@@ -25,7 +25,7 @@ const trackedSources = execFileSync(
     'git',
     ['-C', walletRoot, 'ls-files', '-z', '--', 'packages/core/src/shared', ':(glob)packages/*/src/**'],
     { encoding: 'utf8' },
-).split('\0').filter(Boolean);
+).split('\0').filter((file) => file && existsSync(join(walletRoot, file))); // a tracked file deleted in the working tree has no links to check
 
 const links = [];
 for (const file of trackedSources) {
@@ -70,19 +70,25 @@ for (const link of links) {
 
 const uniqueLinks = new Set(links.map(({ url }) => url));
 
+// Each surface names how its link is written: LearnNote renders a literal anchor, while
+// About's rows are ActionListItem rows that take their href, target and rel from the
+// docLinkProps helper (an object literal, not JSX), so the check reads that helper.
 const docsLinkSurfaces = [
-    ['packages/core/src/shared/components/LearnNote.jsx', /<a\b[^>]*href=\{DOCS_URL\}[^>]*>/],
-    ['packages/core/src/shared/components/BottomTabBar.jsx', /<a\b[^>]*href=\{site\.href\}[^>]*>/],
-    ['packages/core/src/shared/components/PlatformSwitcher.jsx', /<a\b[^>]*href=\{p\.href\}[^>]*>/],
-    ['packages/core/src/shared/components/settings/AboutSection.jsx', /<a\b[^>]*href=\{href\}[^>]*>/],
+    ['packages/core/src/shared/components/LearnNote.jsx', /<a\b[^>]*href=\{DOCS_URL\}[^>]*>/, /\btarget="_blank"/, /\brel="([^"]+)"/],
+    [
+        'packages/core/src/shared/components/settings/AboutSection.jsx',
+        /function docLinkProps\([\s\S]*?\n\}/,
+        /\btarget:\s*'_blank'/,
+        /\brel:\s*'([^']+)'/,
+    ],
 ];
 
-for (const [file, anchorPattern] of docsLinkSurfaces) {
+for (const [file, anchorPattern, targetPattern, relPattern] of docsLinkSurfaces) {
     const source = readFileSync(join(walletRoot, file), 'utf8');
     const anchor = source.match(anchorPattern)?.[0];
     assert.ok(anchor, `${file}: docs link renders as an anchor`);
-    assert.match(anchor, /\btarget="_blank"/, `${file}: docs link opens outside the app`);
-    const rel = anchor.match(/\brel="([^"]+)"/)?.[1].split(/\s+/) || [];
+    assert.match(anchor, targetPattern, `${file}: docs link opens outside the app`);
+    const rel = anchor.match(relPattern)?.[1].split(/\s+/) || [];
     assert.ok(rel.includes('noopener'), `${file}: docs link prevents opener access`);
     assert.ok(rel.includes('noreferrer'), `${file}: docs link omits referrer data`);
 }

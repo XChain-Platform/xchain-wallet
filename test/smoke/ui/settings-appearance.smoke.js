@@ -63,7 +63,7 @@ assert.doesNotMatch(src, /error\.message/, 'error state never shows the raw erro
 
 // ─── 4. Reduced motion is live (schema v2); no accent row until it exists
 
-assert.match(src, /Reduced motion/, 'Reduced motion row present');
+assert.match(src, /label=(?:\{t\('settings\.appearance\.reducedMotion'\)\}|"Reduced motion")/, 'Reduced motion row present');
 assert.match(src, /update\(\{\s*reducedMotion:\s*next\s*\}\)/, 'reducedMotion writes through update');
 assert.match(src, /value:\s*'auto'/, 'auto option present');
 assert.match(src, /value:\s*'always'/, 'always option present');
@@ -76,7 +76,8 @@ assert.doesNotMatch(src, /<span[^>]*>\s*Accent color\s*<\/span>/, 'no Accent col
 const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(
     settingsSrc,
-    /import \{ AppearanceSection \} from '\.\.\/components\/settings\/AppearanceSection\.jsx'/,
+    // The row pages also import the theme and motion summary helpers.
+    /import \{ AppearanceSection\b[^}]*\} from '\.\.\/components\/settings\/AppearanceSection\.jsx'/,
     'Settings.jsx imports AppearanceSection',
 );
 const idx = settingsSrc.indexOf("id: 'appearance'");

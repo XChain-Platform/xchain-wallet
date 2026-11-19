@@ -115,7 +115,7 @@ test('quit waits for a pending signing send, then exits at the 15 s deadline', a
         }, [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION]);
         await win.reload();
         await dismissIntroCarousel(win);
-        await win.getByRole('button', { name: 'Try in demo mode' }).click();
+        await win.getByRole('button', { name: 'Try Demo' }).click();
         await unlockedShell(win).waitFor({ state: 'visible', timeout: 120_000 });
 
         // Stands in for a send between signing and saving. Quit only counts

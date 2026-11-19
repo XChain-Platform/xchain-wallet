@@ -83,20 +83,14 @@ async function breakOracle(page, mode) {
     };
 }
 
-/** Opens the palette from the header's action menu, wherever the layout keeps it. */
+/** Opens the wallet menu from the header button. */
 async function openFromHeader(page) {
     const dialog = commandPalette(page);
     await expect(async () => {
         if (await dialog.isVisible()) return;
-        const direct = page.getByRole('button', { name: /^Search/ }).first();
-        if (await direct.isVisible().catch(() => false)) {
-            await direct.click({ timeout: 3_000 });
-        } else {
-            await page.getByRole('button', { name: 'Open menu' }).click({ timeout: 3_000 });
-            await page.getByRole('menuitem', { name: /^Search/ }).click({ timeout: 3_000 });
-        }
+        await page.getByRole('button', { name: 'Open menu' }).click({ timeout: 3_000 });
         await expect(dialog).toBeVisible({ timeout: 3_000 });
-    }, 'the header menu never opened the command palette').toPass({ timeout: 30_000 });
+    }, 'the header menu does not open the wallet menu').toPass({ timeout: 30_000 });
     return dialog;
 }
 
@@ -127,6 +121,7 @@ async function expectMoneyRoutes(page) {
     await page.keyboard.press('Enter');
     await expect(dialog).toBeHidden();
     await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
+    // A whole amount shows as typed, without decimals (U61, operator 2026-11-17).
     await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('7');
     await expect(page.getByRole('main')).not.toContainText(/\bNaN\b|\bundefined\b/);
 
@@ -146,7 +141,7 @@ async function runPlainSend(page) {
 }
 
 for (const vp of VIEWPORTS) {
-    test.describe(`command palette on a failing network at ${vp.label}`, () => {
+    test.describe(`wallet menu on a failing network at ${vp.label}`, () => {
         test.use(vp.use);
 
         for (const mode of ['500', 'malformed', 'wrong-shape', 'slow']) {
@@ -177,13 +172,13 @@ for (const vp of VIEWPORTS) {
             await expect(dialog).toBeHidden();
             await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
             await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('5');
-            await expect(page.getByRole('button', { name: 'Change asset (currently XCP)' })).toBeVisible();
+            await expect(page.getByRole('button', { name: /^Asset: XCP\b/ })).toBeVisible();
 
             // Abandoned without submitting: the plain Send command opens a
             // blank form, carrying neither the typed amount nor the token.
             await runPlainSend(page);
             await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('');
-            await expect(page.getByRole('button', { name: 'Change asset (currently XCP)' })).toHaveCount(0);
+            await expect(page.getByRole('button', { name: /^Asset: XCP\b/ })).toHaveCount(0);
         });
 
         test('the browser drops offline mid-session: palette and money routes hold, then recover', async ({ page, context }) => {

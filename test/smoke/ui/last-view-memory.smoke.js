@@ -148,8 +148,10 @@ for (const shellPath of shells) {
     const src = read(shellPath);
     assert.ok(/import \{ useLastView \} from '@xchain-wallet\/core\/shared\/hooks\/useLastView\.js'/.test(src),
         `${shellPath} imports useLastView`);
-    assert.ok(/useLastView\(\{[\s\S]*walletId: activeWalletId,[\s\S]*currentView: unlockedView,[\s\S]*onResume: setUnlockedView,/.test(src),
-        `${shellPath} calls useLastView with active wallet / current view / setter`);
+    // A resume starts the navigation history over on the remembered view;
+    // a browser Back or Forward follows the same history instead.
+    assert.ok(/useLastView\(\{[\s\S]*walletId: activeWalletId,[\s\S]*currentView: unlockedView,[\s\S]*onResume: \(view, meta\) => \(meta\?\.source === 'history' \? nav\.sync\(view\) : resetNav\(view\)\),/.test(src),
+        `${shellPath} calls useLastView with active wallet / current view / history`);
 }
 
 console.log('OK: last-view memory + useLastView hook + 3 shells wiring smoke');

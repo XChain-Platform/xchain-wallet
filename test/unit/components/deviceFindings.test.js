@@ -23,24 +23,23 @@ describe('device finding fixes', () => {
     });
 
     it('distinguishes Marketplace from Dispensers in every navigation registry', () => {
-        const sources = [
-            read('packages/core/src/shared/components/LeftNav.jsx'),
-            read('packages/core/src/shared/routes/MenuRoute.jsx'),
-            read('packages/core/src/shared/commandPalette/commandRegistry.js'),
-        ];
+        const leftNav = read('packages/core/src/shared/components/LeftNav.jsx');
+        const walletMenu = read('packages/core/src/shared/walletMenu.js');
+        const commandRegistry = read('packages/core/src/shared/commandPalette/commandRegistry.js');
 
-        for (const source of sources) {
-            expect(source).toMatch(/(?:label|title): 'Marketplace'[^\n]*Icon: Icon\.LineChartIcon/);
+        for (const source of [leftNav, commandRegistry]) {
+            expect(source).toMatch(/Icon: Icon\[(?:row|item)\.icon\]/);
+            expect(source).toMatch(/walletMenu/);
         }
-        expect(sources[0]).toMatch(/label: 'Dispensers'[^\n]*Icon: Icon\.DollarIcon/);
-        expect(sources[2]).toMatch(/title: 'Dispensers'[^\n]*Icon: Icon\.DollarIcon/);
+        expect(walletMenu).toMatch(/id: 'market-activity'[^\n]*icon: 'LineChartIcon'/);
+        expect(walletMenu).toMatch(/id: 'dispensers-list'[^\n]*icon: 'DollarIcon'/);
     });
 
-    it('hides the Search shortcut hint for touch input', () => {
-        const css = read('packages/core/src/shared/components/AppHeader.module.css');
+    it('shows the X close button instead of a shortcut hint on every width', () => {
+        const css = read('packages/core/src/shared/commandPalette/CommandPalette.module.css');
 
-        expect(css).toMatch(
-            /@media \(pointer: coarse\), \(hover: none\)\s*\{\s*\.shortcut\s*\{[^}]*display:\s*none/,
-        );
+        expect(rule(css, '.menuPanel .escHint')).toMatch(/display:\s*none/);
+        expect(css).not.toMatch(/\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/);
+        expect(css).not.toMatch(/\.menuHeader \.close\s*\{[^}]*display:\s*none/);
     });
 });

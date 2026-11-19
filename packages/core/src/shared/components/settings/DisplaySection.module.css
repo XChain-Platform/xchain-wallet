@@ -15,33 +15,8 @@
     min-width: 0 !important;
 }
 
-.watchControls {
-    display: grid;
-    grid-template-columns: minmax(6rem, 1fr) minmax(5rem, 0.6fr) auto;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.watchControls > * {
-    min-width: 0;
-    margin-bottom: 0;
-}
-
-/* The button column is auto-sized; the shrink allowance above would let a
-   narrow window squeeze it below its label and wrap "Watch token" per letter. */
-.watchControls > button {
-    min-width: max-content;
-    white-space: nowrap;
-}
-
 @media (max-width: 640px) {
-    .fieldRow,
-    .watchControls {
+    .fieldRow {
         grid-template-columns: minmax(0, 1fr);
-    }
-
-    .watchControls > button {
-        width: 100%;
     }
 }

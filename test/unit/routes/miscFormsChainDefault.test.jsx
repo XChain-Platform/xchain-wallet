@@ -13,7 +13,7 @@
 // file covers the same defect found in six more forms during the sweep for
 // more callers of the same hand-rolled `Object.keys(byChain)[0]` / first-key
 // pattern: AdvancedActionsForm, ControllerBindForm, SignMessageForm,
-// TokenWizard, LinkForm and PsbtSignForm, plus Receive falling back to the
+// IssueTokenForm (the former TokenWizard), LinkForm and PsbtSignForm, plus Receive falling back to the
 // oldest chain when ReceivePicker sends no prefill.
 //
 // AttachContentForm is deliberately NOT covered here: its chain is a
@@ -34,7 +34,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
-import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
@@ -112,9 +112,22 @@ function mount(Form, props, messaging) {
 
 afterEach(() => cleanup());
 
+// Opens the From section (closed on load) so its Network and address fields
+// are in the accessibility tree.
+const openFromSection = async () => {
+    const toggle = await waitFor(() => {
+        const found = document.querySelector('[data-form-section="from"] [data-form-section-toggle]');
+        expect(found).not.toBeNull();
+        return found;
+    });
+    if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'true'));
+};
+
 // Every NetworkField-based form renders the chain through a button whose
-// accessible name is "Network: <display name>".
+// accessible name is "Network: <display name>", inside its From section.
 const expectNetworkButton = async (displayName) => {
+    await openFromSection();
     await waitFor(async () => {
         const button = await screen.findByRole('button', { name: /^Network: / });
         expect(button.getAttribute('aria-label') || button.textContent)
@@ -144,21 +157,16 @@ describe('AdvancedActionsForm network default', () => {
     });
 });
 
-describe('TokenWizard network default', () => {
-    async function mountOnChainStage(messaging) {
-        mount(TokenWizard, {}, messaging);
-        const memeCard = await screen.findByRole('button', { name: /Meme token/ });
-        fireEvent.click(memeCard);
-    }
-
-    it('opens the network stage on the last-used network, not the first-created one', async () => {
-        const messaging = messagingWith();
-        await mountOnChainStage(messaging);
+// The token wizard is one Issue Token form now; its From section carries the
+// network the token is issued on.
+describe('IssueTokenForm network default', () => {
+    it('opens on the last-used network, not the first-created one', async () => {
+        mount(IssueTokenForm, {}, messagingWith());
         await expectNetworkButton('Dogecoin');
     });
 
     it('falls back to the first network when the last-used network has no addresses any more', async () => {
-        await mountOnChainStage(messagingWith({
+        mount(IssueTokenForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
         await expectNetworkButton('Bitcoin');
@@ -185,12 +193,17 @@ describe('ControllerBindForm network default', () => {
 });
 
 describe('LinkForm network default', () => {
-    const chainButtons = async () => screen.findAllByRole('button', { name: /^Network: / });
+    // The form's own Network (in the From section, closed on load) comes
+    // first; Action 1 and Action 2 follow.
+    const chainButtons = async () => {
+        await openFromSection();
+        return screen.findAllByRole('button', { name: /^Network: / });
+    };
 
     it('COIN1 opens on the last-used network, not the first-created one', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
-            const [first] = await chainButtons();
+            const [, first] = await chainButtons();
             expect(first.getAttribute('aria-label')).toMatch(/^Network: Dogecoin/);
         });
     });
@@ -198,7 +211,7 @@ describe('LinkForm network default', () => {
     it('COIN2 still lands on a distinct network from COIN1', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
-            const [first, second] = await chainButtons();
+            const [, first, second] = await chainButtons();
             const firstName = first.getAttribute('aria-label');
             const secondName = second.getAttribute('aria-label');
             expect(firstName).not.toEqual(secondName);
@@ -217,53 +230,56 @@ describe('LinkForm network default', () => {
     });
 });
 
-// SignMessageForm and PsbtSignForm both render a Chain picker whose props
-// (`chains` / `selectedChainId`) do not match ChainPicker's real API
-// (`chainIds` / `value`), so the picker never shows a selection - a
-// pre-existing, separate defect out of scope for this issue. The internal
-// `chainId` default is still verified through the chain-scoped address
-// select, which correctly reacts to it.
 describe('SignMessageForm network default', () => {
-    const addressSelect = async () => screen.findByRole('combobox', { name: 'Address' });
+    // The signing address sits in the "Signing with" section, closed on load.
+    const addressField = async () => {
+        await openFromSection();
+        return screen.findByRole('textbox', { name: 'Signing address' });
+    };
 
     it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(SignMessageForm, {}, messagingWith());
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_DOGE.address));
     });
 
     it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 
     it('still opens, on the first network, when the settings read fails', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockRejectedValue(new Error('vault locked')),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 });
 
 describe('PsbtSignForm network default', () => {
-    const addressSelect = async () => screen.findByRole('combobox', { name: 'Signing address' });
+    // The signing address sits in the "Signing with" section, closed on load.
+    const addressField = async () => {
+        await openFromSection();
+        return screen.findByRole('textbox', { name: 'Signing address' });
+    };
 
     it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(PsbtSignForm, {}, messagingWith());
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_DOGE.address));
     });
 
     it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(PsbtSignForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 });
 
 describe('Receive network default', () => {
-    const tokenButton = async () => screen.findByRole('button', { name: /^Change asset / });
+    // The Asset field's name is "Asset: <tick> on <chain>".
+    const tokenButton = async () => screen.findByRole('button', { name: /^Asset: / });
 
     it('opens on the last-used network, not the first-created one', async () => {
         mount(Receive, {}, messagingWith());

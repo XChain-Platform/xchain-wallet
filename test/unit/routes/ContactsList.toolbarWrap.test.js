@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// At phone width each toolbar control takes a full row so the network filter
-// keeps room for its full "All networks" label. jsdom has no layout, so the
+// At phone width the search box shrinks and the network filter
+// stays on the same row at its own width. jsdom has no layout, so the
 // test pins the rules that make that happen.
 
 import { describe, expect, it } from 'vitest';
@@ -17,6 +17,9 @@ const source = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.jsx'),
     'utf8',
 );
+const addressListSource = readCss('packages/core/src/shared/routes/AddressList.jsx');
+// Tabs draw the shared view-toggle look from SegmentedControl.module.css.
+const tabsCss = readCss('packages/core/src/ui/SegmentedControl.module.css');
 const listPageCss = readFileSync(
     resolve(process.cwd(), 'packages/core/src/ui/ListPage.module.css'),
     'utf8',
@@ -31,8 +34,10 @@ function rule(text, selector) {
 const toolbarCss = readCss('packages/core/src/shared/components/ListToolbar.module.css');
 
 describe('list toolbar at phone width', () => {
-    it('puts the contacts search, network filter and sort in the shared ListToolbar', () => {
-        expect(source).toMatch(/toolbar=\{\(\s*<ListToolbar\b[\s\S]*?<NetworkFilterDropdown[\s\S]*?<Select[\s\S]*?<\/ListToolbar>/);
+    it('puts the contacts search, network filter and sort in the title bar filter panel (G95)', () => {
+        expect(source).toMatch(/<ListFilterMenu\b[\s\S]*?searchLabel="Search contacts"[\s\S]*?<NetworkFilterDropdown[\s\S]*?<Select[\s\S]*?<\/ListFilterMenu>/);
+        expect(source).not.toMatch(/<ListToolbar\b/);
+        expect(source).not.toMatch(/toolbar=\{/);
     });
 
     it('lets the toolbar wrap', () => {
@@ -41,8 +46,9 @@ describe('list toolbar at phone width', () => {
         expect(rule(toolbarCss, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('gives each control an equal share that drops to its own row when narrow', () => {
-        expect(rule(toolbarCss, '.field')).toMatch(/flex:\s*1 1 12rem/);
+    it('lets the search box shrink while each filter keeps its width, wrapping only as a fallback', () => {
+        expect(rule(toolbarCss, '.search')).toMatch(/flex:\s*1 1 9rem/);
+        expect(rule(toolbarCss, '.filter')).toMatch(/flex:\s*0 1 auto/);
     });
 });
 
@@ -65,23 +71,22 @@ describe('list toolbar control alignment', () => {
     it('uses the shared medium Input for every route search field', () => {
         const toolbar = readCss('packages/core/src/shared/components/ListToolbar.jsx');
         expect(toolbar).toMatch(/<Input[\s\S]*?type="search"[\s\S]*?size="md"/);
-        for (const name of ['DispensersList', 'MyLists', 'ContactsList', 'MessagingInbox']) {
-            expect(readCss(`packages/core/src/shared/routes/${name}.jsx`)).toMatch(/<ListToolbar\b/);
-        }
-        // These toolbars use the shared medium Input, which owns the control tokens.
-        for (const name of ['StakingList']) {
+        // Lists that moved their search to the title-bar filter panel get the same
+        // medium Input from the shared ListFilterMenu, never a toolbar of their own.
+        const filterMenu = readCss('packages/core/src/shared/components/ListFilterMenu.jsx');
+        expect(filterMenu).toMatch(/<Input[\s\S]*?size="md"/);
+        for (const name of ['DispensersList', 'StakingList', 'AddressList', 'ContactsList', 'MyLists', 'SharedListDirectory']) {
             const route = readCss(`packages/core/src/shared/routes/${name}.jsx`);
-            expect(route).toMatch(/<Input\s+type="search"\s+size="md"/);
+            expect(route).toMatch(/<ListFilterMenu\b/);
+            expect(route).not.toMatch(/<ListToolbar\b/);
         }
         mediumControl(routeCss('AddressList'), '.searchField input');
     });
 
-    it('uses medium control tokens for the address type segments', () => {
-        const addressList = routeCss('AddressList');
-        const segmented = rule(addressList, '.segmented');
-        expect(segmented).toMatch(/height:\s*var\(--xc-control-h-md\)/);
-        expect(segmented).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
-        expect(rule(addressList, '.segment'))
-            .toMatch(/font-size:\s*var\(--xc-control-font-md,\s*var\(--xc-control-font\)\)/);
+    it('keeps the shared medium-height view toggle and picks address types from the filter panel', () => {
+        expect(addressListSource).toMatch(/<IconSelect[\s\S]*?value=\{sourceFilter\}/);
+        expect(rule(tabsCss, '.segmented')).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(rule(tabsCss, '.segment')).toMatch(/height:\s*100%/);
+        expect(rule(tabsCss, '.segment')).toMatch(/border:\s*0/);
     });
 });

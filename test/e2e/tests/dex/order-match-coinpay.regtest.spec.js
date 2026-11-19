@@ -35,12 +35,17 @@
 // user actually walks when their wallet was closed. Auto-pay's own arming is
 // left to a spec that can watch it in isolation.
 
-import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
     EXPLORER_URL,
+    fillOrderSide,
+    placeOrderButton,
+    REGTEST_TICKER,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -51,7 +56,10 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Wallet A needs miner fees only; wallet B also has to pay the ask. */
@@ -182,7 +190,7 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -205,11 +213,9 @@ async function issueRunToken(page, owner, tick) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(String(TOKEN_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: tick, supply: TOKEN_SUPPLY });
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -221,9 +227,9 @@ async function issueRunToken(page, owner, tick) {
 async function openCreateOrder(page) {
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const source = await main.getByLabel('From address').inputValue();
+    const source = await (await openFromAddress(main)).inputValue();
     expect(source, `the Create order form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
     return { main, source };
@@ -256,12 +262,11 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            const { main } = await openCreateOrder(page);
-            // Defaults are give-a-token / get-native, which is this side exactly.
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await openCreateOrder(page);
+            // Give the run's token, get native coin.
+            await fillOrderSide(page, 'give', tick, GIVE_TOKENS);
+            await fillOrderSide(page, 'get', REGTEST_TICKER, ASK);
+            await placeOrderButton(page).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -297,26 +302,24 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const { main } = await openCreateOrder(page);
 
-            // Mirror of wallet A: give native coin, get the token. The radios
-            // come in DOM order (give side first, then get side), so first/last
-            // is what distinguishes the two groups.
-            await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
-            await main.getByRole('radio', { name: 'A token' }).last().check();
-
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+            // Mirror of wallet A: give native coin, get the token. Wallet B
+            // has never held the token, so the get pick comes from the
+            // picker's "On the platform" search.
+            await fillOrderSide(page, 'give', REGTEST_TICKER, ASK);
+            await fillOrderSide(page, 'get', tick, GIVE_TOKENS);
 
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
-            // web-shell acknowledgement the armed path would demand.
-            const autopay = main.getByRole('switch', { name: /Enable auto-pay/ });
+            // web-shell acknowledgement the armed path would demand. The
+            // switch sits in the closed Order Terms section.
+            await openFormSection(main, 'Order Terms');
+            const autopay = main.getByRole('switch', { name: 'Auto pay', exact: true });
             await expect(autopay,
                 'the native-coin GIVE side offers no auto-pay control, so PC-16 never armed')
                 .toBeVisible();
             await autopay.uncheck();
 
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await placeOrderButton(page).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -361,9 +364,11 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('wallet B pays it from Payments due', async () => {
             const makerSatsBefore = await coinBalanceSats(maker);
 
-            await page.getByRole('button', { name: 'Payments due' }).first().click();
+            // Payments due is a wallet menu row (Trade group), reached by the
+            // command palette like the rest of the menu.
+            await openPaletteCommand(page, 'Payments due');
             const main = page.getByRole('main');
-            const pending = main.getByRole('list', { name: 'Pending payments' });
+            const pending = main.getByRole('list', { name: 'Payments due' });
             await expect(pending, 'the obligation this wallet owes is not in Payments due')
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
@@ -374,11 +379,15 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 
-            await main.getByRole('button', { name: 'Pay now' }).first().click();
-            await main.getByRole('button', { name: 'Review' }).click();
-            await page.getByRole('button', { name: 'Continue to confirmation' }).click();
+            // The row says what it buys once the bulk read lands; the tap opens
+            // the payment's detail either way.
+            await pending.getByRole('button', { name: new RegExp(`^Buying\\b.*, Pay ${ASK}`) }).first().click();
+            await main.getByRole('button', { name: 'Pay Order', exact: true }).click();
+            // The review page states the amount in its rows; its submit is
+            // the bare verb "Pay".
+            await page.getByRole('button', { name: 'Pay', exact: true }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await approveAndGetTxid(page);
@@ -461,11 +470,10 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            const { main } = await openCreateOrder(page);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await openCreateOrder(page);
+            await fillOrderSide(page, 'give', tick, GIVE_TOKENS);
+            await fillOrderSide(page, 'get', REGTEST_TICKER, ASK);
+            await placeOrderButton(page).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -483,25 +491,23 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
 
             const { main } = await openCreateOrder(page);
-            await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
-            await main.getByRole('radio', { name: 'A token' }).last().check();
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+            await fillOrderSide(page, 'give', REGTEST_TICKER, ASK);
+            await fillOrderSide(page, 'get', tick, GIVE_TOKENS);
 
-            // Left ON this time, and the web shell's acknowledgement taken: this
-            // is the arming the rest of the test depends on.
-            await expect(main.getByRole('switch', { name: /Enable auto-pay/ })).toBeChecked();
-            await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
+            // Left ON this time: this is the arming the rest of the test
+            // depends on. The web shell's keep-open fact is a confirm notice.
+            // The switch sits in the closed Order Terms section.
+            await openFormSection(main, 'Order Terms');
+            await expect(main.getByRole('switch', { name: 'Auto pay', exact: true })).toBeChecked();
 
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await placeOrderButton(page).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status), 'the chain rejected the taker order').toBe('valid');
             takerOrder = String(action.action_index);
             await expect(page.getByRole('main'), 'the wallet did not report the order as armed')
-                .toContainText(/Auto-pay is armed/, { timeout: 30_000 });
+                .toContainText(/Auto pay is armed/, { timeout: 30_000 });
         });
 
         await test.step('nobody touches the wallet, and the payment happens anyway', async () => {

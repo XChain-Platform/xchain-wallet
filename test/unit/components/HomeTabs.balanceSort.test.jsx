@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     getNativePricesRequest: vi.fn(),
     heroProps: { current: null },
     chartProps: { current: null },
+    collectibleKeys: new Set(),
 }));
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
@@ -32,7 +33,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings: {}, loading: false }),
 }));
 vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => ({
-    useCollectibleKeys: () => new Set(),
+    useCollectibleKeys: () => mocks.collectibleKeys,
 }));
 vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     useNativeFiatRates: () => ({}),
@@ -51,6 +52,7 @@ import {
     getTokenFiatRate,
     refreshTokenFiatRate,
 } from '../../../packages/core/src/flows/priceLookup.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const tabsCss = readFileSync(
     'packages/core/src/shared/components/HomeTabs.module.css',
@@ -121,6 +123,23 @@ function mountTokens() {
     );
 }
 
+// The sort choice is a single-select button inside the Filter and sort panel
+// that shows the current choice as its text; its listbox offers Name and Value.
+function sortTrigger() {
+    const panel = screen.getByRole('dialog', { name: 'Filter and sort' });
+    return Array.from(panel.querySelectorAll('button[aria-haspopup="listbox"]'))
+        .find((button) => /^Sort by (name|value)$/.test(button.textContent.trim()));
+}
+
+function currentSort() {
+    return sortTrigger().textContent.trim().replace('Sort by ', '').replace(/^./, (c) => c.toUpperCase());
+}
+
+function pickSort(label) {
+    fireEvent.click(sortTrigger());
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(`Sort by ${label}`, 'i') }));
+}
+
 function renderedKeys() {
     return screen.queryAllByRole('listitem')
         .map((element) => element.dataset.balanceKey);
@@ -132,6 +151,7 @@ beforeEach(() => {
     mocks.getNativePricesRequest.mockReset();
     mocks.heroProps.current = null;
     mocks.chartProps.current = null;
+    mocks.collectibleKeys.clear();
     mocks.getNativePricesRequest.mockResolvedValue({
         prices: {
             'bitcoin-mainnet': { change24hPct: 5 },
@@ -167,7 +187,7 @@ describe('balance row sorting', () => {
         expect(mocks.getNativePricesRequest).toHaveBeenCalledTimes(1);
     });
 
-    it('sorts exact values and changes descending, names ascending, and missing metrics last', () => {
+    it('sorts exact values descending, names ascending, and missing values last', () => {
         const rows = [
             { chainId: 'c:a', tick: 'AAA', displayName: 'Zulu', quantity: '9007199254740993', divisibility: 0, fiatRate: 1, change24hPct: -2 },
             { chainId: 'c:b', tick: 'BBB', displayName: 'Alpha', quantity: '9007199254740992', divisibility: 0, fiatRate: 1, change24hPct: 4 },
@@ -176,49 +196,44 @@ describe('balance row sorting', () => {
 
         expect(sortBalanceRows(rows, 'value').map((row) => row.tick)).toEqual(['AAA', 'BBB', 'CCC']);
         expect(sortBalanceRows(rows, 'name').map((row) => row.tick)).toEqual(['BBB', 'CCC', 'AAA']);
-        expect(sortBalanceRows(rows, 'change').map((row) => row.tick)).toEqual(['BBB', 'AAA', 'CCC']);
+        expect(sortBalanceRows(rows, 'change').map((row) => row.tick)).toEqual(['BBB', 'CCC', 'AAA']);
     });
 
-    it.each([360, 400])('puts the compact sort below complete tab labels at %ipx', async (width) => {
+    it.each([360, 400])('puts one filter and sort button after complete tab labels at %ipx', async (width) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         mount();
 
-        const sort = screen.getByRole('combobox', { name: 'Sort balances' });
+        const filter = screen.getByRole('button', { name: 'Filter and sort' });
         const tablist = screen.getByRole('tablist', { name: 'Wallet view' });
-        expect(sort).toBeVisible();
-        expect(sort.closest('label')?.parentElement).toBe(tablist.parentElement);
+        expect(filter).toBeVisible();
+        expect(filter.parentElement?.parentElement).toBe(tablist.parentElement);
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
-        expect([...sort.options].map((option) => option.textContent))
-            .toEqual(['Value', 'Name', '24h change']);
-        expect(tablist.compareDocumentPosition(sort)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+            .toEqual(['Balances', 'NFTs', 'DeFi']);
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+        expect(tablist.compareDocumentPosition(filter)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+        fireEvent.click(filter);
+        expect(currentSort()).toBe('Name');
 
         const narrowRules = tabsCss.slice(
             tabsCss.indexOf('@media not all and (min-width: 600px)'),
-            tabsCss.indexOf('@media (max-width: 420px)'),
+            tabsCss.indexOf('/* ───── Tab panel'),
         );
-        const compactRules = tabsCss.slice(tabsCss.indexOf('@media (max-width: 420px)'));
-        expect(narrowRules).toMatch(/\.tabsRow\s*\{[^}]*flex-direction:\s*column;/s);
         expect(narrowRules).toMatch(/\.tabsRow\s*>\s*\[role='tablist'\]\s*\{[^}]*width:\s*100%;/s);
-        expect(narrowRules).toMatch(/\.sortControl\s*\{[^}]*align-self:\s*flex-end;/s);
-        expect(compactRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
-        // The visible label survives the compact layout: no visually-hidden clip.
-        expect(compactRules).not.toMatch(/\.sortLabel\s*\{[^}]*(?:clip:|width:\s*1px)/s);
-        expect(compactRules).toMatch(/\.sortLabel\s*\{[^}]*white-space:\s*nowrap;/s);
-        expect(tabsCss).toMatch(/\.sortControl\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*var\(--xc-control-h-md\);/s);
-        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/s);
+        expect(narrowRules).not.toMatch(/flex-direction:\s*column/);
+        // The tabs share the row evenly, as every view toggle does, on one line.
+        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*1 1 0;[^}]*white-space:\s*nowrap;/s);
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
             'bitcoin-mainnet:BTC',
         ]);
 
-        await waitFor(() => expect(mocks.getNativePricesRequest).toHaveBeenCalled());
-        fireEvent.change(sort, { target: { value: 'change' } });
+        pickSort('Value');
         expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:BTC',
-            'dogecoin-mainnet:DOGE',
             'litecoin-mainnet:LTC',
+            'dogecoin-mainnet:DOGE',
+            'bitcoin-mainnet:BTC',
         ]);
     });
 
@@ -234,49 +249,74 @@ describe('balance row sorting', () => {
         );
 
         expect(screen.getByText('Fund your wallet')).toBeVisible();
-        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Filter and sort' })).toBeNull();
+        cleanup();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        // Balances remembered as Tokens on this wallet.
+        localStorage.setItem('xc:balances:type:empty-wallet', 'tokens');
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{}}
+                walletId="empty-wallet"
+                networkFilter="all"
+            />,
+        );
         expect(screen.getByText('No tokens yet')).toBeVisible();
-        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Filter and sort' })).toBeNull();
     });
 
     it('restores the choice only for the wallet that saved it', () => {
         const first = mount('wallet-a');
-        fireEvent.change(screen.getByLabelText('Sort balances'), { target: { value: 'name' } });
-        expect(localStorage.getItem('xc:balances:sort:wallet-a')).toBe('name');
+        fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
+        pickSort('Value');
+        expect(localStorage.getItem('xc:balances:sort:wallet-a')).toBe('value');
         first.unmount();
 
         mount('wallet-a');
-        expect(screen.getByLabelText('Sort balances')).toHaveValue('name');
+        fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
+        expect(currentSort()).toBe('Value');
         cleanup();
 
         mount('wallet-b');
-        expect(screen.getByLabelText('Sort balances')).toHaveValue('value');
+        fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
+        expect(currentSort()).toBe('Name');
     });
 
-    it('keeps unpriced tokens after priced tokens in every sort mode', () => {
+    it('sorts tokens by name by default and renders an unpriced token as zero fiat', () => {
         mountTokens();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-        const sort = screen.getByLabelText('Sort balances');
+        showHomeBalances('tokens');
 
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
         expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:ZED',
-            'bitcoin-mainnet:BETA',
             'bitcoin-mainnet:AAA',
-        ]);
-        fireEvent.change(sort, { target: { value: 'name' } });
-        expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:BETA',
             'bitcoin-mainnet:ZED',
-            'bitcoin-mainnet:AAA',
         ]);
-        fireEvent.change(sort, { target: { value: 'change' } });
+        expect(screen.getByText('$0.00')).toBeInTheDocument();
+    });
+
+    it('falls back to name for removed and unknown saved sort values', () => {
+        localStorage.setItem('xc:balances:sort:wallet-a', 'change');
+        mount('wallet-a');
         expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:BETA',
-            'bitcoin-mainnet:ZED',
-            'bitcoin-mainnet:AAA',
+            'litecoin-mainnet:LTC',
+            'dogecoin-mainnet:DOGE',
+            'bitcoin-mainnet:BTC',
         ]);
+    });
+
+    it('puts the NFT name alone under its image on the NFTs tab', () => {
+        // Operator 2026-11-15: the NFTs tab is a grid of large images to
+        // browse, the name under each and no ticker or balance line.
+        mocks.collectibleKeys.add('bitcoin-mainnet:AAA');
+        mountTokens();
+        fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
+
+        const name = screen.getByText('Alpha token');
+        expect(name.tagName).toBe('DIV');
+        expect(name.nextElementSibling).toBeNull();
+        expect(screen.queryByText('AAA')).toBeNull();
     });
 });
 

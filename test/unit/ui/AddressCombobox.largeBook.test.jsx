@@ -50,8 +50,9 @@ describe('<AddressCombobox> with a large address book', () => {
         const options = screen.getAllByRole('option');
         expect(options).toHaveLength(52);
         expect(options[49]).toHaveTextContent('Person 00049');
-        expect(options[50]).toHaveTextContent('bc1qre...ntone');
-        expect(options[51]).toHaveTextContent('bc1qre...nttwo');
+        // A recent send is named by its address line (G99), not a short label.
+        expect(options[50]).toHaveTextContent('bc1qrecentone');
+        expect(options[51]).toHaveTextContent('bc1qrecenttwo');
     });
 
     it('reaches a contact past the first 50 by typing', () => {

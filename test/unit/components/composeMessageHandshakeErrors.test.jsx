@@ -27,6 +27,7 @@ import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const HD_ADDRESS = Object.freeze({
@@ -43,6 +44,7 @@ const HD_ADDRESS = Object.freeze({
 const UNKNOWN_RECIPIENT = 'bc1qdevmock02ddeeff';
 
 beforeEach(() => {
+    resetWalletModes();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -116,7 +118,7 @@ async function openHandshakeBox(messaging) {
 }
 
 function requestButton(utils) {
-    return utils.getByRole('button', { name: /Request encrypted session/i });
+    return utils.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
 }
 
 /** Every alert the screen is currently showing, as text. */
@@ -246,8 +248,8 @@ describe('the message key-request reports its failures', () => {
     });
 
     it('shows the unsigned key request without claiming it was sent in watcher mode', async () => {
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
         const messaging = stubMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
             buildActionPsbtRequest: () => Promise.resolve({ psbtHex: 'aa00', encoding: 'psbt' }),
         });
         const utils = await openHandshakeBox(messaging);

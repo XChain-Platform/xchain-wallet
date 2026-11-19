@@ -39,26 +39,3 @@ export function reconcileActiveAccount(walletId, accounts) {
     else clearActiveAccount(walletId);
     return chosen;
 }
-
-/**
- * Keep unfinished confirmations in the active wallet and account. Sessions
- * without an account tag remain visible within their wallet so compatibility
- * does not strand an already composed transaction.
- *
- * @param {unknown} sessions
- * @param {string} walletId
- * @param {string | null | undefined} accountId
- * @returns {any[]}
- */
-export function filterConfirmSessionsForAccount(sessions, walletId, accountId) {
-    if (!Array.isArray(sessions)) return [];
-    return sessions.filter((session) => {
-        const request = session?.request || {};
-        const dispatchBase = session?.dispatch?.base || {};
-        const sessionWalletId = request.walletId || dispatchBase.walletId;
-        if (sessionWalletId !== walletId) return false;
-
-        const sessionAccountId = request.accountId || dispatchBase.accountId;
-        return !accountId || !sessionAccountId || sessionAccountId === accountId;
-    });
-}

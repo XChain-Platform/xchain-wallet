@@ -20,13 +20,21 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-const { sendTokenMock } = vi.hoisted(() => ({ sendTokenMock: vi.fn() }));
+const { sendTokenMock, gatedPublishComposeMock } = vi.hoisted(() => ({
+    sendTokenMock: vi.fn(),
+    gatedPublishComposeMock: vi.fn(),
+}));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
+    gatedPublishComposeMock.mockImplementation(actual.flows.composeGatedPublishForConfirm);
     return {
         ...actual,
-        flows: { ...actual.flows, sendToken: sendTokenMock },
+        flows: {
+            ...actual.flows,
+            sendToken: sendTokenMock,
+            composeGatedPublishForConfirm: gatedPublishComposeMock,
+        },
     };
 });
 
@@ -125,7 +133,7 @@ function makeSdk(createTx) {
     };
 }
 
-function makeHost() {
+function makeHost(sourceRow = SOURCE_ROW) {
     const createTx = vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' }));
     const vault = {
         wallets: memCollection([{ id: 'w1', schemaVersion: 1, name: 'W', format: 'bip39', importedKeys: [] }]),
@@ -133,7 +141,7 @@ function makeHost() {
             schemaVersion: 2, id: 'acct-1', walletId: 'w1', index: 0, name: 'Main',
             activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z',
         }]),
-        addresses: memCollection([SOURCE_ROW]),
+        addresses: memCollection([sourceRow]),
         signers: memCollection(),
         settings: {
             _rec: {
@@ -156,7 +164,7 @@ function makeHost() {
         signThrottleStorage: null,
         logConsoleStorage: null,
     });
-    return { host, createTx };
+    return { host, createTx, vault };
 }
 
 function from(source) {
@@ -260,6 +268,28 @@ describe('every confirm-compose route hardens the PSBT for a device source', () 
     });
 });
 
+// The request's `from.source` is the client's claim; the vault's record of the
+// address is the truth. A device address whose request omits or misstates the
+// source must still compose a PSBT the device can sign.
+describe('every confirm-compose route hardens from the stored record when the request omits the source', () => {
+    const DEVICE_ROW = { ...SOURCE_ROW, source: 'ledger', signerId: 'signer-1' };
+    for (const [type, build] of Object.entries(ROUTES)) {
+        for (const claim of [undefined, 'hd']) {
+            it(`${type} attaches prev txs for a stored device record with source ${claim ?? 'omitted'}`, async () => {
+                const { host, createTx } = makeHost(DEVICE_ROW);
+                await drive(host, type, build(claim));
+                expect(createTx.mock.calls[0][0].attachPrevTx).toBe(true);
+            });
+        }
+    }
+
+    it('keeps a stored software record unhardened when the request omits the source', async () => {
+        const { host, createTx } = makeHost();
+        await drive(host, 'action.composeForConfirm', ROUTES['action.composeForConfirm'](undefined));
+        expect(createTx.mock.calls[0][0].attachPrevTx).toBeUndefined();
+    });
+});
+
 describe('every confirm-compose route excludes coins held by another send', () => {
     for (const [type, build] of Object.entries(ROUTES).filter(([name]) => name !== 'action.quoteMaxSendable')) {
         it(`${type} passes only free coins to the encoder`, async () => {
@@ -291,4 +321,73 @@ describe('every confirm-compose route excludes coins held by another send', () =
         expect(res).toMatchObject({ ok: false, error: { name: 'CoinsHeldError' } });
         expect(createTx).not.toHaveBeenCalled();
     });
+});
+
+describe('every per-action confirm-compose route refuses a chain off the active network', () => {
+    const GUARDED = [
+        'action.composeForConfirm',
+        'action.vote.composeForConfirm',
+        'action.bet.composeForConfirm',
+        'action.message.composeForConfirm',
+        'action.gatedPublish.composeForConfirm',
+    ];
+    for (const type of GUARDED) {
+        it(`${type} raises ActiveNetworkChangedError before composing`, async () => {
+            const { host, createTx, vault } = makeHost();
+            await vault.settings.put({ ...(await vault.settings.get()), activeNetwork: 'mainnet' });
+            const res = await host.handle({ type, request: ROUTES[type]('hd') });
+            expect(res).toMatchObject({ ok: false, error: { name: 'ActiveNetworkChangedError' } });
+            expect(createTx).not.toHaveBeenCalled();
+        });
+    }
+});
+
+describe('gated publish confirm envelope signer', () => {
+    it('uses the vault address record instead of a request claim', async () => {
+        gatedPublishComposeMock.mockClear();
+        const { host } = makeHost();
+        await drive(host, 'action.gatedPublish.composeForConfirm', {
+            ...ROUTES['action.gatedPublish.composeForConfirm']('ledger'),
+            envelopeSigner: { source: 'ledger', id: 'forged' },
+        });
+        expect(gatedPublishComposeMock).toHaveBeenCalledTimes(1);
+        expect(gatedPublishComposeMock.mock.calls[0][0].envelopeSigner).toMatchObject({
+            id: SOURCE_ROW.id,
+            address: SOURCE_ROW.address,
+            source: SOURCE_ROW.source,
+        });
+    });
+});
+
+// The Advanced section's choices (ruling G98) reach the four routes that build
+// their own encoder options, as they reach the generic one: the chosen coins,
+// fee bumping, and a change address that must be one of the wallet's own.
+describe('every route-specific compose honours the Advanced choices', () => {
+    const OWN_CHANGE = 'addr_0_0_1';
+    const specific = Object.entries(ROUTES).filter(([name]) => (
+        name !== 'action.composeForConfirm' && name !== 'action.quoteMaxSendable'));
+
+    for (const [type, build] of specific) {
+        it(`${type} passes the chosen coins, RBF and an own change address to the encoder`, async () => {
+            const { host, createTx, vault } = makeHost();
+            await vault.addresses.put({
+                ...SOURCE_ROW, id: 'addr-change', address: OWN_CHANGE, derivationPath: "m/84'/1'/0'/0/1",
+            });
+            await drive(host, type, { ...build('hd'), utxos: [SOURCE_UTXOS[1]], rbf: true, change: OWN_CHANGE });
+            const opts = createTx.mock.calls[0][0];
+            expect(opts.utxos).toEqual([SOURCE_UTXOS[1]]);
+            // The request reaches the encoder, capped to the chain: this test
+            // chain declares no RBF support, so it arrives as false.
+            expect(opts).toHaveProperty('rbf', false);
+            expect(opts.change).toBe(OWN_CHANGE);
+        });
+
+        it(`${type} refuses a change address outside the wallet before encoding`, async () => {
+            const { host, createTx } = makeHost();
+            const res = await host.handle({ type, request: { ...build('hd'), change: 'bcrt1qstranger' } });
+            expect(res.ok).toBe(false);
+            expect(res.error.message).toMatch(/does not belong to this wallet/);
+            expect(createTx).not.toHaveBeenCalled();
+        });
+    }
 });

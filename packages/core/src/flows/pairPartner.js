@@ -64,8 +64,8 @@
 
 import { sha256 } from '@noble/hashes/sha2';
 import { t } from '../i18n/index.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import '../i18n/locales/en/flows.js';
-import '../i18n/locales/en/settings.js';
 
 export const PARTNER_PAIRING_VERSION = 1;
 export const PARTNER_PAIRING_KIND = 'xcw-partner-pairing';
@@ -127,8 +127,8 @@ export function describePairingLane(walletMode) {
             help: t('flows.pairPartner.unavailableHelp'),
         };
     }
-    // The locale values remain 'Pair a signer' and 'Pair a watcher', the
-    // pairing lane's user-visible contract.
+    // The locale values 'Pair a Signer' and 'Pair a Watcher' are the pairing
+    // lane's user-visible contract: the page title and its main button.
     const cta = partnerMode === 'signer'
         ? t('flows.pairPartner.pairSigner')
         : t('flows.pairPartner.pairWatcher');
@@ -218,7 +218,7 @@ export function keySetIdOf(keys) {
  * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
  * @param {string[]} opts.chainIds
  * @param {number} [opts.accountIndex]
- * @param {'bip39' | 'counterwallet-legacy' | 'wif-only'} [opts.format]
+ * @param {'bip39' | 'counterwallet-legacy' | 'wif-only'} opts.format
  * @returns {Promise<Array<{ chainId: string, addressType: string, path: string, publicKey: string, chainCode: string, xpub: string | null, keyId: string }>>}
  */
 export async function collectPairingKeys({
@@ -226,7 +226,7 @@ export async function collectPairingKeys({
     chainRegistry,
     chainIds,
     accountIndex = 0,
-    format = 'bip39',
+    format,
 }) {
     if (!signer || typeof signer.getPublicKey !== 'function') {
         throw new PartnerPairingError('collectPairingKeys: an unlocked signer is required');
@@ -237,6 +237,12 @@ export async function collectPairingKeys({
     if (!Array.isArray(chainIds) || chainIds.length === 0) {
         throw new PartnerPairingError('collectPairingKeys: chainIds must be a non-empty array');
     }
+    // Require the caller to preserve the wallet's seed derivation format.
+    if (format === undefined) {
+        throw new PartnerPairingError(
+            'collectPairingKeys: format is required ("bip39", "counterwallet-legacy" or "wif-only")',
+        );
+    }
 
     const keys = [];
     const seenPaths = new Set();
@@ -245,7 +251,7 @@ export async function collectPairingKeys({
             ? chainRegistry.descriptorFor(chainId)
             : chainRegistry.get(chainId);
         if (!descriptor) continue;
-        const addressType = descriptor.defaultAddressType;
+        const addressType = defaultAddressTypeForFormat(descriptor, format);
         const fullPath = chainRegistry.derivationPathFor(
             chainId, addressType, accountIndex, 0, 0, { format },
         );

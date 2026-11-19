@@ -21,14 +21,15 @@ import {
     encryptWalletSeed,
     encryptWalletPassphrase,
     makeFreshKdfParams,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { ensureSettings } from './seedSettings.js';
+import { ensureSettingsNow } from './seedSettings.js';
+import { serializeSettingsWrites } from './settings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
 // The same phrase (and passphrase) imported twice derives the same addresses.
 // A second wallet over the same keys would double-count every balance and
@@ -62,6 +63,67 @@ async function existingWalletNameFor(vault, derived) {
     return null;
 }
 
+// Whether two settings values are the same. The vault stores settings sparsely
+// and reads them back without the null overrides and in its own key order, so
+// a record read after a write differs from the object that was written by
+// exactly those two things, which are not part of the value.
+function sameValue(left, right) {
+    if (left === right) return true;
+    if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+        return (left ?? null) === (right ?? null);
+    }
+    if (Array.isArray(left) !== Array.isArray(right)) return false;
+    if (Array.isArray(left)) {
+        return left.length === right.length && left.every((item, i) => sameValue(item, right[i]));
+    }
+    const set = (value) => Object.keys(value).filter((key) => value[key] !== null && value[key] !== undefined);
+    const leftKeys = set(left);
+    const rightKeys = set(right);
+    return leftKeys.length === rightKeys.length
+        && leftKeys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+}
+
+export function settingsSeedDelta(before, seeded, chainIds) {
+    const added = (path) => chainIds.flatMap((chainId) => {
+        const oldValue = path(before)?.[chainId];
+        const seededValue = path(seeded)?.[chainId];
+        return oldValue === undefined && seededValue !== undefined
+            ? [[chainId, seededValue]]
+            : [];
+    });
+    return {
+        created: before === null,
+        seeded,
+        fees: added((settings) => settings?.fees),
+    };
+}
+
+function removeUnchangedSeedEntries(source, entries) {
+    const next = { ...(source ?? {}) };
+    for (const [chainId, seededValue] of entries) {
+        if (sameValue(next[chainId], seededValue)) delete next[chainId];
+    }
+    return next;
+}
+
+export async function rollbackSettingsSeed(vault, delta) {
+    if (!delta) return;
+    await serializeSettingsWrites(vault, async () => {
+        const current = await vault.settings.get();
+        if (!current) return;
+        if (delta.created && sameValue(current, delta.seeded)
+            && typeof vault.settings.clear === 'function') {
+            await vault.settings.clear();
+            return;
+        }
+        const next = {
+            ...current,
+            fees: removeUnchangedSeedEntries(current.fees, delta.fees),
+        };
+        if (!sameValue(next, current)) await vault.settings.put(next);
+    });
+}
+
 /**
  * @typedef {Object} PersistOpts
  * @property {string} mnemonic                      already normalized + validated
@@ -79,6 +141,7 @@ async function existingWalletNameFor(vault, derived) {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string[]} activeChainIds
+ * @property {'full' | 'watcher' | 'signer'} [walletMode]   §20: this wallet's mode, chosen at create, import or pair; default `full`
  * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]   optional. Passed to `ensureSettings` so a fresh wallet's settings record is created with this network selected. Existing settings (e.g. second wallet created in an already-configured vault) preserve their stored value. Defaults: caller should pass an inferred value (typically the networkKind of activeChainIds[0]) so the wallet lands on the network its chains are on.
  */
 
@@ -102,6 +165,7 @@ export async function persistHdWallet({
     sdkRegistry,
     activeChainIds,
     activeNetwork,
+    walletMode,
 }) {
     // A supplied key belongs to the params it was derived with; calibrating
     // fresh ones beside it would seal a seed no password opens.
@@ -128,7 +192,7 @@ export async function persistHdWallet({
     let walletRecord;
     let account;
     let signer;
-    let previousSettings;
+    let settingsSeed = null;
     let accountPutAttempted = false;
     let walletPutAttempted = false;
     let settingsPutAttempted = false;
@@ -137,8 +201,7 @@ export async function persistHdWallet({
         const rollbackErrors = [];
         if (settingsPutAttempted) {
             try {
-                if (previousSettings) await vault.settings.put(previousSettings);
-                else if (typeof vault.settings.clear === 'function') await vault.settings.clear();
+                await rollbackSettingsSeed(vault, settingsSeed);
             } catch (e) {
                 rollbackErrors.push(e);
             }
@@ -191,6 +254,7 @@ export async function persistHdWallet({
             passphraseEnabled,
             encryptedSeed,
             kdfParams: storedKdfParams,
+            walletMode,
         });
 
         // A create or import adds a wallet; it never replaces one. A stored
@@ -199,8 +263,6 @@ export async function persistHdWallet({
         if (await vault.wallets.get(walletRecord.id)) {
             throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
         }
-        previousSettings = await vault.settings.get();
-
         // 4. Build the first Account. Persistence waits until the wallet
         //    and every initial address are ready.
         account = createAccount({
@@ -254,9 +316,7 @@ export async function persistHdWallet({
             // A restored Counterwallet wallet opens on the legacy address
             // its old wallet showed first - that is where the user's
             // balances are - not on the chain's modern default.
-            const addressType = format === 'counterwallet-legacy'
-                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-                : descriptor.defaultAddressType;
+            const addressType = defaultAddressTypeForFormat(descriptor, format);
             const [derived] = await signer.getAddresses({
                 chainId,
                 accountIndex: 0,
@@ -293,7 +353,17 @@ export async function persistHdWallet({
         //    before wallet records so a settings failure cannot leave an
         //    incomplete wallet behind; rollback restores the prior settings.
         settingsPutAttempted = true;
-        await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });
+        await serializeSettingsWrites(vault, async () => {
+            await ensureSettingsNow(
+                vault,
+                chainRegistry,
+                activeChainIds,
+                { activeNetwork },
+                ({ before, seeded }) => {
+                    settingsSeed = settingsSeedDelta(before, seeded, activeChainIds);
+                },
+            );
+        });
 
         // 9. Persist the complete wallet graph. Every generated id is new,
         //    so removing these records restores the pre-call graph if a

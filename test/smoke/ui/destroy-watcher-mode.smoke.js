@@ -34,6 +34,19 @@ assert.match(
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(
+    formSrc,
+    /credentials=\{\([\s\S]{0,160}t\('common\.watcherBuildsUnsigned'\)/,
+    'watcher review puts the unsigned-build explanation inside Confirm Standard',
+);
+assert.match(
+    formSrc,
+    /<ConfirmActionModal[\s\S]{0,500}onApprove=\{\(\) => handleSubmit/,
+    'watcher review uses the standard Approve decision to build the unsigned transaction',
+);
+assert.doesNotMatch(
+    formSrc,
+    /Create Unsigned Transaction/,
+    'watcher review does not restore a nonstandard approve label',
+);
 console.log('destroy-watcher-mode smoke OK');

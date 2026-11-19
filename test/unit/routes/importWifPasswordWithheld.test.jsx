@@ -57,14 +57,14 @@ async function openImportForm(messaging) {
     );
     fireEvent.click(await screen.findByRole('button', { name: /Add or import address/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Import address/i }));
-    await screen.findByLabelText(/WIF private key/i);
+    await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
 }
 
 async function submitWif() {
-    fireEvent.change(screen.getByLabelText(/WIF private key/i), {
+    fireEvent.change(screen.getByLabelText(/WIF private key/i, { selector: 'input' }), {
         target: { value: 'cSV3exampleRegtestWifValue' },
     });
-    const pw = screen.queryByLabelText(/Wallet password/i);
+    const pw = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
     if (pw) fireEvent.change(pw, { target: { value: 'correct horse' } });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));
@@ -76,7 +76,7 @@ describe('WIF import withholds the password when the session signer is ready', (
         await openImportForm(messaging);
         // The field is not rendered in this state, so the guard has to come
         // from the payload rather than from an empty string.
-        await waitFor(() => expect(screen.queryByLabelText(/Wallet password/i)).toBeNull());
+        await waitFor(() => expect(screen.queryByLabelText(/Wallet password/i, { selector: 'input' })).toBeNull());
 
         await submitWif();
         await waitFor(() => expect(messaging.importWifRequest).toHaveBeenCalledTimes(1));
@@ -87,7 +87,7 @@ describe('WIF import withholds the password when the session signer is ready', (
     it('sends `password` while the signer is not ready', async () => {
         const messaging = messagingFor(false);
         await openImportForm(messaging);
-        await screen.findByLabelText(/Wallet password/i);
+        await screen.findByLabelText(/Wallet password/i, { selector: 'input' });
 
         await submitWif();
         await waitFor(() => expect(messaging.importWifRequest).toHaveBeenCalledTimes(1));

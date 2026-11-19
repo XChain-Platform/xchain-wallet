@@ -13,7 +13,7 @@
 // WHY THE DISTINCTION IS THE POINT. The existing round trip and the deadline
 // race both bet from a second ADDRESS inside one wallet, which is enough to
 // satisfy the protocol rule that an oracle may not bet its own market. What it
-// cannot exercise is the WALLET boundary: MyBets and OracleConsole are scoped
+// cannot exercise is the WALLET boundary: Bet Markets' My bets and My markets tabs are scoped
 // per wallet, the bettor's wallet has never seen the market's creation, and
 // nothing in one wallet's vault knows the other exists. A market that only ever
 // works when both roles share a seed would pass every test written so far.
@@ -56,10 +56,14 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm as approveWhenReady,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -122,21 +126,20 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(page.getByRole('main'));
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
 async function approveConfirm(page) {
     await expectConfirmModal(page, 'this action', 60_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /**
@@ -151,7 +154,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address').inputValue();
+    return (await openFromAddress(main)).inputValue();
 }
 
 test.describe('BET across two wallets', () => {
@@ -186,20 +189,20 @@ test.describe('BET across two wallets', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await main.getByLabel('Your oracle address').inputValue()).toBe(oracle);
+            expect(await (await openFromAddress(main)).inputValue()).toBe(oracle);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Two wallets ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
-            await main.getByLabel('Betting closes')
+            await fieldByLabel(main, 'Question').fill(`Two wallets ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await approveConfirm(page);
 
             const until = Date.now() + 180_000;
@@ -245,31 +248,36 @@ test.describe('BET across two wallets', () => {
             await gotoBettingHub(page);
             // Chain-scoped, not wallet-scoped: a market wallet B never created
             // must still be browsable from wallet B.
-            const row = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            const row = page.locator(`[data-market-index="${feedIndex}"]`);
             await expect(row,
                 `wallet B cannot see market #${feedIndex}, which wallet A created on the same chain`)
                 .toBeVisible({ timeout: 30_000 });
             await row.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
-            await main.getByLabel(/^Stake/).fill(STAKE);
+            // The outcome buttons are on the Bet tab; tapping one opens the
+            // Place Bet step with that outcome preselected, where the stake is.
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
+            await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Buy Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
             // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same
             // balance the stake leaves, so the debit below is stake plus this
             // fee. Read off the screen the user approved rather than hardcoded:
             // the fee is a hub setting, and on the coin lane there is no line.
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            const feeLine = page.getByTestId('confirm-protocol-fee');
+            const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();
                 betFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
                 expect(Number.isFinite(betFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
             }
-            await page.getByTestId('confirm-approve').click();
+            await approveWhenReady(page);
 
             await expect(page.getByTestId('bet-result'), 'no receipt after placing the bet')
                 .toBeVisible({ timeout: 120_000 });
@@ -318,24 +326,27 @@ test.describe('BET across two wallets', () => {
                 'the oracle wallet paid for the bettor stake').toBe(MINT_XCHAIN);
         });
 
-        await test.step('MyBets is scoped to the wallet that placed the bet', async () => {
-            // Wallet B placed it, so wallet B lists it.
-            await openPaletteCommand(page, 'My bets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+        await test.step('the My bets tab is scoped to the wallet that placed the bet', async () => {
+            // Wallet B placed it, so wallet B lists it. The palette's My bets
+            // opens Bet Markets on its My bets tab.
+            // My bets is the All list narrowed to the markets bet in (ruling
+            // 2026-11-13), so the market's card is what it lists.
+            await openPaletteCommand(page, 'My predictions');
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet B does not list a bet it placed').toBeVisible({ timeout: 30_000 });
 
-            // Wallet A did not, so wallet A must not: a MyBets that reads the
+            // Wallet A did not, so wallet A must not: a My bets tab that reads the
             // chain rather than the wallet would show every bet on the venue.
             await switchToWallet(page, 'Oracle Wallet');
 
-            await openPaletteCommand(page, 'My bets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+            await openPaletteCommand(page, 'My predictions');
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet A lists a bet placed by a different wallet')
                 .toBeHidden({ timeout: 30_000 });
 
             // And the market IS wallet A's, so its oracle console still claims it.
             await openPaletteCommand(page, 'My markets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet A does not list the market it created').toBeVisible({ timeout: 30_000 });
         });
     });

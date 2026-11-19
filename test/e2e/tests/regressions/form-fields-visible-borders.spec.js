@@ -8,6 +8,7 @@ import {
     expect,
     gotoSection,
     openSettings,
+    revealChainPicker,
     test,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -32,12 +33,14 @@ const VISIBLE_FIELD_SELECTOR = [
     'input[type="week"]',
     'input[type="datetime-local"]',
     'select',
+    // The shared themed dropdown trigger (ruling G96) is a field too.
+    '[data-xc-select]',
     'textarea',
 ].map((selector) => `${selector}:visible`).join(', ');
 
 async function gotoPaletteRoute(page, name) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', { name: new RegExp(`^${name}\\b`) }).first().click();
@@ -48,26 +51,36 @@ async function gotoPaletteRoute(page, name) {
 // one before it measures the inline action.
 async function selectHeldGiveToken(page) {
     const main = page.getByRole('main');
-    const network = main.getByRole('button', { name: /^Give and get network:/ });
-    await expect(network).toBeVisible();
-    if (await network.getAttribute('aria-label') !== 'Give and get network: Bitcoin') {
+    const network = main.getByRole('button', { name: /^Network:/ });
+    await revealChainPicker(main, network, 'Network');
+    if (await network.getAttribute('aria-label') !== 'Network: Bitcoin') {
         await network.click();
-        await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
-        await expect(network).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: 'Select Bitcoin' }).click();
+        await expect(network).toHaveAttribute('aria-label', 'Network: Bitcoin');
     }
     await selectNamedToken(page, 'Give token', {
         chainId: 'bitcoin-mainnet',
         chainLabel: 'Bitcoin',
         tick: 'PEPECASH',
     });
-    await expect(main.getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+    // Swap's Max is an icon button on the available line under the amount,
+    // not an action inside the field, so it is asserted here and not measured.
+    await expect(main.getByRole('region', { name: 'You give' })
+        .getByRole('button', { name: 'Max you give amount' })).toBeVisible();
 }
 
-async function expectVisibleFieldsHaveBorders(page, label) {
+// The big amounts on Quick's You give and You get cards are borderless and
+// transparent by operator sign-off (fe2bc59bb); the card's own 1px border
+// frames each one. Only those two cards may stand in for a field's border,
+// and only while the card draws a border on every side.
+const GIVE_GET_CARDS = ['You give', 'You get'];
+
+async function expectVisibleFieldsHaveBorders(page, label, expectedCardFramed = []) {
     const fields = page.locator(VISIBLE_FIELD_SELECTOR);
     await expect(fields.first(), `${label}: no visible text field, select, or textarea`).toBeVisible();
 
-    const measurements = await fields.evaluateAll((elements) => {
+    const measurements = await fields.evaluateAll((elements, cardNames) => {
         const shadowIsVisible = (value) => value !== 'none'
             && value.split(/,(?![^()]*\))/).some((layer) => {
                 if (/\btransparent\b/i.test(layer)) return false;
@@ -96,6 +109,15 @@ async function expectVisibleFieldsHaveBorders(page, label) {
                 || element.getAttribute('placeholder')
                 || element.id
                 || '(unlabelled)';
+            const selfOutlined = Object.values(borders).some((width) => width >= 1)
+                || shadowIsVisible(style.boxShadow);
+            const card = element.closest(cardNames.map((name) => `section[aria-label="${name}"]`).join(', '));
+            const cardStyle = card ? getComputedStyle(card) : null;
+            const cardFramed = !selfOutlined && Boolean(cardStyle)
+                && ['Top', 'Right', 'Bottom', 'Left'].every((side) => (
+                    Number.parseFloat(cardStyle[`border${side}Width`]) >= 1
+                    && cardStyle[`border${side}Style`] !== 'none'
+                ));
 
             return {
                 element: element.tagName.toLowerCase(),
@@ -103,17 +125,21 @@ async function expectVisibleFieldsHaveBorders(page, label) {
                 label: labelText,
                 borders,
                 boxShadow: style.boxShadow,
-                outlined: Object.values(borders).some((width) => width >= 1)
-                    || shadowIsVisible(style.boxShadow),
+                outlined: selfOutlined || cardFramed,
+                framedBy: cardFramed ? card.getAttribute('aria-label') : undefined,
             };
         });
-    });
+    }, GIVE_GET_CARDS);
 
     const offenders = measurements.filter(({ outlined }) => !outlined);
     expect(
         offenders,
         `${label}: visible fields without a 1px border or visible box shadow\n${JSON.stringify(measurements, null, 2)}`,
     ).toEqual([]);
+    expect(
+        measurements.map(({ framedBy }) => framedBy).filter(Boolean).sort(),
+        `${label}: fields framed by a Give/Get card instead of their own border`,
+    ).toEqual([...expectedCardFramed].sort());
 }
 
 async function expectInlineActionsInsideFields(page, label, requiredNames = []) {
@@ -138,8 +164,10 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
             || element.id
             || element.tagName.toLowerCase();
 
+        // Max is an icon-only in-field action now, so it is found by its
+        // accessible name and reported under its short name.
         const actions = [...body.querySelectorAll('button')].filter((button) => (
-            visible(button) && button.textContent.trim() === 'Max'
+            visible(button) && button.getAttribute('aria-label') === 'Use max available amount'
         ));
         const measurements = actions.map((button) => {
             let owner = button.parentElement;
@@ -168,7 +196,7 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
                 && buttonBox.bottom <= fieldBox.bottom + slack;
 
             return {
-                action: button.textContent.trim(),
+                action: 'Max',
                 field: field ? describe(field) : null,
                 inside,
                 buttonBox: {
@@ -201,8 +229,8 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
     ).toEqual([]);
 }
 
-async function checkScreen(page, label, requiredActions = []) {
-    await expectVisibleFieldsHaveBorders(page, label);
+async function checkScreen(page, label, requiredActions = [], cardFramed = []) {
+    await expectVisibleFieldsHaveBorders(page, label, cardFramed);
     await expectInlineActionsInsideFields(page, label, requiredActions);
 }
 
@@ -234,9 +262,9 @@ for (const theme of THEMES) {
 
                 await test.step(`${context} / Swap`, async () => {
                     await gotoPaletteRoute(page, 'Swap');
-                    await expect(page.getByRole('heading', { name: 'Swap tokens', exact: true })).toBeVisible();
+                    await expect(page.getByRole('heading', { name: 'Swap Tokens', exact: true })).toBeVisible();
                     await selectHeldGiveToken(page);
-                    await checkScreen(page, `${context} / Swap`, ['Max']);
+                    await checkScreen(page, `${context} / Swap`, [], GIVE_GET_CARDS);
                 });
 
                 await test.step(`${context} / Receive`, async () => {
@@ -247,6 +275,8 @@ for (const theme of THEMES) {
 
                 await test.step(`${context} / Settings search`, async () => {
                     await openSettings(page);
+                    // The search sits behind the Filter settings button.
+                    await page.getByRole('button', { name: 'Filter settings' }).click();
                     await expect(page.getByRole('searchbox', { name: 'Search settings' })).toBeVisible();
                     await checkScreen(page, `${context} / Settings search`);
                 });
@@ -254,12 +284,20 @@ for (const theme of THEMES) {
                 await test.step(`${context} / Contacts`, async () => {
                     await gotoSection(page, 'Contacts');
                     await expect(page.getByRole('heading', { name: 'Contacts', exact: true })).toBeVisible();
+                    // The search sits in the panel behind Filter contacts.
+                    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
+                    await expect(page.getByRole('searchbox', { name: 'Search contacts' })).toBeVisible();
                     await checkScreen(page, `${context} / Contacts`);
+                    // Close the panel so the palette shortcut is not typed into its search.
+                    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
                 });
 
                 await test.step(`${context} / Addresses`, async () => {
                     await gotoPaletteRoute(page, 'Addresses');
                     await expect(page.getByRole('heading', { name: 'Addresses', exact: true })).toBeVisible();
+                    // The search sits in the panel behind Filter addresses.
+                    await page.getByRole('button', { name: 'Filter addresses', exact: true }).click();
+                    await expect(page.getByRole('searchbox', { name: 'Search addresses' })).toBeVisible();
                     await checkScreen(page, `${context} / Addresses`);
                 });
             }

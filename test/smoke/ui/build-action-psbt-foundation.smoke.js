@@ -24,7 +24,7 @@
 //   - All three messaging shims expose `buildActionPsbtRequest(opts)`
 //     calling `action.psbt`.
 //   - shared/hooks/useWalletMode.js exports `useWalletMode`, derives
-//     `walletMode` from settings with `WALLET_MODE_DEFAULT` fallback,
+//     `walletMode` from the wallet record with `WALLET_MODE_DEFAULT` fallback,
 //     returns `{ walletMode, isFullMode, isWatcherMode, isSignerMode }`.
 
 import { strict as assert } from 'node:assert';
@@ -117,21 +117,19 @@ for (const [name, src] of [
 
 // ─── 5. useWalletMode hook ----------------------------------------
 
+// §20: the mode belongs to each wallet record, read from the safe wallet
+// list; the hook never reads settings.
 assert.match(
     hookSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
-    'useWalletMode imports WALLET_MODE_DEFAULT',
+    /import \{ WALLET_MODE_DEFAULT, walletModeOf \} from '\.\.\/\.\.\/schemas\/wallet\.js';/,
+    'useWalletMode takes the default and the reader from the wallet schema',
 );
+assert.doesNotMatch(hookSrc, /useSettings/, 'useWalletMode does not read settings');
+assert.match(hookSrc, /export function useWalletMode\(walletId\)/, 'useWalletMode exported');
 assert.match(
     hookSrc,
-    /import \{ useSettings \} from '\.\/useSettings\.js';/,
-    'useWalletMode reads settings via useSettings',
-);
-assert.match(hookSrc, /export function useWalletMode\(\)/, 'useWalletMode exported');
-assert.match(
-    hookSrc,
-    /settings\?\.walletMode \|\| WALLET_MODE_DEFAULT/,
-    'falls back to default mode when settings absent / loading',
+    /\|\| WALLET_MODE_DEFAULT;/,
+    'falls back to the default mode while the wallet is unknown',
 );
 assert.match(hookSrc, /isFullMode: walletMode === 'full'/, 'isFullMode flag');
 assert.match(hookSrc, /isWatcherMode: walletMode === 'watcher'/, 'isWatcherMode flag');

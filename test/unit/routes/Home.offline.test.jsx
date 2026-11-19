@@ -64,7 +64,6 @@ describe('Home offline behavior', () => {
         setNavigatorOnline(true);
         const onSend = vi.fn();
         const onSwap = vi.fn();
-        const onCreateToken = vi.fn();
         const messaging = {
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([]),
@@ -73,15 +72,15 @@ describe('Home offline behavior', () => {
             getSettings: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
         };
-        mountHome(messaging, onSend, { onSwap, onCreateToken });
+        mountHome(messaging, onSend, { onSwap });
 
         await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
-        expect(screen.getByText(/^Updated /)).toBeTruthy();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
 
         // A failed background read leaves the last successful rows and sync
         // time intact instead of returning Home to a loading state.
         messaging.getWalletBalances.mockRejectedValueOnce(new Error('Failed to fetch'));
-        vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + flows.BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
         expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
@@ -90,20 +89,19 @@ describe('Home offline behavior', () => {
         setNavigatorOnline(false);
         act(() => { window.dispatchEvent(new Event('offline')); });
         await waitFor(() => expect(screen.getByText(/Showing cached balances/)).toBeTruthy());
-        // Offline, the freshness label names the saved data and keeps the last
-        // sync time in its title.
-        expect(screen.getByText('Offline, showing saved data').getAttribute('title')).toBeTruthy();
+        // Offline, the cached-balances notice is the one message: the balance
+        // card carries no freshness line (Settings, About shows the last load).
+        expect(screen.queryByText('Offline, showing saved data')).toBeNull();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-        expect(onSend).not.toHaveBeenCalled();
-        expect(screen.getByText(/Sending needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
-        expect(onSwap).not.toHaveBeenCalled();
-        expect(screen.getByText(/Swapping needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-        expect(onCreateToken).not.toHaveBeenCalled();
-        expect(screen.getByText(/Creating a token needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        // Home has no action row at all: Send, Receive, Exchange and Create
+        // token live in the navigation and the wallet menu.
+        for (const name of ['Send', 'Receive', 'Exchange', 'More', 'Swap', 'Create token']) {
+            expect(screen.queryByRole('button', { name })).toBeNull();
+        }
+        // The balance card's menu no longer carries a Refresh portfolio row,
+        // so the offline guard is shown by the read count staying put.
+        expect(screen.queryByRole('menuitem', { name: 'Refresh portfolio' })).toBeNull();
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
         messaging.getWalletBalances.mockResolvedValue(BALANCES);
@@ -112,13 +110,12 @@ describe('Home offline behavior', () => {
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(3));
         await waitFor(() => expect(screen.queryByText(/Showing cached balances/)).toBeNull());
-        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     });
 
-    it('gives a fresh offline wallet its actions under the one offline message', async () => {
-        // Nothing saved yet and no network: the balances are unavailable, but
-        // Home still offers its actions instead of an empty page.
+    it('gives a fresh offline wallet the one offline message and no action row', async () => {
+        // Nothing saved yet and no network: the balances are unavailable and
+        // the navigation holds every action.
         setNavigatorOnline(false);
         const onSend = vi.fn();
         const onReceive = vi.fn();
@@ -132,20 +129,15 @@ describe('Home offline behavior', () => {
         };
         mountHome(messaging, onSend, { onReceive });
 
-        const actions = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(screen.getAllByText('You are offline. Connect to load balances and use network actions.'))
+        expect(await screen.findAllByText('You are offline. Connect to load balances and use network actions.'))
             .toHaveLength(1);
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
-
-        const send = within(actions).getByRole('button', { name: 'Send' });
-        expect(send).toHaveAttribute('aria-disabled', 'true');
-        expect(send).toHaveAttribute('title', 'Send needs a network connection');
-        fireEvent.click(send);
         expect(onSend).not.toHaveBeenCalled();
-
-        fireEvent.click(within(actions).getByRole('button', { name: 'Receive' }));
-        expect(onReceive).toHaveBeenCalledTimes(1);
+        expect(onReceive).not.toHaveBeenCalled();
     });
 
     it('cold-starts from cached balances when services are offline but the device interface is online', async () => {
@@ -205,5 +197,38 @@ describe('Home offline behavior', () => {
 
         await screen.findByText('You are offline. Connect to load balances and use network actions.');
         expect(screen.queryByText(/Couldn't load balances/)).toBeNull();
+    });
+
+    it('identifies an SDK load failure instead of calling the wallet offline', async () => {
+        setNavigatorOnline(true);
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{
+                    address: 'bc1qsdkfailed',
+                    balances: null,
+                    error: '[xchain-wallet/web] xchain-sdk is not loaded yet (or failed to load)',
+                }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+        const view = mountHome(messaging, vi.fn());
+
+        await screen.findByText('Part of the wallet did not load. Reload to try again.');
+
+        reachability.overall = 'offline';
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <Home activeWalletId={WALLET.id} onSend={() => {}} onReceive={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+        expect(screen.queryByText(/You are offline/)).toBeNull();
     });
 });

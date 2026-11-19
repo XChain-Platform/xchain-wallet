@@ -8,7 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-163: the wizard's chain step must let the user choose WHO SIGNS.
+// D-163: the token form must let the user choose WHO SIGNS. On the one Issue
+// Token form that is the From section (Network plus the source address and
+// its picker), which these cases drive.
 //
 // It used to render the fee-payer as read-only text and auto-pick the highest
 // external HD address, with no control anywhere in the flow to change it. For
@@ -22,13 +24,13 @@
 // This pins the REMEDY's existence at the unit level; the full drive (refused
 // from the wrong address, accepted from the right one, same form and same
 // minute) is `test/e2e/tests/tokens/subtoken-issue.regtest.spec.js`, which needs
-// a chain. Teeth: revert the AddressField in `renderChainStage` to the old
-// read-only line and both cases below fail.
+// a chain. Teeth: drop the From section's picker and the cases below fail.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 // TWO external HD addresses on one chain, which is the situation the defect
@@ -75,52 +77,64 @@ function mountWizard() {
     return messaging;
 }
 
-/** Template -> chain, where the fee payer is named. */
-async function driveToChainStage(template = 'Subtoken') {
-    fireEvent.click(await screen.findByText(template));
-    return screen.findByLabelText('Fee paid by');
+/** Pick a template, then open the From section, where the signer is named. */
+async function driveToFrom(template = 'Subtoken') {
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(template) }));
+    const field = await screen.findByLabelText('From address');
+    fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
+    return field;
+}
+
+/** Opens the From address help tip and returns its text. */
+function fromAddressHelp() {
+    fireEvent.click(screen.getByRole('button', { name: /^About From address/ }));
+    return document.body.textContent;
 }
 
 afterEach(() => cleanup());
 
-describe('TokenWizard signing address', () => {
+describe('Issue Token signing address', () => {
+    it('gives the Network field a help tip', async () => {
+        mountWizard();
+        await driveToFrom('Meme token');
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeTruthy();
+    });
+
     it('names the fee payer in a field that opens the address picker', async () => {
         mountWizard();
-        const field = await driveToChainStage();
+        const field = await driveToFrom();
 
-        // Unchanged default: the newest external HD address. The fix adds a
-        // way past it, and must not quietly move the default underneath every
-        // other template.
+        // Unchanged default: the newest external HD address. The picker adds
+        // a way past it, and must not quietly move the default underneath
+        // every other template.
         expect(field.value).toBe(ADDRESSES['bitcoin-mainnet'][1].address);
 
-        // The remedy itself. Before D-163 this button did not exist on any
-        // stage of this wizard, while every other authoring form in the wallet
-        // had one.
+        // The remedy itself: the signer can be changed.
         const open = screen.getByRole('button', { name: 'Choose source address' });
-        expect(open).toBeTruthy();
         fireEvent.click(open);
-        expect(screen.queryByLabelText('Fee paid by')).toBeNull();
+        expect(screen.queryByLabelText('From address')).toBeNull();
     });
 
     it('tells a subtoken author that the signer is what the chain checks', async () => {
         mountWizard();
-        await driveToChainStage('Subtoken');
+        await driveToFrom('Subtoken');
 
         // The sentence exists because the refusal it prevents names a wire
         // field ("TICK") rather than the signer, so a user reading the error
         // alone looks at the wrong control.
-        expect(screen.getByText(
+        expect(fromAddressHelp()).toMatch(
             /subtoken can only be issued by the address that owns its parent/i,
-        )).toBeTruthy();
+        );
     });
 
     it('says nothing about parents on a template that has none', async () => {
         mountWizard();
-        await driveToChainStage('Meme token');
+        await driveToFrom('Meme token');
 
-        expect(screen.queryByText(
+        expect(fromAddressHelp()).not.toMatch(
             /subtoken can only be issued by the address that owns its parent/i,
-        )).toBeNull();
+        );
         expect(screen.getByRole('button', { name: 'Choose source address' })).toBeTruthy();
     });
 });

@@ -29,7 +29,7 @@ const CASES = [
 async function enterDemoWallet(page) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
@@ -47,8 +47,7 @@ for (const scenario of CASES) {
 
             const header = page.getByRole('region', { name: 'App header' });
             const menuButton = header.getByRole('button', { name: 'Open menu' });
-            const menu = page.getByRole('menu', { name: 'Header actions' });
-            const settingsPanel = page.getByRole('dialog', { name: 'Wallet settings' });
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
 
             await activate(menuButton, scenario.hasTouch);
             await expect(menu).toBeVisible();
@@ -58,19 +57,18 @@ for (const scenario of CASES) {
             await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
 
             await activate(menuButton, scenario.hasTouch);
-            await activate(menu.getByRole('menuitem', { name: 'Settings', exact: true }), scenario.hasTouch);
-            await expect(settingsPanel).toBeVisible();
+            await activate(menu.locator('[data-wallet-menu-row="settings"]'), scenario.hasTouch);
+            await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
 
             if (scenario.destination === 'wallets') {
-                await activate(settingsPanel.getByRole('button', { name: /Demo Wallet/ }), scenario.hasTouch);
-                await expect(page.getByRole('heading', { name: 'Wallets', level: 1 })).toBeVisible();
-            } else {
-                await activate(settingsPanel.getByRole('button', { name: 'All settings' }), scenario.hasTouch);
-                await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
+                const main = page.getByRole('main');
+                // Settings groups its rows: Wallets, then My Wallets.
+                await activate(main.getByRole('button', { name: /^Wallets\b/ }), scenario.hasTouch);
+                await activate(main.getByRole('button', { name: /^My Wallets\b/ }), scenario.hasTouch);
+                await expect(page.getByRole('heading', { name: /^(My )?Wallets$/, level: 1 })).toBeVisible();
             }
 
             await expect(menu).toBeHidden();
-            await expect(settingsPanel).toBeHidden();
             await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
         });
     });

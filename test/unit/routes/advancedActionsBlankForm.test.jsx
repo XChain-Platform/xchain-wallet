@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: Preview on an untouched action form names the field to fill and
+// Unit: submitting an untouched action form names the field to fill and
 // never reaches the encoder.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 const BTC = 'bitcoin-mainnet';
 const FROM = {
@@ -30,7 +31,7 @@ const FROM = {
 afterEach(() => cleanup());
 
 describe('AdvancedActionsForm blank form', () => {
-    it('refuses Preview with a field-level message and does not call the encoder', async () => {
+    it('refuses submission with a field-level message and does not call the encoder', async () => {
         const composeForConfirm = vi.fn().mockResolvedValue({});
         const target = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
@@ -51,11 +52,14 @@ describe('AdvancedActionsForm blank form', () => {
                 <AdvancedActionsForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await waitFor(() => expect(document.querySelector('option[value="BROADCAST"]')).toBeTruthy());
-        const picker = document.querySelector('option[value="BROADCAST"]').closest('select');
-        fireEvent.change(picker, { target: { value: 'BROADCAST' } });
+        // Network sits in the closed From section; open it so its help shows.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        const picker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(picker)).toContain('BROADCAST'));
+        selectOption(picker, 'BROADCAST');
         await screen.findByLabelText('MESSAGE');
-        fireEvent.click(screen.getByRole('button', { name: /^(Preview|Sign action)$/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Action' }));
 
         expect((await screen.findAllByText('Enter a value for MESSAGE.')).length).toBeGreaterThan(0);
         expect(screen.getByLabelText('MESSAGE')).toHaveAttribute('aria-invalid', 'true');

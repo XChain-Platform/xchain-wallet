@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Demo-mode axe sweep: the layout sweep's unlocked walk (home tabs, header
-// popovers, every command-palette destination, the menu, every Settings
-// section, the More sheet) with an axe audit of each screen, in light and
+// navigation destination, the wallet menu and every Settings section) with
+// an axe audit of each screen, in light and
 // dark at 360x800 and 1280x800. Any serious or critical violation fails the
 // run. Writes tmp/a11y-sweep/<combo>.json. Run with
 // playwright.a11y-sweep.config.js.
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
 import { dismissIntroCarousel, expect, freezeMotion, test, unlockedShell } from '../../fixtures/wallet.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
-import { WCAG_TAGS } from '../../fixtures/a11y.js';
+import { WCAG_TAGS, withoutRuledContrast } from '../../fixtures/a11y.js';
 import { createSweep } from '../../layout/sweep.js';
 
 const OUT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..', 'tmp', 'a11y-sweep');
@@ -41,7 +41,10 @@ for (const size of SIZES) {
             const found = [];
             const onScreen = async (p, label) => {
                 await freezeMotion(p);
-                const { violations } = await new AxeBuilder({ page: p }).withTags(WCAG_TAGS).analyze();
+                // White text on the U97 success fill is a ruled exception, not a finding.
+                const violations = withoutRuledContrast(
+                    (await new AxeBuilder({ page: p }).withTags(WCAG_TAGS).analyze()).violations,
+                );
                 for (const v of violations) {
                     if (!BLOCKING.has(v.impact)) continue;
                     found.push({

@@ -3,13 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The batch and parallel composers pick their source address from a native
-// select, which cannot shorten its text. A full 42-character address ran
-// under the chevron and was cut off at phone width, so the options use the
-// wallet's usual first6…last6 form. The value stays the address record id.
+// Both composers show their source in the standard read-only address field,
+// which opens the own-address picker; no source address is offered as a
+// native select option.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
@@ -45,15 +44,24 @@ function mount(Form) {
 afterEach(() => cleanup());
 
 describe.each([
-    ['BatchComposerForm', BatchComposerForm],
     ['ParallelComposer', ParallelComposer],
-])('%s source options', (_name, Form) => {
-    it('shows the source address as first6…last6 and keeps the record id as the value', async () => {
+])('%s source control', (_name, Form) => {
+    it('shows the complete source in a read-only address field', async () => {
         mount(Form);
-        const select = await screen.findByLabelText('From address');
-        const short = `${ADDRESS.slice(0, 6)}…${ADDRESS.slice(-6)}`;
-        expect(await screen.findByRole('option', { name: short })).toBeTruthy();
-        expect(select.value).toBe(FROM.id);
-        expect(select.textContent).not.toContain(ADDRESS);
+        const field = await screen.findByLabelText(/^From(?: address)?$/, { selector: 'input' });
+        expect(field).toHaveValue(ADDRESS);
+        expect(field).toHaveAttribute('readonly');
+        expect(screen.queryByRole('combobox', { name: /^From(?: address)?$/ })).toBeNull();
+    });
+});
+
+// Batch (layout 1) has no page From field: each transaction's Network and
+// From row names the complete source and opens the own-address picker.
+describe('BatchComposerForm source control', () => {
+    it('names the complete source on the transaction From row, never as a select option', async () => {
+        mount(BatchComposerForm);
+        const row = await screen.findByRole('button', { name: 'Change the network and From address of transaction 1' });
+        expect(within(row).getByLabelText(ADDRESS)).toBeTruthy();
+        expect(screen.queryByRole('combobox', { name: /^From(?: address)?$/ })).toBeNull();
     });
 });

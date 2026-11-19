@@ -305,7 +305,7 @@ assert.ok(
     'component renders the §18.5 cross-check copy',
 );
 assert.ok(
-    /Verify[\s\S]*derivation path[\s\S]*address[\s\S]*on your/.test(xcheck),
+    /Verify[\s\S]*account path[\s\S]*address[\s\S]*on your/.test(xcheck),
     'component instructs user to compare both path and address against device screen',
 );
 

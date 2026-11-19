@@ -25,8 +25,10 @@ const TEMPLATE_NAMES = [
     'Collectible',
     'Limited edition',
     'Subtoken',
-    'Custom',
 ];
+
+// The first entry is the neutral choice that fills nothing in.
+const PICKER_ROWS = ['Select template', ...TEMPLATE_NAMES];
 
 const MAX_OFFSET_PX = 1;
 
@@ -38,36 +40,57 @@ async function settle(page) {
 
 async function openCreateToken(page) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('Create a token');
     await palette.getByRole('option', { name: /^Create a token\b/ }).click();
     await expect(palette).toBeHidden();
-    await expect(page.getByText('Step 1 of 4: Template', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Issue Token' })).toBeVisible();
 }
 
 async function cardMetrics(page) {
-    const main = page.getByRole('main');
-    const templateList = main.getByRole('list').filter({ hasText: 'Meme token' });
-    const cards = templateList.locator(':scope > li > button');
-    await expect(cards).toHaveCount(TEMPLATE_NAMES.length);
+    // The templates are the options of the Select template dropdown.
+    const picker = page.getByRole('listbox', { name: 'Select template' });
+    if (!(await picker.isVisible())) {
+        await page.getByRole('button', { name: /Select template/ }).click();
+    }
+    await expect(picker).toBeVisible();
+    const cards = picker.getByRole('option');
+    await expect(cards).toHaveCount(PICKER_ROWS.length);
 
     const metrics = [];
-    for (let index = 0; index < TEMPLATE_NAMES.length; index += 1) {
-        const name = TEMPLATE_NAMES[index];
+    for (let index = 0; index < PICKER_ROWS.length; index += 1) {
+        const name = PICKER_ROWS[index];
         const card = cards.nth(index);
-        const title = card.getByText(name, { exact: true });
+        const title = card.getByText(name, { exact: true }).first();
         await expect(card, `${name} card is not visible`).toBeVisible();
         await expect(title, `${name} title is not visible`).toBeVisible();
 
         metrics.push(await card.evaluate((element, titleText) => {
-            const titleElement = [...element.querySelectorAll('span')]
-                .find((candidate) => candidate.textContent === titleText);
-            if (!titleElement) throw new Error(`No title element for ${titleText}`);
+            // An option is an icon plus a text column of the name over its description.
+            const iconElement = element.firstElementChild;
+            const textColumn = element.children[1];
+            const titleElement = textColumn?.children[0];
+            const subtitleElement = textColumn?.children[1];
+            if (!titleElement || titleElement.textContent.trim() !== titleText) {
+                throw new Error(`No title element for ${titleText}`);
+            }
 
             const cardBox = element.getBoundingClientRect();
             const titleBox = titleElement.getBoundingClientRect();
-            const style = getComputedStyle(element);
+            const nameNode = [...titleElement.childNodes]
+                .find((node) => node.nodeType === Node.TEXT_NODE
+                    && node.textContent.trim() === titleText);
+            if (!iconElement) throw new Error(`No icon element for ${titleText}`);
+            if (!subtitleElement) throw new Error(`No description element for ${titleText}`);
+            if (!nameNode) throw new Error(`No name text node for ${titleText}`);
+
+            const nameRange = document.createRange();
+            nameRange.selectNodeContents(nameNode);
+            // The icon is centred on the whole name-over-description column.
+            const textBox = textColumn.getBoundingClientRect();
+            const iconBox = iconElement.getBoundingClientRect();
+            const subtitleBox = subtitleElement.getBoundingClientRect();
             const titleStyle = getComputedStyle(titleElement);
             return {
                 name: titleText,
@@ -75,13 +98,13 @@ async function cardMetrics(page) {
                 height: cardBox.height,
                 titleInset: titleBox.left - cardBox.left,
                 titleColor: titleStyle.color,
-                backgroundColor: style.backgroundColor,
-                borders: ['Top', 'Right', 'Bottom', 'Left'].map((side) => ({
-                    side: side.toLowerCase(),
-                    width: parseFloat(style[`border${side}Width`]),
-                    style: style[`border${side}Style`],
-                    color: style[`border${side}Color`],
-                })),
+                nameLineCount: nameRange.getClientRects().length,
+                iconTextCenterOffset: Math.abs(
+                    (iconBox.top + iconBox.height / 2) - (textBox.top + textBox.height / 2),
+                ),
+                descriptionInset: subtitleBox.left - cardBox.left,
+                iconInset: iconBox.left - cardBox.left,
+                descriptionGap: subtitleBox.top - titleBox.bottom,
             };
         }, name));
     }
@@ -128,17 +151,29 @@ test('Create token template cards retain their visual hierarchy', async ({ page 
             const { linkColor, metrics } = await cardMetrics(page);
             const diagnostic = JSON.stringify({ linkColor, metrics }, null, 2);
 
-            const borderFailures = metrics.flatMap((metric) => metric.borders
-                .filter((border) => border.width <= 0
-                    || border.style === 'none'
-                    || border.style === 'hidden'
-                    || border.color === 'transparent'
-                    || border.color === 'rgba(0, 0, 0, 0)'
-                    || border.color === metric.backgroundColor)
-                .map((border) => `${metric.name} ${border.side}`));
+            const wrappedNames = metrics
+                .filter(({ nameLineCount }) => nameLineCount !== 1)
+                .map(({ name }) => name);
             expect(
-                borderFailures,
-                `${viewport.width}px: every card edge must have a visible border\n${diagnostic}`,
+                wrappedNames,
+                `${viewport.width}px: every template name must stay on one line with its icon\n${diagnostic}`,
+            ).toEqual([]);
+
+            const iconTextOffsets = metrics.map(({ iconTextCenterOffset }) => iconTextCenterOffset);
+            expect(
+                Math.max(...iconTextOffsets),
+                `${viewport.width}px: template icons are not centred on their text\n${diagnostic}`,
+            ).toBeLessThanOrEqual(MAX_OFFSET_PX);
+
+            const descriptionAlignmentFailures = metrics
+                .filter(({ descriptionInset, titleInset, descriptionGap }) => (
+                    Math.abs(descriptionInset - titleInset) > MAX_OFFSET_PX
+                    || descriptionGap < -MAX_OFFSET_PX
+                ))
+                .map(({ name }) => name);
+            expect(
+                descriptionAlignmentFailures,
+                `${viewport.width}px: descriptions must sit under the title and align with it\n${diagnostic}`,
             ).toEqual([]);
 
             const titleInsets = metrics.map(({ titleInset }) => titleInset);
@@ -156,20 +191,10 @@ test('Create token template cards retain their visual hierarchy', async ({ page 
             ).toEqual([]);
 
             const rows = rowsFor(metrics);
-            for (const row of rows) {
-                const heights = row.map(({ height }) => height);
-                expect(
-                    Math.max(...heights) - Math.min(...heights),
-                    `${viewport.width}px: cards in a row have unequal heights\n${diagnostic}`,
-                ).toBeLessThanOrEqual(MAX_OFFSET_PX);
-            }
-
-            if (viewport.width === 1280) {
-                expect(
-                    rows.some((row) => row.length > 1),
-                    `1280px: no multi-card row was rendered\n${diagnostic}`,
-                ).toBe(true);
-            }
+            expect(
+                rows.every((row) => row.length === 1),
+                `${viewport.width}px: templates must render as one list row each\n${diagnostic}`,
+            ).toBe(true);
         });
     }
 });

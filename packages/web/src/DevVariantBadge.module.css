@@ -2,10 +2,15 @@
     --xc-badge-safe-inline-start: env(safe-area-inset-left, 0px);
 
     position: fixed;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    inset-inline-start: calc(12px + var(--xc-badge-safe-inline-start));
+    /* The clearances hold the room the shell navigation takes at this
+       corner, so the default spot never sits on Lock or a bottom tab. */
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--xc-badge-clear-block, 0px));
+    inset-inline-start: calc(12px + var(--xc-badge-safe-inline-start) + var(--xc-badge-clear-inline, 0px));
     z-index: 9999;
     display: inline-flex;
+    flex-wrap: wrap;
+    max-inline-size: calc(100vw - 24px - var(--xc-badge-clear-inline, 0px));
+    box-sizing: border-box;
     align-items: center;
     gap: 8px;
     padding: 6px 10px;

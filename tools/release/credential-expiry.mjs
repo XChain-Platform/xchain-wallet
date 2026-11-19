@@ -1,4 +1,13 @@
 #!/usr/bin/env node
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 // The release-credential expiry clock (§6, frontier row 121).
 //
 // WHY THIS FILE EXISTS. §6 records four dated credentials and calls the K3
@@ -129,14 +138,18 @@ export function readActualExpiry(file, { run = execFileSync, fingerprint, signin
     if (/\.(asc|gpg|pgp)$/.test(file)) return readOpenPgpExpiry(file, { run, fingerprint, signingSubkey });
 
     if (file.endsWith('.provisionprofile') || file.endsWith('.mobileprovision')) {
-        try {
-            const plist = run('security', ['cms', '-D', '-i', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-            const m = /<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/.exec(plist);
-            if (!m) return { date: null, reason: 'no ExpirationDate in the profile' };
-            return parsedExpiry(m[1]);
-        } catch {
-            return { date: null, reason: 'the profile could not be decoded (security cms failed)' };
+        for (const [command, args] of [
+            ['security', ['cms', '-D', '-i', file]],
+            ['openssl', ['cms', '-verify', '-noverify', '-inform', 'DER', '-in', file]],
+            ['openssl', ['smime', '-verify', '-noverify', '-inform', 'DER', '-in', file]],
+        ]) {
+            try {
+                const plist = run(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+                const m = /<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/.exec(plist);
+                if (m) return parsedExpiry(m[1]);
+            } catch { /* try the next CMS decoder */ }
         }
+        return { date: null, reason: 'the profile could not be decoded by security or openssl' };
     }
 
     // A .cer may be DER or PEM and openssl will not guess; try the declared

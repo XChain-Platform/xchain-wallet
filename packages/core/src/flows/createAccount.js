@@ -18,14 +18,33 @@
 
 import { createAccount as createAccountRecord } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
+import {
+    hardwareNetworkSupport,
+    hardwareWalletRecord,
+    isHardwareWallet,
+    refuseHardwareWallet,
+} from './hardwareWallet.js';
+import { isWrongAppError } from '../signers/hardwareSession.js';
+import { recordLedgerIdentities } from './registerSigner.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../util/display_name.js';
 
 /** @type {WeakMap<object, Map<string, Promise<void>>>} */
 const CREATE_ACCOUNT_QUEUES = new WeakMap();
+
+export class LegacySingleAccountError extends Error {
+    constructor() {
+        super(
+            'This older FreeWallet recovery phrase supports one software account. '
+            + 'Upgrade to a standard recovery phrase to add another software account.',
+        );
+        this.name = 'LegacySingleAccountError';
+    }
+}
 
 /**
  * Serializes account index selection and persistence for each wallet.
@@ -73,6 +92,7 @@ function enqueueCreateAccount(vault, walletId, operation) {
  * @typedef {Object} CreateAccountResult
  * @property {import('../schemas/account.js').Account} account
  * @property {Array<{ chainId: string, address: import('../schemas/address.js').Address }>} addresses
+ * @property {string[]} [waitingChains]   hardware wallet only: networks left without an address because the device had another app open (a Ledger answers only the open app's coin)
  */
 
 /**
@@ -95,6 +115,8 @@ export async function createAccount({
         throw new Error('createAccount: walletId is required');
     }
     if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // No password could help a hardware wallet, so name the real reason.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'adding an account without it connected');
         throw new Error('createAccount: either `signer` or `password` is required');
     }
     if (!vault) throw new Error('createAccount: vault is required');
@@ -112,6 +134,19 @@ export async function createAccount({
     return enqueueCreateAccount(vault, walletId, async () => {
         const wallet = await vault.wallets.get(walletId);
         if (!wallet) throw new WalletNotFoundError(walletId);
+        // A hardware wallet's accounts come only from its device: with no
+        // device signer there is no seed to fall back on.
+        if (!providedSigner || providedSigner.kind === 'software') {
+            refuseHardwareWallet(wallet, 'adding an account without it connected');
+        }
+        // A device derives only on the networks its firmware signs; the
+        // others are left without an address rather than failing the add.
+        const chainIds = isHardwareWallet(wallet)
+            ? activeChainIds.filter((id) => hardwareNetworkSupport(providedSigner.kind, id).supported)
+            : activeChainIds;
+        if (chainIds.length === 0) {
+            throw new Error(`createAccount: ${hardwareNetworkSupport(providedSigner.kind, activeChainIds[0]).reason}`);
+        }
 
         // Pick next free index. Indices are dense (0, 1, 2, ...) when
         // accounts are added one at a time, but a future feature could
@@ -120,6 +155,10 @@ export async function createAccount({
         const existing = await vault.accounts.findBy('walletId', walletId);
         const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
         const nextIndex = maxIndex + 1;
+        const usesWalletSeed = !providedSigner || providedSigner.kind === 'software';
+        if (wallet.format === 'counterwallet-legacy' && usesWalletSeed && nextIndex !== 0) {
+            throw new LegacySingleAccountError();
+        }
         const requestedName = typeof name === 'string' ? name.trim() : '';
         if (name !== undefined && !hasVisibleText(requestedName)) {
             throw new Error('createAccount: name must be a non-empty string');
@@ -157,21 +196,37 @@ export async function createAccount({
         // signers produce HD addresses; HW signers produce trezor / ledger
         // addresses tied to the SignerRecord by signerId (§17.6).
         const signerKind = signer.kind;
-        const addressSource = signerKind === 'software' ? 'hd' : signerKind;
+
+        // A Ledger answers only the coin of the app that is open, so a
+        // hardware wallet's new account keeps the networks that app reads and
+        // leaves the others waiting (the connect flow's per-network read);
+        // the account fails only when no network could be read at all.
+        const perAppDevice = isHardwareWallet(wallet) && signerKind === 'ledger';
+        const waitingChains = [];
+        let firstWrongApp = null;
 
         try {
+            const addressSource = addressSourceForSignerKind(signerKind);
             const addresses = [];
-            for (const chainId of activeChainIds) {
+            for (const chainId of chainIds) {
                 const descriptor = chainRegistry.get(chainId);
                 const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
-                const [derived] = await signer.getAddresses({
-                    chainId,
-                    accountIndex: nextIndex,
-                    change: 0,
-                    startIndex: 0,
-                    count: 1,
-                    addressType,
-                });
+                let derived;
+                try {
+                    [derived] = await signer.getAddresses({
+                        chainId,
+                        accountIndex: nextIndex,
+                        change: 0,
+                        startIndex: 0,
+                        count: 1,
+                        addressType,
+                    });
+                } catch (error) {
+                    if (!perAppDevice || !isWrongAppError(error)) throw error;
+                    waitingChains.push(chainId);
+                    firstWrongApp ??= error;
+                    continue;
+                }
                 const record = createAddress({
                     accountId: account.id,
                     chain: descriptor.coin,
@@ -186,6 +241,7 @@ export async function createAccount({
                 });
                 addresses.push({ chainId, address: record });
             }
+            if (addresses.length === 0 && firstWrongApp) throw firstWrongApp;
 
             try {
                 await vault.accounts.put(account);
@@ -197,7 +253,17 @@ export async function createAccount({
                 try { await vault.accounts.delete(account.id); } catch { /* Preserve the write error. */ }
                 throw error;
             }
-            return { account, addresses };
+            // A network this Ledger is read on for the first time records
+            // its identity; one already recorded is kept.
+            if (perAppDevice && addresses.length) {
+                await recordLedgerIdentities(vault, signer.id, addresses.map(({ chainId, address }) => ({
+                    chainId,
+                    accountIndex: nextIndex,
+                    derivationPath: address.derivationPath,
+                    publicKey: address.publicKey,
+                })));
+            }
+            return waitingChains.length ? { account, addresses, waitingChains } : { account, addresses };
         } finally {
             if (ownsSigner && typeof signer.lock === 'function') signer.lock();
         }

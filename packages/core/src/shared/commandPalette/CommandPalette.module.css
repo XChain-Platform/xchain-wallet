@@ -93,27 +93,45 @@
     border-bottom: 1px solid var(--xc-border);
 }
 
+/* The field holds the search icon at its start edge, the way Home's filter
+   search does, and the typed text starts after the icon. */
+.searchField {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+/* G112: the glass sits as far from the start edge as from the top and
+   bottom of the md field (tokens.css), at the glyph size that inset assumes. */
 .searchIcon {
     --xc-icon-size: var(--xc-icon-md);
+    position: absolute;
+    inset-inline-start: var(--xc-field-glyph-inset-md);
+    z-index: calc(var(--xc-z-base) + 1);
     display: inline-flex;
+    align-items: center;
     color: var(--xc-text-muted);
-    flex: 0 0 auto;
+    pointer-events: none;
 }
 
 /* The search box is a form field like any other, so it carries the shared
    field border, radius, height and focus ring. */
 .input {
     flex: 1 1 auto;
+    width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--xc-control-border);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius, 8px);
     outline: none;
-    background: var(--xc-surface);
+    background: var(--xc-bg);
     color: var(--xc-text);
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    padding-inline: var(--xc-space-3);
+    /* The text starts one icon gap after the glass. */
+    padding-inline: calc(var(--xc-field-glyph-inset-md) + var(--xc-icon-md) + var(--xc-field-icon-gap) - var(--xc-field-border)) var(--xc-space-3);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
@@ -124,11 +142,11 @@
 .input:focus {
     outline: none;
     border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+    /* The global focus-visible rule supplies the standard focus token. */
+    box-shadow: none;
 }
 
-/* Box-shadow focus rings are not painted in forced-colors mode, so give this
-   control a real outline there. */
+/* Use the system focus color when forced-colors mode replaces theme tokens. */
 @media (forced-colors: active) {
     .input:focus {
         outline: 2px solid Highlight;
@@ -148,14 +166,21 @@
     padding: 1px 6px;
 }
 
+/* The results list scrolls inside the panel, so it takes the shared scroll
+   class for the reserved gutter and the themed pointer scrollbar. */
 .list {
+    composes: scrollArea from '../../ui/Screen.module.css';
     list-style: none;
     margin: 0;
-    padding: var(--xc-space-2) 0;
+    padding: var(--xc-space-2);
     overflow-y: auto;
     flex: 1 1 auto;
     min-height: 0;
     overscroll-behavior: contain;
+}
+
+.list > li + li {
+    margin-block-start: var(--xc-space-2);
 }
 
 .groupHead {
@@ -166,7 +191,17 @@
     color: var(--xc-text-muted);
 }
 
-.groupList { list-style: none; margin: 0; padding: 0; }
+.groupList {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.groupList > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
 
 .row {
     display: flex;
@@ -178,8 +213,13 @@
 }
 
 .rowActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-row-active-bg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .rowIcon {
@@ -189,9 +229,8 @@
     color: var(--xc-text-muted);
 }
 
-.rowActive .rowIcon { color: var(--xc-on-accent); }
-
 .rowText {
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -200,21 +239,18 @@
 .rowTitle {
     font-size: var(--xc-text-sm);
     line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .rowSubtitle {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
 }
-
-/* Full-strength text: fading it 15% dropped the subtitle under 4.5:1 on the accent. */
-.rowActive .rowSubtitle { color: var(--xc-on-accent); }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
@@ -277,5 +313,345 @@
 
     .header {
         padding-top: var(--xc-space-4);
+    }
+}
+
+.visuallyHidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -0.0625rem;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* The wallet menu measures the available shell width, including framed
+   previews whose container can be narrower than the browser viewport. */
+.overlay.menuOverlay {
+    container: wallet-menu / inline-size;
+    align-items: stretch;
+    justify-content: stretch;
+    max-block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
+    padding: 0;
+    background: transparent;
+}
+
+.panel.menuPanel {
+    inline-size: 100%;
+    max-inline-size: none;
+    block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
+    max-block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
+    border: 0;
+    border-radius: 0;
+    padding-block-end: env(safe-area-inset-bottom, 0);
+}
+
+.menuHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    padding: var(--xc-space-2);
+    padding-block-start: calc(var(--xc-space-2) + env(safe-area-inset-top, 0));
+    /* The 8px gap to the first box comes from the surface alone. */
+    padding-block-end: 0;
+    border-block-end: 0;
+}
+
+.menuHeader .searchRow {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    padding: 0;
+    border: 0;
+}
+
+.menuActions {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+}
+
+.menuHeader .close,
+.menuHeader .lock {
+    flex: 0 0 auto;
+}
+
+/* Lock wallet: a plain icon button the size of Close, directly left of it,
+   in the normal icon colour. */
+.lock {
+    display: inline-flex;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+}
+
+.menuPanel .escHint {
+    display: none;
+}
+
+.walletSurface {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    display: flex;
+    flex: 1 1 auto;
+    min-block-size: 0;
+    flex-direction: column;
+    /* One 8px rhythm: header to box, box to box, last box to footer, edges. */
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* The surface above is the one scroller: the boxes, then Settings and Lock
+   wallet, flow as plain content, so a short screen scrolls to every item. */
+.walletGrid {
+    flex: none;
+    display: grid;
+    /* Rows keep their full height, so a short screen scrolls the boxes
+       instead of squeezing them. */
+    grid-auto-rows: max-content;
+    /* Boxes flow in menu order; each takes its own content height, so no row
+       is stretched and no extra space opens between boxes. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    align-content: start;
+    justify-content: stretch;
+    gap: var(--xc-space-2);
+}
+
+/* Each catalogue group is the shared flush card: the wallet card outline,
+   with the rows carrying their own padding. */
+.walletGroup {
+    composes: flush from '../../ui/Card.module.css';
+    min-inline-size: 0;
+    overflow: hidden;
+}
+
+.walletGroupHead {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.walletGroupList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.walletGroupList > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.walletGroupList .walletRow {
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
+    --xc-button-hover-border: transparent;
+    inline-size: 100%;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    padding-inline: var(--xc-space-2);
+    border-color: transparent;
+    background: transparent;
+    color: var(--xc-text);
+    font-weight: 400;
+    text-align: start;
+    white-space: normal;
+    border-radius: 0;
+}
+
+.walletGroupList .walletRow:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .walletGroupList .walletRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+.walletGroupList .walletRowActive {
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
+}
+
+.walletGroupList .walletRow[data-wallet-menu-keyboard-focused] {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.walletRowIcon {
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+.walletRowLabel {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+    color: var(--xc-text-muted);
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* The menu keeps equal margins on both sides, so it does not reserve the
+   shared scroll class's scrollbar lane; a scrollbar shows only on overflow. */
+@supports (scrollbar-gutter: stable) {
+    .menuPanel .walletSurface {
+        scrollbar-gutter: auto;
+    }
+}
+
+/* Short phone sheets trade spare rhythm for more of the catalogue on screen;
+   the full menu (eight boxes of six or seven) scrolls. The row floor keeps every
+   destination touchable. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @media (max-height: 700px) {
+        @container wallet-menu not (min-width: 640px) {
+            .panel.menuPanel {
+                --xc-wallet-menu-row-h: clamp(32px, calc((var(--xc-viewport-h, 100vh) - 136px) / 13), 40px);
+            }
+
+            .menuHeader {
+                gap: var(--xc-space-2);
+                padding: var(--xc-space-2) var(--xc-space-2) 0;
+                padding-block-start: calc(var(--xc-space-2) + env(safe-area-inset-top, 0));
+            }
+
+            .menuHeader .input,
+            .menuHeader .close,
+            .menuHeader .close > button,
+            .menuHeader .lock,
+            .menuHeader .lock > button {
+                --xc-button-height: 40px;
+                block-size: 40px;
+                min-block-size: 40px;
+            }
+
+            .menuHeader .close,
+            .menuHeader .lock {
+                inline-size: 40px;
+            }
+
+            .walletSurface {
+                gap: var(--xc-space-2);
+                padding: var(--xc-space-2);
+                overflow-y: auto;
+            }
+
+            .walletGrid {
+                gap: var(--xc-space-2);
+            }
+
+            .walletGroupHead {
+                padding: var(--xc-space-1) var(--xc-space-2) 0;
+            }
+
+            .walletGroupList {
+                padding: 0;
+            }
+
+            .walletGroupList .walletRow {
+                --xc-button-height: var(--xc-wallet-menu-row-h);
+                min-block-size: var(--xc-wallet-menu-row-h);
+                block-size: var(--xc-wallet-menu-row-h);
+                font-size: max(var(--xc-text-sm), var(--xc-control-font-md, var(--xc-text-md)));
+            }
+        }
+    }
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container wallet-menu (min-width: 640px) {
+        .panel.menuPanel {
+            --xc-wallet-menu-bar-h: calc(var(--xc-control-h-md) + (2 * var(--xc-space-2)) + 1px);
+            align-self: flex-start;
+            inline-size: fit-content;
+            min-inline-size: min(36rem, calc(100cqi - (2 * var(--xc-space-2))));
+            max-inline-size: calc(100cqi - (2 * var(--xc-space-2)));
+            block-size: auto;
+            max-block-size: calc(var(--xc-viewport-h, 100vh) - var(--xc-wallet-menu-bar-h) - (2 * var(--xc-space-2)));
+            margin-block-start: calc(var(--xc-wallet-menu-bar-h) + var(--xc-space-2));
+            margin-inline-start: auto;
+            margin-inline-end: var(--xc-space-2);
+            border: 1px solid var(--xc-border);
+            border-radius: var(--xc-radius-lg);
+            padding-block-end: 0;
+        }
+
+        .menuHeader {
+            padding: var(--xc-space-2) var(--xc-space-2) 0;
+        }
+
+        /* Equal columns that fill the panel; two columns until three fit. */
+        .walletGrid {
+            grid-template-columns: repeat(2, minmax(max-content, 1fr));
+        }
+    }
+
+    /* Wide windows (layout 1, ruling 2026-11-14): the eight seven-row boxes sit
+       four across, two rows of equal-height boxes. The sheet floats with the
+       gutter on each side and visible rounded corners and shadow, and never
+       grows past the four-column width (the iPad's 834px less both gutters),
+       so 1280 and 1920 desktops get the same sheet, anchored at the end edge
+       under the menu button. The heading and rows sit 8px from the box edge. */
+    @container wallet-menu (min-width: 800px) {
+        .panel.menuPanel {
+            --xc-wallet-menu-four-col-w: calc(834px - (2 * var(--xc-page-gutter)));
+            inline-size: min(var(--xc-wallet-menu-four-col-w), calc(100cqi - (2 * var(--xc-page-gutter))));
+            min-inline-size: 0;
+            max-inline-size: var(--xc-wallet-menu-four-col-w);
+            margin-inline-start: auto;
+            margin-inline-end: var(--xc-page-gutter);
+        }
+
+        .walletGrid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            align-items: stretch;
+        }
+
+        .walletGroupHead {
+            padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
+        }
+
+        .walletGroupList {
+            padding: 0 0 var(--xc-space-2);
+        }
+    }
+}
+
+@media (forced-colors: active) {
+    .walletGroupList .walletRow {
+        border-color: Canvas;
+    }
+
+    .walletGroupList .walletRow[data-wallet-menu-keyboard-focused] {
+        outline: 2px solid Highlight;
     }
 }

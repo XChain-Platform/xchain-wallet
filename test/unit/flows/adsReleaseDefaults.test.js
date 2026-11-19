@@ -6,26 +6,22 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: §36.6 release-tunable ADS defaults through the live paths. The
-// accumulator advances by the RESOLVED per-coin amount (stored null =
-// follow the descriptor), the trigger fires against the resolved
-// threshold, updateSettings rewrites a value equal to the descriptor
-// default back to null (the FreeWallet rule), and the vault stores the
-// settings record sparse so a pristine wallet persists nothing but its
-// schema version.
+// Unit: the wallet-wide automatic donation queue through the live vault paths
+// (§36, ruling 2026-11-14). Every broadcast on any chain accrues the same fiat
+// amount into one queue; a carried donation takes its amount off only when it
+// is booked after the broadcast; the settings patch the page writes merges
+// and validates; the vault stores the record sparse; and a stored v3 record
+// with per-chain sats queues reads back as the v4 fiat setting.
 
 import { describe, it, expect } from 'vitest';
 import { webcrypto } from 'node:crypto';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import {
-    resolveAdsForNextTx,
-    stepAdsAccumulator,
-} from '../../../packages/core/src/flows/ads.js';
+import { commitAdsStep, stepAdsQueue, isAdsDue } from '../../../packages/core/src/flows/ads.js';
 import { updateSettings } from '../../../packages/core/src/flows/settings.js';
 import { seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
-import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { CURRENT_VERSION, createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { InMemoryBackend, Vault } from '../../../packages/core/src/storage/index.js';
 
 const chainRegistry = defaultRegistry();
@@ -44,85 +40,88 @@ async function makeVault() {
     return vault;
 }
 
-describe('stepAdsAccumulator resolves the per-tx amount per coin (§36.6)', () => {
-    it('DOGE accrues 0.05 DOGE per tx from a null (follow-default) field', () => {
-        const next = stepAdsAccumulator(seeded(), 'dogecoin-mainnet', {
-            donationIncluded: false,
-            chainRegistry,
-        });
-        expect(next.ads.perChain['dogecoin-mainnet'].accumulatedSats).toBe(5_000_000);
-        // the stored preference stays null: accrual never pins the default
-        expect(next.ads.perChain['dogecoin-mainnet'].perTxAmountSats).toBe(null);
+describe('one queue across every chain', () => {
+    it('accrues the same fiat amount for a send on any chain, broadcast by broadcast', async () => {
+        const vault = await makeVault();
+        await vault.settings.put(seeded());
+        // A BTC send, a DOGE send and an LTC testnet send each add $0.05.
+        for (let i = 0; i < 3; i += 1) await commitAdsStep({ vault });
+        const s = await vault.settings.get();
+        expect(s.ads.queued).toBe('0.15');
+        expect(s.ads.donationCount).toBe(0);
     });
 
-    it('BTC crosses the 25,000 trigger on the 25th tx, not the 24th', () => {
-        let s = seeded();
-        for (let i = 0; i < 24; i++) {
-            s = stepAdsAccumulator(s, 'bitcoin-mainnet', { donationIncluded: false, chainRegistry });
-        }
-        expect(s.ads.perChain['bitcoin-mainnet'].accumulatedSats).toBe(24_000);
-        expect(resolveAdsForNextTx(s, 'bitcoin-mainnet', chainRegistry).donationAmount).toBe(0);
-        s = stepAdsAccumulator(s, 'bitcoin-mainnet', { donationIncluded: false, chainRegistry });
-        expect(resolveAdsForNextTx(s, 'bitcoin-mainnet', chainRegistry).donationAmount).toBe(25_000);
+    it('becomes due on the send that reaches the send-at total, not the one before', () => {
+        let s = createDefaultSettings();
+        s = { ...s, ads: { ...s.ads, perTransaction: '1', sendAt: '25' } };
+        for (let i = 0; i < 24; i += 1) s = stepAdsQueue(s);
+        expect(isAdsDue(s)).toBe(false);
+        s = stepAdsQueue(s);
+        expect(s.ads.queued).toBe('25');
+        expect(isAdsDue(s)).toBe(true);
     });
 
-    it('a donation tx banks the accumulator and restarts from the per-tx amount', () => {
-        let s = seeded();
-        for (let i = 0; i < 25; i++) {
-            s = stepAdsAccumulator(s, 'bitcoin-mainnet', { donationIncluded: false, chainRegistry });
-        }
-        s = stepAdsAccumulator(s, 'bitcoin-mainnet', { donationIncluded: true, chainRegistry });
-        const state = s.ads.perChain['bitcoin-mainnet'];
-        expect(state.lifetimeDonatedSats).toBe(25_000);
-        expect(state.accumulatedSats).toBe(1000);
-    });
-
-    it('a user override drives the accrual instead of the descriptor', () => {
+    it('a carried donation leaves the queue only when it is booked after the broadcast', async () => {
+        const vault = await makeVault();
         const base = seeded();
-        const tuned = {
-            ...base,
-            ads: {
-                ...base.ads,
-                perChain: {
-                    ...base.ads.perChain,
-                    'dogecoin-mainnet': { ...base.ads.perChain['dogecoin-mainnet'], perTxAmountSats: 7 },
-                },
-            },
-        };
-        const next = stepAdsAccumulator(tuned, 'dogecoin-mainnet', {
-            donationIncluded: false,
-            chainRegistry,
-        });
-        expect(next.ads.perChain['dogecoin-mainnet'].accumulatedSats).toBe(7);
+        await vault.settings.put({ ...base, ads: { ...base.ads, queued: '25.05' } });
+        await commitAdsStep({ vault, donationIncluded: true, donatedFiat: '25.05', currency: 'USD' });
+        const s = await vault.settings.get();
+        expect(s.ads).toMatchObject({ queued: '0.05', donated: '25.05', donationCount: 1 });
+    });
+
+    it('never subtracts a donation booked in another currency, and never goes below zero', () => {
+        const base = createDefaultSettings();
+        const s = { ...base, ads: { ...base.ads, queued: '10', donated: '1' } };
+        expect(stepAdsQueue(s, { donationIncluded: true, donatedFiat: '10', currency: 'EUR' }).ads)
+            .toMatchObject({ queued: '10.05', donated: '1', donationCount: 0 });
+        expect(stepAdsQueue(s, { donationIncluded: true, donatedFiat: '12', currency: 'USD' }).ads)
+            .toMatchObject({ queued: '0.05', donated: '13', donationCount: 1 });
+    });
+
+    it('adds nothing while donations are off, and writes nothing', async () => {
+        const vault = await makeVault();
+        const base = seeded();
+        await vault.settings.put({ ...base, ads: { ...base.ads, perTransaction: '0', queued: '3' } });
+        const before = await vault.settings.get();
+        const after = stepAdsQueue(before);
+        expect(after).toBe(before);
+    });
+
+    it('follows the display currency only while nothing is queued or donated', () => {
+        const base = { ...createDefaultSettings(), fiatCurrency: 'EUR' };
+        expect(stepAdsQueue(base).ads.currency).toBe('EUR');
+        const held = { ...base, ads: { ...base.ads, queued: '1' } };
+        expect(stepAdsQueue(held).ads.currency).toBe('USD');
     });
 });
 
-describe('updateSettings normalizes values equal to the release default (§36.6)', () => {
-    it('writing the default value stores null; a real override stores the number', async () => {
+describe('the page patch', () => {
+    it('merges one donation field and keeps the queue', async () => {
         const vault = await makeVault();
-        await vault.settings.put(seeded());
-
-        // "Set" DOGE per-tx to exactly the descriptor default: not an override.
-        let s = await updateSettings(vault, {
-            ads: { perChain: { 'dogecoin-mainnet': { perTxAmountSats: 5_000_000 } } },
-        });
-        expect(s.ads.perChain['dogecoin-mainnet'].perTxAmountSats).toBe(null);
-
-        // A differing value is a real override and survives.
-        s = await updateSettings(vault, {
-            ads: { perChain: { 'dogecoin-mainnet': { perTxAmountSats: 42 } } },
-        });
-        expect(s.ads.perChain['dogecoin-mainnet'].perTxAmountSats).toBe(42);
+        const base = seeded();
+        await vault.settings.put({ ...base, ads: { ...base.ads, queued: '3.45' } });
+        const s = await updateSettings(vault, { ads: { sendAt: '50', currency: 'USD' } });
+        expect(s.ads).toMatchObject({ sendAt: '50', queued: '3.45', perTransaction: '0.05' });
     });
 
-    it('same rule for fee preferences', async () => {
+    it('refuses an amount outside the bounds', async () => {
+        const vault = await makeVault();
+        await vault.settings.put(seeded());
+        await expect(updateSettings(vault, { ads: { perTransaction: '11' } })).rejects.toThrow(/ads/);
+        await expect(updateSettings(vault, { ads: { sendAt: '0.5' } })).rejects.toThrow(/ads/);
+        await expect(updateSettings(vault, { ads: { perTransaction: '0.055' } })).rejects.toThrow(/ads/);
+        await expect(updateSettings(vault, { ads: { recipient: 'someone' } })).rejects.toThrow(/ads/);
+    });
+
+    it('fee preferences still store null for a value equal to the release default', async () => {
         const vault = await makeVault();
         await vault.settings.put(seeded());
         const s = await updateSettings(vault, {
             fees: { 'bitcoin-mainnet': { strategy: 'normal', rbfByDefault: false } },
         });
-        expect(s.fees['bitcoin-mainnet'].strategy).toBe(null);      // equals descriptor default
-        expect(s.fees['bitcoin-mainnet'].rbfByDefault).toBe(false); // differs (BTC default true)
+        expect(s.fees['bitcoin-mainnet'].strategy).toBe(null);
+        expect(s.fees['bitcoin-mainnet'].rbfByDefault).toBe(false);
     });
 });
 
@@ -130,20 +129,51 @@ describe('the vault stores settings sparse (§35.10)', () => {
     it('a pristine default record persists as schemaVersion only', async () => {
         const vault = await makeVault();
         await vault.settings.put(createDefaultSettings());
-        expect(vault._doc.settings).toEqual({ schemaVersion: 3 });
-        // ...and reads back as the full record.
+        expect(vault._doc.settings).toEqual({ schemaVersion: CURRENT_VERSION });
         expect(await vault.settings.get()).toEqual(createDefaultSettings());
     });
 
-    it('per-chain entries survive deflation so the active-chain set is preserved', async () => {
+    it('stores only the donation fields that differ from the defaults', async () => {
+        const vault = await makeVault();
+        const base = createDefaultSettings();
+        await vault.settings.put({ ...base, ads: { ...base.ads, queued: '1.5', recipient: 'explorer' } });
+        expect(vault._doc.settings.ads).toEqual({ queued: '1.5', recipient: 'explorer' });
+        expect((await vault.settings.get()).ads).toMatchObject({ queued: '1.5', recipient: 'explorer', sendAt: '5' });
+    });
+
+    it('per-chain fee entries survive deflation so the active-chain set is preserved', async () => {
         const vault = await makeVault();
         await vault.settings.put(seeded());
         expect(Object.keys(vault._doc.settings.fees).sort())
             .toEqual(['bitcoin-mainnet', 'dogecoin-mainnet']);
-        // null preference fields are dropped from storage...
-        expect(vault._doc.settings.fees['bitcoin-mainnet']).toEqual({});
-        // ...but the read path still exposes the entry for consumers.
-        const full = await vault.settings.get();
-        expect(full.fees['bitcoin-mainnet']).toBeDefined();
+        expect(vault._doc.settings.ads).toBeUndefined();
+    });
+});
+
+describe('a stored v3 record migrates on read', () => {
+    it('reads per-chain settings back as the wallet-wide fiat setting', async () => {
+        const vault = await makeVault();
+        // The sparse v3 form: the switch left at its default (absent = on), a
+        // DOGE recipient choice, and test-network queues worth nothing.
+        vault._doc.settings = {
+            schemaVersion: 3,
+            ads: {
+                perChain: {
+                    'dogecoin-testnet': { accumulatedSats: 90000000, lifetimeDonatedSats: 0, lifetimeTxCount: 4, donationAddressRole: 'EXPLORER' },
+                    'bitcoin-regtest': { accumulatedSats: 5000, lifetimeDonatedSats: 0, lifetimeTxCount: 1 },
+                },
+            },
+        };
+        const s = await vault.settings.get();
+        expect(s.schemaVersion).toBe(CURRENT_VERSION);
+        expect(s.ads).toEqual({
+            perTransaction: '0.05',
+            sendAt: '5',
+            recipient: 'explorer',
+            currency: 'USD',
+            queued: '0',
+            donated: '0',
+            donationCount: 0,
+        });
     });
 });

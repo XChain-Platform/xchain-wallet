@@ -62,12 +62,13 @@ for (const symbol of [
 ]) {
     assert.ok(receive.includes(symbol), `shared Receive.jsx references ${symbol}`);
 }
-// Receive reads stored addresses and can derive a fresh next-index address
-// for the selected type without leaving the payment-request screen.
+// Receive reads stored addresses; Generate new address opens the shared Add
+// Addresses page (which calls generateReceiveAddress) for the active chain.
 for (const call of [
     'messaging.getAddressesByChain',
     'messaging.getNewestAddress',
-    'messaging.generateReceiveAddress',
+    '<AddAddressModal',
+    'initialChainId={activeChainId',
 ]) {
     assert.ok(receive.includes(call), `shared Receive.jsx wires ${call}`);
 }
@@ -80,7 +81,7 @@ assert.ok(
     /onReceive/.test(home),
     'shared Home.jsx accepts onReceive prop',
 );
-assert.ok(home.includes('onClick={onReceive}'), 'shared Home.jsx wires the Receive button');
+assert.ok(!home.includes('onClick={onReceive}'), 'shared Home.jsx has no Receive quick action; Receive is reached from the navigation');
 
 const app = readFileSync(
     join(ext, 'src', 'popup', 'App.jsx'),

@@ -52,7 +52,6 @@
 //    that distinguishes a real round trip from a well-formed no-op.
 
 import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
-import { searchForTx } from '../../fixtures/pendingHistory.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -68,7 +67,12 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
+    approveConfirm as approveWhenReady,
+    searchHistory,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -90,6 +94,7 @@ const MINT_XCHAIN = 2000;
 const CONTRACT_SOURCE =
     "module.exports = { meta: { name: 'Wallet Counter', description: 'Increments a stored"
     + " counter and returns its new value.', version: '1.0.0' },"
+    + " abi: { version: 1, methods: { inc: { summary: 'Add one to the counter.', params: [] } } },"
     + " inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
@@ -106,18 +111,17 @@ async function explorerJson(path) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 async function gotoDeployForm(page) {
     await openPaletteCommand(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Publish contract' });
+    const deploy = page.getByRole('button', { name: 'Publish contract', exact: true });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
-    await expect(page.getByRole('main').getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(page.getByRole('main'), 'Code source')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -179,7 +183,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
     // `xchain-sdk/formatSelector.js` correctly refuses. Both are fixed and
     // this spec is their regression proof:
     //
-    //   DEPLOY / NAME. The `Name (optional)` input rode into the action
+    //   DEPLOY / NAME. The `Name` input enters the action
     //   params; it was a screen-local label and has since been removed
     //   outright (CONTRACT_META_REQUIRED: the name is the contract's own
     //   `meta.name`, read off the source and recorded by the chain). This
@@ -214,7 +218,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // SHAPE without switching first (the previous fix) can only turn a
             // wrong-chain run into a 30s timeout, never into a right one.
             await selectVenueChain(deployMain, 'Network');
-            const fromField = deployMain.getByLabel('From', { exact: true });
+            const fromField = await openFromAddress(deployMain);
             await expect(fromField, `the deploy form has no ${REGTEST_CHAIN_LABEL} source address`)
                 .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
             deployer = await fromField.inputValue();
@@ -246,28 +250,27 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // on the venue chain the same way; the equality check is what makes
             // that a re-selection of the funded address rather than a new one.
             await selectVenueChain(main, 'Network');
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the form still signs with the funded address').toBe(deployer);
 
             // No Name field any more: the form shows what the chain is about
             // to record, parsed read-only out of the pasted source.
-            await expect(main.getByLabel('Name (optional)'),
+            await expect(fieldByLabel(main, 'Name'),
                 'the deploy form carries no on-device Name field').toHaveCount(0);
-            await main.getByLabel('Code source').fill(CONTRACT_SOURCE);
+            await fieldByLabel(main, 'Code source').fill(CONTRACT_SOURCE);
             const identity = main.locator('dl[aria-label="Contract identity"]');
             await expect(identity, 'the parsed contract identity is shown').toBeVisible({ timeout: 30_000 });
             await expect(identity).toContainText(META_NAME);
             await expect(identity).toContainText(META_VERSION);
 
-            // Drive the SDK-backed helper rather than skipping to submit: a
-            // source the validator rejects can never deploy, so a green
-            // validation is the cheap precondition that keeps a later failure
-            // meaningful.
-            await main.getByRole('button', { name: 'Validate code' }).click();
-            await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
+            // Wait for the SDK-backed check the form runs once typing pauses
+            // rather than skipping to submit: a source the validator rejects
+            // can never deploy, so a green validation is the cheap
+            // precondition that keeps a later failure meaningful.
+            await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
 
-            await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
-            await main.getByRole('button', { name: 'Publish', exact: true }).click();
+            await fieldByLabel(main, 'Gas limit').fill(DEPLOY_GAS);
+            await main.getByRole('button', { name: 'Publish Contract', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText(/Contract published\./)).toBeVisible({ timeout: 120_000 });
@@ -320,37 +323,34 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Reach the contract the way a user does: find it in the list, open
             // it, and call a method from the detail page.
             //
-            // FILTERED TO THIS RUN'S CHAIN FIRST, with the list's own chain
-            // tabs. A contract's action index is per-CHAIN, and this list shows
-            // every chain at once, so "#376" alone can name a Litecoin contract
-            // and a Dogecoin one in the same screen - the same collision the
-            // dispenser browse hit on 2026-09-02. The filter is also the real
-            // user path, so nothing is being reached around here.
+            // SCOPED TO THIS RUN'S CHAIN. A contract's action index is
+            // per-CHAIN, and the list groups every chain at once in its own
+            // "Contracts on <network>" region, so "#376" alone can name a
+            // Litecoin contract and a Dogecoin one on the same screen - the
+            // same collision the dispenser browse hit on 2026-09-02.
             //
             // FOUND BY THE NAME THE CHAIN RECORDED, which is what every row is
             // labelled with: "<meta.name> v<meta.version> (C:<coin>:<index>)".
             // The address makes the label unique across runs and chains, which
             // the name alone (every run deploys the same source) is not.
             //
-            // `.first()` because the list renders the same contract twice on
-            // purpose - once under "My contracts (published by me)", once under
-            // "Browse all contracts" - and the first is the one that proves the
-            // wallet recognises the deploy as its own.
-            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            // The All view proves the deploy is browsable by anyone; the My
+            // Contracts view (deploys by this wallet's own addresses) proves
+            // the wallet recognises it as its own, and the row is opened there.
             const rowLabel = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
-            // The list row carries its identity as an aria-label with an "Open" prefix.
-            const row = page.getByRole('button', { name: `Open ${rowLabel}`, exact: true });
-            await expect(row.first()).toBeVisible({ timeout: 60_000 });
-            // The two sections load independently ("My contracts" is a
-            // per-address query, browse-all a paginated one), so the second
-            // copy can land after the first is already visible: poll the count
-            // rather than read it once (a one-shot read went red on 2026-09-09
-            // with both rows on screen in the failure snapshot).
-            await expect.poll(async () => row.count(), {
-                message: 'the wallet lists its own deploy under "My contracts", not only under browse-all',
-                timeout: 30_000,
-            }).toBeGreaterThan(1);
-            await row.first().click();
+            const contractRow = () => page.getByRole('main')
+                .getByRole('region', { name: `Contracts on ${REGTEST_CHAIN_LABEL}`, exact: true })
+                // The list row carries its identity as an aria-label with an "Open" prefix.
+                .getByRole('button', { name: `Open ${rowLabel}`, exact: true });
+            const views = page.getByRole('tablist', { name: 'Contract views' });
+            await views.getByRole('tab', { name: 'All', exact: true }).click();
+            await expect(contractRow(), 'the deployed contract is not in the All view')
+                .toBeVisible({ timeout: 60_000 });
+            await views.getByRole('tab', { name: 'My Contracts', exact: true }).click();
+            await expect(contractRow(),
+                'the wallet does not list its own deploy under My Contracts, only under All')
+                .toBeVisible({ timeout: 60_000 });
+            await contractRow().click();
 
             const main = page.getByRole('main');
             // The detail page is headed by the same "<name> v<version> (C:<coin>:<n>)"
@@ -359,13 +359,16 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(page.getByRole('heading', { name: rowLabel, exact: true }).first())
                 .toBeVisible({ timeout: 30_000 });
 
-            await page.getByRole('button', { name: 'Call method', exact: true }).click();
+            // Call by name ends the Contract Functions list on the Actions tab;
+            // its name carries the description too.
+            await page.getByRole('button', { name: /^Call by name\b/ }).click();
 
-            // No ABI is declared, so the form is in its manual lane: a free-text
-            // method name and pipe-delimited params. `inc` takes none.
-            await main.getByLabel('Method', { exact: true }).fill('inc');
+            // The form calls only what the contract declares in its abi block
+            // (no free-text lane), so `inc` is picked from the Method list; it
+            // takes no arguments.
+            await pickOption(fieldByLabel(main, 'Method'), 'inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await main.getByRole('button', { name: 'Call contract', exact: true }).click();
+            await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText('Method call broadcast.')).toBeVisible({ timeout: 120_000 });
@@ -410,7 +413,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // payloads, never off a device-local label.
             await gotoSection(page, 'History');
             const label = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
-            await searchForTx(page, deployTxid);
+            await searchHistory(page, deployTxid);
             await expect(page.getByText(label, { exact: true }).first(),
                 'a history row shows "<name> v<version> (<address>)"').toBeVisible({ timeout: 60_000 });
         });

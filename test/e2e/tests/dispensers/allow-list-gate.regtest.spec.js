@@ -39,7 +39,7 @@
 //       --config=playwright.regtest.config.js tests/dispensers/allow-list-gate.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -59,7 +59,12 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
+    approveConfirm,
+    FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 2;
@@ -178,7 +183,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -202,9 +207,9 @@ async function addWalletAndReadAddress(page, name) {
 
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    const address = await form.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(form)).inputValue();
     expect(address, `${name} has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
     return address;
 }
@@ -222,11 +227,11 @@ async function payCoin(page, to, amount) {
         `the Send form is composing on the wrong chain: no ${coin} amount field`)
         .toBeVisible({ timeout: 30_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(to);
+    await fieldByLabel(page, 'To').fill(to);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expectConfirmModal(page, 'this action', 60_000);
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 180_000 });
 }
@@ -253,9 +258,9 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             // checks, and the one an owner forgets to list.
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
 
             // Both buyers are read BEFORE the list is published, because the
@@ -283,7 +288,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a list');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // TYPE=2 (addresses). The SELLER'S OWN ADDRESS IS ON THE LIST, and
@@ -292,12 +297,14 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             // who lists only their customers refuses every sale with
             // `invalid: GET_ADDRESS (dispenser allow list)`. Same asymmetry the
             // token lists have (§"Dispensers" / Session 32), one level down.
-            await main.getByLabel('List type').selectOption('2');
-            await main.getByLabel('Addresses', { exact: true }).fill([seller, allowed].join('\n'));
+            // List type is the themed dropdown: open it, then pick Addresses.
+            await main.getByRole('button', { name: /^List type:/ }).click();
+            await main.getByRole('option', { name: 'Addresses', exact: true }).click();
+            await fieldByLabel(main, 'Addresses').fill([seller, allowed].join('\n'));
             await expect(main, 'the list form did not accept both addresses for this chain')
                 .toContainText('2 valid addresses');
 
-            await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+            await main.getByRole('button', { name: 'Publish List', exact: true }).click();
             await expectConfirmModal(page);
             const published = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(published.action)).toBe('LIST');
@@ -316,7 +323,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('and opens a dispenser bound to it', async () => {
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The dispenser opens on the Source: that is the address each buyer
@@ -325,22 +332,24 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: 'Set allow-list' }).click();
+            // The allow and block lists live in their own closed Lists section.
+            await openFormSection(main, 'Lists');
+            await main.getByRole('button', { name: 'Allow list: None set' }).click();
             const picker = page.getByRole('main');
             const row = picker.getByRole('button').filter({ hasText: `Address list #${listIndex}` });
             await expect(row, `the dispenser's list picker cannot see list #${listIndex}, which this `
                 + 'wallet just published from this chain')
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(main.getByRole('button', { name: `Allow-list #${listIndex}` }),
+            await expect(main.getByRole('button', { name: new RegExp(`^Allow list: .*#${listIndex}\\b`) }),
                 'the picker closed without binding the list')
                 .toBeVisible({ timeout: 30_000 });
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.status), 'the chain rejected the gated dispenser').toBe('valid');
@@ -419,29 +428,19 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('and what the buyer is told BEFORE paying (D-148)', async () => {
             // The panel a buyer actually reaches, from the buyer's own wallet.
-            // It used to say "Any LTC wallet can trigger a fill" on every
-            // dispenser, gated or not, while reading neither list field - though
-            // the explorer serves both on the row it was already reading and the
-            // OWNER's view of the same page prints them. The step above measured
-            // what following that sentence costs.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(main.getByLabel('Token ticker')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token ticker').fill(TICK);
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the gated dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
-            const panel = page.getByRole('main');
-            await expect(panel, 'no pay-to-buy panel rendered at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-            const text = await panel.innerText();
+            // D-148 guards against "Any LTC wallet can trigger a fill" on a
+            // gated dispenser: the explorer serves both list fields on the row
+            // the panel reads, and the OWNER's view of the same page prints
+            // them. The step above measured what following that sentence costs.
+            // The pay-here panel is on the dispenser's full page only, so the
+            // helper opens it there and reads it before the viewport widens.
+            const text = await openDispenserForBuy(page, {
+                seller, tick: TICK, index: dispenserIndex, what: `the gated dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel, 'no pay-to-buy panel rendered at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                return panel.innerText();
+            });
 
             expect(/Any .* wallet can trigger a fill/i.test(text),
                 `the panel tells this buyer any wallet can trigger a dispenser that just refused `

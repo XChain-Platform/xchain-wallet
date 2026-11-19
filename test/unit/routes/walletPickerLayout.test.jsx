@@ -40,25 +40,14 @@ describe('WalletPicker row layout', () => {
         });
 
         const row = screen.getByRole('button', { name: new RegExp(`^${wallet.name}`) });
-        expect(row.children).toHaveLength(1);
-        expect(row.firstElementChild.children).toHaveLength(2);
-        expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
+        // The row is a list row: tile, the name with its type line, and a chevron.
+        expect(row.textContent).toContain(wallet.name);
+        expect(row.textContent).toMatch(/Demo wallet.*BIP39/);
+        expect(row.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
         expect(screen.getByTitle(wallet.name)).toHaveTextContent(wallet.name);
-
-        const css = readFileSync(
-            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
-            'utf8',
-        );
-        const nameRule = /\.rowName\s*\{([^}]*)\}/.exec(css)?.[1] || '';
-        expect(nameRule).toMatch(/overflow:\s*hidden/);
-        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
-        expect(nameRule).toMatch(/white-space:\s*nowrap/);
-        // The identity ring is a box-shadow; the clip box must leave room for it on every side.
-        expect(nameRule).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
-        expect(nameRule).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
     });
 
-    it('marks the current wallet and keeps add and manage actions in the footer', async () => {
+    it('marks the current wallet, adds from the title bar and opens a wallet\'s page from its row', async () => {
         const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
         const onShowDetails = vi.fn();
         await act(async () => {
@@ -79,50 +68,29 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        expect(screen.getByRole('button', { current: true })).toHaveTextContent('Primary');
-        const add = screen.getByRole('button', { name: 'Add wallet' });
-        const manage = screen.getByRole('button', { name: 'Manage wallet' });
-        expect(add.closest('footer')).toBeTruthy();
-        expect(manage.closest('footer')).toBeTruthy();
+        const row = screen.getByRole('button', { current: true });
+        expect(row).toHaveTextContent('Primary');
+        expect(row).toHaveTextContent('Active');
+        // A plus at the far right of the title line adds a wallet; there is
+        // no Manage wallet button, since each row opens that wallet's page.
+        const add = screen.getByRole('button', { name: 'Add Wallet' });
+        expect(add.closest('header')).not.toBeNull();
+        expect(add.closest('footer')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Manage Wallet' })).toBeNull();
 
-        const css = readFileSync(
-            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
-            'utf8',
-        );
-        const footerButtonRule = /\.footerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
-        expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
-        expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
-
-        fireEvent.click(manage);
+        fireEvent.click(row);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
     });
 
-    it('sizes the wallet-details control from the kit icon-button size', () => {
+    it('keeps no row-menu button rules once the pop-out moved into a menu row', () => {
         const css = readFileSync(
             join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
             'utf8',
         );
-        const menuButtonRule = /\.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
-
-        expect(menuButtonRule).toMatch(/width:\s*var\(--xc-button-height\)/);
-        expect(menuButtonRule).toMatch(/height:\s*var\(--xc-button-height\)/);
-        expect(menuButtonRule).not.toMatch(/(?:width|height):\s*32px/);
+        expect(css).not.toMatch(/\.rowMenuBtn\b|\.rowWrap\b/);
     });
 
-    it('keeps the row action in place while it is pressed', () => {
-        const css = readFileSync(
-            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
-            'utf8',
-        );
-        const menuButtonRule = /\.rowWrap \.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
-        // The kit's :active rule sets transform, so a translate used for
-        // centring is dropped on press and the release misses the button.
-        expect(menuButtonRule).not.toMatch(/transform\s*:/);
-        expect(menuButtonRule).toMatch(/inset-block:\s*0/);
-        expect(menuButtonRule).toMatch(/margin-block:\s*auto/);
-    });
-
-    it('renders the wallet-details glyph in the kit icon slot', async () => {
+    it('has no separate wallet-details button; the row carries the chevron', async () => {
         const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
         await act(async () => {
             render(
@@ -142,11 +110,10 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        const details = screen.getByRole('button', { name: 'Wallet details for Primary' });
-        // A glyph passed as a label child is squeezed by the label padding
-        // into a sliver; the icon slot sizes it from the kit icon scale.
-        expect(details.querySelector('[aria-hidden="true"] > svg')).toBeTruthy();
-        expect(details.children).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: 'Wallet details for Primary' })).toBeNull();
+        const row = screen.getByRole('button', { current: true });
+        // The chevron is a glyph in the list row's own icon slot, never a label child.
+        expect(row.querySelector('[aria-hidden="true"] svg')).toBeTruthy();
     });
 
     it('labels imported-key wallets accurately', async () => {
@@ -259,9 +226,8 @@ describe('WalletPicker switching', () => {
         expect(onSwitch).toHaveBeenCalledWith('wallet-2');
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Add wallet' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Add Wallet' }).disabled).toBe(true);
         expect(savings.disabled).toBe(true);
-        expect(savings.getAttribute('aria-busy')).toBe('true');
 
         finishSwitch();
         await waitFor(() => expect(onBack).toHaveBeenCalledOnce());
@@ -329,7 +295,7 @@ describe('WalletDetails layout', () => {
                 />
             </MessagingProvider>,
         );
-        const rename = await screen.findByRole('button', { name: 'Rename wallet' });
+        const rename = await screen.findByRole('button', { name: /^Edit wallet/ });
         const upgrade = screen.getByRole('button', { name: /Upgrade/ });
         // Extra inline margins on top of the page gap spaced the buttons
         // unevenly (8 px more above one, 12 px more above the next).
@@ -374,11 +340,11 @@ describe('WalletDetails wallet changes', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByRole('button', { name: 'Rename wallet' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Edit wallet/ })).not.toBeInTheDocument();
         await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
         resolveSecond([secondWallet]);
         expect(await screen.findByText(secondWallet.name)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Rename wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit wallet/ }));
         expect(onRename).toHaveBeenCalledWith(secondWallet);
     });
 

@@ -8,10 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
+import { titleCase } from '../utils/titleCase.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network and the fee selector come from the Wallet Form
+// Standard's FromSection and FeeSection.
+import { AddressField, Button, FieldNote, FormNotice, Icon, Input, ListPage, Notice, PageHeader, Screen, StatusMessage, Switch, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+// Every Manage token mode is laid out on the Wallet Form Standard:
+// From (closed), the mode's own section (open: Token and the mode's fields),
+// Network fee, the status slot and the mode's action.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -23,19 +38,23 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import { actionWarningIds } from '../../flows/actionWarnings.js';
+// A preset token shows in the standard Token field.
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
-import { SharedListDirectory } from './SharedListDirectory.jsx';
+import { ListField } from '../components/ListField.jsx';
+import { NetworksField } from '../components/NetworksField.jsx';
+import { NetworksPickerScreen } from '../components/NetworksPickerScreen.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -47,8 +66,8 @@ import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { bridgeChainsList, isReachableBridgeChain, coinDisplay as bridgeCoinDisplay } from './BridgeTick.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { lockIconFor } from './lockIcons.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -61,7 +80,8 @@ import {
     issueSupplyLimitError,
 } from '../utils/issueFieldValidation.js';
 import { currentListMemberCount } from '../../flows/listMembership.js';
-import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, groupDecodedAmounts, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { padToDecimals } from '../components/AmountField.jsx';
 import { exceedsHeadroom, mintHeadroom } from '../utils/mintHeadroom.js';
 import { isNativeCoinTick, unknownTickMessage } from '../utils/dividendTickChecks.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -75,12 +95,16 @@ import {
 import { boundListIndex, listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
+
+// One empty address list, so the list picker's load does not rerun on every
+// render while the wallet's addresses are still loading.
+const NO_ADDRESSES = Object.freeze([]);
 
 function isPositiveDecimal(value) {
     const text = String(value || '').trim();
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
 }
-
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
@@ -121,6 +145,15 @@ function newOwnerAddressError(address, descriptor) {
         return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
     }
     return `This is not a valid ${chainLabelFor(descriptor)} address. Check it for typos.`;
+}
+
+// The Allow list or Block list field's text: the bound or picked list with its
+// member count, "None after this update" once cleared ('0' detaches), or null
+// while the token has no list there, so the field shows its placeholder.
+function accessListFieldText(idx, label, count) {
+    if (idx === '0') return 'None after this update';
+    if (!idx) return null;
+    return `${label}${count != null ? ` · ${count} member${count === 1 ? '' : 's'}` : ''}`;
 }
 
 // PC-02's lock matrix and PC-06's create-time lock panel drive the same
@@ -225,18 +258,28 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
     const [allowListName, setAllowListName] = useState(/** @type {string | null} */ (null));
     const [blockListName, setBlockListName] = useState(/** @type {string | null} */ (null));
-    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
-    const [sharedBlockPickerOpen, setSharedBlockPickerOpen] = useState(initialPicker === 'shared-block');
+    // The list picker for the Allow list or Block list field. Manage token's
+    // Shared block list entry opens the block picker on All, where the
+    // published lists are.
+    const [listPickerFor, setListPickerFor] = useState(
+        /** @type {'allow' | 'block' | null} */ (initialPicker === 'shared-block' ? 'block' : null),
+    );
+    const [listPickerTab, setListPickerTab] = useState(
+        /** @type {'all' | undefined} */ (initialPicker === 'shared-block' ? 'all' : undefined),
+    );
+    const [sharedAllowListLabel, setSharedAllowListLabel] = useState(/** @type {string | null} */ (null));
     const [sharedBlockListLabel, setSharedBlockListLabel] = useState(/** @type {string | null} */ (null));
     const blockListTouched = useRef(false);
     // Bridgeability (mode === 'bridge-settings', ISSUE v7,
     // xchain-token-bridge.md section 7). Three owner-set fields on the ORIGIN
     // row: which destination chains this token may be locked to (default none),
     // a raise-only confirmation depth the federation must honour for its locks,
-    // and a one-way freeze of both. `bridgeChainPicks` is a per-coin checkbox
+    // and a one-way freeze of both. `bridgeChainPicks` is a per-coin on/off
     // map because the wire field is a comma list and a free-text box invites a
-    // typo that reads as "no chains".
+    // typo that reads as "no chains". The networks are chosen on their own
+    // picker page (G117), so the form keeps one field however many chains exist.
     const [bridgeChainPicks, setBridgeChainPicks] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const [bridgeNetworksPickerOpen, setBridgeNetworksPickerOpen] = useState(false);
     const [bridgeMinDepth, setBridgeMinDepth] = useState('');
     const [bridgeLock, setBridgeLock] = useState(false);
     const [bridgePrefilled, setBridgePrefilled] = useState(false);
@@ -248,15 +291,21 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'LOCK');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [callbackTokenPickerOpen, setCallbackTokenPickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    // The standard sections' open state, held above every early
+    // return (pickers, list screens, review). Only the mode's section opens.
+    const formSections = useFormSections({ from: false, main: true, fee: false });
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
-    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
-    // Counts Review presses, so the refusal a press raises takes focus.
-    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // The form error standard: the main action is always enabled; a press
+    // lists every problem in one notice at the top, outlines each failing
+    // field, and a field clears when it changes. Refusals with no field
+    // (the source, the fee, a failed compose) go in as form-level entries.
+    const form = useFormErrors();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -303,7 +352,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -353,10 +402,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: native-coin protocol fee (every ISSUE edit version this
-    // form signs is quotable); authoritative check at submit via
-    // applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for these free token updates.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Every mode edits issuer-controlled token state, so each one reads the
     // current owner before it can compose. The same record supplies lock state
@@ -376,12 +424,28 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         && Number.isInteger(callbackTokenInfo?.divisibility)
         ? callbackTokenInfo.divisibility
         : null;
+    // Payout per unit follows the callback token's own format (U61): every
+    // edit is checked against its decimal places, and the value re-formats
+    // when the callback token changes or the field loses focus.
+    const callbackAmountPrecisionError = mode === 'callback-settings' && callbackAmount.trim()
+        && callbackTokenDivisibility != null
+        ? tokenAmountPrecisionError(callbackAmount.trim(), {
+            divisibility: callbackTokenDivisibility,
+            tick: callbackTickKey,
+            noun: 'Payout per unit',
+        })
+        : null;
+    useEffect(() => {
+        if (mode !== 'callback-settings' || callbackTokenDivisibility == null) return;
+        setCallbackAmount((v) => padCallbackAmount(v, callbackTokenDivisibility));
+    }, [mode, callbackTokenDivisibility]);
     const assetInfoMatchesSelection = !assetInfo || (
         (!assetInfo.chainId || assetInfo.chainId === chainId)
         && (!assetInfo.tick || String(assetInfo.tick) === ticker.trim())
     );
     const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
     const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
+    const tokenInfoFailed = !!currentAssetInfo?.loadError;
     const tokenLocks = currentAssetInfo?.locks || {};
     const ownerEligibility = tokenIssuerEligibility({
         tokenInfo: currentAssetInfo,
@@ -393,8 +457,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const ownershipError = ownerEligibility.error;
     const descriptionLocked = mode === 'description' && !!tokenLocks.description;
     const eligibilityError = descriptionLocked
-        ? `The description for ${ticker} is permanently locked and cannot be updated.`
+        ? `Description is permanently locked for ${ticker} and cannot be updated.`
         : ownershipError;
+    // A non-owner is told at submit (handleReview), never as soon as the token
+    // is picked. Only an unconfirmed issuer and a locked description show early.
+    const eagerEligibilityError = descriptionLocked
+        ? eligibilityError
+        : (ownerEligibility.issuerAddress ? null : ownershipError);
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
     // undistributed (issue.js). LOCK_CALLBACK reads straight off the lock
@@ -424,6 +493,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [lockChecks, setLockChecks] = useState(/** @type {Record<string, boolean>} */ ({}));
     const hasAnyNewLock = LOCK_FLAGS.some((f) => lockChecks[f.key] && !tokenLocks[f.key]);
     const allLocksSet = LOCK_FLAGS.every((f) => !!tokenLocks[f.key]);
+    // The token's lock state is read as soon as a token is set. While that read
+    // runs, or after it fails, no switch can move: the state is not known.
+    const lockStateLoading = mode === 'lock' && tokenInfoPending;
+    const lockStateUnknown = mode === 'lock' && !!chainId && !!ticker
+        && (!currentAssetInfo || !!currentAssetInfo.loadError);
 
     // Prefill the four persisted mint-config fields from the token's
     // current record, once, so re-fetches (or the user editing a field
@@ -473,10 +547,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const selection = chainId && ticker ? `${chainId}:${ticker}` : null;
         const previous = prefillSelection.current;
         prefillSelection.current = selection;
-        if (!previous || previous === selection) return;
+        if (previous === selection) return;
+        // Each token has its own lock state: switches turned on for the first
+        // token never carry to the next, which reloads its own.
+        setLockChecks({});
+        if (!previous) return;
         blockListTouched.current = false;
         setAllowListIdx(null);
         setBlockListIdx(null);
+        setSharedAllowListLabel(null);
         setSharedBlockListLabel(null);
         setListsPrefilled(false);
         setMaxMint('');
@@ -574,6 +653,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         () => bridgeDestinations.filter((c) => bridgeChainPicks[c]),
         [bridgeDestinations, bridgeChainPicks],
     );
+    // The Destination networks field and its picker page (G117): one row per
+    // destination ticker, drawn with that coin's chain on this token's network
+    // kind (a regtest token shows the regtest icons). The value stays the ticker
+    // BRIDGE_CHAINS carries, so the picks map and the compose are unchanged. The
+    // row's muted line is the ticker alone: the network kind is the banner's to say.
+    const bridgeNetworkKind = descriptor?.networkKind || 'mainnet';
+    const bridgeNetworkOptions = useMemo(() => bridgeDestinations.map((coin) => {
+        const coinId = Object.keys(PROTOCOL_COIN_TICKER).find((id) => PROTOCOL_COIN_TICKER[id] === coin);
+        const chain = coinId ? chainRegistry.byCoin(coinId).find((d) => d.networkKind === bridgeNetworkKind) : null;
+        return {
+            value: coin,
+            chainId: chain?.id || (coinId ? `${coinId}-${bridgeNetworkKind}` : coin),
+            title: bridgeCoinDisplay(coin),
+            ticker: coin,
+            description: coin,
+        };
+    }), [bridgeDestinations, bridgeNetworkKind]);
     // The entries a lock can reach: a stored lower-case entry checks no box and opens no chain.
     const reachableBridgeChains = useMemo(
         () => (currentBridgeChains || []).filter(isReachableBridgeChain),
@@ -630,6 +726,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const mintStopEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: mintStopBlock });
     const callbackBlockEstimate = blockDateEstimateText({ coin: descriptor?.coin, currentHeight, targetBlock: callbackBlock });
     const hasAnyCallbackField = !!(callbackBlock || callbackTick || callbackAmount);
+    // One or two of the three set: say what a working callback needs, live.
+    const callbackFilledCount = [callbackBlock, callbackTick, callbackAmount]
+        .filter((v) => String(v || '').trim()).length;
+    const callbackPartlySet = mode === 'callback-settings' && callbackFilledCount > 0 && callbackFilledCount < 3;
     const hasAnyMintField = !!(maxMint || mintAddressMax || mintStartBlock || mintStopBlock || mintSupply || transferSupply);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
@@ -676,6 +776,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             mintSupply,
             transferSupply,
             lockChecks,
+            currentLocks: currentAssetInfo?.locks || null,
             callbackBlock,
             callbackTick,
             callbackAmount,
@@ -694,18 +795,29 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
          callbackBlock, callbackTick, callbackAmount,
          allowListIdx, blockListIdx, assetInfo?.allowList, assetInfo?.blockList,
          pickedBridgeChains, currentBridgeChains, bridgeMinDepth, bridgeLock,
-         assetInfo?.minDepth, assetInfo?.min_depth],
+         assetInfo?.minDepth, assetInfo?.min_depth, currentAssetInfo?.locks],
     );
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'ISSUE',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
+    const reviewWarningIds = useMemo(
+        () => (decoded ? actionWarningIds({ action: 'ISSUE', params: actionParams }) : []),
+        [actionParams, decoded],
+    );
+    const legacyComposed = useMemo(() => (decoded ? {
+        action: 'ISSUE',
+        chainId,
+        decoded,
+        actionWarnings: reviewWarningIds,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, decoded, reviewWarningIds]);
 
     async function callbackDistributionError() {
         if (flowsLib.isDemoWallet(walletId) || typeof messaging?.tokenHolderSummary !== 'function') return null;
@@ -721,59 +833,85 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             return t('routes.tokenAdmin.callbackHoldersUnread', { tick: ticker.trim() });
         }
         setDistribution({ isDistributed: fresh.isDistributed, holderCount: Number(fresh.holderCount) || 0 });
-        return fresh.isDistributed
-            ? 'Callback settings can only be changed before any supply is distributed. This token already has holders.'
+        if (fresh.isDistributed) {
+            return 'Callback settings can only be changed before any supply is distributed. This token already has holders.';
+        }
+        // A capped or short page is a floor, not the holder set, so an
+        // undistributed reading over it proves nothing and Review refuses.
+        return fresh.partial === true
+            ? t('routes.tokenAdmin.callbackHoldersUnread', { tick: ticker.trim() })
             : null;
     }
 
     async function handleReview(event) {
         event.preventDefault();
-        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
         if (reviewInFlightRef.current) return;
-        setReviewAttempt((n) => n + 1);
-        if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+        if (actionUnavailable) return;
+        // Every press validates the whole form: an empty required field is
+        // marked on the field itself and takes the cursor, and nothing else
+        // is checked until it is filled.
+        const problems = {};
+        if (!ticker.trim()) problems['token-admin-token'] = 'Pick the token.';
+        if (mode === 'description' && !descriptionLocked && !description.trim()) {
+            problems['token-admin-description'] = 'Enter the new description.';
+        }
+        if (mode === 'transfer' && !transferTo.trim()) problems['token-admin-transfer-to'] = 'Enter the new owner address.';
+        if (mode === 'lock' && singleEncode && !typedConfirmOk) {
+            problems['token-admin-lock-confirm'] = 'Type LOCK to confirm the permanent lock.';
+        }
+        const firstMissing = Object.keys(problems)[0] || null;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        // A custom fee the fee field already refuses has no message of its own.
+        if (feeStop) problems['form:fee'] = feeStop.formError;
+        if (!chainId || !fromAddress) problems['form:from'] = 'Pick a source address first.';
+        if (firstMissing || feeStop) {
+            form.validate(problems);
+            if (firstMissing) setTimeout(() => document.getElementById(firstMissing)?.focus(), 0);
             return;
         }
+        // The mode checks run in order and the first refusal is listed, under
+        // its field's id when it names one.
+        let chainProblem = null;
+        const setFormError = (message, key = 'form') => { if (!chainProblem) chainProblem = [key, message]; };
+        const runChecks = () => {
         if (!ticker.trim()) {
             setFormError('Ticker is required.');
             return;
         }
         const tickerError = tickerReferenceError(ticker);
         if (tickerError) {
-            setFormError(tickerError);
+            setFormError(tickerError, 'token-admin-token');
             return;
         }
         if (tokenInfoPending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`, 'token-admin-token');
             return;
         }
         if (eligibilityError) {
-            setFormError(eligibilityError);
+            setFormError(eligibilityError, 'token-admin-token');
             return;
         }
         if (mode === 'description' && !description.trim()) {
-            setFormError('Description is required.');
+            setFormError('Description is required.', 'token-admin-description');
             return;
         }
         if (mode === 'description') {
             const descriptionError = actionTextSafetyError(description, 'Description')
                 || issueDescriptionError(description);
             if (descriptionError) {
-                setFormError(descriptionError);
+                setFormError(descriptionError, 'token-admin-description');
                 return;
             }
         }
         if (mode === 'transfer') {
             if (!transferTo.trim()) {
-                setFormError('New owner address is required.');
+                setFormError('New owner address is required.', 'token-admin-transfer-to');
                 return;
             }
             if (transferToError) {
                 // The field already shows the reason under itself; the banner
                 // names the field once instead of saying it again.
-                setFormError('Fix the New owner address below.');
+                setFormError('Fix the New owner address below.', 'token-admin-transfer-to');
                 return;
             }
         }
@@ -787,22 +925,22 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (maxMint && !isPositiveDecimal(maxMint)) {
-                setFormError('Max mint per transaction must be a positive number.');
+                setFormError('Max mint per transaction must be a positive number.', 'token-admin-max-mint');
                 return;
             }
             if (mintAddressMax && !isPositiveDecimal(mintAddressMax)) {
-                setFormError('Max mint per address must be a positive number.');
+                setFormError('Max mint per address must be a positive number.', 'token-admin-mint-address-max');
                 return;
             }
             if (mintSupply && !isPositiveDecimal(mintSupply)) {
-                setFormError('Mint supply must be a positive number.');
+                setFormError('Mint supply must be a positive number.', 'token-admin-mint-supply');
                 return;
             }
             // Keep all token quantities within this token's on-chain decimal scale.
-            for (const [value, noun] of [
-                [maxMint, 'Max mint per transaction'],
-                [mintAddressMax, 'Max mint per address'],
-                [mintSupply, 'Mint supply'],
+            for (const [value, noun, fieldId] of [
+                [maxMint, 'Max mint per transaction', 'token-admin-max-mint'],
+                [mintAddressMax, 'Max mint per address', 'token-admin-mint-address-max'],
+                [mintSupply, 'Mint supply', 'token-admin-mint-supply'],
             ]) {
                 if (!value) continue;
                 const precisionError = tokenAmountPrecisionError(value, {
@@ -811,30 +949,30 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     noun,
                 });
                 if (precisionError) {
-                    setFormError(precisionError);
+                    setFormError(precisionError, fieldId);
                     return;
                 }
                 const amountLimitError = issueSupplyLimitError(value, noun);
                 if (amountLimitError) {
-                    setFormError(amountLimitError);
+                    setFormError(amountLimitError, fieldId);
                     return;
                 }
             }
             if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
-                setFormError('Minting start must be a whole block number.');
+                setFormError('Minting start must be a whole block number.', 'token-admin-mint-start');
                 return;
             }
             if (mintStopBlock && !/^\d+$/.test(mintStopBlock.trim())) {
-                setFormError('Minting close must be a whole block number.');
+                setFormError('Minting close must be a whole block number.', 'token-admin-mint-stop');
                 return;
             }
             if (mintAddressMax && maxMint
                 && compareDecimalStrings(mintAddressMax, maxMint) === -1) {
-                setFormError('Max mint per address must be at least the max mint per transaction.');
+                setFormError('Max mint per address must be at least the max mint per transaction.', 'token-admin-mint-address-max');
                 return;
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
-                setFormError('Minting must close after it opens. Check the block numbers.');
+                setFormError('Minting must close after it opens. Check the block numbers.', 'token-admin-mint-stop');
                 return;
             }
             // Mint supply creates supply in this transaction, so it is bounded by what
@@ -847,23 +985,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 ? mintHeadroom({ maxSupply: capInfo.maxSupply, totalSupply: capInfo.totalSupply })
                 : null;
             if (mintSupply && exceedsHeadroom(mintSupply, supplyRoom)) {
-                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim()} can still be minted.`);
+                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim()} can still be minted.`, 'token-admin-mint-supply');
                 return;
             }
             if (transferSupply && !mintSupply) {
-                setFormError('Sending new supply needs a mint supply amount.');
+                setFormError('Sending new supply needs a mint supply amount.', 'token-admin-mint-supply');
                 return;
             }
             if (transferSupply && !isValidAddressForChain(
                 transferSupply.trim(), descriptor.coin, descriptor.networkKind,
             )) {
-                setFormError(`New supply destination is not valid for ${descriptor.displayName || chainId}.`);
+                setFormError(`New supply destination is not valid for ${descriptor.displayName || chainId}.`, 'token-admin-transfer-supply');
                 return;
             }
         }
         if (mode === 'callback-settings') {
             if (callbackLocked) {
-                setFormError('Callback settings are permanently locked for this token.');
+                setFormError('Callback is permanently locked for this token.');
                 return;
             }
             if (callbackDistributed) {
@@ -875,7 +1013,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (callbackBlock && (!/^\d+$/.test(String(callbackBlock).trim()) || (currentHeight != null && Number(callbackBlock) < currentHeight))) {
-                setFormError('Callback block must be a whole block height at or after the current block.');
+                setFormError('Callback block must be a whole block height at or after the current block.', 'token-admin-callback-block');
                 return;
             }
             const callbackTickError = callbackTick
@@ -899,12 +1037,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (callbackAmount && !isPositiveDecimal(callbackAmount)) {
-                setFormError('Callback amount must be a positive number.');
+                setFormError('Callback amount must be a positive number.', 'token-admin-callback-amount');
                 return;
             }
             // Hold fractional payouts until the newly typed token lookup resolves.
             if (callbackAmount.includes('.') && callbackTokenDivisibility == null) {
-                setFormError(`Callback amount must be a whole number until the wallet confirms whether ${callbackTickKey || 'the callback token'} supports decimals.`);
+                setFormError(`Callback amount must be a whole number until the wallet confirms whether ${callbackTickKey || 'the callback token'} supports decimals.`, 'token-admin-callback-amount');
                 return;
             }
             // Price callback payouts in the payout token's decimal scale.
@@ -914,7 +1052,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 noun: 'Callback amount',
             });
             if (callbackPrecisionError) {
-                setFormError(callbackPrecisionError);
+                setFormError(callbackPrecisionError, 'token-admin-callback-amount');
                 return;
             }
             // A usable callback needs all three set (block + tick + amount);
@@ -952,7 +1090,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             const depth = String(bridgeMinDepth).trim();
             if (depth && !/^\d+$/.test(depth)) {
-                setFormError('Minimum confirmations must be a whole number of blocks.');
+                setFormError('Minimum confirmations must be a whole number of blocks.', 'token-admin-bridge-depth');
                 return;
             }
             if (!bridgeChanged) {
@@ -960,6 +1098,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
         }
+        };
+        runChecks();
+        if (chainProblem) problems[chainProblem[0]] = chainProblem[1];
+        if (!form.validate(problems)) return;
         // The gates and prefilled values above came from the record read when
         // the form opened; a lock, transfer or settings edit since then makes
         // them stale. Mint settings also bounds a mint-now amount by supply.
@@ -972,7 +1114,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             if (mode === 'callback-settings') {
                 const distributionError = await callbackDistributionError();
                 if (distributionError) {
-                    setFormError(distributionError);
+                    form.fail(distributionError);
                     return;
                 }
             }
@@ -982,13 +1124,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             if (await tokenRecordChangedSince({
                 messaging, chainId, tick: ticker.trim(), current: currentAssetInfo, keys: watched,
             })) {
-                setFormError(tokenRecordChangedMessage(ticker.trim()));
+                form.fail(tokenRecordChangedMessage(ticker.trim()));
                 return;
             }
         } finally {
             reviewInFlightRef.current = false;
         }
-        setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
@@ -1073,7 +1214,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(submitFailureMessage(err, {
+            form.fail(submitFailureMessage(err, {
                 chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Update failed.',
             }));
@@ -1147,18 +1288,20 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     function handleBuildAnother() {
         setResult(null);
+        form.reset(); // a fresh form opens with no marks
         setSubmitError(null);
         setStage('form');
     }
         const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${MODE_LABEL_LOWER[mode]}`
-                    : `${MODE_LABEL[mode]}`}
+                    ? titleCase(`Review ${MODE_LABEL_LOWER[mode]}`)
+                    : titleCase(`${MODE_LABEL[mode]}`)}
         />
     );
     const wrap = (children) => (
@@ -1172,10 +1315,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
@@ -1196,7 +1339,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="update" unsaved={result.unsaved} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>{MODE_DONE_TITLE[mode]}</h2>
                 {txid ? (
                     <>
@@ -1207,122 +1350,82 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={`Review ${MODE_LABEL_LOWER[mode]}`}
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            (mode === 'lock' && !typedConfirmOk) || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
-                                : `Sign: ${MODE_LABEL_LOWER[mode]}`}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={mode !== 'lock' || typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        {mode === 'lock' ? (
+                            <Input
+                                label="Type LOCK to confirm"
+                                help={t('common.typedConfirmationHint', { word: 'LOCK' })}
+                                value={typedConfirm}
+                                onChange={(event) => setTypedConfirm(event.target.value)}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                        ) : null}
+                    </>
                 )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {mode === 'transfer' ? (
-                    <FormNotice variant="warning" role="alert">
-                            Transferring ownership cannot be undone. After confirmation,
-                            only the new owner can administer this token.
-                    </FormNotice>
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                {mode === 'lock' ? (
-                    <Input
-                        label="Type LOCK to confirm"
-                        hint={t('common.typedConfirmationLockBelowHint')}
-                        value={typedConfirm}
-                        onChange={(e) => setTypedConfirm(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                ) : null}
-            </FormPage>,
+                summary={{
+                    verb: titleCase(MODE_SUBMIT_LABEL[mode] || MODE_LABEL[mode] || ''),
+                    ticker: String(ticker || '').trim().toUpperCase(),
+                    chainId,
+                    direction: 'none',
+                    address: fromAddress?.address,
+                    ...(mode === 'transfer' && transferTo.trim() ? { recipient: transferTo.trim() } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // Every mode changes the token itself: the token is the hero, the
+        // mode is the action, and a transfer names the new owner.
+        const adminSummary = {
+            verb: titleCase(MODE_SUBMIT_LABEL[mode] || MODE_LABEL[mode] || ''),
+            ticker: String(ticker || '').trim().toUpperCase(),
+            chainId,
+            direction: 'none',
+            address: fromAddress?.address,
+            ...(mode === 'transfer' && transferTo.trim() ? { recipient: transferTo.trim() } : {}),
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={adminSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1330,14 +1433,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
-                extraCredentials={mode === 'transfer' ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>
-                            Transferring ownership cannot be undone. After confirmation,
-                            only the new owner can administer this token.
-                        </p>
-                    </StatusMessage>
-                ) : null}
+                // An ownership transfer's warning is the confirm screen's
+                // warnings card (flows/actionWarnings.js TOKEN_OWNERSHIP_TRANSFER).
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
@@ -1354,9 +1451,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -1371,13 +1469,31 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select token"
+                title="Select Token"
                 onSelect={(sel) => {
                     setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    if (callbackTokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                chainIdFilter={chainId}
+                kindFilter="tokens"
+                kindLocked
+                title="Select Callback Token"
+                onSelect={(sel) => {
+                    setCallbackTick(String(sel.tick || ''));
+                    setCallbackTokenPickerOpen(false);
+                }}
+                onBack={() => setCallbackTokenPickerOpen(false)}
             />
         );
     }
@@ -1389,6 +1505,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 contacts={contacts}
                 onPick={(entry) => {
                     setTransferTo(entry.address);
+                    form.clear('token-admin-transfer-to');
+                    form.clear('token-admin-transfer-supply');
                     setContactsPickerOpen(false);
                 }}
                 onBack={() => setContactsPickerOpen(false)}
@@ -1396,138 +1514,198 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
-    if (sharedBlockPickerOpen) {
+    // G117: Destination networks opens its own picker page. Each switch writes
+    // the picks map straight away, so Back returns to the form showing the new
+    // choice; a frozen or policy-bound token cannot open it (the field is
+    // disabled), and the switches stay disabled here too as a second guard.
+    if (bridgeNetworksPickerOpen && mode === 'bridge-settings') {
         return (
-            <SharedListDirectory
-                walletId={walletId}
-                chainId={chainId}
-                mode="pick"
-                filterType="2"
-                onSelect={(pick) => {
-                    const next = sharedBlockPickState(pick);
-                    if (!next) return;
-                    blockListTouched.current = true;
-                    setBlockListIdx(next.blockListIdx);
-                    setBlockListCount(next.memberCount);
-                    setBlockListName(null);
-                    setSharedBlockListLabel(next.label);
-                    setSharedBlockPickerOpen(false);
-                }}
-                onBack={() => setSharedBlockPickerOpen(false)}
+            <NetworksPickerScreen
+                variant={variant}
+                title="Destination Networks"
+                options={bridgeNetworkOptions}
+                selected={pickedBridgeChains}
+                disabled={bridgeFrozen || bridgePolicyBound}
+                notice="Turn on each network this token may be bridged to. Turning every network off closes the bridge to new transfers."
+                onToggle={(coin, on) => setBridgeChainPicks((prev) => ({ ...prev, [coin]: on }))}
+                onBack={() => setBridgeNetworksPickerOpen(false)}
             />
         );
     }
 
-    // PC-04: address-list picker for the allow/block-list fields. Only
+    // PC-04: the list picker for the Allow list and Block list fields. Only
     // TYPE=2 (address) lists are valid ALLOW_LIST/BLOCK_LIST targets
-    // (issue.js isValidList(x, 2)), so filter to them.
+    // (issue.js isValidList(x, 2)), so filter to them. A published list from
+    // the shared directory binds its local mirror on this chain, exactly as
+    // a plain list index does, and keeps its "shared from" label.
     if (listPickerFor) {
+        const closePicker = () => { setListPickerFor(null); setListPickerTab(undefined); };
         return (
             <ListPickerScreen
                 variant={variant}
                 messaging={messaging}
                 chainId={chainId}
-                addresses={addressesByChain?.[chainId] || []}
+                addresses={addressesByChain?.[chainId] || NO_ADDRESSES}
                 filterType="2"
                 includeUnions
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
+                walletId={walletId}
+                initialTab={listPickerTab}
+                title={listPickerFor === 'allow' ? 'Select Allow List' : 'Select Block List'}
                 onSelect={(row) => {
+                    const shared = row.shared ? sharedBlockPickState(row) : null;
+                    if (row.shared && !shared) return;
+                    const name = shared ? null : (typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                     if (listPickerFor === 'allow') {
-                        setAllowListIdx(row.actionIndex);
-                        setAllowListCount(row.memberCount);
-                        setAllowListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
+                        setAllowListIdx(shared ? shared.blockListIdx : row.actionIndex);
+                        setAllowListCount(shared ? shared.memberCount : row.memberCount);
+                        setAllowListName(name);
+                        setSharedAllowListLabel(shared ? shared.label : null);
                     } else {
                         blockListTouched.current = true;
-                        setBlockListIdx(row.actionIndex);
-                        setBlockListCount(row.memberCount);
-                        setBlockListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
-                        setSharedBlockListLabel(null);
+                        setBlockListIdx(shared ? shared.blockListIdx : row.actionIndex);
+                        setBlockListCount(shared ? shared.memberCount : row.memberCount);
+                        setBlockListName(name);
+                        setSharedBlockListLabel(shared ? shared.label : null);
                     }
-                    setListPickerFor(null);
+                    closePicker();
                 }}
-                onBack={() => setListPickerFor(null)}
+                onBack={closePicker}
             />
         );
     }
 
+    // Which standard section the current error belongs to, so that
+    // section reopens on every attempt; and the closed sections' summaries.
+    // A source refusal belongs to From, a custom fee refusal (the review's
+    // fee stop) to Network fee, every other entry to the main section.
+    const errorKeys = Object.keys(form.errors);
+    const sectionHasError = (id) => (id === 'from' ? errorKeys.includes('form:from')
+        : id === 'fee' ? errorKeys.includes('form:fee')
+            : errorKeys.some((key) => key !== 'form:from' && key !== 'form:fee'));
+    const sectionErrorKey = (id) => (sectionHasError(id)
+        ? (id === 'fee' ? `fee-${form.errors['form:fee']}-${form.attempt}` : form.attempt + 1)
+        : 0);
+    // No source to default to: no funding address on the network (the default
+    // skips dispenser-delegated ones) and none picked by hand.
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0;
+    const mainSummary = ticker ? String(ticker).trim().toUpperCase() : null;
+    const ModeIcon = MODE_ACTION_ICON[mode] || Icon.GearIcon;
+    const actionUnavailable = tokenInfoPending || tokenInfoFailed
+        || (mode === 'mint-settings' && nothingMintEditable)
+        || (mode === 'callback-settings' && callbackFieldsDisabled)
+        || (mode === 'lock' && (allLocksSet || lockStateUnknown));
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
-            status={formError && reviewAttempt > 0 ? (
-                // Leads the page, far above the button on a phone: it takes focus.
-                <FormErrorSummary errors={[{ message: formError }]} focusKey={reviewAttempt} />
-            ) : formError || eligibilityError ? (
-                <StatusMessage variant="error">
-                    {formError || eligibilityError}
+            // The press list leads the page, far above the button on a phone.
+            errors={form}
+            status={!form.hasErrors && eagerEligibilityError ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={tokenInfoFailed ? {
+                        label: t('common.tryAgain'),
+                        onAction: () => invalidateTokenInfo(chainId, ticker),
+                    } : undefined}
+                >
+                    {eagerEligibilityError}
                 </StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant={mode === 'lock' ? 'danger' : 'primary'}
+            action={(
+                // The main action is green on every mode, Lock token
+                // included; the typed LOCK gate carries the warning.
+                // The standard FormAction: an icon per mode and a verb label.
+                <FormAction
+                    icon={<ModeIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker
-                        || tokenInfoPending
-                        || !!eligibilityError
-                        || (mode === 'description' && !description)
-                        || (mode === 'transfer' && !transferTo)
-                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
-                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
-                        || (mode === 'access-lists' && !listsChanged)
-                        || (mode === 'bridge-settings' && (
-                            bridgeFrozen
-                            || !bridgeChanged
-                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
-                        ))
-                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
-                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
-                        || actionConfirm.composing}
+                    // G22: never disabled for an empty or unchanged field; a
+                    // press marks it or says what to change. Only a live read
+                    // or a token with nothing left to change holds it.
+                    aria-disabled={actionUnavailable ? 'true' : undefined}
                 >
-                    {singleEncode ? 'Update token' : 'Preview'}
-                </Button>
+                    {titleCase(MODE_SUBMIT_LABEL[mode])}
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // The token decides the network: a preset token locks it, and
+                // the Token picker lists every chain and moves the form, so
+                // Network locks once a token is set.
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    lockNetwork={lockedToken || Boolean(ticker)}
+                    networkHelp={MODE_NETWORK_HELP[mode]}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={MODE_FROM_HELP[mode]}
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                    formErrorKey="form:from"
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    formErrorKey="form:fee"
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <TickerIcon chainId={chainId} tick={ticker} size={32} />
-            ) : (
-                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="main"
+                title={MODE_SECTION_TITLE[mode] || titleCase(MODE_LABEL[mode] || '')}
+                icon={ModeIcon}
+                {...formSections.bind('main')}
+                revealKey={sectionErrorKey('main')}
+                summary={mainSummary}
+            >
+            {/* The token always shows as the standard Token field (icon and
+                ticker); a preset token fills it and its picker stays shut. */}
+            {lockedToken ? (
                 <TokenField
                     label="Token"
+                    help={MODE_TOKEN_HELP[mode]}
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    disabled
+                />
+            ) : (
+                <TokenField
+                    id="token-admin-token"
+                    label="Token"
+                    help={MODE_TOKEN_HELP[mode]}
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
 
             {mode === 'description' ? (
-                <Input
-                    label="New description"
-                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain and replaces the current one.`}
+                <Textarea
+                    id="token-admin-description"
+                    label="Description"
+                    help={`Stored on-chain and replaces the current description. Up to ${MAX_ISSUE_TEXT_LENGTH} characters.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={descriptionLocked}
                     autoComplete="off"
                     maxLength={MAX_ISSUE_TEXT_LENGTH}
+                    rows={4}
                 />
             ) : null}
 
@@ -1535,14 +1713,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <AddressField
                     label="New owner address"
                     icon="contacts"
-                    hint={`The ${chainLabelFor(descriptor) || 'same-network'} address that will receive ownership.`}
+                    help={`The ${chainLabelFor(descriptor) || 'same-network'} address that will receive ownership.`}
+                    id="token-admin-transfer-to"
                     value={transferTo}
                     error={transferToError || undefined}
                     onChange={(e) => {
                         setTransferTo(e.target.value);
                         // Drop any form-level error the previous submit left
                         // behind; the field's own error is derived and live.
-                        setFormError(null);
+                        form.clear('form');
                     }}
                     onIconClick={() => setContactsPickerOpen(true)}
                 />
@@ -1550,35 +1729,46 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <FormNotice variant="warning" role="alert" lead="Locking is permanent.">
-                        Each flag below is a one-way switch: once checked and submitted, it can never be unlocked or reversed.
-                    </FormNotice>
                     {allLocksSet ? (
-                        <p className={styles.hint}>
-                            Every lock is already permanently set for {ticker}.
-                            There is nothing left to lock.
-                        </p>
-                    ) : (
-                        <div role="group" aria-label="Lock flags">
-                            {LOCK_FLAGS.map((f) => {
-                                const isLocked = !!tokenLocks[f.key];
-                                return (
-                                    <div key={f.key} className={styles.lockFlagRow}>
-                                        <Checkbox
-                                            label={`${f.label}${isLocked ? ' (already locked)' : ''}`}
-                                            description={f.hint}
-                                            checked={isLocked || !!lockChecks[f.key]}
-                                            disabled={isLocked}
-                                            onChange={(e) => setLockChecks((prev) => ({
-                                                ...prev,
-                                                [f.key]: e.target.checked,
-                                            }))}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                        <p className={styles.hint}>Everything is already locked.</p>
+                    ) : null}
+                    {/* The same lock switches as the Issue form: each row's icon
+                        names the thing locked; the switch shows the state. The
+                        token's own lock state decides which are on and fixed;
+                        until it is read (or when the read fails) none can move. */}
+                    <div
+                        role="group"
+                        aria-label="Lock flags"
+                        aria-busy={lockStateLoading ? 'true' : undefined}
+                        className={styles.lockFlagList}
+                    >
+                        {LOCK_FLAGS.map((f) => {
+                            const isLocked = !!tokenLocks[f.key];
+                            const checked = isLocked || !!lockChecks[f.key];
+                            const ItemIcon = lockIconFor(f.field);
+                            return (
+                                <div
+                                    key={f.key}
+                                    className={checked ? `${styles.lockRow} ${styles.lockRowOn}` : styles.lockRow}
+                                    data-lock-flag={f.key}
+                                >
+                                    <Switch
+                                        icon={<ItemIcon />}
+                                        id={`token-admin-lock-${f.key}`}
+                                        label={`${f.label}${isLocked ? ' (already locked)' : ''}`}
+                                        description={isLocked ? 'Already locked' : f.hint}
+                                        help={f.help}
+                                        checked={checked}
+                                        disabled={isLocked || lockStateUnknown}
+                                        onChange={(e) => setLockChecks((prev) => ({
+                                            ...prev,
+                                            [f.key]: e.target.checked,
+                                        }))}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
                 </>
             ) : null}
 
@@ -1601,7 +1791,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             ) : null}
                             {mintSupplyLocked ? (
                                 <FormNotice variant="warning" role="alert">
-                                    {`Minting supply now is permanently locked for ${ticker}.`}
+                                    {`Mint supply is permanently locked for ${ticker}.`}
                                 </FormNotice>
                             ) : null}
                             {maxSupplyLockedInfo ? (
@@ -1613,8 +1803,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     )}
 
                     <Input
-                        label="Max mint per transaction (optional)"
-                        hint="Caps how much can be minted in one transaction. Leave blank for no limit."
+                        id="token-admin-max-mint"
+                        label="Max mint per transaction"
+                        optional
+                        help="Caps how much can be minted in one transaction. Leave blank for no limit."
                         inputMode="decimal"
                         value={maxMint}
                         onChange={(e) => setMaxMint(e.target.value)}
@@ -1622,8 +1814,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         disabled={maxMintFieldDisabled}
                     />
                     <Input
-                        label="Max mint per address (optional)"
-                        hint="The most this address can ever mint in total, across every MINT transaction. Leave blank for no limit."
+                        id="token-admin-mint-address-max"
+                        label="Max mint per address"
+                        optional
+                        help="The most this address can ever mint in total, across every MINT transaction. Leave blank for no limit."
                         inputMode="decimal"
                         value={mintAddressMax}
                         onChange={(e) => setMintAddressMax(e.target.value)}
@@ -1631,10 +1825,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         disabled={mintWindowFieldsDisabled}
                     />
                     <Input
-                        label="Minting opens at block (optional)"
-                        hint={mintStartEstimate
-                            ? `Block height when public minting starts. Est. ${mintStartEstimate}.`
-                            : 'Block height when public minting starts. Leave blank to open immediately.'}
+                        id="token-admin-mint-start"
+                        label="Minting opens at block"
+                        optional
+                        help="Block height when public minting starts. Leave blank to open immediately. Dates shown are rough estimates; real block times vary."
+                        // Live text only under the field (U57): the estimate
+                        // and the current block, never a loose note below.
+                        hint={[
+                            mintStartEstimate ? `Est. ${mintStartEstimate}.` : null,
+                            currentHeight != null ? `Current block: ${String(currentHeight)}.` : null,
+                        ].filter(Boolean).join(' ') || undefined}
                         inputMode="numeric"
                         value={mintStartBlock}
                         onChange={(e) => setMintStartBlock(e.target.value)}
@@ -1642,25 +1842,22 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         disabled={mintWindowFieldsDisabled}
                     />
                     <Input
-                        label="Minting closes at block (optional)"
-                        hint={mintStopEstimate
-                            ? `Block height when public minting ends. Est. ${mintStopEstimate}.`
-                            : 'Block height when public minting ends. Leave blank to keep it open.'}
+                        id="token-admin-mint-stop"
+                        label="Minting closes at block"
+                        optional
+                        help="Block height when public minting ends. Leave blank to keep it open. Dates shown are rough estimates; real block times vary."
+                        hint={mintStopEstimate ? `Est. ${mintStopEstimate}.` : undefined}
                         inputMode="numeric"
                         value={mintStopBlock}
                         onChange={(e) => setMintStopBlock(e.target.value)}
                         autoComplete="off"
                         disabled={mintWindowFieldsDisabled}
                     />
-                    {currentHeight != null ? (
-                        <p className={styles.hint}>
-                            Current block: {currentHeight.toLocaleString('en-US')}.
-                            Dates above are rough estimates; real block times vary.
-                        </p>
-                    ) : null}
                     <Input
-                        label="Mint supply now (optional)"
-                        hint="Mints this amount immediately, in this same transaction, on top of the settings above."
+                        id="token-admin-mint-supply"
+                        label="Mint supply now"
+                        optional
+                        help="Mints this amount immediately, in this same transaction, on top of the settings above."
                         inputMode="decimal"
                         value={mintSupply}
                         onChange={(e) => setMintSupply(e.target.value)}
@@ -1668,9 +1865,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         disabled={mintNowFieldsDisabled}
                     />
                     <AddressField
-                        label="Send that new supply to (optional)"
+                        id="token-admin-transfer-supply"
+                        label="Send that new supply to"
+                        optional
                         icon="contacts"
-                        hint="Only used together with Mint supply now above. Leave blank to keep it in your own address."
+                        help="Only used together with Mint supply now. Leave blank to keep it in your own address."
                         value={transferSupply}
                         onChange={(e) => setTransferSupply(e.target.value)}
                         onIconClick={() => setContactsPickerOpen(true)}
@@ -1681,125 +1880,92 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'callback-settings' ? (
                 <>
-                    <p className={styles.hint}>
-                        A callback lets you later recall <strong>all</strong> of {ticker || 'this token'}
-                        {' '}back to your address in one action, paying every holder a set amount of
-                        another token per unit they held. Configure it here; it can only be edited
-                        before any supply is distributed.
-                    </p>
                     {callbackLocked ? (
                         <FormNotice variant="warning" role="alert">
-                            {`Callback settings are permanently locked for ${ticker}. They can no longer be changed.`}
+                            {`Callback is permanently locked for ${ticker}. Its settings can no longer be changed.`}
                         </FormNotice>
                     ) : callbackDistributed ? (
                         <FormNotice variant="warning" role="alert">
                             {`${ticker} already has holders${distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''}, so its callback settings are frozen. They can only be set before any supply leaves your address.`}
                         </FormNotice>
                     ) : null}
-                    <Input
+                    <TokenField
                         label="Callback token"
-                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
-                        value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value)}
-                        autoComplete="off"
+                        help="The token every holder is paid in when the callback runs. Leave it empty to keep the current one."
+                        value={callbackTick && chainId ? { chainId, tick: callbackTick } : null}
+                        onOpenPicker={() => setCallbackTokenPickerOpen(true)}
                         disabled={callbackFieldsDisabled}
                     />
                     <Input
+                        id="token-admin-callback-amount"
                         label="Payout per unit"
-                        hint="How much of the callback token each holder receives per unit of this token they hold."
+                        help={`When you run the callback, every holder hands back all of their ${ticker || 'token'} and receives this much of the callback token for each unit. It can only be set before any supply is distributed; leave it blank to keep the current value.`}
                         inputMode="decimal"
                         value={callbackAmount}
+                        error={callbackAmountPrecisionError || undefined}
                         onChange={(e) => setCallbackAmount(e.target.value)}
+                        onBlur={() => setCallbackAmount((v) => padCallbackAmount(v, callbackTokenDivisibility))}
                         autoComplete="off"
                         disabled={callbackFieldsDisabled}
                     />
                     <Input
+                        id="token-admin-callback-block"
                         label="Callback allowed from block"
-                        hint={callbackBlockEstimate
-                            ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
-                            : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                        help="The earliest block height you can trigger the callback. Must be a future block. Leave it blank to keep the current value. The date shown is a rough estimate; real block times vary."
+                        // Live text only under the field (U57): the estimate
+                        // and the current block, never a loose note below.
+                        hint={[
+                            callbackBlockEstimate ? `Est. ${callbackBlockEstimate}.` : null,
+                            currentHeight != null ? `Current block: ${String(currentHeight)}.` : null,
+                        ].filter(Boolean).join(' ') || undefined}
                         inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"
                         disabled={callbackFieldsDisabled}
                     />
-                    {currentHeight != null ? (
-                        <p className={styles.hint}>
-                            Current block: {currentHeight.toLocaleString('en-US')}.
-                            Date above is a rough estimate; real block times vary.
-                        </p>
+                    {callbackPartlySet ? (
+                        <FieldNote variant="warning">
+                            A working callback needs all three fields set.
+                        </FieldNote>
                     ) : null}
-                    <p className={styles.hint}>
-                        Values you leave blank keep their current setting. A working callback
-                        needs all three fields set.
-                    </p>
                 </>
             ) : null}
 
             {mode === 'access-lists' ? (
+                // Allow list and Block list are list fields like Token above
+                // them: the field opens the list picker (My lists, Recent, and
+                // All with the published lists), and on a network that can
+                // detach a list its clear action sets the field to none. An
+                // empty field reads "None set" (G114).
                 <>
-                    <p className={styles.hint}>
-                        Restrict who can interact with {ticker || 'this token'} by pointing it
-                        at address lists you've published. An allow-list permits only its
-                        members; a block-list denies its members. Both reference an address
-                        list (create one in My Lists first).
-                    </p>
-                    <div className={styles.detailsList}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Allow-list</span>
-                            <span className={styles.detailsValue}>
-                                {allowListIdx && allowListIdx !== '0'
-                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
-                                    : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
-                        </Button>
-                        {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
-                                Remove list
-                            </Button>
-                        ) : null}
-                    </div>
-                    <div className={styles.detailsList}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Block-list</span>
-                            <span className={styles.detailsValue}>
-                                {blockListIdx && blockListIdx !== '0'
-                                    ? `${sharedBlockListLabel || listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
-                                    : (blockListIdx === '0' ? 'None after this update' : 'None')}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
-                        </Button>
-                        <Button type="button" variant="ghost" onClick={() => setSharedBlockPickerOpen(true)}>
-                            Use a shared block list
-                        </Button>
-                        {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
-                                Remove list
-                            </Button>
-                        ) : null}
-                    </div>
-                    <p className={styles.hint}>
-                        {listDetachActive
-                            ? 'Choose Remove list to detach a bound policy. Fields you do not change keep their current binding.'
-                            : 'A list can be replaced here. Fields you do not change keep their current binding.'}
-                    </p>
+                    <ListField
+                        label="Allow list"
+                        help={`Only members of this allow list may interact with the token. Pick one of your address lists or a published one. A field you do not change keeps its current binding.${listDetachActive ? ' Clearing the field detaches a bound list.' : ''}`}
+                        placeholder="None set"
+                        valueText={accessListFieldText(allowListIdx, sharedAllowListLabel || listLabel(allowListIdx, allowListName), allowListCount)}
+                        onOpenPicker={() => setListPickerFor('allow')}
+                        onClear={listDetachActive && allowListIdx && allowListIdx !== '0'
+                            ? () => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); setSharedAllowListLabel(null); }
+                            : undefined}
+                        clearLabel="Remove allow-list"
+                    />
+                    <ListField
+                        label="Block list"
+                        help={`Members of this block list are denied interaction with the token. Pick one of your address lists or a published one, such as a shared block list. A field you do not change keeps its current binding.${listDetachActive ? ' Clearing the field detaches a bound list.' : ''}`}
+                        placeholder="None set"
+                        valueText={accessListFieldText(blockListIdx, sharedBlockListLabel || listLabel(blockListIdx, blockListName), blockListCount)}
+                        onOpenPicker={() => setListPickerFor('block')}
+                        onClear={listDetachActive && blockListIdx && blockListIdx !== '0'
+                            ? () => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }
+                            : undefined}
+                        clearLabel="Remove block-list"
+                    />
                 </>
             ) : null}
 
             {mode === 'bridge-settings' ? (
                 <>
-                    <p className={styles.hint}>
-                        Bridging lets holders lock {ticker || 'this token'} here and receive a
-                        copy of it on another chain. It is off until you turn it on, and only
-                        you can. Holders can always bring a copy back, even after you close a
-                        chain again.
-                    </p>
                     {bridgeFrozen ? (
                         <FormNotice variant="status">
                             These settings are frozen for good: this token's bridge configuration was locked and can never change again.
@@ -1816,7 +1982,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         <p className={styles.hint}>
                             This venue does not report the token's current bridge setting, so
                             nothing below is pre-filled. Applying will set it to exactly what
-                            you check here.
+                            you choose here.
                         </p>
                     ) : null}
                     {currentBridgeChains && reachableBridgeChains.length < currentBridgeChains.length ? (
@@ -1825,66 +1991,56 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                 + 'a spelling the network does not accept, so it opens no network. '
                                 + (bridgeFrozen
                                     ? 'The settings are frozen, so it cannot be corrected.'
-                                    : 'Check the networks you mean and apply to correct it.')}
+                                    : 'Choose the networks you mean and apply to correct it.')}
                         </FormNotice>
                     ) : null}
-                    {/* One group, so the label sits a label gap above its chains
-                        instead of a form gap plus its own margin, and the
-                        chains read as one control rather than loose fields. */}
-                    <div className={styles.checkGroup} role="group" aria-labelledby="bridge-destination-chains">
-                        <span id="bridge-destination-chains" className={styles.pickerLabel}>Destination networks</span>
-                        {bridgeDestinations.map((coin) => (
-                            <Checkbox
-                                key={coin}
-                                label={bridgeCoinDisplay(coin)}
-                                checked={!!bridgeChainPicks[coin]}
-                                disabled={bridgeFrozen || bridgePolicyBound}
-                                onChange={(e) => setBridgeChainPicks(
-                                    (prev) => ({ ...prev, [coin]: e.target.checked }),
-                                )}
-                            />
-                        ))}
-                    </div>
-                    <p className={styles.hint}>
-                        Unchecking every chain closes the door to NEW transfers. It never
-                        touches copies already out there, and holders can still bring those
-                        back.
-                    </p>
+                    {/* G117: one picker field that shows the chosen networks and
+                        opens the networks page, so the form never grows with the
+                        number of chains. It shows the reachable picks only, never
+                        a stored spelling no network accepts. */}
+                    <NetworksField
+                        label="Destination networks"
+                        help="Bridging lets holders lock this token here and receive a copy of it on another chain. It is off until you turn it on, and only you can. Holders can always bring a copy back, even after you close a chain again. Turning every network off closes the door to NEW transfers. It never touches copies already out there, and holders can still bring those back."
+                        options={bridgeNetworkOptions}
+                        selected={pickedBridgeChains}
+                        placeholder="None set"
+                        disabled={bridgeFrozen || bridgePolicyBound}
+                        onOpenPicker={() => setBridgeNetworksPickerOpen(true)}
+                    />
                     <Input
-                        label="Minimum confirmations (optional)"
-                        hint="Blocks to wait before copying a locked transfer to the other network. Longer waits are safer but slower. Values below the platform default have no effect."
+                        id="token-admin-bridge-depth"
+                        label="Minimum confirmations"
+                        optional
+                        help="Blocks to wait before copying a locked transfer to the other network. Longer waits are safer but slower. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}
                         inputMode="numeric"
                     />
+                    {/* G120: a plain toggle field with its static warning
+                        right under it, on the page whether the switch is on or
+                        off, so the owner reads what freezing means before
+                        turning it on. Flipping the switch shows or hides no
+                        notice anywhere on the form. */}
                     {!bridgeFrozen ? (
-                        <Checkbox
-                            label="Freeze these settings permanently"
-                            checked={bridgeLock}
-                            onChange={(e) => setBridgeLock(e.target.checked)}
-                        />
-                    ) : null}
-                    {bridgeLock ? (
-                        <FormNotice variant="status">
-                            Freezing is one-way. Neither the chain list nor the minimum confirmations can ever be changed again, by you or by a future owner. That is the assurance a holder has against both.
-                        </FormNotice>
+                        <>
+                            <Switch
+                                id="token-admin-bridge-freeze"
+                                label="Freeze settings permanently"
+                                help={t('routes.tokenAdmin.freezeHelp')}
+                                checked={bridgeLock}
+                                onChange={(e) => setBridgeLock(e.target.checked)}
+                            />
+                            <Notice tone="danger" role="note" flush data-bridge-freeze-warning="">
+                                Freezing is one-way. Neither the destination networks nor the minimum confirmations can ever be changed again, by you or by a future owner. That is the assurance a holder has against both.
+                            </Notice>
+                        </>
                     ) : null}
                 </>
             ) : null}
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-
+            {/* The fee selector lives in the Network fee section; the typed
+                LOCK gate is last inside the mode's section. */}
             {/*
               * D-165: the typed confirmation for a LOCK, on the path a normal
               * wallet actually takes. It used to live only in the legacy
@@ -1898,8 +2054,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
               */}
             {mode === 'lock' && singleEncode && !allLocksSet ? (
                 <Input
+                    id="token-admin-lock-confirm"
                     label="Type LOCK to confirm"
-                    hint={t('common.typedConfirmationLockAboveHint')}
+                    help={t('common.typedConfirmationHint', { word: 'LOCK' })}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -1907,8 +2064,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     spellCheck={false}
                 />
             ) : null}
-
-        </FormPage>,
+            </FormSection>
+        </FormFrame>,
     );
 }
 
@@ -1940,7 +2097,7 @@ function composeAdminParams(mode, form) {
         const p = { VERSION: '3', TICK };
         const checks = form.lockChecks || {};
         for (const f of LOCK_FLAGS) {
-            if (checks[f.key]) p[f.field] = '1';
+            if (checks[f.key] && !form.currentLocks?.[f.key]) p[f.field] = '1';
         }
         return p;
     }
@@ -2010,6 +2167,28 @@ function composeAdminParams(mode, form) {
     };
 }
 
+/** The Network field's help tip, written for what the chain means in each mode. */
+const MODE_NETWORK_HELP = {
+    lock: "The chain the token lives on. Locks are recorded on this network and your From address pays the fee here.",
+    description: "The chain the token lives on. The new description is recorded on this network.",
+    transfer: "The chain the token lives on. Ownership moves to a new address on this same network.",
+    'mint-settings': "The chain the token lives on. The new mint settings are recorded on this network.",
+    'callback-settings': "The chain the token lives on. The callback is configured on this network.",
+    'access-lists': "The chain the token lives on. The lists restrict who can use it on this network.",
+    'bridge-settings': "The chain the token lives on. Its destination networks are the other chains a copy can be bridged to.",
+};
+
+/** The Token field's help tip, written for what the token is in each mode. */
+const MODE_TOKEN_HELP = {
+    lock: "The token you are locking. Only the flags you tick below are locked, and a lock can never be undone.",
+    description: "The token whose description you are replacing. Your From address must be its owner.",
+    transfer: "The token whose ownership you are handing over. Your From address must be its owner.",
+    'mint-settings': "The token whose mint settings you are changing. Your From address must be its owner.",
+    'callback-settings': "The token whose callback you are configuring. Your From address must be its owner.",
+    'access-lists': "The token you are restricting with an allow-list or a block-list. Your From address must be its owner.",
+    'bridge-settings': "The token whose bridging you are opening or closing. Your From address must be its owner.",
+};
+
 const MODE_LABEL = {
     lock: 'Lock token',
     description: 'Update description',
@@ -2018,6 +2197,39 @@ const MODE_LABEL = {
     'callback-settings': 'Callback settings',
     'access-lists': 'Access lists',
     'bridge-settings': 'Bridge settings',
+};
+
+// The title of each mode's main standard section. It
+// names the mode without repeating the action button's own label.
+const MODE_SECTION_TITLE = {
+    lock: 'Locks',
+    description: 'Description',
+    transfer: 'New Owner',
+    'mint-settings': 'Mint Settings',
+    'callback-settings': 'Callback Settings',
+    'access-lists': 'Access Lists',
+    'bridge-settings': 'Bridge Settings',
+};
+
+// The icon of each mode's main section and action button.
+const MODE_ACTION_ICON = {
+    lock: Icon.LockIcon,
+    description: Icon.PencilIcon,
+    transfer: Icon.UserIcon,
+    'mint-settings': Icon.MintIcon,
+    'callback-settings': Icon.CoinsIcon,
+    'access-lists': Icon.TokenListIcon,
+    'bridge-settings': Icon.LinkIcon,
+};
+
+const MODE_SUBMIT_LABEL = {
+    lock: 'Lock token',
+    description: 'Update description',
+    transfer: 'Transfer ownership',
+    'mint-settings': 'Update mint settings',
+    'callback-settings': 'Update callback settings',
+    'access-lists': 'Update access lists',
+    'bridge-settings': 'Update bridge settings',
 };
 
 const MODE_LABEL_LOWER = {
@@ -2040,11 +2252,32 @@ const MODE_DONE_TITLE = {
     'bridge-settings': 'Bridge settings updated',
 };
 
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
-    );
+/** The From field's help tip, written for what the owner's address does in each mode. */
+const MODE_FROM_HELP = {
+    lock: "The token owner's address. It signs this lock and pays the network fee.",
+    description: "The token owner's address. It signs the new description and pays the network fee.",
+    transfer: "The token's current owner. It signs the hand-over and pays the network fee.",
+    'mint-settings': "The token owner's address. It signs the new mint settings and pays the network fee.",
+    'callback-settings': "The token owner's address. It signs the callback settings and pays the network fee.",
+    'access-lists': "The token owner's address. It signs the access-list change and pays the network fee.",
+    'bridge-settings': "The token owner's address. It signs the bridge settings and pays the network fee.",
+};
+
+/**
+ * Re-formats Payout per unit to the callback token's format, the way every
+ * amount field shows it: "1" and "1.00000000" read "1", and "1.5" reads
+ * "1.50000000" at 8 and "1.50" at 2, because the padding zeros are dropped
+ * before the shared formatter runs. Any significant digit stays, so a value
+ * finer than the token allows keeps its digits and its field error. A blank
+ * or malformed value, or an unknown precision, comes back unchanged.
+ *
+ * @param {string} value
+ * @param {number | null} places
+ * @returns {string}
+ */
+function padCallbackAmount(value, places) {
+    const text = String(value ?? '').trim();
+    if (places == null || !/^\d+(?:\.\d*)?$/.test(text)) return value;
+    const bare = text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text;
+    return padToDecimals(bare, places);
 }

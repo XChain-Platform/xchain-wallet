@@ -48,10 +48,13 @@ import { app, BrowserWindow, dialog, Menu, ipcMain, powerMonitor, safeStorage, s
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
+// The pre-flight amount validators sit on no SDK index export, so they are read by path.
+import * as preflightNumeric from 'xchain-sdk/src/preflight/numeric.js';
+import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_format.js';
 
 import { IPC_CHANNEL } from './messageHost.js';
 // Pre-host + runtime helpers live in the pure-JS runtime module so the
@@ -62,7 +65,12 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
-import { FileBroadcastQueueStorage, broadcastQueuePathFor } from './broadcastQueueStorage.js';
+import {
+    FileBroadcastQueuePrunedLedger,
+    FileBroadcastQueueStorage,
+    broadcastQueuePathFor,
+    broadcastQueuePrunedPathFor,
+} from './broadcastQueueStorage.js';
 import { applyScreenProtection, notifyWindowHidden } from './screenProtection.js';
 import {
     attachRendererCspHeaders,
@@ -83,7 +91,7 @@ import {
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { createTrezorBridge } from './trezorBridgeWindow.js';
-import { attachUpdater } from './updater.js';
+import { attachUpdater, desktopInstallChannel } from './updater.js';
 import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
@@ -530,10 +538,18 @@ function buildRuntime() {
         // The panic-mode freeze main's signers read (main/panicModeState.js).
         panicModeStore: new FilePanicModeStore(panicModeStatePathFor(userData)),
         broadcastQueueStorage: new FileBroadcastQueueStorage(broadcastQueuePathFor(userData), console),
+        broadcastQueuePrunedLedger: new FileBroadcastQueuePrunedLedger(
+            broadcastQueuePrunedPathFor(userData),
+            console,
+        ),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
             sdkFactory: REAL_SDK_FACTORY,
+        }),
+        loadAmountRules: () => flowsLib.amountRulesFromSdk({
+            numeric: preflightNumeric,
+            amountFormat: preflightAmountFormat,
         }),
         // Apply the egress policy for the current settings. ensureHost calls
         // this the moment the vault opens (boot or password unlock), and the
@@ -552,7 +568,12 @@ function buildRuntime() {
         },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
-        notify: createOsNotifier({ Notification, reportFailure: reportMainFailure }),
+        notify: createOsNotifier({
+            Notification,
+            reportFailure: reportMainFailure,
+            // The same settings the shared host reads; no new IPC surface.
+            getSettings: () => (runtime?.vault ? flowsLib.getSettings(runtime.vault) : undefined),
+        }),
         // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
@@ -638,6 +659,20 @@ export function createWindow(opts = {}) {
     );
     win.once('ready-to-show', () => {
         runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); }, 'renderer reveal');
+    });
+    // The window shows the title the page holds now. A title event can arrive
+    // after the page has moved on, so each event re-reads the document title
+    // and a return to an earlier screen never keeps the title of the screen
+    // it came from.
+    win.webContents.on('page-title-updated', (event) => {
+        event.preventDefault();
+        void runMainTask(async () => {
+            if (win.isDestroyed()) return;
+            const title = await win.webContents.executeJavaScript('document.title');
+            if (!win.isDestroyed() && typeof title === 'string' && title && win.getTitle() !== title) {
+                win.setTitle(title);
+            }
+        }, 'window title');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
@@ -1156,6 +1191,12 @@ void runMainTask(async () => {
         return lastUpdaterEvent;
     });
 
+    ipcMain.handle('xchain:updater-channel', async (event, ...args) => {
+        if (!isTrustedSender(event)) return null;
+        if (!hasNoIpcArguments(args)) return null;
+        return desktopInstallChannel();
+    });
+
     ipcMain.handle('xchain:updater-install', async (event, ...args) => {
         if (!isTrustedSender(event)) {
             return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
@@ -1463,6 +1504,9 @@ app.on('before-quit', (event) => {
         flushWindowBoundsSync();
         tray?.destroy();
         tray = null;
+        // Quitting ends locked auto pay; its sealed keys are zeroed at once
+        // (the vault close follows when its last cycle settles).
+        if (runtime?.lockedAutopay) void runtime.lockedAutopay.end('quit');
         if (runtime) tearDownHost(runtime);
     }, 'desktop shutdown');
 });

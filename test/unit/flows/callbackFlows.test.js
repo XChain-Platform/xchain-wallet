@@ -72,7 +72,7 @@ describe('callbackAction', () => {
         [{ VERSION: '0', TICK: 'BAD|TICK' }, /can only use/],
         [{ VERSION: '1', TICK: 'JDOG' }, /VERSION must be "0"/],
         [{ VERSION: '0', TICK: 'JDOG', MEMO: 'bad;memo' }, /Memo cannot contain/],
-        [{ VERSION: '0', TICK: 'JDOG', MEMO: 'é'.repeat(126) }, /252 bytes/],
+        [{ VERSION: '0', TICK: 'JDOG', MEMO: 'é'.repeat(251) }, /251 characters/],
     ])('refuses invalid wire fields before submit %#', async (params, message) => {
         await expect(callbackAction(callbackOpts({ params }))).rejects.toThrow(message);
         expect(submitAction).not.toHaveBeenCalled();

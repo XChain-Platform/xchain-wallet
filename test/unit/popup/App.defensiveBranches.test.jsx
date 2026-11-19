@@ -99,7 +99,7 @@ describe('popup App defensive branches', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' }))
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' }))
             .toBeInTheDocument();
         expect(screen.queryByText('XChain Wallet cannot connect to this page.'))
             .not.toBeInTheDocument();
@@ -113,8 +113,8 @@ describe('popup App defensive branches', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Something stopped the wallet from opening.');
-        expect(screen.getByRole('heading', { name: /wallet couldn't start/i })).toBeInTheDocument();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Your wallet data is safe and unchanged.');
+        expect(screen.getByRole('heading', { name: 'Wallet Unavailable' })).toBeInTheDocument();
         expect(screen.queryByText('storage permission refused')).not.toBeInTheDocument();
     });
 
@@ -126,7 +126,7 @@ describe('popup App defensive branches', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('heading', { name: 'Your device needs to be unlocked' }))
+        expect(await screen.findByText(/device's secure storage stays locked until you unlock the device itself/))
             .toBeInTheDocument();
         expect(screen.queryByText('secure storage is locked')).not.toBeInTheDocument();
     });
@@ -146,7 +146,7 @@ describe('popup App defensive branches', () => {
         expect(window.location.pathname).toBe('/popup.html');
         expect(window.location.search).toBe('?keep=1');
         expect(window.location.hash).toBe('#fragment');
-        expect(await screen.findByRole('button', { name: 'Create new wallet' }))
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' }))
             .toBeInTheDocument();
     });
 });

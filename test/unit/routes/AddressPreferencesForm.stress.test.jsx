@@ -87,30 +87,52 @@ function deferred() {
 }
 
 async function typeMemo(value) {
-    const memo = await screen.findByLabelText(/^Memo \(optional\)/);
+    const memo = await screen.findByLabelText(/^Memo$/);
     fireEvent.change(memo, { target: { value } });
     return memo;
 }
 
-function utf8Bytes(value) {
-    return new TextEncoder().encode(value).byteLength;
+// The three preferences are pickers whose trigger is named "<field>: <current
+// choice>". Incoming Sends and Dispensers start closed, so a section is opened
+// before its picker can be queried.
+const FEE_FIELD = 'How the protocol fee is handled';
+const MEMO_FIELD = 'Require memo on incoming sends';
+const DISPENSER_FIELD = 'Who may open dispensers';
+
+function openSections() {
+    for (const title of ['Incoming Sends', 'Dispensers']) {
+        const toggle = screen.getByRole('button', { name: new RegExp(`^${title}`) });
+        if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+    }
+}
+
+function picker(field) {
+    return screen.getByRole('button', { name: new RegExp(`^${field}: `) });
+}
+
+function chosen(field) {
+    return picker(field).getAttribute('aria-label').slice(field.length + 2);
+}
+
+function pick(field, option) {
+    fireEvent.click(picker(field));
+    fireEvent.click(screen.getByRole('option', { name: option }));
 }
 
 function clickReview() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 }
 
 async function continueToConfirm(target) {
-    await screen.findByRole('form', { name: 'Review preferences' });
-    const button = screen.getByRole('button', { name: /Continue to confirmation|Build unsigned transaction/ });
+    await screen.findByTestId('confirm-modal');
+    const button = screen.getByRole('button', { name: 'Approve' });
     fireEvent.click(button);
     await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
     return target.composeForConfirm.mock.calls[0][0].actionData;
 }
 
 function reviewText() {
-    const form = screen.getByRole('form', { name: 'Review preferences' });
-    return form.textContent;
+    return screen.getByTestId('confirm-modal').textContent;
 }
 
 function expectWireShape(params) {
@@ -120,7 +142,7 @@ function expectWireShape(params) {
     if ('MEMO' in params) {
         expect(params.MEMO).not.toMatch(/[|;\u0000-\u001f\u007f-\u009f​‪-‮⁦-⁩]/);
         expect(params.MEMO).toBe(params.MEMO.trim());
-        expect(new TextEncoder().encode(params.MEMO).byteLength).toBeLessThanOrEqual(250);
+        expect(params.MEMO.length).toBeLessThanOrEqual(250);
     }
 }
 
@@ -128,17 +150,17 @@ afterEach(() => cleanup());
 
 describe('AddressPreferencesForm input', () => {
     const accepted = [
-        ['250 bytes of two-byte text', 'é'.repeat(125)],
-        ['250 bytes of CJK plus padding', '漢'.repeat(83) + 'a'],
-        ['250 bytes of emoji plus padding', '🚀'.repeat(62) + 'ab'],
-        ['combining marks', 'é'.repeat(80)],
+        ['250 accented characters', 'é'.repeat(250)],
+        ['250 CJK characters', '漢'.repeat(250)],
+        ['250 UTF-16 units of emoji', '🚀'.repeat(125)],
+        ['250 UTF-16 units of combining marks', 'é'.repeat(125)],
     ];
     for (const [name, value] of accepted) {
         it(`Review accepts a memo of ${name} and compose carries it exactly`, async () => {
             const { target } = mount();
             await typeMemo(value);
             clickReview();
-            expect(await screen.findByRole('form', { name: 'Review preferences' })).toBeTruthy();
+            expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
             expect(reviewText()).toContain(value);
             const actionData = await continueToConfirm(target);
             expect(actionData.action).toBe('ADDRESS');
@@ -148,9 +170,9 @@ describe('AddressPreferencesForm input', () => {
     }
 
     const refused = [
-        ['251 bytes of two-byte text', 'é'.repeat(125) + 'a', /251 bytes/],
-        ['252 bytes of CJK', '漢'.repeat(84), /252 bytes/],
-        ['252 bytes of emoji', '🚀'.repeat(63), /252 bytes/],
+        ['251 accented characters', 'é'.repeat(251), /251 characters/],
+        ['252 CJK characters', '漢'.repeat(252), /252 characters/],
+        ['252 UTF-16 units of emoji', '🚀'.repeat(126), /252 characters/],
         ['a zero-width space', 'pay​me', /zero-width/],
         ['a right-to-left override', 'abc‮def', /text-direction|direction/],
         ['an isolate mark', 'abc⁦def', /text-direction|direction/],
@@ -162,7 +184,7 @@ describe('AddressPreferencesForm input', () => {
             await typeMemo(value);
             clickReview();
             expect(await screen.findByText(message)).toBeTruthy();
-            expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.getAddressPreferences).toHaveBeenCalledTimes(1);
             expect(target.composeForConfirm).not.toHaveBeenCalled();
         });
@@ -172,7 +194,7 @@ describe('AddressPreferencesForm input', () => {
         const { target } = mount();
         await typeMemo('   hello world   ');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(screen.getByText('hello world')).toBeTruthy();
         const actionData = await continueToConfirm(target);
         expect(actionData.params.MEMO).toBe('hello world');
@@ -182,7 +204,7 @@ describe('AddressPreferencesForm input', () => {
         const { target } = mount();
         const memo = await typeMemo('line one\nline two\r\nthree');
         clickReview();
-        const reviewOpen = await screen.findByRole('form', { name: 'Review preferences' }).catch(() => null);
+        const reviewOpen = await screen.findByTestId('confirm-modal').catch(() => null);
         if (!reviewOpen) {
             expect(target.composeForConfirm).not.toHaveBeenCalled();
             return;
@@ -205,7 +227,7 @@ describe('AddressPreferencesForm input', () => {
 
     it('every field at its default still writes all three values', async () => {
         const { target } = mount();
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({ FEE_PREFERENCE: '2', REQUIRE_MEMO: '0', DISPENSER_PREFERENCE: '1' });
@@ -213,13 +235,18 @@ describe('AddressPreferencesForm input', () => {
 
     it('every field set writes exactly what the review shows', async () => {
         const { target } = mount();
-        fireEvent.click(await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' }));
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' }));
-        fireEvent.click(screen.getByRole('radio', { name: 'Anyone may open a dispenser funded by this address' }));
+        await screen.findByRole('button', { name: /^Update preferences$/i });
+        openSections();
+        pick(FEE_FIELD, 'Destroy (reduces supply)');
+        pick(MEMO_FIELD, 'Yes');
+        pick(DISPENSER_FIELD, 'Anyone');
         await typeMemo('all set');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
-        expect(screen.getByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByText('Destroy the fee (reduces supply) - changed')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-summary-notice')).toHaveTextContent('All three preferences');
+        expect(screen.queryByText(/Estimate unavailable/)).toBeNull();
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({
             FEE_PREFERENCE: '1', REQUIRE_MEMO: '1', DISPENSER_PREFERENCE: '2', MEMO: 'all set',
@@ -235,7 +262,7 @@ describe('AddressPreferencesForm input', () => {
     for (const [name, read] of oddReads) {
         it(`normalises an on-chain read with ${name} to a valid wire write`, async () => {
             const { target } = mount({ prefs: () => Promise.resolve(read) });
-            await screen.findByRole('button', { name: 'Review' });
+            await screen.findByRole('button', { name: /^Update preferences$/i });
             clickReview();
             const actionData = await continueToConfirm(target);
             expectWireShape(actionData.params);
@@ -248,40 +275,40 @@ describe('AddressPreferencesForm input', () => {
 describe('AddressPreferencesForm races', () => {
     it('a double click on Review runs one review and one compose', async () => {
         const { target } = mount();
-        const review = await screen.findByRole('button', { name: 'Review' });
+        const review = await screen.findByRole('button', { name: /^Update preferences$/i });
         fireEvent.click(review);
         fireEvent.click(review);
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
-        await screen.findByRole('form', { name: 'Review preferences' });
-        const button = screen.getByRole('button', { name: /Continue to confirmation/ });
+        await screen.findByTestId('confirm-modal');
+        const button = screen.getByRole('button', { name: 'Approve' });
         fireEvent.click(button);
         fireEvent.click(button);
         await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
         await act(async () => { await Promise.resolve(); });
         expect(target.composeForConfirm).toHaveBeenCalledTimes(1);
-        expect(screen.getAllByRole('form', { name: 'Review preferences' })).toHaveLength(1);
+        expect(screen.getAllByTestId('confirm-modal')).toHaveLength(1);
     });
 
     it('a field changed while Review reads the baseline is the value review shows and compose writes', async () => {
         const held = deferred();
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? Promise.resolve(DEFAULTS) : held.promise; } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
-        fireEvent.click(screen.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }));
+        pick(FEE_FIELD, 'Destroy (reduces supply)');
         await act(async () => { held.resolve(DEFAULTS); await held.promise; });
-        await screen.findByRole('form', { name: 'Review preferences' });
-        expect(screen.getByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByText('Destroy the fee (reduces supply) - changed')).toBeTruthy();
         const actionData = await continueToConfirm(target);
         expect(actionData.params.FEE_PREFERENCE).toBe('1');
     });
 
     const lateMemos = [
         ['a|b', 'Memo cannot contain "|" or ";".'],
-        ['é'.repeat(125) + 'a', 'Memo is 251 bytes; the network accepts at most 250 bytes.'],
+        ['😀'.repeat(125) + 'a', 'Memo is 251 characters; the network accepts at most 250 characters.'],
     ];
     for (const [late, message] of lateMemos) {
-        it(`a memo edited while Review reads the baseline is checked before the write (${utf8Bytes(late)} bytes)`, async () => {
+        it(`a memo edited while Review reads the baseline is checked before the write (${late.length} characters)`, async () => {
             const held = deferred();
             let calls = 0;
             const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? Promise.resolve(DEFAULTS) : held.promise; } });
@@ -291,9 +318,9 @@ describe('AddressPreferencesForm races', () => {
             await typeMemo(late);
             await act(async () => { held.resolve(DEFAULTS); await held.promise; });
             expect(await screen.findByText(message)).toBeTruthy();
-            expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             // No continue button exists outside review, so nothing can compose.
-            expect(screen.queryByRole('button', { name: /Continue to confirmation|Build unsigned transaction/ })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
             expect(target.composeForConfirm).not.toHaveBeenCalled();
         });
     }
@@ -304,18 +331,18 @@ describe('AddressPreferencesForm races', () => {
             prefs: (args) => { reads.push(args.address); return Promise.resolve(args.address === OTHER ? ALL_SET : DEFAULTS); },
         });
         const view = render(element(target, ADDRESS));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         view.rerender(element(target, OTHER));
         await act(async () => { await Promise.resolve(); });
-        const reviewOpen = screen.queryByRole('form', { name: 'Review preferences' });
+        const reviewOpen = screen.queryByTestId('confirm-modal');
         if (reviewOpen) {
             // Still in review: it must name the new address and compose must
             // send from the address the review names. The review shortens an
             // address to its head and tail, so the tail is what it shows.
             expect(reviewText()).toContain('Destroy the fee');
-            const button = screen.getByRole('button', { name: /Continue to confirmation/ });
+            const button = screen.getByRole('button', { name: 'Approve' });
             fireEvent.click(button);
             await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
             const call = target.composeForConfirm.mock.calls[0][0];
@@ -338,7 +365,7 @@ describe('AddressPreferencesForm network reads', () => {
         });
         expect(await screen.findByText('HTTP 500')).toBeTruthy();
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({ FEE_PREFERENCE: '1', REQUIRE_MEMO: '1', DISPENSER_PREFERENCE: '2' });
@@ -349,21 +376,21 @@ describe('AddressPreferencesForm network reads', () => {
         const { target } = mount({
             prefs: () => { calls += 1; return calls === 2 ? Promise.reject(new Error('timeout')) : Promise.resolve(DEFAULTS); },
         });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
         expect(await screen.findByText(/Could not re-check the current on-chain values: timeout/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
     });
 
     for (const [name, value] of [['null', null], ['a string', '<html>'], ['an array', []]]) {
         it(`a malformed prefill of ${name} leaves defaults and Review still works`, async () => {
             let calls = 0;
             const { target } = mount({ prefs: () => { calls += 1; return Promise.resolve(calls === 1 ? value : DEFAULTS); } });
-            await screen.findByRole('button', { name: 'Review' });
+            await screen.findByRole('button', { name: /^Update preferences$/i });
             await act(async () => { await Promise.resolve(); });
-            expect(screen.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).checked).toBe(false);
+            expect(chosen(FEE_FIELD)).toBe('Donate to protocol development');
             clickReview();
             const actionData = await continueToConfirm(target);
             expectWireShape(actionData.params);
@@ -373,7 +400,7 @@ describe('AddressPreferencesForm network reads', () => {
     it('a malformed review read refuses Review rather than writing guesses', async () => {
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return Promise.resolve(calls === 1 ? DEFAULTS : null); } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
         expect(await screen.findByText(/Could not re-check the current on-chain values/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
@@ -382,7 +409,7 @@ describe('AddressPreferencesForm network reads', () => {
     it('a prefill that never answers does not block Review', async () => {
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? new Promise(() => {}) : Promise.resolve(DEFAULTS); } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
         const actionData = await continueToConfirm(target);
         expectWireShape(actionData.params);
@@ -394,12 +421,13 @@ describe('AddressPreferencesForm network reads', () => {
             prefs: (args) => (args.address === ADDRESS ? first.promise : Promise.resolve(DEFAULTS)),
         });
         const view = render(element(target, ADDRESS));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         view.rerender(element(target, OTHER));
         await act(async () => { await Promise.resolve(); });
         await act(async () => { first.resolve(ALL_SET); await first.promise; });
-        expect(screen.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).checked).toBe(false);
-        expect(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' }).checked).toBe(false);
+        openSections();
+        expect(chosen(FEE_FIELD)).toBe('Donate to protocol development');
+        expect(chosen(MEMO_FIELD)).toBe('No');
         expect(screen.queryByText('Custom preferences set')).toBeNull();
     });
 });
@@ -410,15 +438,15 @@ describe('AddressPreferencesForm lifecycle', () => {
         const view = render(element(target));
         await typeMemo('before lock');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         // A lock replaces the route; unlock mounts it fresh.
         view.unmount();
         const again = render(element(target));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         const before = target.getAddressPreferences.mock.calls.length;
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(target.getAddressPreferences.mock.calls.length).toBe(before + 1);
         expect(screen.queryByText('before lock')).toBeNull();
         again.unmount();
@@ -434,8 +462,8 @@ describe('AddressPreferencesForm lifecycle', () => {
         view.unmount();
         await act(async () => { held.resolve(ALL_SET); await held.promise; });
         render(element(target));
-        await screen.findByRole('button', { name: 'Review' });
-        expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+        await screen.findByRole('button', { name: /^Update preferences$/i });
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -443,7 +471,7 @@ describe('AddressPreferencesForm lifecycle', () => {
 describe('AddressPreferencesForm scale', () => {
     it('a wallet of 500 addresses with long labels renders with one preferences read', async () => {
         const { target } = mount({ count: 500 });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: /^Update preferences$/i });
         await act(async () => { await Promise.resolve(); });
         expect(target.getAddressesByChain).toHaveBeenCalledTimes(1);
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(1);

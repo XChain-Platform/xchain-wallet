@@ -17,13 +17,16 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { humanizeError } from '../../../packages/core/src/shared/utils/humanizeError.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 
-function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalancesError = false } = {}) {
+function mount(quantity, {
+    walletMode = 'full', onReceive = vi.fn(), walletBalancesError = false, multisigs = [], onSessionStarted,
+} = {}) {
     const balances = {
         native: { tick: 'BTC', quantity, divisibility: 8 },
         tokens: [],
@@ -38,9 +41,12 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
             : vi.fn().mockResolvedValue({
                 [CHAIN_ID]: [{ address: FROM, balances, error: null }],
             }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, grace: { testSendThresholdSats: 0 } }),
+        // §20: the mode is the wallet's own, read from the safe wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
+        getSettings: vi.fn().mockResolvedValue({ grace: { testSendThresholdSats: 0 } }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
+        listMultisigReceiveAddresses: vi.fn().mockResolvedValue(multisigs),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -54,22 +60,23 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
-        React.createElement(Send, { walletId: 'w', onBack() {}, onReceive }),
+        React.createElement(Send, { walletId: 'w', onBack() {}, onReceive, onSessionStarted }),
     ));
     return { messaging, onReceive };
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('Send from an address holding no coin', () => {
     it('shows a Receive action instead of the form when the selected network is empty', async () => {
         const { onReceive } = mount('0');
 
         const heading = await screen.findByRole('heading', { name: 'Nothing to send yet' });
-        // The empty state is the page's content at full width: directly in
-        // the page body, with no card or dashed box around it.
+        // The empty state is the page's content at full width: in the page
+        // body through the ListPage root alone, with no card or dashed box around it.
         const emptyState = heading.closest('[role="status"]');
-        expect(emptyState.parentElement).toBe(screen.getByRole('main'));
+        expect(emptyState.parentElement.parentElement).toBe(screen.getByRole('main'));
+        expect(emptyState.closest('form')).toBeNull();
         // Every empty state is unboxed, so the plain variant has no class of its own.
         expect(emptyState.className).toMatch(/wrap/);
         expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();
@@ -90,6 +97,8 @@ describe('Send from an address holding no coin', () => {
         const { messaging } = mount('0', { walletMode: 'watcher' });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(await screen.findByText('0 BTC available')).toBeInTheDocument();
+        expect(await screen.findByText(/This wallet has no funds to send yet/)).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
     });
 
@@ -98,6 +107,29 @@ describe('Send from an address holding no coin', () => {
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
+    });
+
+    it('lists a multisig source in the shared picker and replaces the normal body when selected', async () => {
+        mount('100000000', {
+            multisigs: [{
+                multisigConfigId: 'config-1',
+                address: 'bc1qmultisig',
+                scheme: 'p2wsh-multisig',
+                threshold: 2,
+                cosignerCount: 3,
+            }],
+        });
+        await screen.findByText(/BTC available/, {}, { timeout: 10_000 });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        // The multisig rides above the address list as a row of the one
+        // shared own-address picker (U60), not a separate source list.
+        const sources = await screen.findByRole('list', { name: 'Picker options' });
+        expect(screen.getByRole('list', { name: 'Addresses' })).toBeInTheDocument();
+        fireEvent.click(within(sources).getByRole('button', { name: /Multisig 2 of 3/ }));
+
+        expect(await screen.findByRole('form', { name: 'Send from multisig' })).toBeInTheDocument();
+        expect(screen.getByText('Needs 2 of 3 signatures')).toBeInTheDocument();
     });
 });
 

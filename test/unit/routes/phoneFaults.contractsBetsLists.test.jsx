@@ -8,13 +8,17 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act as domAct, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { selectOption, selectOptionDetails } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
-import betStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
+import createBetStyles from '../../../packages/core/src/shared/routes/CreateBetFeedForm.module.css';
+import outcomeStyles from '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css';
+import outcomeListStyles from '../../../packages/core/src/shared/routes/OutcomeList.module.css';
+import betCardStyles from '../../../packages/core/src/shared/components/BetMarketCard.module.css';
+import betListStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
@@ -104,13 +108,14 @@ describe('BetFeedsList market cards', () => {
                 <BetFeedsList walletId="w1" onOpenMarket={() => {}} onBack={() => {}} />
             </MessagingProvider>,
         );
-        const taking = await screen.findByRole('button', { name: 'Taking bets' }, { timeout: 10_000 });
-        const every = screen.getByRole('button', { name: 'All markets' });
-        expect(taking.getAttribute('aria-pressed')).toBe('true');
-        expect(every.getAttribute('aria-pressed')).toBe('false');
-        fireEvent.click(every);
-        expect(taking.getAttribute('aria-pressed')).toBe('false');
-        expect(every.getAttribute('aria-pressed')).toBe('true');
+        // The Status choice sits in the title-line filter menu, where its value is plain text.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter prediction markets' }, { timeout: 10_000 }));
+        const status = screen.getByRole('combobox', { name: 'Status' });
+        expect(status).toHaveValue('open');
+        expect(selectOptionDetails(status).find((o) => o.label === 'Positions available').selected).toBe(true);
+        selectOption(status, 'all');
+        expect(status).toHaveValue('all');
+        expect(selectOptionDetails(status).find((o) => o.label === 'All markets').selected).toBe(true);
     }, 20_000);
 });
 
@@ -191,26 +196,37 @@ describe('bet screens at phone widths', () => {
                 onBack={() => {}}
             />
         ));
-        expect(await screen.findByText(longLabel)).toHaveClass(betStyles.betLongText);
-        expect(utils.container.querySelector(`.${betStyles.betActions}`)).toBeTruthy();
+        // The market card's question wraps anywhere, like every long bet text.
+        expect(await screen.findByText(longLabel)).toHaveClass(betCardStyles.question);
+        expect(utils.container.querySelector(`.${betListStyles.toolbarActions}`)).toBeTruthy();
         utils.unmount();
 
         utils = await mountAtWidth(width, (
             <BetFeedDetail walletId="w1" chainId={chainId} feedIndex="7" onBack={() => {}} />
         ));
-        expect(await screen.findByRole('group', { name: 'Outcome to back' }))
-            .toHaveClass(betStyles.betWagerChoices);
-        expect(utils.container.querySelector(`.${betStyles.betOddsRow}`)).toBeTruthy();
+        // The Bet tab is one list card with a row per outcome.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
+        expect(await screen.findByRole('list', { name: 'Outcome to back' }))
+            .toHaveClass(outcomeListStyles.list);
+        // The facts sit on the Details tab, one per wrapping row.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(utils.container.querySelector(`.${outcomeStyles.factRow}`)).toBeTruthy();
         utils.unmount();
 
         utils = await mountAtWidth(width, (
             <CreateBetFeedForm walletId="w1" chainId={chainId} onBack={() => {}} />
         ));
-        expect((await screen.findByLabelText('Outcome 0')).closest(`.${betStyles.betOutcomeRow}`)).toBeTruthy();
+        // Each outcome is a row of its own (dot, field) drawn by the form's module.
+        expect((await screen.findByLabelText('Outcome 1')).closest(`.${createBetStyles.outcomeRow}`)).toBeTruthy();
         utils.unmount();
 
-        utils = await mountAtWidth(width, <MyBets walletId="w1" onBack={() => {}} />);
-        expect(await screen.findByText(`from ${address.address}`)).toHaveClass(betStyles.betLongText);
+        // My bets is the All list narrowed (ruling 2026-11-13): the same card
+        // and grid at phone width.
+        utils = await mountAtWidth(width, (
+            <BetFeedsList walletId="w1" view="bets" onOpenMarket={() => {}} onBack={() => {}} />
+        ));
+        expect(await screen.findByText(longLabel)).toHaveClass(betCardStyles.question);
+        expect(utils.container.querySelector(`ul.${betListStyles.marketList}`)).toBeTruthy();
         utils.unmount();
     }, 20_000);
 
@@ -221,11 +237,16 @@ describe('bet screens at phone widths', () => {
         ), 'utf8');
         const narrow = css.slice(css.indexOf('@media not all and (min-width: 400px)'));
 
-        expect(narrow).toMatch(/\.betActions,[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
-        expect(narrow).toMatch(/\.betActions > \*,[\s\S]*width:\s*100%/);
-        expect(narrow).toMatch(/\.betOddsRow,\s*\.betOutcomeRow\s*\{[^}]*flex-direction:\s*column/s);
-        expect(narrow).toMatch(/\.betOutcomeRow > button\s*\{[^}]*width:\s*100%/s);
-        expect(css).toMatch(/\.betLongText\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(narrow).toMatch(/\.betActions\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+        expect(narrow).toMatch(/\.betActions > \*\s*\{[^}]*width:\s*100%/s);
+        // The market's question is the shared outcome hero's title and its odds
+        // are the outcome page's fact rows; both wrap a long unbroken label.
+        const outcomeCss = readFileSync(resolve(
+            here,
+            '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css',
+        ), 'utf8');
+        expect(outcomeCss).toMatch(/\.question\s*\{[^}]*overflow-wrap:\s*break-word/s);
+        expect(outcomeCss).toMatch(/\.factRow\s*\{[^}]*flex-wrap:\s*wrap/s);
     });
 });
 
@@ -263,11 +284,15 @@ describe('ContractsList filter field sizing', () => {
                 </MessagingProvider>,
             );
 
+            // The user's own contracts sit under the Mine tab.
+            fireEvent.click(await screen.findByRole('tab', { name: /My Contracts|Mine/ }));
             const card = await screen.findByRole('button', { name: new RegExp(`^Open ${contractName}`) });
             expect(card).toHaveClass(contractStyles.contractRow);
             expect(card).toHaveTextContent(contractName);
-            expect(screen.getByRole('tablist', { name: 'Network filter' }))
-                .toHaveClass(contractStyles.chainFilters);
+            // The network choice is the standard Network field in the
+            // title-line filter menu (operator ruling 2026-11-13).
+            fireEvent.click(screen.getByRole('button', { name: 'Filter contracts' }));
+            expect(screen.getByRole('button', { name: 'Network: All networks' })).toBeInTheDocument();
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }
@@ -276,7 +301,12 @@ describe('ContractsList filter field sizing', () => {
     it('puts the flex basis on a wrapper, never on the input itself', () => {
         const source = route('ContractsList.jsx');
         expect(source).not.toMatch(/aria-label="Filter contracts"\s*\n\s*style=/);
-        expect(source).toMatch(/<div className=\{contractStyles\.toolbarSearch\}>\s*\n\s*<Input/);
-        expect(source).toMatch(/className=\{`\$\{styles\.entry\} \$\{contractStyles\.contractRow\}`\}/);
+        // The search box lives in the shared title-line filter menu, so the page owns no input.
+        expect(source).not.toMatch(/<Input\b/);
+        expect(source).toMatch(/<ListFilterMenu[\s\S]*?searchLabel="Search contracts"/);
+        // Rows are shared ListRows in one list card (G07), ending in the standard chevron (G97).
+        expect(source).toMatch(/<ListRow\s+className=\{contractStyles\.contractRow\}[\s\S]*?chevron/);
+        // No network heading over the rows; the icon's badge names the network (U12).
+        expect(source).not.toMatch(/<ChainBadge\b/);
     });
 });

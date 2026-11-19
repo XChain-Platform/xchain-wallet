@@ -17,8 +17,22 @@ export function FormErrorSummarySection() {
             id="form-error-summary"
             title="Form error summary"
             tag="TEMPLATE PART · FormErrorSummary"
-            kicker="The validation summary in a FormPage status slot. It takes focus when a submit fails and lists each problem as a link that moves focus to the field that needs it."
+            kicker="The validation summary: a danger Notice that reads Fix N things to continue and lists each problem. FormPage and FormFrame render it from the form's useFormErrors object (errors={form}) at the top of the page; it takes focus once per failed submit, clears as each field is fixed, and has no X."
         >
+            <Guidance
+                what={<><code>useFormErrors()</code> gives <code>validate(map)</code> (field id to message, one pass for every field), <code>fail(message)</code> for a problem with no field, <code>clear(id)</code> and <code>reset()</code>. Pass the object as <code>errors</code> to FormPage or FormFrame; Input, Select, Textarea and IconSelect read their own entry by <code>id</code>, outline red with the line under, and clear on the user's change. The picker fields do the same (NetworkField and ChainPicker, TokenField, by <code>id</code> or <code>formErrorKey</code>; the From and Fees sections by <code>formErrorKey</code>) and clear when a pick changes their value. <code>errorAction</code> on FormPage or FormFrame gives the notice its one action, such as Use max.</>}
+                when={<>Every form that validates on submit.</>}
+                whenNot={<>Live per-keystroke feedback (the field's own <code>error</code>).</>}
+                doRule={<>✓ Give each field an explicit <code>id</code> · collect every failing check into one <code>validate</code> call</>}
+                dontRule={<>✗ Return on the first failure · wipe every error on any change</>}
+            />
+            <Markup>
+{`const form = useFormErrors();
+const ok = form.validate({ 'thing-name': name.trim() ? null : 'Enter a name.' });
+<FormPage label="Create thing" onSubmit={onSubmit} errors={form} actions={...}>
+    <Input id="thing-name" label="Name" ... />
+</FormPage>`}
+            </Markup>
             <Guidance
                 what={<>Props: <code>errors</code> (a list of <code>{'{ id, label, message }'}</code>; <code>id</code> is the field's input id and makes the entry a link), <code>focusKey</code> (change it on each submit attempt so a repeated failure takes focus again), <code>recovery</code> (an optional <code>{'{ label, onAction }'}</code> button, such as Use max). Renders nothing for an empty list.</>}
                 when={<>A form submit that failed validation, with one or more field errors or a form-level error the user can fix on this page.</>}
@@ -58,7 +72,7 @@ export function FormErrorSummarySection() {
             <LiveExample label="Written beside the field, shown at the top">
                 <FormPage as="div">
                     <Input id="sg-notice-amount" label="Amount" onChange={() => {}} />
-                    <FormNotice variant="warning">Live fee estimate unavailable. Using safe default rates.</FormNotice>
+                    <FormNotice variant="warning">Check the amount before continuing.</FormNotice>
                 </FormPage>
             </LiveExample>
             <Guidance

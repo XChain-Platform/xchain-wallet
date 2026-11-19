@@ -42,6 +42,7 @@ import styles from './EmptyState.module.css';
  * @param {string} [props.actionLabel]                    omit, with onAction, for no button
  * @param {() => void} [props.onAction]
  * @param {import('react').ReactNode | null} [props.actionIcon]   icon for the button; defaults to the label's icon
+ * @param {'primary' | 'secondary' | 'ghost' | 'link' | 'danger' | 'success' | 'rowAction'} [props.actionVariant] primary action style; default 'success'
  * @param {string} [props.secondaryActionLabel]           optional outline action shown after the primary action
  * @param {() => void} [props.onSecondaryAction]
  * @param {import('react').ReactNode | null} [props.secondaryActionIcon]
@@ -58,6 +59,7 @@ export function EmptyState({
     actionLabel,
     onAction,
     actionIcon,
+    actionVariant = 'success',
     secondaryActionLabel,
     onSecondaryAction,
     secondaryActionIcon,
@@ -84,7 +86,7 @@ export function EmptyState({
         return hasPrimaryAction || hasSecondaryAction ? (
             <div className={[styles.sectionActions, className].filter(Boolean).join(' ')}>
                 {hasPrimaryAction ? (
-                    <Button variant="primary" size="sm" onClick={onAction} icon={actionIcon}>
+                    <Button variant={actionVariant} size="sm" onClick={onAction} icon={actionIcon}>
                         {actionLabel}
                     </Button>
                 ) : null}
@@ -119,7 +121,7 @@ export function EmptyState({
             {hasPrimaryAction || hasSecondaryAction ? (
                 <div className={sectionLine ? styles.sectionActions : styles.actions}>
                     {hasPrimaryAction ? (
-                        <Button variant="primary" size="sm" onClick={onAction} icon={actionIcon}>
+                        <Button variant={actionVariant} size="sm" onClick={onAction} icon={actionIcon}>
                             {actionLabel}
                         </Button>
                     ) : null}

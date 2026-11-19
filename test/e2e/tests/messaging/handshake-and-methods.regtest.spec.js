@@ -89,7 +89,9 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/messaging/handshake-and-methods.regtest.spec.js
 
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openPaletteCommand, revealChainPicker, test,
+} from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     approveConfirm,
@@ -108,7 +110,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 4;
@@ -160,10 +164,10 @@ async function onboardFundedWallet(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    const address = await main.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -178,7 +182,7 @@ async function onboardFundedWallet(page, walletName) {
 }
 
 /**
- * Points the compose form's "Delivery network" at this run's chain.
+ * Points the compose form's "Network" field at this run's chain.
  *
  * The pick itself is `selectVenueChain`'s job, and it now covers this screen:
  * it reads the picker on EVERY chain instead of returning early on Bitcoin,
@@ -191,17 +195,16 @@ async function onboardFundedWallet(page, walletName) {
  * message delivered on the wrong chain still looks green.
  */
 async function pickDeliveryNetwork(scope) {
-    const trigger = scope.getByRole('button', { name: /^Delivery network:/ });
-    await expect(trigger, 'the compose form has no "Delivery network" picker')
-        .toBeVisible({ timeout: 30_000 });
+    const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
+    await revealChainPicker(scope, trigger, 'Network');
 
-    await selectVenueChain(scope, 'Delivery network');
+    await selectVenueChain(scope, 'Network');
 
     await expect(trigger,
         `the message would have been delivered on the wrong chain: this form defaults to `
         + `DOGECOIN, not to ${REGTEST_CHAIN_LABEL}, and the explorer this run reads is `
         + `${REGTEST_COIN}'s`)
-        .toHaveAttribute('aria-label', new RegExp(`^Delivery network: ${REGTEST_CHAIN_LABEL}\\b`),
+        .toHaveAttribute('aria-label', new RegExp(`^Network: ${REGTEST_CHAIN_LABEL}\\b`),
             { timeout: 15_000 });
 }
 
@@ -222,7 +225,7 @@ async function gotoNewConversation(page) {
     await compose.click();
 
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Address', { exact: true }),
+    await expect(fieldByLabel(main, 'Address'),
         'the compose screen never rendered its Address field').toBeVisible({ timeout: 30_000 });
     await pickDeliveryNetwork(main);
     return main;
@@ -271,9 +274,14 @@ async function pickEncryption(scope, labelPrefix) {
  * it is the precondition for every "Send is disabled" assertion in this file:
  * the in-flight `checking` state disables Send too, and would otherwise let
  * that assertion pass without the refusal it claims to prove.
+ *
+ * A refused press also states the same sentence as the Encryption field's
+ * error and in the Form errors summary, both alerts too, so the banner is
+ * named by its warning variant: it is the one that carries the key request.
  */
 function missingPubkeyBanner(scope) {
-    return scope.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
+    return scope.locator('[role="alert"][data-variant="warning"]')
+        .filter({ hasText: "don't know the recipient's public key" });
 }
 
 /** The banner's block: the banner message plus the key-request button below it. */
@@ -281,18 +289,35 @@ function keyRequestBlock(scope) {
     return missingPubkeyBanner(scope).locator('xpath=..');
 }
 
-const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
+const sendButton = (scope) => scope.getByRole('button', { name: 'Send Message', exact: true });
 
 /**
- * The confirm page's accessible name for a MESSAGE: "Confirm " plus the
- * decoded headline with the recipient in full. The visible headline shortens
- * the address, so the exact recipient is only checkable here.
+ * Asserts the confirm page for a MESSAGE names its kind, its recipient and its
+ * chain.
  *
+ * The Confirm Standard page (G127) keeps the address and the chain out of the
+ * sentence: its accessible name is "Confirm " plus the decoded sentence
+ * ("Send encrypted message to"), the recipient is the facts card's first
+ * address row, in full as that row's accessible name (labelled To, or From
+ * when the recipient is the signing address itself), and the chain is the
+ * Network row.
+ *
+ * @param {import('@playwright/test').Page} page
  * @param {'public' | 'encrypted'} kind
  * @param {string} recipient
+ * @param {string} message  what a wrong kind means for this step
  */
-const confirmName = (kind, recipient) =>
-    `Confirm Send ${kind} message to ${recipient} on ${REGTEST_CHAIN_LABEL}`;
+async function expectMessageConfirm(page, kind, recipient, message) {
+    const confirm = page.getByTestId('confirm-modal');
+    await expect(confirm, message).toHaveAttribute('aria-label', `Confirm Send ${kind} message to`);
+    const addressRow = confirm
+        .locator('dd[data-testid="confirm-address"], dd[data-testid="confirm-source"]').first();
+    await expect(addressRow.locator(`[aria-label="${recipient}"]`),
+        `the confirm screen does not name ${recipient} as the message's recipient`).toBeVisible();
+    await expect(confirm.locator('dd[data-testid="confirm-network"]'),
+        `the confirm screen does not name ${REGTEST_CHAIN_LABEL} as the message's chain`)
+        .toHaveText(REGTEST_CHAIN_LABEL);
+}
 
 /**
  * How long a refused press is watched for a confirm screen. An accepted press
@@ -345,9 +370,9 @@ async function waitForIndexedPubkey(address, timeoutMs = 300_000) {
 
 /** Fills the recipient, and the body when one is given. */
 async function fillRecipient(scope, address, message) {
-    await scope.getByLabel('Address', { exact: true }).fill(address);
+    await fieldByLabel(scope, 'Address').fill(address);
     if (message !== undefined) {
-        await scope.getByLabel('Message', { exact: true }).fill(message);
+        await fieldByLabel(scope, 'Message').fill(message);
     }
 }
 
@@ -436,12 +461,9 @@ async function approveAndCaptureTxid(page, txids) {
     await expect(confirm, 'the compose form never reached a confirm screen')
         .toBeVisible({ timeout: 90_000 });
     const before = txids.length;
-    const approve = page.getByTestId('confirm-approve');
-    // Approve stays disabled while pre-flight is in flight; waiting on the
-    // button rather than on a sleep is what keeps this off the venue's clock.
-    await expect(approve, 'Approve never became clickable on the confirm screen')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // A tap while pre-flight is in flight is dropped (G130), so the fixture
+    // taps until the confirm screen takes it.
+    await approveConfirm(page);
 
     const notice = page.getByRole('dialog', { name: 'Message sent', exact: true });
     await expect(notice, 'the wallet never reported the message as sent')
@@ -496,7 +518,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the refusal banner does not tell the user what to do instead')
                 .toContainText('pick "Plain text" below');
             await expect(keyRequestBlock(main)
-                .getByRole('button', { name: 'Request encrypted session (publish your key)' }),
+                .getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' }),
             'the refusal banner offers no handshake, so the only way forward it leaves is plaintext')
                 .toBeVisible();
         });
@@ -533,12 +555,9 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             // not from form state, and the decoder's own word for v3 is PUBLIC
             // rather than the softer "unencrypted" (`describe.js` decodeMessage,
             // version 3 branch). A user about to publish a message forever is
-            // owed the harder word. The headline draws the recipient shortened
-            // (first6…last6); the full headline is the confirm page's
-            // accessible name, so that is where the exact text is read.
-            await expect(confirm,
-                'the confirm screen does not name the message as PUBLIC on the venue chain')
-                .toHaveAttribute('aria-label', confirmName('public', REGTEST_DESTINATION));
+            // owed the harder word.
+            await expectMessageConfirm(page, 'public', REGTEST_DESTINATION,
+                'the confirm screen does not name the message as PUBLIC');
 
             const txid = await approveAndCaptureTxid(page, txids);
             const action = await waitForValidAction(txid);
@@ -648,7 +667,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
 
             const request = keyRequestBlock(main)
-                .getByRole('button', { name: 'Request encrypted session (publish your key)' });
+                .getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
             await expect(request, 'no handshake offer for a recipient the chain has no key for')
                 .toBeVisible({ timeout: 30_000 });
 
@@ -765,7 +784,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoSection(page, 'Send');
             await selectVenueSendAsset(page, 'XCHAIN');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('main').getByRole('textbox', { name: /^Amount/ }).fill(KEY_SEND);
             const before = txids.length;
             await mainButton(page, 'Send').click();
@@ -792,8 +811,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
             await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
             await sendButton(main).click();
-            await expect(page.getByTestId('confirm-modal'))
-                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
+            await expectMessageConfirm(page, 'encrypted', ownAddress,
+                'the confirm screen does not name the ECIES message as encrypted');
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECIES send carries no ENCRYPTED_MESSAGE on chain')
@@ -831,8 +850,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await sendButton(main).click();
             // The SAME decoded headline as ECIES: the confirm screen cannot tell
             // the methods apart either, because v2 carries no method field.
-            await expect(page.getByTestId('confirm-modal'))
-                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
+            await expectMessageConfirm(page, 'encrypted', ownAddress,
+                'the confirm screen does not name the ECDH-session message as encrypted');
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECDH send carries no ENCRYPTED_MESSAGE on chain')

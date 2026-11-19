@@ -72,6 +72,8 @@ import {
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
+import { showHomeBalances } from '../../fixtures/homeBalances.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     approveAndGetTxid,
@@ -81,7 +83,6 @@ import {
     pickAssetByChainAndTick,
     PINNED_SDK,
     SDK_HAS_UNCONFIRMED,
-    searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -98,7 +99,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    searchHistory,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin for the payer, to pay miner fees for its mint and its send. */
@@ -158,11 +161,12 @@ function ownTokenRow(page) {
  * fails here by name rather than silently restoring the vacuum downstream.
  */
 async function gotoTokensTab(page) {
-    const tab = page.getByRole('tab', { name: /^Tokens/ });
-    await expect(tab, 'Home has no Tokens tab, so the balance claims below would be asserting '
-        + 'against the Coins tab, where a token row never appears at any balance')
+    // Tokens is the Balances tab's Type now (operator 2026-11-15).
+    const tab = page.getByRole('tab', { name: /^Balances/ });
+    await expect(tab, 'Home has no Balances tab, so the balance claims below would be asserting '
+        + 'against a list where a token row never appears at any balance')
         .toBeVisible({ timeout: 60_000 });
-    await tab.first().click();
+    await showHomeBalances(page, 'tokens');
 }
 
 /**
@@ -227,7 +231,7 @@ async function payTheSubject(browser, page, { beforePayment } = {}) {
     await test.step(`the payer sends ${PAY_AMOUNT} ${TICK} to the subject`, async () => {
         await gotoSection(payer.page, 'Send');
         await pickAssetByChainAndTick(payer.page, TICK, REGTEST_CHAIN_ID, TICK);
-        await payer.page.getByLabel('To', { exact: true }).fill(subject);
+        await fieldByLabel(payer.page, 'To').fill(subject);
         await payer.page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(PAY_AMOUNT);
         await mainButton(payer.page, 'Send').click();
 
@@ -383,7 +387,7 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
 
             // Exactly one row for it, so a duplicate cannot hide behind a
             // "the row is visible" assertion.
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(historyRows(page), 'the incoming payment has more than one History row')
                 .toHaveCount(1, { timeout: 30_000 });
 
@@ -575,8 +579,8 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
             if (!(await master.isChecked())) await master.click();
             const picker = page.getByRole('combobox', { name: `${FAMILY} sound`, exact: true });
             await expect(picker, `no "${FAMILY} sound" picker under the sounds switch`).toBeVisible({ timeout: 30_000 });
-            await picker.selectOption(pick);
-            await expect(picker).toHaveValue(pick);
+            await pickOption(picker, pick);
+            await expectDropdownValue(picker, pick);
         }
         if (enabled !== undefined && (await master.isChecked()) !== enabled) await master.click();
         if (enabled !== undefined) await expect(master).toBeChecked({ checked: enabled });
@@ -595,10 +599,13 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
                 await test.step('CLAIM 6: preview plays the picked file with no live event and no toast', async () => {
                     await openSettings(p);
                     await resetSoundPlays(p);
-                    await p.getByRole('button', { name: `Preview ${FAMILY} sound`, exact: true }).click();
-                    await expect.poll(async () => soundPlays(p), { timeout: 10_000, message: 'Preview started no play' })
-                        .toHaveLength(1);
-                    expect((await soundPlays(p))[0]).toMatch(/\/sounds\/chime\.mp3$/);
+                    // Picking a sound is its preview (no inner button): go away and back.
+                    const picker = p.getByRole('combobox', { name: `${FAMILY} sound`, exact: true });
+                    await pickOption(picker, 'bong');
+                    await pickOption(picker, 'chime');
+                    await expect.poll(async () => soundPlays(p), { timeout: 10_000, message: 'Picking started no play' })
+                        .toHaveLength(2);
+                    expect((await soundPlays(p))[1]).toMatch(/\/sounds\/chime\.mp3$/);
                     expect(receivedKinds(await collected(p)), 'preview raised a notification').toEqual([]);
                     await gotoSection(p, 'Home');
                 });

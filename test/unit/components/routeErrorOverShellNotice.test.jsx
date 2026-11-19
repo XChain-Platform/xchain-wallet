@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // A screen's own error ("Couldn't load your listings") says more than the
-// shell's "Some balances may be out of date", so the shell's notice steps
-// aside while the error shows.
+// shell's offline notice, so the shell's notice steps aside while the error
+// shows.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -82,7 +82,7 @@ describe('a screen error over the shell reachability notice', () => {
         ));
         const shown = boxes(container);
         expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some balances may be out of date');
+        expect(shown[0]).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(shown[0]).toHaveTextContent('Locking is permanent.');
     });
 });

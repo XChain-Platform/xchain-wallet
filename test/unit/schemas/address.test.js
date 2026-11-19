@@ -12,12 +12,14 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    ADDRESS_OWNERSHIP_RULES,
     createAddress,
     validateAddress,
     CURRENT_VERSION,
     defaultAddressLabel,
     normalizeAddressLabel,
 } from '../../../packages/core/src/schemas/address.js';
+import { ADDRESS_SOURCES } from '../../../packages/core/src/schemas/constants.js';
 
 const BASE_INPUT = {
     accountId: 'acct-1',
@@ -164,10 +166,52 @@ describe('validateAddress', () => {
     });
 
     it('accepts all valid sources', () => {
-        for (const source of ['hd', 'imported-wif', 'watch-only', 'trezor', 'ledger']) {
-            const a = createAddress({ ...BASE_INPUT, source });
+        for (const source of ADDRESS_SOURCES) {
+            const noOwner = source === 'imported-wif' || source === 'watch-only';
+            const a = createAddress({
+                ...BASE_INPUT,
+                source,
+                accountId: noOwner ? null : BASE_INPUT.accountId,
+                derivationPath: noOwner ? null : BASE_INPUT.derivationPath,
+            });
             expect(validateAddress(a).ok).toBe(true);
         }
+    });
+
+    it('defines an ownership rule for every address source', () => {
+        expect(Object.keys(ADDRESS_OWNERSHIP_RULES).sort()).toEqual([...ADDRESS_SOURCES].sort());
+    });
+
+    it.each(['hd', 'trezor', 'ledger'])(
+        'requires accountId and derivationPath for %s addresses',
+        (source) => {
+            const address = createAddress({ ...BASE_INPUT, source });
+            const missingAccount = validateAddress({ ...address, accountId: null });
+            const missingPath = validateAddress({ ...address, derivationPath: null });
+            expect(missingAccount.ok).toBe(false);
+            expect(missingAccount.errors.some((error) => error.includes('accountId'))).toBe(true);
+            expect(missingPath.ok).toBe(false);
+            expect(missingPath.errors.some((error) => error.includes('derivationPath'))).toBe(true);
+        },
+    );
+
+    it('requires imported-wif ownership fields to be null', () => {
+        const address = createAddress({
+            ...BASE_INPUT,
+            source: 'imported-wif',
+            accountId: null,
+            derivationPath: null,
+        });
+        expect(validateAddress({ ...address, accountId: 'acct-1' }).ok).toBe(false);
+        expect(validateAddress({ ...address, derivationPath: "m/0'/0" }).ok).toBe(false);
+    });
+
+    it('requires watch-only ownership fields to be paired', () => {
+        const address = createAddress({ ...BASE_INPUT, source: 'watch-only' });
+        expect(validateAddress(address).ok).toBe(true);
+        expect(validateAddress({ ...address, accountId: null, derivationPath: null }).ok).toBe(true);
+        expect(validateAddress({ ...address, accountId: null }).ok).toBe(false);
+        expect(validateAddress({ ...address, derivationPath: null }).ok).toBe(false);
     });
 
     it('rejects empty addressType', () => {

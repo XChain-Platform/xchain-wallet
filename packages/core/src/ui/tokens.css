@@ -44,18 +44,27 @@
     --xc-form-gap: var(--xc-space-4);
     --xc-label-gap: var(--xc-space-1);
     --xc-help-gap: var(--xc-space-1);
+    /* Gap between a label's text and the help dot after it. The dot's 24px tap
+       target adds 4px of its own, so 2px here reads as about 6px, one text
+       space (G116). Every label-plus-help wrapper takes its gap from here. */
+    --xc-label-help-gap: 2px;
     --xc-section-gap: var(--xc-space-4);
     --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-header-gap: var(--xc-space-2);
-    --xc-list-row-padding: var(--xc-space-3);
+    --xc-list-row-padding: var(--xc-space-2); /* 8px everywhere */
 
     /* Screen owns page-edge spacing so route content stays geometry-free. */
-    --xc-page-gutter: var(--xc-space-3); /* 12px below 640px; the media queries after this block step it up */
-    --xc-page-top: var(--xc-space-3);
+    --xc-page-gutter: var(--xc-space-2); /* 8px at every width, so the top bar has 8px around its buttons and every row lines up */
+    --xc-page-top: var(--xc-space-2); /* 8px everywhere */
+    /* The XChain logo's own blue and purple, for brand surfaces
+       (the balance card) and brand accents (tabs, action icons). */
+    --xc-brand-blue: #0089D0;
+    --xc-brand-purple: #8A288F;
+    --xc-brand-gradient: linear-gradient(135deg, var(--xc-brand-blue) 0%, #3C5CB4 55%, var(--xc-brand-purple) 100%);
 
     /* Every card (ui/Card.module.css) shares one border, fill, inset and
        radius across content types, and a wide form card one width. */
-    --xc-card-pad: var(--xc-space-4);
+    --xc-card-pad: var(--xc-space-2); /* 8px everywhere */
     --xc-card-radius: var(--xc-radius-md);
     --xc-card-border: 1px solid var(--xc-border);
     --xc-card-bg: var(--xc-surface-raised);
@@ -174,6 +183,30 @@
     --xc-control-font: var(--xc-control-font-md);
     --xc-control-pad-x: var(--xc-control-pad-x-md);
 
+    /* G112: an icon inside a field sits in a square slot at the field's edge,
+     * as far from that side as from the top and bottom, the way the Network
+     * field draws its network icon. Each inset is measured from the field's
+     * outer border edge, so it is (control height - icon box) / 2; a field
+     * that places the icon with padding takes the inset less its border.
+     * The text after a leading icon starts --xc-field-icon-gap after it.
+     *   icon:   a leading picture (network, token, option) at --xc-control-icon-*
+     *   glyph:  a bare 18px glyph (the list or chevron caret, the search glass)
+     *   action: an in-field icon button's --xc-tap-min box, its icon centred
+     * These resolve on :root, so the touch heights below carry into them; a
+     * block that sets its own --xc-control-h-md around a field re-declares
+     * the md insets with the same formula (HomeListFilterMenu.module.css). */
+    --xc-field-border: 1px;
+    --xc-field-icon-gap: var(--xc-space-2);
+    --xc-field-icon-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-control-icon-sm)) / 2);
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-icon-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-control-icon-lg)) / 2);
+    --xc-field-glyph-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-glyph-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-sm: calc((var(--xc-control-h-sm) - var(--xc-tap-min)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
+    --xc-field-action-inset-lg: calc((var(--xc-control-h-lg) - var(--xc-tap-min)) / 2);
+
     /* Menus use one row measure across popovers, overflow actions, and
      * navigation sheets. Content can wrap and grow beyond this minimum. */
     --xc-menu-item-h: var(--xc-control-h-md);
@@ -204,6 +237,10 @@
     --xc-list-shadow: var(--xc-shadow-md);
     --xc-privacy-filter: blur(12px);
     --xc-privacy-opacity: 1;
+    /* The concealed recovery phrase grid blurs its placeholder words past
+     * reading. Static, so no reduced-motion or low-power block overrides it:
+     * the hidden state must look hidden everywhere. */
+    --xc-secret-placeholder-filter: blur(6px);
 
     /* Brand accent (sampled from branding/images/xchain-color-750.png).
      * Darkened one step from the sampled brand value to clear
@@ -246,6 +283,36 @@
     --xc-on-accent: #FFFFFF;
     --xc-on-danger: #FFFFFF;
     --xc-on-success: #FFFFFF;
+
+    /* Scheme-owned hero and interaction colours. Keeping this complete set in
+     * each palette block lets another scheme replace the blue hero without
+     * changing buttons, links, toggles, charts or navigation independently. */
+    --xc-hero-bg: #EEF6FC;
+    --xc-hero-text: #0F172A;
+    --xc-hero-text-muted: rgba(15, 23, 42, 0.75);
+    --xc-hero-border: #9DB8D3;
+    --xc-hero-shadow: 0 2px 10px rgba(15, 23, 42, 0.10), 0 1px 2px rgba(15, 23, 42, 0.06);
+    --xc-hero-chart-up: #15803D;
+    --xc-hero-chart-down: #C81E1E;
+    --xc-hero-chart-line: var(--xc-hero-chart-up);
+    --xc-hero-chart-fill: color-mix(in srgb, var(--xc-hero-chart-up) 22%, transparent);
+    --xc-hero-chart-fill-opacity: 0.22;
+    --xc-hero-guide: #7FA6C8;
+    --xc-hero-guide-opacity: 0.55;
+    --xc-hero-chip-bg: #FFFFFF;
+    --xc-hero-chip-text: #0F172A;
+    --xc-hero-chip-selected-bg: #1A7BAC;
+    --xc-hero-chip-selected-text: #FFFFFF;
+    --xc-hero-pill-up-bg: #DCFCE7;
+    --xc-hero-pill-up-text: #14532D;
+    --xc-hero-pill-down-bg: #FEE2E2;
+    --xc-hero-pill-down-text: #991B1B;
+    --xc-hero-scale-text: #2C5070;
+    --xc-toggle-selected-bg: #1A7BAC;
+    --xc-toggle-selected-text: #FFFFFF;
+    --xc-row-active-bg: rgba(26, 123, 172, 0.20);
+    --xc-row-hover-bg: rgba(15, 23, 42, 0.10);
+    --xc-link: #156690;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
@@ -262,7 +329,8 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    --xc-success-fill: #146F34;
+    /* Main action fill: a brighter green than --xc-success. */
+    --xc-success-fill: #16A34A;
     --xc-badge-multisig-classic-bg: #FEF3C7;
     --xc-badge-multisig-classic-fg: #78350F;
     --xc-badge-multisig-classic-border: #D97706;
@@ -286,6 +354,11 @@
     --xc-control-border-hover: var(--xc-border-strong);
     --xc-control-selected: var(--xc-accent-primary);
     --xc-control-selected-text: var(--xc-on-accent);
+    /* An on/off switch is green when on, the same green as the main action
+     * button, with a white thumb. High-contrast dark swaps in a brighter green
+     * so the track keeps 3:1 against its black page. */
+    --xc-switch-on: var(--xc-success-fill);
+    --xc-switch-on-thumb: #FFFFFF;
     --xc-control-focus-ring: var(--xc-focus-ring);
     --xc-control-disabled-bg: var(--xc-bg-muted);
     --xc-control-disabled-border: var(--xc-border-strong);
@@ -294,6 +367,29 @@
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
+    /* Text drawn over a chart on the brand card keeps this soft shadow. */
+    --xc-shadow-text-on-brand: 0 1px 3px rgba(0, 0, 0, 0.35);
+    /* Gain and loss figures on the brand card, which is blue in every theme,
+       so these stay bright on its dark pill instead of following the theme. */
+    --xc-brand-card-gain: #00E676;
+    --xc-brand-card-loss: #FF5A5A;
+    /* A bet market's outcome marks: the coloured square (or round) behind a
+       Yes or No thumb or an outcome's letter, and the faint share fill behind
+       its row. Yes and No keep their meaning colours; any other outcome takes
+       the next of eight hues by its place in the market. Each hue holds a
+       white letter at 4.5:1 or better, so the same fills serve both themes. */
+    --xc-outcome-yes: #16A34A;
+    --xc-outcome-no: #DC2626;
+    --xc-outcome-1: #2563EB;
+    --xc-outcome-2: #7C3AED;
+    --xc-outcome-3: #0E7490;
+    --xc-outcome-4: #B45309;
+    --xc-outcome-5: #BE185D;
+    --xc-outcome-6: #0F766E;
+    --xc-outcome-7: #4338CA;
+    --xc-outcome-8: #4D7C0F;
+    --xc-outcome-unknown: #5F7086;
+    --xc-on-outcome: #FFFFFF;
     /* Semantic aliases keep surface intent readable while sharing recipes. */
     --xc-shadow-header-menu: var(--xc-shadow-md);
     --xc-shadow-toast: var(--xc-shadow-md);
@@ -305,11 +401,9 @@
     --xc-shadow-selected-ring: inset 0 0 0 1px var(--xc-control-selected);
     --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
     --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
-    --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
     /* currentColor resolves on the element using the token, so the halo and
        ring follow that element's own text color. */
     --xc-shadow-status-halo: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
-    --xc-shadow-identity-ring: 0 0 0 2px var(--xc-surface), 0 0 0 4px currentColor;
 
     /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that
@@ -331,18 +425,19 @@
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
 }
 
-/* The page gutter is tiered by viewport width: 12px below 640px (compact,
- * including the extension popup and side panel), 16px from 640px (rail),
- * 24px from 900px (full). The tier edges match the layout tiers. */
+/* The page gutter is tiered by viewport width at the layout tier edges (640px
+ * rail, 900px full), but every tier uses the same 8px value as compact. */
 @media (min-width: 640px) {
     :root {
-        --xc-page-gutter: var(--xc-space-4);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
+/* The full layout keeps the same 8px gutter as phones, so the top bar has 8px
+   around its buttons on every side and every window's bars are one height. */
 @media (min-width: 900px) {
     :root {
-        --xc-page-gutter: var(--xc-space-6);
+        --xc-page-gutter: var(--xc-space-2);
     }
 }
 
@@ -393,24 +488,41 @@
     height: var(--xc-menu-item-icon);
 }
 
+/* Every menu item is one line; a menu grows to its longest item (width set by
+ * the popup's own style) and only past the viewport cap does a label ellipsize. */
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"] {
+    white-space: nowrap;
+}
+
+:root [role="menu"] [role="menuitem"] > span:not([aria-hidden="true"]),
+:root [role="menu"] [role="menuitemradio"] > span:not([aria-hidden="true"]),
+:root [role="menu"] [role="menuitemcheckbox"] > span:not([aria-hidden="true"]) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 :root [role="menu"] > [role="menuitem"] + [role="menuitem"],
 :root [role="menu"] > li + li,
 :root [data-xc-menu-list="rows"] > li + li {
     border-top: 1px solid var(--xc-border);
 }
 
-:root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
-:root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    :root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
+    :root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 :root [role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):is([aria-current], [aria-checked="true"], [aria-selected="true"]),
 :root [data-xc-menu-list] [data-xc-menu-item][aria-current] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    font-weight: 600;
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 :root [role="menu"] [role="menuitem"]:focus-visible,
@@ -425,10 +537,6 @@
     color: var(--xc-danger-fg);
 }
 
-:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"]:not(:disabled, [aria-disabled="true"]):hover {
-    background: var(--xc-danger-bg);
-}
-
 :root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] svg {
     color: currentColor;
 }
@@ -438,7 +546,7 @@
  * property accepts any tokens, so the later declaration always wins the
  * cascade, and an engine without dvh (Chromium below 108) then finds the
  * value invalid at the point of USE and drops the height it was meant to
- * set. Measured on an LG K51's stock WebView 102 (2026-10-12): the shell lost
+ * set. Measured on an LG K51's stock WebView 102: the shell lost
  * its height and the bottom tab bar floated mid-screen under short pages. */
 @supports (height: 100dvh) {
     :root {
@@ -448,7 +556,7 @@
 
 @media (max-width: 480px) {
     :root {
-        --xc-card-pad: var(--xc-space-3);
+        --xc-card-pad: var(--xc-space-2);
     }
 }
 
@@ -508,6 +616,32 @@
         --xc-badge-multisig-taproot-fg: #DDD6FE;
         --xc-badge-multisig-taproot-border: #A78BFA;
         --xc-focus-ring: #FFFFFF;
+        --xc-hero-bg: #10213A;
+        --xc-hero-text: #E5EAF2;
+        --xc-hero-text-muted: rgba(229, 234, 242, 0.85);
+        --xc-hero-border: #2B4566;
+        --xc-hero-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+        --xc-hero-chart-up: #4ADE80;
+        --xc-hero-chart-down: #F87171;
+        --xc-hero-chart-line: var(--xc-hero-chart-up);
+        --xc-hero-chart-fill: color-mix(in srgb, var(--xc-hero-chart-up) 22%, transparent);
+        --xc-hero-chart-fill-opacity: 0.22;
+        --xc-hero-guide: #7FA6C8;
+        --xc-hero-guide-opacity: 0.55;
+        --xc-hero-chip-bg: var(--xc-surface);
+        --xc-hero-chip-text: #E5EAF2;
+        --xc-hero-chip-selected-bg: #1A7BAC;
+        --xc-hero-chip-selected-text: #FFFFFF;
+        --xc-hero-pill-up-bg: rgba(74, 222, 128, 0.16);
+        --xc-hero-pill-up-text: #4ADE80;
+        --xc-hero-pill-down-bg: rgba(248, 113, 113, 0.16);
+        --xc-hero-pill-down-text: #FCA5A5;
+        --xc-hero-scale-text: #9DB8D9;
+        --xc-toggle-selected-bg: #1A7BAC;
+        --xc-toggle-selected-text: #FFFFFF;
+        --xc-row-active-bg: rgba(26, 123, 172, 0.20);
+        --xc-row-hover-bg: rgba(229, 234, 242, 0.10);
+        --xc-link: #4AA8D8;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
         --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
@@ -549,6 +683,32 @@
     --xc-badge-multisig-taproot-fg: #DDD6FE;
     --xc-badge-multisig-taproot-border: #A78BFA;
     --xc-focus-ring: #FFFFFF;
+    --xc-hero-bg: #10213A;
+    --xc-hero-text: #E5EAF2;
+    --xc-hero-text-muted: rgba(229, 234, 242, 0.85);
+    --xc-hero-border: #2B4566;
+    --xc-hero-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+    --xc-hero-chart-up: #4ADE80;
+    --xc-hero-chart-down: #F87171;
+    --xc-hero-chart-line: var(--xc-hero-chart-up);
+    --xc-hero-chart-fill: color-mix(in srgb, var(--xc-hero-chart-up) 22%, transparent);
+    --xc-hero-chart-fill-opacity: 0.22;
+    --xc-hero-guide: #7FA6C8;
+    --xc-hero-guide-opacity: 0.55;
+    --xc-hero-chip-bg: var(--xc-surface);
+    --xc-hero-chip-text: #E5EAF2;
+    --xc-hero-chip-selected-bg: #1A7BAC;
+    --xc-hero-chip-selected-text: #FFFFFF;
+    --xc-hero-pill-up-bg: rgba(74, 222, 128, 0.16);
+    --xc-hero-pill-up-text: #4ADE80;
+    --xc-hero-pill-down-bg: rgba(248, 113, 113, 0.16);
+    --xc-hero-pill-down-text: #FCA5A5;
+    --xc-hero-scale-text: #9DB8D9;
+    --xc-toggle-selected-bg: #1A7BAC;
+    --xc-toggle-selected-text: #FFFFFF;
+    --xc-row-active-bg: rgba(26, 123, 172, 0.20);
+    --xc-row-hover-bg: rgba(229, 234, 242, 0.10);
+    --xc-link: #4AA8D8;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
@@ -594,19 +754,10 @@
     }
 }
 
-:root[data-xc-reduced-motion="reduce"] {
-    --xc-motion-duration-fast: 0.01ms;
-    --xc-motion-duration-standard: 0.01ms;
-    --xc-motion-duration-ambient: 0.01ms;
-    --xc-transition: 0ms;
-    --xc-backdrop-filter: none;
-    --xc-list-shadow: none;
-    --xc-privacy-filter: none;
-    --xc-privacy-opacity: 0;
-}
-
-/* Native shells set this attribute when sustained GPU effects are too costly.
- * It reduces the same paint and motion work without changing user settings. */
+/* Native shells set data-xc-low-power when sustained GPU effects are too
+ * costly. It reduces the same paint and motion work as "Always reduce"
+ * without changing user settings. */
+:root[data-xc-reduced-motion="reduce"],
 :root[data-xc-low-power="true"] {
     --xc-motion-duration-fast: 0.01ms;
     --xc-motion-duration-standard: 0.01ms;
@@ -706,6 +857,7 @@
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
             --xc-success-fill: #166534;
+            --xc-switch-on: #4ADE80;
             --xc-accent-primary: #93C5FD;
             --xc-accent-text: #93C5FD;
             --xc-danger-fg: #FCA5A5;
@@ -733,6 +885,7 @@
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
         --xc-success-fill: #166534;
+        --xc-switch-on: #4ADE80;
         --xc-accent-primary: #93C5FD;
         --xc-accent-text: #93C5FD;
         --xc-danger-fg: #FCA5A5;
@@ -758,6 +911,32 @@
         --xc-accent-primary: LinkText;
         --xc-accent-primary-hover: VisitedText;
         --xc-on-accent: Canvas;
+        --xc-hero-bg: LinkText;
+        --xc-hero-text: Canvas;
+        --xc-hero-text-muted: Canvas;
+        --xc-hero-border: CanvasText;
+        --xc-hero-shadow: none;
+        --xc-hero-chart-up: Canvas;
+        --xc-hero-chart-down: Canvas;
+        --xc-hero-chart-line: Canvas;
+        --xc-hero-chart-fill: LinkText;
+        --xc-hero-chart-fill-opacity: 0;
+        --xc-hero-guide: CanvasText;
+        --xc-hero-guide-opacity: 1;
+        --xc-hero-chip-bg: LinkText;
+        --xc-hero-chip-text: Canvas;
+        --xc-hero-chip-selected-bg: Canvas;
+        --xc-hero-chip-selected-text: LinkText;
+        --xc-hero-pill-up-bg: Canvas;
+        --xc-hero-pill-up-text: CanvasText;
+        --xc-hero-pill-down-bg: Canvas;
+        --xc-hero-pill-down-text: CanvasText;
+        --xc-hero-scale-text: Canvas;
+        --xc-toggle-selected-bg: Highlight;
+        --xc-toggle-selected-text: HighlightText;
+        --xc-row-active-bg: Highlight;
+        --xc-row-hover-bg: Canvas;
+        --xc-link: LinkText;
         --xc-danger: Mark;
         --xc-danger-bg: Canvas;
         --xc-danger-text: Mark;
@@ -868,12 +1047,6 @@ body {
     transform: scaleX(-1);
 }
 
-/* The active-navigation rail is drawn with a physical inset, so it sits on
-   the leading edge only when the token flips with the reading direction. */
-:root[dir='rtl'] {
-    --xc-shadow-nav-indicator: inset -3px 0 0 var(--xc-accent-primary, var(--xc-text));
-}
-
 :where(
     input[type='number'],
     input[inputmode='numeric'],
@@ -913,13 +1086,13 @@ body {
  * links keep the same semantic color so browser defaults cannot resemble a
  * wallet status while the underline and shared focus ring remain present. */
 :where(a[href]) {
-    color: var(--xc-accent-text);
+    color: var(--xc-link);
     text-decoration: underline;
     text-underline-offset: 0.15em;
 }
 
 :where(a[href]:visited) {
-    color: var(--xc-accent-text);
+    color: var(--xc-link);
 }
 
 /* A dialog can place its scrollport on the panel, body, list, or viewer.
@@ -932,7 +1105,7 @@ body {
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
- * cosigner card ran 67px off a 411px phone (2026-10-12). Let fieldsets
+ * cosigner card ran 67px off a 411px phone. Let fieldsets
  * shrink like any other block. */
 fieldset {
     min-inline-size: 0;
@@ -1071,9 +1244,11 @@ html.xc-focus-visible-fallback :where(
     outline-offset: -2px !important;
 }
 
-/* Disabled controls retain the contrast of their semantic color pairs.
- * Reduced saturation supplies the visual state without alpha compositing. */
-:where(input, select, textarea, button):disabled {
+/* Disabled fields retain the contrast of their semantic color pairs.
+ * Reduced saturation supplies the visual state without alpha compositing.
+ * Buttons are not in this list: a button never looks disabled (G130,
+ * operator 2026-11-16), so a disabled or busy button keeps its colours. */
+:where(input, select, textarea):disabled {
     opacity: var(--xc-disabled-opacity) !important;
     filter: saturate(var(--xc-disabled-saturation));
 }
@@ -1085,7 +1260,7 @@ html.xc-focus-visible-fallback :where(
 }
 
 @media (forced-colors: active) {
-    :where(input, select, textarea, button):disabled {
+    :where(input, select, textarea):disabled {
         filter: none;
     }
 

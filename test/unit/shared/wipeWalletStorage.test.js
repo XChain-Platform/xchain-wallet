@@ -45,6 +45,7 @@ import {
     isDuressMatch,
     setDuressPassphrase,
 } from '../../../packages/core/src/flows/duressPassphrase.js';
+import * as eraseSchedule from '../../../packages/core/src/flows/eraseSchedule.js';
 
 const META_KEY = 'xchain-wallet:vault-meta';
 const QUEUE_KEY = 'xchain.broadcastQueue';
@@ -158,6 +159,8 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
             'xc:backupReminderFundedAt',
             'xc:alertCenter:w1',
             'xc:balanceCache:w1:a1',
+            'xc:balanceCache:staleAt',
+            'xc:ownedTokens:v1:w1:list',
             'xc:balances:sort:w1',
             'xc:historyCache:v2:w1:a1',
             'xc:homeFilters:w1',
@@ -194,6 +197,7 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
             `xc:contacts:sort:${walletId}`,
             `xc:formdraft:send:${walletId}`,
             `xc:historyCache:v2:${walletId}:account-1`,
+            `xc:ownedTokens:v1:${walletId}:list`,
             `xc:historyGroupingMode:${walletId}`,
             `xc:homeFilters:${walletId}`,
             `xc:lastView:${walletId}`,
@@ -414,5 +418,32 @@ describe('subscribeVaultWipe', () => {
         subscribeVaultWipe(onWipe)();
         storageEvent(META_KEY, null);
         expect(onWipe).not.toHaveBeenCalled();
+    });
+});
+
+// Security review of the Forgot Password recovery, 2026-11-16: the cancel at
+// the end of a wipe can now throw (the store refused the clear). By then the
+// vault is gone, so the wipe must still finish its clears, and the cancel
+// marker the throw left behind keeps the erase from running again.
+describe('wipeWalletStorage with an erase whose store refuses the clear', () => {
+    afterEach(async () => {
+        await eraseSchedule.configureEraseSchedulePersistence(null);
+        eraseSchedule.__resetEraseScheduleForTests();
+    });
+
+    it('finishes every clear, and the scheduled erase cannot run again', async () => {
+        const dueAt = Date.now() - 60_000;
+        const slot = { scheduledAt: dueAt - eraseSchedule.ERASE_HOLD_MS, dueAt };
+        await eraseSchedule.configureEraseSchedulePersistence({
+            load: async () => slot,
+            save: async () => {},
+            clear: async () => { throw new Error('keystore is locked'); },
+        });
+        setDuressPassphrase('under duress');
+        stubIndexedDB();
+
+        await expect(wipeWalletStorage()).resolves.toBeUndefined();
+        expect(isDuressMatch('under duress')).toBe(false);
+        expect(await eraseSchedule.shouldRunDueErase()).toBe(false);
     });
 });

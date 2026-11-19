@@ -14,8 +14,8 @@
 // renderer." This preload upholds that by exposing, via contextBridge, only
 // the named function-only worlds pinned in BRIDGE_WORLDS
 // (test/integration/shells/desktop-preload-contract.test.js) and enumerated
-// below. Nothing about Node, the filesystem, Electron internals, or native
-// modules is exposed to the renderer. Adding a world means editing that list,
+// below. No Node APIs, filesystem access, Electron internals, or native modules
+// are exposed to the renderer. Adding a world means editing that list,
 // deliberately; the list is the count, so no number is written down here (a
 // count and a prose list drift apart silently, and this one did).
 //
@@ -76,11 +76,11 @@
 //     renderer pulls the verified descriptor batch through this call
 //     to hot-swap its own registry realm.
 //
-//   - `xchainWalletUpdater.{onEvent,getState,install}`: the renderer's
+//   - `xchainWalletUpdater.{getChannel,onEvent,getState,install}`: the renderer's
 //     half of the update path. Main runs the check, the K1 signature
 //     gate and `quitAndInstall`; the renderer subscribes to status
 //     (`onEvent`), reads status that landed before it mounted
-//     (`getState`), and asks for check, download, or restart steps
+//     (`getState`), reads the install channel (`getChannel`), and asks for check, download, or restart steps
 //     (`install`).
 //     Read-and-ask only: nothing here hands the renderer a path, a
 //     URL, or a way to skip the signature gate.
@@ -107,7 +107,8 @@
 // exposed. The package's "type": "module" makes plain .js files ESM,
 // hence the .cjs extension. `require('electron')` is the only module a
 // sandboxed preload may pull in.
-const { contextBridge, ipcRenderer } = require('electron');
+const electron = require('electron');
+const { contextBridge, ipcRenderer } = electron;
 
 const MESSAGE_CHANNEL = 'xchain-wallet:message';
 const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
@@ -119,6 +120,7 @@ const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
+const UPDATER_CHANNEL_CHANNEL = 'xchain:updater-channel';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
@@ -250,6 +252,15 @@ function validateSignerMessage(args) {
 }
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
+    filePathOf(file) {
+        if (arguments.length !== 1 || file === null || typeof file !== 'object') return null;
+        try {
+            const path = electron.webUtils?.getPathForFile(file);
+            return typeof path === 'string' && path.length > 0 ? path : null;
+        } catch {
+            return null;
+        }
+    },
     /**
      * @param {{ type: string, request?: unknown }} message
      * @returns {Promise<import('./main/messageHost.js').IpcResponse>}   type-only: this sandboxed preload may require nothing but electron
@@ -360,6 +371,10 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
 // repo. So the shipped desktop wallet checked for updates on launch,
 // told no one, and could not install one. Both halves are exposed here.
 contextBridge.exposeInMainWorld('xchainWalletUpdater', {
+    getChannel() {
+        assertNoArguments('xchainWalletUpdater.getChannel', arguments);
+        return ipcRenderer.invoke(UPDATER_CHANNEL_CHANNEL);
+    },
     /**
      * Subscribe to updater events: `available`, `verifying`, `rejected`,
      * `error`, `downloaded`. Returns an unsubscribe.

@@ -1,0 +1,251 @@
+/* The line between two panels, with the 8px gap on each side (the DEX
+   list's divider, MarketsList.module.css .panelDivider). It is also the
+   resize handle: 13px of hit area centred on the 1px line, which turns
+   accent on hover, focus and drag. */
+.divider {
+    position: relative;
+    flex: 0 0 1px;
+    align-self: stretch;
+    background: var(--xc-border);
+    cursor: col-resize;
+    /* No pan or double-tap zoom, so a touch drag reaches the resize
+       handler, but pinch zoom stays available (WCAG 1.4.4). */
+    touch-action: pinch-zoom;
+    outline: none;
+}
+
+.divider::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: -6px;
+    width: 13px;
+}
+
+.divider:hover,
+.divider:focus-visible,
+.divider[data-dragging] {
+    background: var(--xc-accent-primary);
+}
+
+.divider:focus-visible {
+    outline: 1px solid var(--xc-accent-primary);
+    outline-offset: 0;
+}
+
+/* The list-and-detail split (ListDetailSplit), the DEX's layout lifted from
+   MarketsList.module.css so every list that opens a detail splits the same
+   way. The measured box: the list page alone on narrow content. */
+.layoutRoot {
+    min-width: 0;
+}
+
+/* Two panels (G128): the page scroller stops and each panel scrolls on its
+   own, so the headers stay put, a long list scrolls under its own panel and
+   picking a row far down it keeps the list where it is and the detail in
+   view. The body becomes a column the split fills, so the split's height is
+   the room left under the headers. Two-part selector so it outranks
+   Screen's body rule. `twoPanelBody` is for a split that is the body's only
+   block (the DEX, Staking); `splitBody` for one that follows other blocks
+   (wide Home's overview), which keeps the body's top inset. */
+.twoPanelBody.twoPanelBody,
+.splitBody.splitBody {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: hidden;
+}
+
+/* The panels pay the top and bottom space themselves, so the line between
+   them runs from the header to the bottom edge. Three-part selector to
+   outrank the Screen body's bottom inset. */
+.twoPanelBody.twoPanelBody.twoPanelBody {
+    padding-block: 0;
+}
+
+.splitBody.splitBody.splitBody {
+    padding-block-end: 0;
+}
+
+/* Every box between a `splitBody` and its split (the page column, the host's
+   own wrapper) passes the body's height down: it grows into the room and may
+   shrink under its content, which only the split's panels hold. Its other
+   blocks (notices, an overview) keep their own height. */
+.splitFill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Matched by attribute, not class: this sheet reaches the page through more
+   than one import, and each copy hashes `splitFill` differently, so `.splitFill`
+   alone missed a sibling copy's box and pinned Home's whole split at its full
+   content height (operator 2026-11-16). */
+.splitFill > :not([class*='splitFill']):not([class*='twoPanel']) {
+    flex-shrink: 0;
+}
+
+.twoPanel {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: stretch;
+    min-height: 0;
+    /* The panels sit 8px apart. */
+    gap: var(--xc-space-2);
+}
+
+/* Each panel is a column of its own cards, never a card around them (U16).
+   The 4px inset gives focus rings room inside the panel's scroll clip and
+   the matching negative margin keeps the cards on the page gutter. */
+.listPanel,
+.detailPanel {
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    padding: var(--xc-page-top) var(--xc-space-1);
+    margin: 0 calc(-1 * var(--xc-space-1));
+}
+
+/* The list panel itself does not scroll. Its fixed header and shrinking list
+   scroller form a column, so tabs and filters never move with the rows. */
+.listPanel {
+    display: flex;
+    flex-direction: column;
+    /* By default the list keeps 36% of the width; a dragged width replaces it inline. */
+    flex: 0 0 clamp(272px, 36%, 400px);
+    /* Not clipped: only the list body scrolls, and the header separator
+       reaches past this box to the sidebar and divider lines. */
+    overflow: visible;
+    gap: 0;
+    /* The rows scroll to the window's bottom edge: the end gap lives inside
+       the scroller (.listBody), not under it (operator 2026-11-16). */
+    padding-block-end: 0;
+}
+
+/* With no fixed list header, the scroller starts right at the page header
+   line, so rows scroll all the way up to it; the 8px top gap lives inside
+   the scroller (.listBody) instead (operator 2026-11-16). */
+@supports selector(:has(*)) {
+    .listPanel:not(:has(> .listHeader)) {
+        padding-block-start: 0;
+    }
+}
+
+.listHeader {
+    flex: none;
+    min-width: 0;
+    /* A full-width separator under the fixed tabs and filter, so the rows
+       scroll under a line as they do at the bottom (operator 2026-11-16). */
+    /* The line runs from the sidebar line to the divider: the panel bleed
+       (4px) plus the 4px gutter beyond it on each side. */
+    margin-inline: calc(-1 * var(--xc-space-2));
+    padding-inline: var(--xc-space-2);
+    padding-block-end: var(--xc-space-2);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+/* The rows and the detail are the named, focusable scroll regions. A scroll
+   that reaches either end stops there instead of moving the page or sibling. */
+.listBody,
+.detailPanel {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.listBody {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: hidden;
+    /* The gaps above and below the rows sit inside the scroller, so rows
+       scroll right under the header line and off the bottom edge. */
+    padding-block-start: var(--xc-space-2);
+    padding-block-end: var(--xc-page-top);
+}
+
+/* The scroll regions are flex columns (scrollArea), so their content must not
+   shrink to fit: a shrunk list card (overflow hidden for its corners) clipped
+   the rows instead of letting the panel scroll (operator 2026-11-16). */
+.listBody.listBody > *,
+.detailPanel.detailPanel > * {
+    /* Doubled class: a host's own `flex: 0 1 auto` on its panel (Home's
+       .panel) has equal weight and loads later, so a single class lost. */
+    flex-shrink: 0;
+}
+
+/* The ring sits inside each scroll clip. */
+.listBody:focus-visible,
+.detailPanel:focus-visible {
+    outline: 2px solid var(--xc-control-focus-ring);
+    outline-offset: -2px;
+}
+
+/* No reserved scrollbar lane (the shared scroll class reserves one), so the
+   list ends exactly 8px from the line. Two-part selector to outrank it.
+   Behind @supports like the reservation itself: Safari 16 has neither. */
+@supports (scrollbar-gutter: auto) {
+    .listBody.listBody,
+    .detailPanel.detailPanel {
+        scrollbar-gutter: auto;
+    }
+}
+
+/* Once the list scrolls, its 6px scrollbar lane (Screen.module.css) took width
+   from the rows and left 14px to the divider. With a mouse the lane is always
+   kept and pushed into the panel's end gap, so the rows end 8px from the line
+   whether or not the list scrolls (operator 2026-11-16). */
+@media (hover: hover) and (pointer: fine) {
+    @supports (scrollbar-gutter: stable) {
+        .listBody.listBody {
+            scrollbar-gutter: stable;
+            margin-inline-end: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
+        }
+        /* The detail panel too: a long page (XCHAIN with many actions) shows a
+           scrollbar and a short one (Bitcoin) does not, so the lane is always kept
+           and pushed into the page gutter; the content stays 8px from the edge
+           either way (operator 2026-11-16). */
+        .detailPanel.detailPanel {
+            scrollbar-gutter: stable;
+            margin-inline-end: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
+        }
+        /* A split body never scrolls, so it keeps no lane of its own; the
+           detail panel's end margin that reached into that lane is dropped
+           with it, which leaves the panel where it was and stops it
+           overflowing the body by the lane's width. */
+        .twoPanelBody.twoPanelBody,
+        .splitBody.splitBody {
+            scrollbar-gutter: auto;
+            padding-inline-end: 0;
+        }
+        .twoPanelBody.twoPanelBody .detailPanel.detailPanel,
+        .splitBody.splitBody .detailPanel.detailPanel {
+            margin-inline-end: 0;
+        }
+    }
+}
+
+.detailPanel {
+    flex: 1 1 0;
+}
+
+/* The row whose detail the right panel shows uses the shared active fill. */
+.selectedRow {
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
+}
+
+@media (forced-colors: active) {
+    .divider {
+        background: CanvasText;
+    }
+
+    .divider:hover,
+    .divider:focus-visible,
+    .divider[data-dragging] {
+        background: Highlight;
+    }
+}

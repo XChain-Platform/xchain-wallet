@@ -45,9 +45,13 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
+    pickIssueParent,
+    pickIssuePreset,
     submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
@@ -57,9 +61,11 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
+    issuePlainToken,
     minerRpc,
     mintXchain,
     payProtocolFeeInCoin,
+    readIssueSource,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -67,7 +73,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** A parent ISSUE, a child ISSUE and an ORDER, each paying a real coin fee. */
@@ -194,9 +202,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -206,7 +212,7 @@ async function approveAndGetTxid(page) {
 }
 
 /**
- * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
+ * Fills the Issue Token form's Subtoken preset and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen (the
  * native-fee pre-flight answers on the form), so the caller waits for whichever
  * outcome it is asserting.
@@ -216,17 +222,17 @@ async function fillSubtoken(page, { parent, child, supply }) {
     await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Subtoken/ }).click();
+    await pickIssuePreset(main, /Subtoken/);
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await expect.poll(async () => main.getByLabel('Fee paid by').inputValue().catch(() => ''),
-        { timeout: 30_000, message: 'the wizard names no signing address' })
+    await expect.poll(async () => fieldByLabel(main, 'From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-    await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Parent ticker').fill(parent);
-    await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    await pickIssueParent(main, parent);
+    await fieldByLabel(main, 'Subtoken name').fill(child);
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     // The coin lane on Bitcoin, for the control and the refused leg alike:
     // the native-fee pre-flight is what answers a refused ISSUE on the form.
     // On the XCHAIN lane the same verdict surfaces on the confirm screen.
@@ -247,9 +253,8 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            owner = await probe.getByLabel('From').inputValue();
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            owner = await readIssueSource(probe);
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -266,11 +271,9 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
 
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(form);
-            await form.getByLabel('Ticker').fill(PARENT);
-            await form.getByLabel('Supply', { exact: true }).fill(String(PARENT_SUPPLY));
-            await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await readIssueSource(form);
+            await issuePlainToken(form, { ticker: PARENT, supply: PARENT_SUPPLY });
 
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -306,22 +309,20 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             await expect(row, `${PARENT} is on chain but My Tokens does not list it`)
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            await clickManageTokenAction(main, 'Sell name');
+            await clickManageTokenAction(main, 'Sell Ownership');
 
             await expect(page.getByRole('main').getByLabel(/^Price/))
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('main').getByLabel(/^Price/).fill(ASK);
 
             // A signing wallet composes the sale onto the shared confirm
-            // screen straight from the form's "List name for sale" submit;
+            // screen straight from the form's "List Ownership for Sale" submit;
             // only a watcher wallet gets the form's own review stage. The
             // result panel then carries the txid.
             await page.getByRole('main')
-                .getByRole('button', { name: 'List name for sale', exact: true }).click();
+                .getByRole('button', { name: 'List Ownership for Sale', exact: true }).click();
             await expectConfirmScreen(page);
             const orderTxid = await approveAndGetTxid(page);
 

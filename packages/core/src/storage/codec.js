@@ -11,6 +11,14 @@
 // Vault-document codec. Serializes the in-memory document shape to a
 // ciphertext blob using AES-256-GCM under the master key.
 //
+// Production shells currently seal the document without AAD. On fresh create
+// they also reuse this master key for seed and imported-WIF ciphertexts, which
+// likewise carry no AAD; backup files carry copies of those sealed fields.
+// Only the optional BIP39 passphrase has its own AAD. A same-key seed or WIF
+// blob placed in the vault slot therefore passes authentication and fails as
+// a JSON or codec error. Any new plaintext under this key needs a purpose AAD
+// such as `xchain-wallet:<purpose>:v1`.
+//
 // Document layout (post-decrypt JSON):
 //   {
 //     documentVersion: 1,             // codec-level version, not schema
@@ -22,6 +30,7 @@
 //     pendingTxs: PendingTx[],
 //     signers: SignerRecord[],
 //     pendingAirdrops: PendingAirdrop[],
+//     pendingFileUploads: PendingFileUpload[],
 //     watchlistEntries: WatchlistEntry[],
 //     priceAlerts: PriceAlert[],
 //     gatedKeys: GatedKey[],
@@ -50,6 +59,7 @@ export function emptyDocument() {
         pendingTxs: [],
         signers: [],
         pendingAirdrops: [],
+        pendingFileUploads: [],
         pendingDeploys: [],
         watchlistEntries: [],
         priceAlerts: [],
@@ -73,6 +83,7 @@ export function emptyDocument() {
  * @property {import('../schemas/pendingTx.js').PendingTx[]} pendingTxs
  * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingAirdrop.js').PendingAirdrop[]} pendingAirdrops
+ * @property {import('../schemas/pendingFileUpload.js').PendingFileUpload[]} pendingFileUploads
  * @property {import('../schemas/pendingDeploy.js').PendingDeploy[]} pendingDeploys
  * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
  * @property {import('../schemas/priceAlert.js').PriceAlert[]} priceAlerts
@@ -142,6 +153,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         pendingTxs: parsed.pendingTxs ?? empty.pendingTxs,
         signers: parsed.signers ?? empty.signers,
         pendingAirdrops: parsed.pendingAirdrops ?? empty.pendingAirdrops,
+        pendingFileUploads: parsed.pendingFileUploads ?? empty.pendingFileUploads,
         pendingDeploys: parsed.pendingDeploys ?? empty.pendingDeploys,
         watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
         priceAlerts: parsed.priceAlerts ?? empty.priceAlerts,

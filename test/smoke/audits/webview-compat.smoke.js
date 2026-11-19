@@ -10,7 +10,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const productionRoots = [
     'packages/core/src',
@@ -23,7 +23,7 @@ const productionRoots = [
 const files = execFileSync('git', ['ls-files', '--', ...productionRoots], { encoding: 'utf8' })
     .trim()
     .split('\n')
-    .filter((file) => /\.(?:css|html|js|jsx|mjs)$/.test(file));
+    .filter((file) => /\.(?:css|html|js|jsx|mjs)$/.test(file) && existsSync(file));
 
 function withoutComments(source) {
     return source

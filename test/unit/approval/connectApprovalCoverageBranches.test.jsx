@@ -51,7 +51,10 @@ describe('ConnectApproval validation branches', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'This connection request is missing or invalid.',
         );
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        expect(approve).not.toBeDisabled();
+        fireEvent.click(approve);
+        expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 
     it('adds an unselected chain and uses an account id as its label', () => {
@@ -59,15 +62,16 @@ describe('ConnectApproval validation branches', () => {
             origin: 'https://dapp.test',
             accountOptions: [{ id: 'account-without-name' }],
         });
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
         const chainBox = screen.getByLabelText(
-            `Allow ${chain.displayName} ${chain.networkKind}`,
+            `Allow ${chain.displayName}`,
         );
 
         expect(chainBox).not.toBeChecked();
-        expect(screen.getByLabelText('Share account-without-name')).toBeTruthy();
         fireEvent.click(chainBox);
-
         expect(chainBox).toBeChecked();
-        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Accounts it can see/ }));
+        expect(screen.getByLabelText('Share account-without-name')).toBeTruthy();
     });
 });

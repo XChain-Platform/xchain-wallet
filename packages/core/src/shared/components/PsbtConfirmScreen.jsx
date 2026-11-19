@@ -32,7 +32,6 @@ import { isUnreadableActionReason } from './psbtDecodeReasons.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/extension.js';
-import '../../i18n/locales/en/send.js';
 
 /**
  * The §5.5 fail-closed rule, as a pure predicate so it can be unit-tested
@@ -139,19 +138,14 @@ export function PsbtConfirmScreen({
             )}
             credentialsReady={signerReady || password.length > 0}
             credentials={signerReady ? (
-                // Panic mode freezes signPsbtFlow too, so this note is
-                // a claim the wallet cannot honour while a freeze is on.
-                <SigningReadyNote>
-                    <p className={hintClassName}>
-                        <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
-                    </p>
-                </SigningReadyNote>
+                // State a self-armed freeze without exposing a duress-armed freeze.
+                <SigningReadyNote />
             ) : (
                 <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
                     <Input
                         type="password"
                         label={t('common.password')}
-                        hint={t('components.messageConfirmScreen.requiredToSign')}
+                        help={t('components.messageConfirmScreen.requiredToSign')}
                         value={password}
                         onChange={(e) => onPasswordChange(e.target.value)}
                         autoComplete="current-password"

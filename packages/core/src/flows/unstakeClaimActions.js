@@ -11,9 +11,8 @@
 // UNSTAKE + COLLECT composers for the §42.7.2 (unstake-lane) +
 // §42.7.3 (rewards) authoring surfaces. Both actions are small:
 // UNSTAKE is `VERSION|SIGNING_PUBKEY[|AMOUNT]`, COLLECT is
-// `VERSION[|AMOUNT]`, so they share a file and the UI combines them
-// in StakingActionForm.jsx via a `mode` prop (same pattern as §42.5
-// ContractFundsForm).
+// `VERSION[|AMOUNT]`, so they share a file and the UI shows them as two
+// actions of the one Staking form (StakingForm.jsx).
 //
 // Capability-staking model (capability-staking-model.md §3): UNSTAKE
 // addresses a specific signing pubkey, not a tier. AMOUNT is the

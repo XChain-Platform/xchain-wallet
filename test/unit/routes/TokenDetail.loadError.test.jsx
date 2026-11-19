@@ -14,7 +14,7 @@
 // the page already resolved.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -44,6 +44,11 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const NOTICE = /Token details could not be loaded from the explorer/;
+
+/** Returns the Manage token row, which the Actions tab (open by default) shows to the owner. */
+async function findManage() {
+    return screen.findByRole('button', { name: /^Manage token\b/ });
+}
 
 function renderDetail(getTokenInfo) {
     const messaging = {
@@ -92,7 +97,10 @@ describe('TokenDetail on an explorer failure', () => {
         const notice = await screen.findByText(NOTICE);
         expect(screen.getAllByText(NOTICE)).toHaveLength(1);
         expect(screen.queryByText('No additional information')).toBeNull();
-        const hero = screen.getByRole('region', { name: 'LOADERR balance' });
+        // The balance card is the region named by its caption and holding the balance summary.
+        const hero = screen.getAllByRole('region')
+            .find((el) => el.querySelector('[aria-label="Balance summary"]'));
+        expect(hero).toBeTruthy();
         expect(notice.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -103,12 +111,12 @@ describe('TokenDetail on an explorer failure', () => {
             chainId: CHAIN, tick: 'LOADERR', creator: null, loadError: true,
         }));
         expect(await screen.findByText(NOTICE)).toBeTruthy();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy());
+        expect(await findManage()).toBeTruthy();
     });
 
     it('shows no notice when the read succeeds', async () => {
         renderDetail(vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'LOADERR', creator: MINE, divisibility: 8 }));
-        await screen.findByRole('button', { name: 'Manage' });
+        await findManage();
         expect(screen.queryByText(NOTICE)).toBeNull();
     });
 });

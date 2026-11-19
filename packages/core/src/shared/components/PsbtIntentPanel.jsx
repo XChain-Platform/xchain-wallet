@@ -8,20 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PsbtIntentPanel (§5.5, the PSBT variant's foregrounded content).
-//
-// On the action variant the decoded action IS the thing to verify. On a
-// PSBT the wallet did not build, it is not: the theft in a hostile PSBT is
-// the OUTPUT SET (where the coins go), and the action data is at most a
-// hint. So this panel enumerates every input and every output in full,
-// marks which inputs the chosen key actually signs and which outputs come
-// back as change, and treats a failed decode as a LOUD state rather than
-// a missing line.
-//
-import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
+// PSBT presentation helpers for the Confirm Standard sign-transaction page.
+// The raw input and output inventory is deliberately not a second review UI.
+// A readable XChain action uses the same decoded model as an in-wallet action,
+// while a transaction with no action becomes a native-coin send model after
+// wallet-owned change is removed.
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { describeUnreadableReason, isUnreadableActionReason } from './psbtDecodeReasons.js';
 import {
     exactNetworkFeeSats,
+    exactSats,
     formatExactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
@@ -29,18 +25,112 @@ import {
     formatNativeBaseUnits,
     tickerForDescriptor,
 } from '../../registry/coinTicker.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import styles from './PsbtIntentPanel.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import '../../i18n/locales/en/send.js';
 
-function amountLabel(value, descriptor) {
+export function amountLabel(value, descriptor) {
     const smallestUnits = formatExactSats(value);
     if (smallestUnits === null) return null;
     if (!descriptor) return `${smallestUnits} sats`;
     const amount = formatNativeBaseUnits(value, descriptor);
     const ticker = tickerForDescriptor(descriptor);
-    return amount === null || !ticker ? null : `${amount} ${ticker}`;
+    return amount === null || !ticker ? null : `${formatWithThousands(amount) || amount} ${ticker}`;
+}
+
+/**
+ * Turn a bare native-coin PSBT into the same decoded and summary inputs the
+ * shared confirm model receives for a composed SEND. Change outputs are not
+ * recipients. Any positive output without an address stays unexplained and
+ * refuses the presentation instead of being hidden.
+ *
+ * @param {object} args
+ * @param {{ inputs?: Array<{value?: number|string}>, outputs?: Array<{address?: string|null, value?: number|string}> } | null} args.decomposed
+ * @param {Set<string>} [args.ownAddresses]
+ * @param {object} [args.chainDescriptor]
+ * @returns {{ actionName: 'SEND', decoded: object, summary: object, feeAmount: string|null, feeText: string|null } | null}
+ */
+export function barePsbtSendPresentation({ decomposed, ownAddresses, chainDescriptor }) {
+    const outputs = Array.isArray(decomposed?.outputs) ? decomposed.outputs : [];
+    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
+    const ticker = tickerForDescriptor(chainDescriptor);
+    if (!ticker || outputs.length === 0) return null;
+
+    const unexplained = outputs.some((output) => {
+        if (output?.address) return false;
+        const value = exactSats(output?.value);
+        return value === null || value > 0n;
+    });
+    if (unexplained) return null;
+
+    const recipients = outputs
+        .filter((output) => output?.address && !own.has(output.address))
+        .map((output) => {
+            const amount = formatNativeBaseUnits(output.value, chainDescriptor);
+            return amount === null ? null : {
+                to: output.address,
+                tick: ticker,
+                amount,
+            };
+        });
+    if (recipients.length === 0 || recipients.some((row) => row === null)) return null;
+
+    const feeSats = exactNetworkFeeSats(decomposed);
+    const feeAmount = feeSats === null ? null : formatNativeBaseUnits(feeSats, chainDescriptor);
+    const feeText = feeSats === null ? null : amountLabel(feeSats, chainDescriptor);
+    if (feeAmount === null || feeText === null) return null;
+
+    if (recipients.length === 1) {
+        const recipient = recipients[0];
+        const shownAmount = formatWithThousands(recipient.amount) || recipient.amount;
+        return {
+            actionName: 'SEND',
+            decoded: {
+                summary: `Send ${shownAmount} ${ticker} to ${recipient.to}.`,
+                details: [
+                    { label: 'Amount', value: shownAmount },
+                    { label: 'Token', value: ticker },
+                    { label: 'To', value: recipient.to },
+                ],
+                warnings: [],
+            },
+            summary: {
+                kind: 'send',
+                amount: recipient.amount,
+                ticker,
+                recipient: recipient.to,
+            },
+            feeAmount,
+            feeText,
+        };
+    }
+
+    const total = sumExactSats(outputs
+        .filter((output) => output?.address && !own.has(output.address))
+        .map((output) => output.value));
+    const totalAmount = total === null ? null : formatNativeBaseUnits(total, chainDescriptor);
+    if (totalAmount === null) return null;
+    const shownTotal = formatWithThousands(totalAmount) || totalAmount;
+    return {
+        actionName: 'SEND',
+        decoded: {
+            summary: `Send ${shownTotal} ${ticker} to ${recipients.length} recipients.`,
+            details: recipients.map((recipient, index) => ({
+                label: `Recipient ${index + 1}`,
+                value: `${formatWithThousands(recipient.amount) || recipient.amount} ${ticker} to ${recipient.to}`,
+            })),
+            warnings: [],
+        },
+        summary: {
+            kind: 'multiSend',
+            recipients,
+            totals: [`${shownTotal} ${ticker}`],
+            ticker,
+        },
+        feeAmount,
+        feeText,
+    };
 }
 
 /**
@@ -61,23 +151,17 @@ function undecodedSentence(decodeError) {
 /**
  * @param {object} props
  * @param {{ inputs: Array<{address?: string, value?: number}>, outputs: Array<{address?: string, value?: number}> } | null} props.decomposed
- * @param {Set<string>} [props.ownAddresses]      wallet-owned addresses (change + own-input marking)
- * @param {string} [props.signingAddress]         the address whose key will sign
  * @param {object|null} [props.decodedAction]     decodeActionFromPsbt intent, when the bytes decoded
  * @param {string|null} [props.decodeError]       why the action decode failed / was punted
  * @param {string|null} [props.unavailableMessage] caller-facing reason the transaction is unavailable
  * @param {boolean} [props.loading]
- * @param {object} [props.chainDescriptor]
  */
 export function PsbtIntentPanel({
     decomposed,
-    ownAddresses,
-    signingAddress,
     decodedAction = null,
     decodeError = null,
     unavailableMessage = null,
     loading = false,
-    chainDescriptor,
 }) {
     if (loading) {
         return <p className={styles.actionIntent}>{t('components.psbtIntentPanel.decodingTransaction')}</p>;
@@ -96,122 +180,25 @@ export function PsbtIntentPanel({
         );
     }
 
-    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
-    const inputs = Array.isArray(decomposed.inputs) ? decomposed.inputs : [];
-    const outputs = Array.isArray(decomposed.outputs) ? decomposed.outputs : [];
-
-    const totalIn = inputs.length > 0
-        ? sumExactSats(inputs.map((input) => input.value))
-        : null;
-    const totalOut = sumExactSats(outputs.map((output) => output.value));
-    const fee = exactNetworkFeeSats(decomposed);
-    const leaving = sumExactSats(outputs
-        .filter((output) => !output.address || !own.has(output.address))
-        .map((output) => output.value));
-
-    return (
-        <div className={styles.panel} data-testid="psbt-intent-panel">
-            {/* The action data, when it decoded, is context ABOVE the output
-                set - never a substitute for it. */}
-            {decodedAction?.summary ? (
+    if (decodedAction?.summary) {
+        return (
+            <div className={styles.panel} data-testid="psbt-intent-panel">
                 <p className={styles.actionIntent} data-testid="psbt-action-intent">
                     {decodedAction.summary}
                 </p>
-            ) : isUnreadableActionReason(decodeError) ? (
-                // An action IS in here and the wallet could not read it. Loud:
-                // this is the case where the output set is the ONLY thing the
-                // user can verify.
-                <>
-                    <StatusMessage variant="warning" role="alert" testId="psbt-action-undecoded">
-                        {undecodedSentence(decodeError)}
-                        {' '}{t('components.psbtIntentPanel.verifyTheAmountsAndDestinations')}
-                    </StatusMessage>
-                    {/* The raw decoder code stays available for support, but
-                        outside the alert so a signer reads only plain words. */}
-                    <details className={styles.details} data-testid="psbt-action-undecoded-details">
-                        <summary>{t('pending.detail.technicalDetails')}</summary>
-                        <code>{decodeError}</code>
-                    </details>
-                </>
-            ) : (
-                // No action at all: an ordinary payment. Stating that plainly is
-                // honest; an alert here would cry wolf on the common case and
-                // train the user to click through the warnings that matter.
-                <p className={styles.actionIntent} data-testid="psbt-action-none">
-                    {t('components.psbtIntentPanel.ordinaryPaymentThisTransactionCarries')}
-                </p>
-            )}
-
-            <div className={styles.section}>
-                <p className={styles.sectionLabel}>
-                    {t('components.psbtIntentPanel.inputs')}{inputs.length}{t('components.psbtIntentPanel.whatThisTransactionSpends')}
-                </p>
-                {inputs.map((inp, i) => {
-                    const isOwn = !!inp.address && own.has(inp.address);
-                    const signs = !!inp.address && !!signingAddress && inp.address === signingAddress;
-                    const amount = amountLabel(inp.value, chainDescriptor);
-                    const isUnknown = !inp.address || amount === null;
-                    return (
-                        <div className={styles.row} key={`in-${i}`} data-testid="psbt-input">
-                            <span className={signs ? styles.tag : styles.tagMuted}>
-                                {isUnknown
-                                    ? t('components.psbtIntentPanel.unknownInput')
-                                    : signs
-                                        ? t('components.psbtIntentPanel.signsWithYourKey')
-                                        : isOwn ? t('components.psbtIntentPanel.yourAddress') : t('components.psbtIntentPanel.otherSigner')}
-                            </span>
-                            {inp.address
-                                ? <span className={styles.addr}><AddressText address={inp.address} truncate={false} /></span>
-                                : <span className={styles.dataOutput}>{t('components.psbtIntentPanel.unknownSourceScript')}</span>}
-                            <span className={styles.value}>
-                                {amount !== null ? amount : t('components.psbtIntentPanel.amountUnknown')}
-                            </span>
-                        </div>
-                    );
-                })}
             </div>
-
-            <div className={styles.section}>
-                <p className={styles.sectionLabel}>
-                    {t('components.psbtIntentPanel.outputs')}{outputs.length}{t('components.psbtIntentPanel.whereTheCoinsGo')}
-                </p>
-                {outputs.map((o, i) => {
-                    const isChange = !!o.address && own.has(o.address);
-                    const amount = amountLabel(o.value, chainDescriptor);
-                    return (
-                        <div className={styles.row} key={`out-${i}`} data-testid="psbt-output">
-                            <span className={isChange ? styles.tagMuted : styles.tag}>
-                                {isChange ? t('components.psbtIntentPanel.changeBackToYou') : t('components.psbtIntentPanel.recipient')}
-                            </span>
-                            {o.address
-                                ? <span className={styles.addr}><AddressText address={o.address} truncate={false} /></span>
-                                : <span className={styles.dataOutput}>{t('components.psbtIntentPanel.dataNonAddressOutput')}</span>}
-                            <span className={styles.value}>
-                                {amount !== null ? amount : t('components.psbtIntentPanel.amountUnknown')}
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-
-            <dl className={styles.totals}>
-                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.leavingThisWallet')}</dt>
-                <dd className={styles.totalsValue}>
-                    {leaving != null ? amountLabel(leaving, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
-                </dd>
-                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.totalIn')}</dt>
-                <dd className={styles.totalsValue}>
-                    {totalIn != null ? amountLabel(totalIn, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
-                </dd>
-                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.totalOut')}</dt>
-                <dd className={styles.totalsValue}>
-                    {totalOut != null ? amountLabel(totalOut, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
-                </dd>
-                <dt className={styles.totalsLabel}>{t('send.networkFee')}</dt>
-                <dd className={styles.totalsValue}>
-                    {fee != null ? amountLabel(fee, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
-                </dd>
-            </dl>
+        );
+    }
+    if (!isUnreadableActionReason(decodeError)) return null;
+    return (
+        <div className={styles.panel} data-testid="psbt-intent-panel">
+            <StatusMessage variant="warning" role="alert" testId="psbt-action-undecoded">
+                {undecodedSentence(decodeError)}
+            </StatusMessage>
+            <details className={styles.details} data-testid="psbt-action-undecoded-details">
+                <summary>{t('pending.detail.technicalDetails')}</summary>
+                <code>{decodeError}</code>
+            </details>
         </div>
     );
 }

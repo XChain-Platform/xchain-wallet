@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import {
     ACTION_ENTRY_DEFS,
     ACTION_GROUPS,
@@ -18,11 +19,13 @@ import {
 } from '../../../packages/core/src/shared/actionEntries.js';
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function mount(entries, walletMode = 'full') {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
-        getSettings: vi.fn(async () => ({ walletMode })),
+        getSettings: vi.fn(async () => ({})),
+        listWallets: vi.fn(async () => [{ id: 'w', name: 'W', walletMode }]),
     };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -32,6 +35,38 @@ function mount(entries, walletMode = 'full') {
 }
 
 describe('ActionsMenu navigation semantics', () => {
+    it('titles the catalogue All actions and gives every entry a non-destructive icon row', () => {
+        const handlers = Object.fromEntries(
+            ACTION_ENTRY_DEFS.map((entry) => [entry.handler, vi.fn()]),
+        );
+        mount(buildActionEntries(handlers, { pairsTrezor: true }));
+
+        expect(screen.getByRole('heading', { level: 1, name: 'All Actions' })).toBeTruthy();
+        // Every entry is an ActionList row (G101): a button in a list item,
+        // its icon in the tinted square, in the default (not danger) tone.
+        const buttons = screen.getAllByRole('listitem').map((item) => item.querySelector('button'));
+        expect(buttons).toHaveLength(ACTION_ENTRY_DEFS.length);
+        for (const button of buttons) {
+            expect(button.querySelector('[aria-hidden="true"][data-tone] svg'), button.textContent).toBeTruthy();
+            expect(button.getAttribute('data-tone'), button.textContent).toBe('default');
+        }
+    });
+
+    it('draws each section as an ActionList named by its heading, and every row runs its own handler', () => {
+        const onIssue = vi.fn();
+        const onSwap = vi.fn();
+        mount(buildActionEntries({ onIssue, onSwap }));
+
+        const tokens = screen.getByRole('list', { name: 'Tokens' });
+        expect(tokens.tagName).toBe('UL');
+        expect(tokens.closest('section').getAttribute('aria-labelledby'))
+            .toBe(screen.getByRole('heading', { level: 2, name: 'Tokens' }).id);
+        fireEvent.click(within(tokens).getByRole('button', { name: /^Issue token/ }));
+        expect(onIssue).toHaveBeenCalledTimes(1);
+        fireEvent.click(within(screen.getByRole('list', { name: 'Markets' })).getByRole('button', { name: /^Swap/ }));
+        expect(onSwap).toHaveBeenCalledTimes(1);
+    });
+
     it('assigns every catalogue entry to exactly one stable section', () => {
         const groupedIds = ACTION_GROUPS.flatMap((group) => group.entryIds);
         expect(groupedIds).toHaveLength(ACTION_ENTRY_DEFS.length);
@@ -81,11 +116,12 @@ describe('ActionsMenu navigation semantics', () => {
         button.focus();
         expect(document.activeElement).toBe(button);
         expect(button.getAttribute('aria-disabled')).toBe('true');
+        // An off ActionList row shows its reason in place of its description.
         const describedBy = button.getAttribute('aria-describedby').split(' ');
         expect(describedBy.map((id) => document.getElementById(id).textContent)).toEqual([
-            'Needs a supported chain.',
             'Unavailable: Add a Bitcoin address to this wallet.',
         ]);
+        expect(button.textContent).not.toContain('Needs a supported chain.');
         fireEvent.click(button);
         expect(unavailable).not.toHaveBeenCalled();
         expect(screen.queryByText('Dead action')).toBeNull();
@@ -105,5 +141,12 @@ describe('ActionsMenu navigation semantics', () => {
         expect(screen.getByText('Sign message')).toBeTruthy();
         expect(screen.getByText('Verify signature')).toBeTruthy();
         expect(screen.getByText('Sign transaction')).toBeTruthy();
+    });
+
+    it('keeps developer tools out of the catalogue and lists Multisig signing', () => {
+        const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
+        expect(ids).not.toContain('parallel');
+        expect(ids).not.toContain('advanced');
+        expect(ids).toContain('multisig-sign');
     });
 });

@@ -26,6 +26,8 @@
 // request named, which is the same set `submitAction` would have dropped.
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
+import { isWalletDataWriteType } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
+import { markWalletDataStale } from '@xchain-wallet/core/shared/utils/walletDataFreshness.js';
 import { hydrateEnvelopeError } from '../background/MessageHost.js';
 import { createSurfaceStateBroadcaster } from './surfaceStateSync.js';
 
@@ -44,6 +46,7 @@ export const RUNTIME_REQUEST_TIMEOUT_MS = 60_000;
 const TIMED_SHELL_REQUESTS = new Set([
     'account.list',
     'addresses.byChain',
+    'addresses.byWallet',
     'balances.wallet',
     'broadcast.queue.list',
     'contacts.list',
@@ -135,6 +138,8 @@ function sendMessageOnce(type, request, timeoutMs) {
                     const req = /** @type {any} */ (request);
                     invalidateTokenInfoForAction(req?.chainId, req);
                 }
+                // A broadcast or an address write changed this wallet's reads; saved ones are stale.
+                if (isWalletDataWriteType(type)) markWalletDataStale();
                 if (type === 'settings.update' && response.result
                     && typeof response.result === 'object') {
                     publishSettingsChange(response.result);
@@ -167,6 +172,7 @@ function sendMessageOnce(type, request, timeoutMs) {
 const REPEATABLE_READS = new Set([
     'account.list',
     'addresses.byChain',
+    'addresses.byWallet',
     'balances.wallet',
     'broadcast.queue.list',
     'contacts.list',

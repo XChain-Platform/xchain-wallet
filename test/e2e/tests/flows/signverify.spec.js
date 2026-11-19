@@ -95,67 +95,45 @@ async function signAndVerify(page, viewportName) {
     await switchToRegtest(page, PASSWORD);
     const address = await readReceiveAddress(page);
 
-    await openPaletteRoute(page, 'Sign a message', 'Sign message', 'Sign message');
+    await openPaletteRoute(page, 'Sign message', 'Sign Message', 'Sign message');
     const signForm = page.getByRole('form', { name: 'Sign message', exact: true });
     await selectVenueChain(signForm, 'Network');
-    const addressField = signForm.getByLabel('Address', { exact: true });
-    const addressOption = addressField.locator('option').filter({ hasText: address });
-    await expect(addressOption, 'the sign form does not offer the active address').toHaveCount(1);
-    const addressId = await addressOption.getAttribute('value');
-    expect(addressId, 'the active address option has no address id').toBeTruthy();
-    await addressField.selectOption(addressId);
+    const addressField = signForm.getByLabel('Signing address', { exact: true });
+    // The Address field is a read-only picker field that starts on the chain's
+    // active address, so the form offering the active address is its value.
+    await expect(addressField, 'the sign form does not start on the active address')
+        .toHaveValue(address);
     await signForm.getByLabel('Message', { exact: true }).fill(MESSAGE);
-    await expectScreen(page, 'Sign message', `${viewportName} sign form`);
+    await expectScreen(page, 'Sign Message', `${viewportName} sign form`);
 
-    await signForm.getByRole('button', { name: 'Sign message', exact: true }).click();
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 30_000 });
-    await expectScreen(page, 'Confirm', `${viewportName} sign review`);
-    expect(
-        await page.getByRole('main').evaluate((main) => main.scrollTop),
-        `${viewportName} sign review did not open at the top`,
-    ).toBeLessThanOrEqual(1);
-    await expect(confirm).toContainText('Sign this message');
-    await expect(confirm.getByTestId('confirm-message-text')).toHaveText(MESSAGE);
-    await expect(confirm.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
-    await expect(confirm.getByTestId('confirm-source')).toContainText(address);
-    // The review's Reject and Approve sit in the screen's pinned footer, a
-    // sibling of the confirm body rather than inside it, so they are named by
-    // their own test ids.
-    await expectSharedLineHeights(
-        page.getByTestId('confirm-reject').or(page.getByTestId('confirm-approve')),
-        `${viewportName} sign review actions`,
-    );
-
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 30_000 });
-    await approve.click();
-
-    const copySignature = page.getByRole('button', { name: 'Copy signature', exact: true });
+    // Sign message started inside the wallet signs in place with no approval
+    // page (ruling U92); the Signature box is on the form from the start.
+    const signatureBox = signForm.getByRole('textbox', { name: 'Signature', exact: true });
+    await expect(signatureBox).toContainText('The signature appears here after you sign.');
+    await signForm.getByRole('button', { name: 'Sign Message', exact: true }).click();
+    const copySignature = signForm.getByRole('button', { name: 'Copy Signature', exact: true });
     await expect(copySignature).toBeVisible({ timeout: 30_000 });
-    await expectScreen(page, 'Sign message', `${viewportName} signed result`);
-    const resultValues = page.getByRole('main').locator('pre');
-    await expect(resultValues).toHaveCount(2);
-    await expect(resultValues.first()).toHaveText(MESSAGE);
-    const signature = (await resultValues.nth(1).textContent() || '').trim();
+    await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    await expectScreen(page, 'Sign Message', `${viewportName} signed result`);
+    const signature = (await signatureBox.locator('pre').textContent() || '').trim();
     expect(signature, 'signing returned no base64 signature').toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
 
     await copySignature.click();
-    // The copied state renames the button to its confirmation ("Copied:
-    // signature") for about 1.5 s, so it is found by that name; a failed copy
-    // keeps the "Copy signature" name with data-state="failed".
-    await expect(page.getByRole('button', { name: 'Copied: signature', exact: true }))
-        .toHaveAttribute('data-state', 'copied');
+    // The Signature copy button is icon-only, so its accessible name stays
+    // "Copy Signature" in every state (the "Copied: Signature" text goes to the
+    // screen-reader announcement, not the name). The copied state is read from
+    // the same button's data-state; a failed copy would show "failed".
+    await expect(copySignature).toHaveAttribute('data-state', 'copied');
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
         .toBe(signature);
 
     await openPaletteRoute(
         page,
         'Verify a signature',
-        'Verify signature',
-        'Verify signature',
+        'Verify Signature',
+        'Verify Signature',
     );
-    const verifyForm = page.getByRole('form', { name: 'Verify signature', exact: true });
+    const verifyForm = page.getByRole('form', { name: 'Verify Signature', exact: true });
     await selectVenueChain(verifyForm, 'Network');
     await verifyForm.getByLabel('Address', { exact: true }).fill(address);
     await verifyForm.getByLabel('Message', { exact: true }).fill(MESSAGE);
@@ -163,9 +141,9 @@ async function signAndVerify(page, viewportName) {
     await signatureField.focus();
     await page.keyboard.press('ControlOrMeta+V');
     await expect(signatureField).toHaveValue(signature);
-    await expectScreen(page, 'Verify signature', `${viewportName} verify form`);
+    await expectScreen(page, 'Verify Signature', `${viewportName} verify form`);
 
-    await verifyForm.getByRole('button', { name: 'Verify signature', exact: true }).click();
+    await verifyForm.getByRole('button', { name: 'Verify Signature', exact: true }).click();
     // FormPage draws a plain form's notices just above the form, as a sibling
     // of it, so the verdict is read from the screen's main content and not
     // from inside the form landmark.
@@ -173,7 +151,7 @@ async function signAndVerify(page, viewportName) {
         'Valid signature. Signature matches this message and address.',
         { timeout: 30_000 },
     );
-    await expectScreen(page, 'Verify signature', `${viewportName} verified result`);
+    await expectScreen(page, 'Verify Signature', `${viewportName} verified result`);
 }
 
 export function defineSignVerifyTests() {

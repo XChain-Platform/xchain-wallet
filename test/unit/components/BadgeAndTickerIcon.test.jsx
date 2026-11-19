@@ -47,7 +47,7 @@ describe('badge presentation', () => {
             </>,
         );
 
-        const watchOnly = screen.getByRole('status', { name: 'Watch-only wallet' });
+        const watchOnly = screen.getByRole('status', { name: 'Another phone signs for this wallet' });
         const dispenser = await screen.findByRole('status', {
             name: '1 open dispenser for XCHAIN on bitcoin-mainnet',
         });
@@ -173,9 +173,10 @@ describe('TickerIcon', () => {
     });
 
     it('names a token fallback and uses theme tokens for foreground and pip colors', () => {
-        render(<TickerIcon chainId="bitcoin-mainnet" tick="XCHAIN" size={32} />);
+        // Any token without artwork; XCHAIN itself now draws the bundled mark.
+        render(<TickerIcon chainId="bitcoin-mainnet" tick="PEPECASH" size={32} />);
 
-        const icon = screen.getByRole('img', { name: /XCHAIN on /i });
+        const icon = screen.getByRole('img', { name: /PEPECASH on /i });
         const fallback = icon.firstElementChild;
         const pip = icon.querySelector('img');
 

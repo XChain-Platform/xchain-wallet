@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 // Smoke for PC-10 "My Lists" (LIST v0 create / v1 fork manager):
-// MyLists, ListCreateForm, ListDetail, ListForkForm; the `listsForSource`
+// MyLists, ListCreateForm (the one List form; its Edit and Fork body was
+// ListForkForm), ListDetail; the `listsForSource`
 // read; the shared background host + 3-shell messaging wiring; and
-// route registration (LeftNav, MenuRoute, command palette, App.jsx).
+// route registration (LeftNav, wallet menu, command palette, App.jsx).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -19,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, SIDEBAR_SECONDARY_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -36,7 +37,6 @@ for (const [file, exportName] of [
     ['MyLists.jsx', 'MyLists'],
     ['ListCreateForm.jsx', 'ListCreateForm'],
     ['ListDetail.jsx', 'ListDetail'],
-    ['ListForkForm.jsx', 'ListForkForm'],
 ]) {
     const p = join(sharedRoutes, file);
     assert.ok(existsSync(p), `${file} exists`);
@@ -48,7 +48,8 @@ for (const [file, exportName] of [
 const myListsSrc = readFileSync(join(sharedRoutes, 'MyLists.jsx'), 'utf8');
 const createSrc = readFileSync(join(sharedRoutes, 'ListCreateForm.jsx'), 'utf8');
 const detailSrc = readFileSync(join(sharedRoutes, 'ListDetail.jsx'), 'utf8');
-const forkSrc = readFileSync(join(sharedRoutes, 'ListForkForm.jsx'), 'utf8');
+// The fork lives in the one List form now (its Edit and Fork body).
+const forkSrc = createSrc;
 
 // --- MyLists: fans out the new read over every address, per chain ---
 
@@ -76,8 +77,8 @@ assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin,
     'ListCreateForm validates pasted addresses against the active chain');
 assert.ok(/permanent public on-chain data/.test(createSrc),
     'ListCreateForm shows the pasted/contact-book address privacy line');
-assert.ok(/bigger transaction/.test(createSrc),
-    'ListCreateForm shows a fee-scales-with-member-count hint');
+assert.ok(/Each address adds to the transaction size and increases the network fee/.test(createSrc),
+    'ListCreateForm puts the fee-scales-with-member-count explanation in Addresses help');
 assert.ok(/isWatcherMode/.test(createSrc), 'ListCreateForm is watcher-mode aware (single tx: supported, not blocked)');
 assert.ok(/isHwSource/.test(createSrc), 'ListCreateForm checks for a hardware source');
 
@@ -91,8 +92,11 @@ assert.ok(/data\.edits\b/.test(detailSrc), 'ListDetail reads the fork delta from
 // so the current membership is state.current_list, not the as-created list.
 assert.ok(/data\?\.state\b/.test(detailSrc) && /current_list/.test(detailSrc),
     'ListDetail reads the resolved membership from data.state.current_list');
-assert.ok(/no reverse lookup/.test(detailSrc),
-    'ListDetail states plainly that no list-to-consumer reverse lookup exists');
+// The explorer has no list-to-consumer reverse lookup. The List detail
+// redesign dropped the "Used by" panel that explained the gap, so the
+// page must not pretend to show what references a list either.
+assert.ok(!/Used by|usedBy/.test(detailSrc),
+    'ListDetail shows no "Used by" panel, since no list-to-consumer reverse lookup exists');
 assert.ok(/onFork/.test(detailSrc), 'ListDetail exposes a Fork & edit action');
 
 // --- ListForkForm: v1 ADD/REMOVE, two-leg chaining, repoint rail ---
@@ -103,7 +107,7 @@ assert.ok(/EDIT:\s*(needsAdd \? '1' : '2'|'2')/.test(forkSrc),
 assert.ok(/twoPhase/.test(forkSrc),
     'ListForkForm recognizes the add-and-remove case needs two chained transactions');
 assert.ok(/wait-index/.test(forkSrc), 'ListForkForm has a wait-index stage for the two-leg case');
-assert.ok(/Not available in watcher mode/.test(forkSrc),
+assert.ok(/Not available when another phone signs/.test(forkSrc),
     'ListForkForm blocks watcher mode only for the two-leg (add+remove) case');
 assert.ok(/REPOINT_TARGETS/.test(forkSrc), 'ListForkForm defines the repoint-rail consumer classes');
 assert.ok(/stays live everywhere it is referenced/.test(forkSrc),
@@ -163,24 +167,20 @@ for (const [shell, msgPath] of [
     assert.ok(m.includes("'lists.forSource'"), `${shell} messaging.js dispatches lists.forSource`);
 }
 
-// --- Registration: LeftNav, BottomTabBar, MenuRoute, command palette ---
+// --- Registration: LeftNav, wallet menu, command palette ---
 
-const leftNav = readFileSync(join(sharedComponents, 'LeftNav.jsx'), 'utf8');
-assert.ok(/id:\s*'lists'/.test(leftNav), 'LeftNav lists a "lists" nav item');
+assert.ok(!SIDEBAR_SECONDARY_DESTINATIONS.includes('lists'), 'Lists stays in the complete wallet menu');
 assert.ok(['list-detail', 'list-create', 'list-fork'].every(
     (route) => ROUTE_NAV_GROUPS.lists.includes(route),
 ),
-    'LeftNav groups list-detail/list-create/list-fork under the Lists highlight');
+    'list routes retain their shared route section outside the side menu');
 
-const bottomBar = readFileSync(join(sharedComponents, 'BottomTabBar.jsx'), 'utf8');
-assert.ok(/id:\s*'lists'/.test(bottomBar), 'BottomTabBar lists a "lists" item in its More sheet');
-
-const menuRoute = readFileSync(join(sharedRoutes, 'MenuRoute.jsx'), 'utf8');
-assert.ok(/onLists/.test(menuRoute), 'MenuRoute accepts onLists');
-assert.ok(/id:\s*'lists'/.test(menuRoute), 'MenuRoute renders a My Lists entry');
+const walletMenu = readFileSync(join(core, 'src', 'shared', 'walletMenu.js'), 'utf8');
+assert.ok(/id:\s*'lists'/.test(walletMenu), 'Wallet menu renders a My Lists entry');
 
 const commandRegistry = readFileSync(join(core, 'src', 'shared', 'commandPalette', 'commandRegistry.js'), 'utf8');
-assert.ok(/nav-lists/.test(commandRegistry), 'Command palette has a nav-lists command');
+assert.ok(/\|\| `nav-\$\{row\.id\}`/.test(commandRegistry) && /visibleWalletMenu\(/.test(commandRegistry),
+    'Command palette builds a nav-lists command from the wallet menu catalogue');
 assert.ok(/create-list/.test(commandRegistry), 'Command palette has a create-list command');
 
 // --- App.jsx wiring (all three shells) ---
@@ -195,20 +195,20 @@ for (const [shell, appPath] of [
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
-    for (const comp of ['MyLists', 'ListDetail', 'ListCreateForm', 'ListForkForm']) {
+    for (const comp of ['MyLists', 'ListDetail', 'ListCreateForm']) {
         assert.ok(app.includes(comp), `${shell} App.jsx imports ${comp}`);
     }
     for (const view of ["'lists'", "'list-detail'", "'list-create'", "'list-fork'"]) {
         assert.ok(app.includes(view), `${shell} tracks ${view} sub-route`);
     }
-    assert.ok(/repointHandlers=\{\{[\s\S]*'issue-lists'[\s\S]*'dispenser-lists'[\s\S]*'order-lists'/.test(app),
+    assert.ok(/'issue-lists'[\s\S]*'dispenser-lists'[\s\S]*'order-lists'[\s\S]*action="fork"[\s\S]*repointHandlers=/.test(app),
         `${shell} App.jsx wires the fork repoint rail to each consumer's edit screen`);
 }
 
 console.log(
-    'OK: list-manager smoke (MyLists/ListCreateForm/ListDetail/ListForkForm exist + wired; '
+    'OK: list-manager smoke (MyLists/ListCreateForm/ListDetail exist + wired; '
     + 'LIST v0 create reuses createList/createListHw/buildActionPsbtRequest; LIST v1 fork chains '
     + 'add-then-remove with a wait-index leg and blocks watcher mode only for that case; honest '
     + '"used by" + repoint-rail gaps; listsForSource flow + host + 3-shell messaging; '
-    + 'LeftNav/BottomTabBar/MenuRoute/command-palette/App.jsx registration)',
+    + 'LeftNav/wallet-menu/command-palette/App.jsx registration)',
 );

@@ -60,7 +60,6 @@ function DesktopKeyboardShell() {
                 <LeftNav
                     currentView={view}
                     onSelect={setView}
-                    onCommandPalette={palette.openPalette}
                 />
             )}
         >
@@ -96,13 +95,29 @@ describe('desktop renderer keyboard shell', () => {
         pressEnter(skip);
         expect(document.getElementById('xc-main')).toHaveFocus();
 
-        const paletteTrigger = screen.getByRole('button', { name: 'Open command palette' });
+        // The side menu has no Search row (U99, operator 2026-11-18): Home is its first stop.
+        expect(screen.queryByRole('button', { name: 'Open the wallet menu' })).toBeNull();
         const home = screen.getByRole('button', { name: 'Home' });
+        const send = screen.getByRole('button', { name: 'Send' });
+        const receive = screen.getByRole('button', { name: 'Receive' });
+        const myTokens = screen.getByRole('button', { name: 'My Tokens' });
         const history = screen.getByRole('button', { name: 'History' });
-        paletteTrigger.focus();
-        fireEvent.keyDown(paletteTrigger, { key: 'ArrowDown' });
+        const nav = screen.getByRole('navigation');
+        const navButtons = [...nav.querySelectorAll('button:not(:disabled)')];
+        expect(navButtons[0]).toBe(home);
+        home.focus();
+        fireEvent.keyDown(home, { key: 'ArrowUp' });
+        expect(navButtons.at(-1)).toHaveFocus();
+        navButtons.at(-1).focus();
+        fireEvent.keyDown(navButtons.at(-1), { key: 'ArrowDown' });
         expect(home).toHaveFocus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
+        expect(send).toHaveFocus();
+        fireEvent.keyDown(send, { key: 'ArrowDown' });
+        expect(receive).toHaveFocus();
+        fireEvent.keyDown(receive, { key: 'ArrowDown' });
+        expect(myTokens).toHaveFocus();
+        fireEvent.keyDown(myTokens, { key: 'ArrowDown' });
         expect(history).toHaveFocus();
         pressEnter(history);
 
@@ -118,12 +133,12 @@ describe('desktop renderer keyboard shell', () => {
         fireEvent.keyDown(home, { key: 'k', ctrlKey: true });
         await flushFocus();
         const search = screen.getByRole('combobox', { name: 'Search commands' });
-        expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Command Palette' })).toBeTruthy();
         expect(search).toHaveFocus();
 
         fireEvent.keyDown(search, { key: 'Escape' });
         await flushFocus();
-        expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         expect(home).toHaveFocus();
     });
 
@@ -135,14 +150,14 @@ describe('desktop renderer keyboard shell', () => {
         fireEvent.keyDown(history, { key: '?' });
         await flushFocus();
         const close = screen.getByRole('button', { name: 'Close' });
-        expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeTruthy();
         expect(close).toHaveFocus();
 
         fireEvent.keyDown(close, { key: 'k', ctrlKey: true });
-        expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         fireEvent.keyDown(close, { key: 'Escape' });
         await flushFocus();
-        expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeNull();
         expect(history).toHaveFocus();
     });
 

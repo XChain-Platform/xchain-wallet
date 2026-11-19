@@ -52,7 +52,7 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * @typedef {Object} PendingTx
- * @property {1} schemaVersion
+ * @property {typeof CURRENT_VERSION} schemaVersion
  * @property {string} id
  * @property {string} chain
  * @property {typeof NETWORKS[number]} network

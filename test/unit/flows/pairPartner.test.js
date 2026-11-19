@@ -85,7 +85,7 @@ const ALL_CHAINS = Object.keys(CHAINS);
 
 async function payloadFor(seed, walletMode, chainIds = ALL_CHAINS, opts = {}) {
     const keys = await collectPairingKeys({
-        signer: mkSigner(seed, opts), chainRegistry: registry, chainIds,
+        signer: mkSigner(seed, opts), chainRegistry: registry, chainIds, format: 'bip39',
     });
     return buildPairingPayload({ walletMode, keys, label: `${walletMode} half` });
 }
@@ -108,19 +108,19 @@ describe('flows/pairPartner role helpers', () => {
         const watcher = describePairingLane('watcher');
         expect(watcher.available).toBe(true);
         expect(watcher.partnerMode).toBe('signer');
-        expect(watcher.cta).toBe('Pair a signer');
+        expect(watcher.cta).toBe('Pair the Signer Phone');
 
         const signer = describePairingLane('signer');
         expect(signer.available).toBe(true);
         expect(signer.partnerMode).toBe('watcher');
-        expect(signer.cta).toBe('Pair a watcher');
+        expect(signer.cta).toBe('Pair the Other Phone');
     });
 
     it('reports the lane unavailable for a full wallet', () => {
         const lane = describePairingLane('full');
         expect(lane.available).toBe(false);
         expect(lane.cta).toBeNull();
-        expect(lane.help).toMatch(/Watcher and Signer/);
+        expect(lane.help).toMatch(/set up with another phone/);
     });
 });
 
@@ -177,7 +177,7 @@ describe('flows/pairPartner key ids', () => {
 describe('flows/pairPartner collectPairingKeys', () => {
     it('reads one account-level key per chain, with xpub when available', async () => {
         const keys = await collectPairingKeys({
-            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ALL_CHAINS,
+            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ALL_CHAINS, format: 'bip39',
         });
         expect(keys).toHaveLength(3);
         expect(keys.map((k) => k.chainId)).toEqual(ALL_CHAINS);
@@ -202,7 +202,9 @@ describe('flows/pairPartner collectPairingKeys', () => {
                 return soft.getPublicKey(params);
             },
         };
-        const keys = await collectPairingKeys({ signer, chainRegistry: registry, chainIds: ALL_CHAINS });
+        const keys = await collectPairingKeys({
+            signer, chainRegistry: registry, chainIds: ALL_CHAINS, format: 'bip39',
+        });
         expect(keys.map((k) => k.xpub)).toEqual([null, null, null]);
         expect(keys[0].keyId).toMatch(/^[0-9a-f]{64}$/);
         expect(calls).toEqual(keys.map((k) => ({ chainId: k.chainId, path: k.path })));
@@ -213,14 +215,21 @@ describe('flows/pairPartner collectPairingKeys', () => {
             signer: mkSigner(SEED_A),
             chainRegistry: registry,
             chainIds: ['bitcoin-mainnet', 'nosuch-chain'],
+            format: 'bip39',
         });
         expect(keys.map((k) => k.chainId)).toEqual(['bitcoin-mainnet']);
     });
 
     it('throws when no requested chain resolves a path', async () => {
         await expect(collectPairingKeys({
-            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ['nosuch-chain'],
+            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ['nosuch-chain'], format: 'bip39',
         })).rejects.toThrow(/no.*chains|derivation path/i);
+    });
+
+    it('requires the wallet seed derivation format', async () => {
+        await expect(collectPairingKeys({
+            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ALL_CHAINS,
+        })).rejects.toThrow(/format is required/);
     });
 
     it('requires an unlocked signer', async () => {
@@ -255,7 +264,7 @@ describe('flows/pairPartner payload encoding', () => {
 
     it('refuses to build a payload for a full wallet', async () => {
         const keys = await collectPairingKeys({
-            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ALL_CHAINS,
+            signer: mkSigner(SEED_A), chainRegistry: registry, chainIds: ALL_CHAINS, format: 'bip39',
         });
         expect(() => buildPairingPayload({ walletMode: 'full', keys })).toThrow(/watcher or signer/);
     });
@@ -325,7 +334,7 @@ describe('flows/pairPartner verifyPartnerPairing', () => {
         const v = verifyPartnerPairing({ local, partner });
         expect(v.ok).toBe(false);
         expect(v.reason).toBe('mode-mismatch');
-        expect(v.message).toMatch(/must be in signer mode/);
+        expect(v.message).toMatch(/Both phones were set up for the same job/);
     });
 
     it('pairs on the overlap when the offline half has fewer chains switched on', async () => {

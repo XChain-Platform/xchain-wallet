@@ -99,13 +99,13 @@ describe('VaultUnavailable: what every kind says', () => {
     );
 
     it.each([
-        ['locked', /unlock your device, then choose try again/i],
-        ['corrupt', /restore your wallet from your recovery phrase or an encrypted backup/i],
-        ['unavailable', /try again.*contact support/i],
-        ['evicted', /try again once.*restore your wallet/i],
-    ])('gives a %s user a plain next step', (kind, nextStep) => {
+        ['locked', /secure storage stays locked until you unlock the device itself/i],
+        ['corrupt', /stored wallet file is damaged, and trying again won't repair it/i],
+        ['unavailable', /secure storage couldn't be reached.*usually temporary/i],
+        ['evicted', /browser removed it.*clear site data/i],
+    ])('keeps the facts for a %s vault in its paragraph', (kind, facts) => {
         renderScreen({ kind });
-        expect(screen.getByText(nextStep)).toBeTruthy();
+        expect(screen.getByText(facts)).toBeTruthy();
     });
 
     it('never renders raw error details or objects', () => {
@@ -115,14 +115,13 @@ describe('VaultUnavailable: what every kind says', () => {
         expect(screen.queryByText(/bad tag/i)).toBeNull();
     });
 
-    it('says something different for each kind', () => {
-        const seen = new Set();
-        for (const kind of KINDS) {
-            cleanup();
-            renderScreen({ kind });
-            seen.add(screen.getByRole('heading').textContent);
-        }
-        expect(seen.size).toBe(KINDS.length);
+    it.each(KINDS)('renders %s outside the wallet shell with one heading and one paragraph', (kind) => {
+        const { container } = renderScreen({ kind });
+        expect(screen.getAllByRole('heading')).toHaveLength(1);
+        expect(screen.getByRole('heading', { name: "Your wallet couldn't be opened" })).toBeTruthy();
+        expect(container.querySelectorAll('p')).toHaveLength(1);
+        expect(container.querySelectorAll('header')).toHaveLength(0);
+        expect(screen.queryByText('Wallet Unavailable')).toBeNull();
     });
 
     it('tells an evicted user the browser did it, and how to stop it recurring', () => {
@@ -131,8 +130,8 @@ describe('VaultUnavailable: what every kind says', () => {
         // reset itself, and the fix is a storage tier the browser will not
         // evict (an installed app, a home-screen icon).
         renderScreen({ kind: 'evicted' });
-        expect(screen.getByRole('heading').textContent).toMatch(/browser removed/i);
-        expect(screen.getByText(/The wallet did not do this/i)).toBeTruthy();
+        expect(screen.getByText(/browser removed it/i)).toBeTruthy();
+        expect(screen.getByText(/The wallet did not remove it/i)).toBeTruthy();
         expect(screen.getByText(/add this site to your home screen/i)).toBeTruthy();
     });
 
@@ -140,21 +139,40 @@ describe('VaultUnavailable: what every kind says', () => {
         renderScreen({ kind: 'locked' });
         // The fix, not just the diagnosis - and it must say the wallet is
         // safe, because "your wallet could not be opened" reads as loss.
-        expect(screen.getByText(/Unlock your device, then choose Try again/i)).toBeTruthy();
-        expect(screen.getByText(/Your wallet is safe on this device/i)).toBeTruthy();
+        expect(screen.getByText(/secure storage stays locked until you unlock the device itself/i)).toBeTruthy();
+        expect(screen.getByText(/still in storage on this device/i)).toBeTruthy();
+    });
+
+    it.each(KINDS)('keeps all %s guidance in the single paragraph', (kind) => {
+        const { container } = renderScreen({ kind });
+        const paragraph = screen.getByText(/recovery phrase still holds everything/i);
+        expect(paragraph.tagName).toBe('P');
+        expect(paragraph).toHaveTextContent(/coins live on the blockchain/i);
+        expect(container.querySelectorAll('p')).toHaveLength(1);
+        expect(document.querySelectorAll('[data-warning-line]')).toHaveLength(0);
+        expect(screen.queryByText(/choose Try again/)).toBeNull();
+    });
+
+    it('keeps the explanation and recovery list in the same form container', () => {
+        renderScreen({ kind: 'locked' });
+        const paragraph = screen.getByText(/recovery phrase still holds everything/i);
+        const actions = screen.getByRole('list', { name: 'Recovery actions' });
+
+        expect(paragraph.closest('form')).toBe(actions.closest('form'));
+        expect(actions.closest('form')).not.toBeNull();
     });
 });
 
 describe('VaultUnavailable: the destructive escape', () => {
     it.each(['locked', 'unavailable'])('is NOT offered for %s', (kind) => {
         renderScreen({ kind });
-        expect(screen.queryByText(/restore from recovery phrase or backup/i)).toBeNull();
+        expect(screen.queryByText('Restore from recovery phrase or backup')).toBeNull();
         expect(screen.queryByText(/^Type WIPE to confirm$/)).toBeNull();
     });
 
     it('is offered for corrupt, because nothing else lets that user proceed', () => {
         renderScreen({ kind: 'corrupt' });
-        expect(screen.getByText(/restore from recovery phrase or backup/i)).toBeTruthy();
+        expect(screen.getByText('Restore from recovery phrase or backup')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
     });
 
@@ -168,16 +186,16 @@ describe('VaultUnavailable: the destructive escape', () => {
         expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /clear and start over/i })).toBeNull();
 
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
         // Never called "damaged": nothing here is damaged, it is gone.
         expect(screen.queryByText(/damaged/i)).toBeNull();
         const confirm = screen.getByRole('button', { name: /clear and start over/i });
-        expect(confirm.disabled).toBe(true);
+        expect(confirm).toBeEnabled();
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
-        await waitFor(() => expect(confirm.disabled).toBe(false));
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
+        await waitFor(() => expect(confirm).toBeEnabled());
         fireEvent.click(confirm);
         await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
         expect(onRetry).toHaveBeenCalledTimes(1);
@@ -191,15 +209,15 @@ describe('VaultUnavailable: the destructive escape', () => {
         // Nothing destructive is reachable before the panel is opened.
         expect(screen.queryByRole('button', { name: /remove damaged data/i })).toBeNull();
 
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
         const confirm = screen.getByRole('button', { name: /remove damaged data/i });
-        expect(confirm.disabled).toBe(true);
+        expect(confirm).toBeEnabled();
 
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
-        await waitFor(() => expect(confirm.disabled).toBe(false));
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
+        await waitFor(() => expect(confirm).toBeEnabled());
         fireEvent.click(confirm);
         await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
         expect(onRetry).toHaveBeenCalledTimes(1);
@@ -209,8 +227,8 @@ describe('VaultUnavailable: the destructive escape', () => {
         const wipe = vi.fn().mockResolvedValue(undefined);
         renderScreen({ kind: 'corrupt', wipe });
 
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIP' } });
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIP' } });
         fireEvent.click(screen.getByRole('button', { name: /remove damaged data/i }));
         expect(wipe).not.toHaveBeenCalled();
     });
@@ -219,24 +237,24 @@ describe('VaultUnavailable: the destructive escape', () => {
         const wipe = vi.fn().mockRejectedValue(new Error('shell wipe failed'));
         renderScreen({ kind: 'corrupt', wipe });
 
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
         fireEvent.click(screen.getByRole('button', { name: /remove damaged data/i }));
 
-        await waitFor(() => expect(screen.getByText(/contact support/i)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/restart the app and try once more/i)).toBeTruthy());
         expect(screen.queryByText(/shell wipe failed/i)).toBeNull();
     });
 
     it('warns, before the input, that the phrase is needed to come back', async () => {
         renderScreen({ kind: 'corrupt' });
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
         expect(screen.getByText(/unless you have your recovery phrase/i)).toBeTruthy();
         expect(screen.getByText(/changes nothing on the blockchain/i)).toBeTruthy();
     });
 
     it('cancels back to a state with nothing destructive reachable', async () => {
         renderScreen({ kind: 'corrupt' });
-        fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
+        fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
         fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
         expect(screen.queryByRole('button', { name: /remove damaged data/i })).toBeNull();
     });

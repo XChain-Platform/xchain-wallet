@@ -20,7 +20,9 @@ describe('dark palette hover states', () => {
     it('draws the notice recovery action with the shared secondary Button', () => {
         const jsx = read('packages/core/src/ui/StatusMessage.jsx');
         const css = read('packages/core/src/ui/StatusMessage.module.css');
-        expect((jsx.match(/variant="secondary"/g) || []).length).toBeGreaterThanOrEqual(2);
+        // One NoticeAction serves the lone notice and each line of a group.
+        expect((jsx.match(/variant="secondary"/g) || []).length).toBeGreaterThanOrEqual(1);
+        expect(jsx).toMatch(/function NoticeAction\b[\s\S]*?<Button[\s\S]*?variant="secondary"/);
         expect(css).not.toMatch(/\.recovery[^{]*\{[^}]*(?:background|border|color):/);
     });
 
@@ -32,6 +34,8 @@ describe('dark palette hover states', () => {
 
     it('out-ranks the Button kit hover on the market selector', () => {
         const css = read('packages/core/src/shared/routes/MarketActivity.module.css');
-        expect(css).toMatch(/\.marketSelector\.marketSelector:hover:not\(:disabled\)\s*\{\s*background:\s*var\(--xc-bg-muted\)/);
+        // The selector sits on the blue hero now (.tokenButton), so its hover
+        // keeps the card colour instead of the muted fill.
+        expect(css).toMatch(/\.tokenButton\.tokenButton:hover:not\(:disabled\)\s*\{\s*background:\s*transparent/);
     });
 });

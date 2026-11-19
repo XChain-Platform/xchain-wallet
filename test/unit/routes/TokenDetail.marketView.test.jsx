@@ -60,10 +60,10 @@ function renderDetail({ onBuy = vi.fn() } = {}) {
     return onBuy;
 }
 
-describe('TokenDetail Market view action', () => {
+describe('TokenDetail Exchange action', () => {
     it('opens the selected asset market even when the balance is zero', () => {
         const onBuy = renderDetail();
-        const button = screen.getByText('Market view').closest('button');
+        const button = screen.getByRole('button', { name: /^Exchange\b/ });
 
         expect(button).toBeTruthy();
         fireEvent.click(button);
@@ -71,9 +71,10 @@ describe('TokenDetail Market view action', () => {
         expect(screen.queryByText('Sell on DEX')).toBeNull();
     });
 
-    it('is absent when the shell has no market route', () => {
+    it('is left out of the Actions tab when the shell has no exchange route', () => {
         renderDetail({ onBuy: null });
 
-        expect(screen.queryByText('Market view')).toBeNull();
+        expect(screen.getByRole('button', { name: /^Send\b/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Exchange\b/ })).toBeNull();
     });
 });

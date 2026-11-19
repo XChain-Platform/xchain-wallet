@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GovernancePollWatcher } from '../../../packages/core/src/notifications/GovernancePollWatcher.js';
 import { DispenserEscrowWatcher } from '../../../packages/core/src/notifications/DispenserEscrowWatcher.js';
 import { DeadlineWatcher } from '../../../packages/core/src/notifications/DeadlineWatcher.js';
+import { CoinpayAutopayWatcher } from '../../../packages/core/src/notifications/CoinpayAutopayWatcher.js';
 
 const ADDRESSES = async () => [{ chainId: 'bitcoin-regtest', address: 'bcrt1qmine', label: 'BTC regtest' }];
 
@@ -102,6 +103,67 @@ describe('watchers stopped while a read is pending', () => {
             intervalMs: 1e9,
         });
         await stopMidPoll(watcher, pending);
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    // PC-16 Phase B: a lock stops the unlocked auto pay instance and hands
+    // payment to the locked session. The stopped instance must neither pay
+    // (its pool is zeroed) nor post "Auto pay is paused" over a session
+    // that is paying.
+    it('coinpay auto pay neither pays nor notifies after stop', async () => {
+        const pending = { gate: gate(), reached: false };
+        const nowMs = 1_800_000_000_000;
+        const notify = vi.fn();
+        const coinpayAction = vi.fn(async () => ({ txid: 'paytx' }));
+        const consent = {
+            schemaVersion: 1, id: 'bitcoin-regtest::aa', walletId: 'w1', chainId: 'bitcoin-regtest',
+            sourceAddress: 'addr-payer', txid: 'aa', orderActionIndex: '500', giveCoinAmount: '0.05',
+            getTick: 'PEPE', getAmount: '1000', autopay: true, payments: [], createdAt: new Date(0).toISOString(),
+        };
+        let signer = { id: 'pooled' };
+        const sdk = {
+            getStatus: async () => ({ last_block: { RBTC: 101 } }),
+            explorer: { coin: 'RBTC' },
+            getCoinpayObligations: async () => {
+                pending.reached = true;
+                await pending.gate.promise;
+                return { data: [{
+                    action_index: '900', payer_address: 'addr-payer', payee_address: 'addr-seller',
+                    coin_amount: '0.005', expiration: Math.floor(nowMs / 1000) + 7000, block_index: 100,
+                    coinpay_status: 'pending_coinpay',
+                }] };
+            },
+            getOrderMatches: async () => ({ data: [{
+                action_index: '900', give_action_index: '600', get_action_index: '500',
+                give_amount: '0.005', get_amount: '100', status: 'pending_coinpay',
+            }] }),
+            getTransaction: async () => null,
+        };
+        const watcher = new CoinpayAutopayWatcher({
+            vault: {
+                autopayOrders: { list: async () => [consent], get: async () => consent, put: async () => {} },
+                autopayLeases: { get: async () => null, put: async () => {} },
+                pendingTxs: { list: async () => [] },
+                addresses: { list: async () => [{ id: 'a1', chain: 'bitcoin', network: 'regtest', address: 'addr-payer', publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0" }] },
+            },
+            sdkRegistry: { get: () => sdk },
+            chainRegistry: { get: () => ({ coin: 'bitcoin' }), chainIdFor: (c, n) => `${c}-${n}` },
+            // The lock zeroes the pool while the read is pending.
+            getSigner: () => signer,
+            getSettings: async () => ({ notifications: { incomingReceipts: true } }),
+            notify,
+            shellKind: 'web',
+            coinpayAction,
+            now: () => nowMs,
+            intervalMs: 1e9,
+        });
+        const poll = watcher.pollOnce();
+        await vi.waitFor(() => expect(pending.reached).toBe(true));
+        watcher.stop();
+        signer = null;
+        pending.gate.release();
+        await poll;
+        expect(coinpayAction).not.toHaveBeenCalled();
         expect(notify).not.toHaveBeenCalled();
     });
 });

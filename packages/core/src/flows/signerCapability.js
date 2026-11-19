@@ -111,9 +111,10 @@ export const CHUNK_REVEAL_CAPABLE_SIGNER_KINDS = Object.freeze(['software']);
  * record and reads `source` (the question is asked before an encoding is
  * chosen); this one takes the Signer that will be dispatched to and reads
  * `kind`, because the chunk lane's hazard is the dispatch itself. Called by
- * `submitWithSigner` BEFORE the phase-1 commit is signed or broadcast: a
- * refusal there costs an error dialog, a refusal at the signer after the
- * commit is on chain is the stranded-funds event §6 forbids.
+ * `submitWithSigner` BEFORE the phase-1 commit is signed or broadcast, so a
+ * refusal costs an error dialog; the reveal is then signed before anything is
+ * broadcast too, and a signer that could not sign it would otherwise fail deep
+ * inside its vendor converter instead of with the capability message.
  *
  * @param {{ kind?: string } | null | undefined} signer
  * @returns {boolean}

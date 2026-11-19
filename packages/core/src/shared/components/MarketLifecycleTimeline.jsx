@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react';
 import S from './MarketLifecycleTimeline.module.css';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
@@ -110,10 +111,10 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
             setState({
                 loading: false,
                 events,
-                error: failed ? (failed.error?.message || 'Failed to load timeline.') : null,
+                error: failed ? userFacingMessage(failed.error, 'Failed to load timeline.') : null,
             });
         }).catch((err) => {
-            if (!cancelled) setState({ loading: false, events: [], error: err?.message || 'Failed to load timeline.' });
+            if (!cancelled) setState({ loading: false, events: [], error: userFacingMessage(err, 'Failed to load timeline.') });
         });
 
         return () => { cancelled = true; };
@@ -138,8 +139,8 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
                         {e.kind === 'matches' && e.row.give_amount != null
                             ? `${formatDecimalAmount(e.row.give_amount)} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
                             : e.row.block_index != null
-                                ? t('components.marketLifecycleTimeline.block', { formatDecimalAmountValue: formatDecimalAmount(e.row.block_index) })
-                                : (e.row.action_index != null ? `#${formatDecimalAmount(e.row.action_index)}` : '')}
+                                ? t('components.marketLifecycleTimeline.block', { formatDecimalAmountValue: String(e.row.block_index) })
+                                : (e.row.action_index != null ? `#${String(e.row.action_index)}` : '')}
                     </span>
                 </li>
             ))}

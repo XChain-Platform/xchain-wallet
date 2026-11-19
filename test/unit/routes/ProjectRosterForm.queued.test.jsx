@@ -11,6 +11,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 
+// Tokens join the list only through the token picker; this stand-in picks
+// whatever ticker is typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+            <button type="button" onClick={onBack}>Close token picker</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
@@ -41,8 +53,6 @@ describe('ProjectRosterForm queued list', () => {
             requoteNativeFee: vi.fn().mockResolvedValue(null),
             reserve: vi.fn().mockResolvedValue({}),
             releaseReservation: vi.fn().mockResolvedValue({}),
-            putConfirmSession: vi.fn().mockResolvedValue({ id: 'cs' }),
-            clearConfirmSession: vi.fn().mockResolvedValue({}),
             createList: vi.fn().mockRejectedValue(transient),
         };
         render(
@@ -56,15 +66,17 @@ describe('ProjectRosterForm queued list', () => {
                 />
             </MessagingProvider>,
         );
-        await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+        fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
         await screen.findByRole('form', { name: 'Review official token list' });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));
 
         await waitFor(() => expect(document.body.textContent).toMatch(/Your official token list is signed/));
         expect(document.body.textContent).not.toMatch(/did not return a transaction ID/);
-        expect(screen.queryByRole('button', { name: 'Publish list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish List' })).toBeNull();
     });
 });

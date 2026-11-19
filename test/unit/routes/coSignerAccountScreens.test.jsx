@@ -15,6 +15,12 @@ import { CoSignerAccountDetail } from '../../../packages/core/src/shared/routes/
 import { CoSignerAccountList } from '../../../packages/core/src/shared/routes/CoSignerAccountList.jsx';
 import { CoSignerProvision } from '../../../packages/core/src/shared/routes/CoSignerProvision.jsx';
 
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => (
+        <button type="button" onClick={() => onPick({ id: 'address-1' })}>Pick wallet key</button>
+    ),
+}));
+
 const DAEMON_KEY = `02${'a'.repeat(64)}`;
 
 function mount(child, messaging) {
@@ -52,13 +58,13 @@ describe('co-signer account screens', () => {
         );
 
         await screen.findByText('Build agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Turn off/ }));
 
-        const dialog = screen.getByRole('dialog', { name: 'Disable this agent account?' });
+        const dialog = screen.getByRole('dialog', { name: 'Turn off this agent account?' });
         expect(within(dialog).getByText(/revokes the agent's signing access/i)).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
 
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Turn Off' }));
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledWith({
             id: account.id,
             patch: { enabled: false },
@@ -98,13 +104,17 @@ describe('co-signer account screens', () => {
             },
         );
 
-        const addressPicker = await screen.findByLabelText("This wallet's key");
-        fireEvent.change(addressPicker, { target: { value: 'address-1' } });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        await screen.findByLabelText("This wallet's key");
+        fireEvent.click(screen.getByRole('button', { name: "Choose this wallet's key" }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick wallet key' }));
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: `04${'b'.repeat(64)}` },
         });
 
-        expect(await screen.findByText(/starting with 02 or 03/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review agent account' }).disabled).toBe(true);
+        // Create stays pressable; the refusal shows on the press and nothing is provisioned.
+        fireEvent.click(screen.getByRole('button', { name: 'Create Agent Account' }));
+        expect((await screen.findAllByText(/starting with 02 or 03/i)).length).toBeGreaterThan(0);
+        expect(screen.getByLabelText('Agent public key')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByRole('heading', { name: 'Review Agent Account' })).toBeNull();
     });
 });

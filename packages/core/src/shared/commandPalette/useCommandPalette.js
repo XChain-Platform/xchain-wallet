@@ -77,10 +77,7 @@ export function useCommandPalette(opts = {}) {
         if (!enabled) setOpen(false);
     }, [enabled]);
 
-    // The palette covers the content but not the navigation, so the bottom
-    // bar and the More sheet stay live under it. Any navigation closes it;
-    // otherwise it stayed open over the screen the user moved to, with the
-    // More sheet stacked on top (iPhone, 2026-10-12).
+    // Any navigation closes the palette so it is absent from the destination screen.
     useEffect(() => {
         setOpen(false);
     }, [currentView]);

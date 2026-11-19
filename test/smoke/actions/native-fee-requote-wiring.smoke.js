@@ -40,6 +40,10 @@ assert.ok(host.includes("host.register('action.requoteNativeFee'"),
     'the host must register action.requoteNativeFee');
 assert.match(host, /sdk\.quoteNativeFee\(actionString/,
     'the re-quote must price the composed action string, not a re-derived one');
+assert.ok(host.includes("host.register('action.quoteProtocolFee'"),
+    'the host must register action.quoteProtocolFee');
+assert.match(host, /sdk\.quoteNativeFee\(\s*\{ action: actionData\.action, params: actionData\.params \}/,
+    'the live quote must price the draft action through the SDK');
 
 // --- 2. every shell exposes it ----------------------------------------
 
@@ -50,6 +54,8 @@ for (const shell of [
 ]) {
     assert.ok(read(...shell).includes("'action.requoteNativeFee'"),
         `${shell.join('/')} must expose action.requoteNativeFee`);
+    assert.ok(read(...shell).includes("'action.quoteProtocolFee'"),
+        `${shell.join('/')} must expose action.quoteProtocolFee`);
 }
 
 // --- 3. the hook refuses rather than signing --------------------------
@@ -75,8 +81,9 @@ const routesDir = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
 // omission. PsbtSignForm signs a PSBT handed to it by a dApp: the wallet
 // composed nothing and quoted nothing, so there is no attached fee output.
 // SignMessageForm signs a message off-chain, with no transaction at all. The
-// hook's own guard is a no-op on both either way.
-const EXEMPT = new Set(['PsbtSignForm.jsx', 'SignMessageForm.jsx']);
+// hook's own guard is a no-op on both either way. MintForm composes MINT,
+// which is free and never carries a native fee output (U81).
+const EXEMPT = new Set(['PsbtSignForm.jsx', 'SignMessageForm.jsx', 'MintForm.jsx']);
 
 const unwired = readdirSync(routesDir)
     .filter((f) => f.endsWith('.jsx') && !EXEMPT.has(f))

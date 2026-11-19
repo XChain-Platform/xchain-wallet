@@ -36,7 +36,7 @@
 // The positive cases matter as much as the negative ones: a gate that
 // removed Send from every wallet would also make this file green.
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 
@@ -46,10 +46,6 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -80,25 +76,21 @@ describe('LeftNav: the primary rail honours signer mode', () => {
         // not a stripped nav.
         expect(labels).toContain('Home');
         expect(labels).toContain('History');
-        expect(labels).toContain('Scan');
+        expect(labels).not.toContain('Scan');
         expect(labels).toContain('Messaging');
     });
 });
 
 describe('BottomTabBar: the thumb row honours signer mode', () => {
-    it('offers Send in the tab row and Receive in the More sheet by default', () => {
+    it('offers Send and Receive as tabs by default', () => {
         render(<BottomTabBar {...navProps} />);
         expect(screen.getByRole('button', { name: /Send/ })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /More/ }));
         expect(screen.getByRole('button', { name: /Receive/ })).toBeInTheDocument();
     });
 
     it('offers neither once the wallet is a signer', () => {
         render(<BottomTabBar {...navProps} isSignerMode />);
         expect(screen.queryByRole('button', { name: /Send/ })).toBeNull();
-        // Receive lives behind "More", so the sheet has to be opened before
-        // its absence means anything.
-        fireEvent.click(screen.getByRole('button', { name: /More/ }));
         expect(screen.queryByRole('button', { name: /Receive/ })).toBeNull();
         expect(screen.getByRole('button', { name: /Home/ })).toBeInTheDocument();
     });
@@ -139,7 +131,9 @@ function messagingFor(walletMode) {
             native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
             tokens: [],
         }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode, grace: { testSendThresholdSats: 0 } }),
+        // §20: the mode is the wallet's own, read from the safe wallet list.
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
+        getSettings: vi.fn().mockResolvedValue({ grace: { testSendThresholdSats: 0 } }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
@@ -175,8 +169,10 @@ describe('Send: the route refuses in signer mode', () => {
 
     it('refuses, and says why and how to undo it, in signer mode', async () => {
         mount(Send, 'signer');
-        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it can't send them to the network/i))
+        expect(await screen.findByText(/signer for another phone\. It signs transactions built on that phone, but it can't send them to the network/i))
             .toBeInTheDocument();
+        // The way to see the mode is Wallet Details; Settings no longer has one.
+        expect(screen.getByText(/shown on Wallet Details/i)).toBeInTheDocument();
         // The form must be GONE, not merely covered: the To field is the one
         // input a URI intent would have pre-filled.
         expect(screen.queryByLabelText(/^To$/)).toBeNull();
@@ -193,7 +189,7 @@ describe('Receive: the route refuses in signer mode', () => {
 
     it('refuses in signer mode', async () => {
         mount(Receive, 'signer');
-        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it doesn't have an address for receiving funds/i))
+        expect(await screen.findByText(/signer for another phone\. It signs transactions built on that phone, but it doesn't have an address for receiving funds/i))
             .toBeInTheDocument();
     });
 });

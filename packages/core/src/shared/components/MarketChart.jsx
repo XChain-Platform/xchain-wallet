@@ -29,7 +29,7 @@
 // blowing up MarketView.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Icon, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
@@ -37,7 +37,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import { describeChartSeries } from './Sparkline.jsx';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
 /**
@@ -77,11 +77,14 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     }, [rawRows, tick1, tick2, period]);
     const chartLabel = points.length > 0
         ? describeChartSeries(points.map((point) => point.value), {
-            label: `${tick1}/${tick2} price chart`,
+            label: t('components.marketChart.priceChart', { tick1, tick2 }),
             rangeLabel: period.label,
-            formatValue: (value) => `${formatChartPrice(value)} ${tick2}`,
+            formatValue: (value) => t('components.marketChart.chartValue', {
+                price: formatChartPrice(value),
+                unit: tick2,
+            }),
         })
-        : `${tick1}/${tick2} price chart. No price trend available for the ${period.label} range.`;
+        : t('components.marketChart.noPriceTrend', { tick1, tick2, range: period.label });
     // Lazy-init the chart once the container is mounted.
 
     useEffect(() => {
@@ -231,20 +234,41 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         } catch { /* chart disposed mid-update */ }
     }, [chartReady, points]);
 
+    // Every state draws inside one stage of the chart's own height under
+    // the same timeframe header, so the card keeps its height while history
+    // loads, fails, comes back empty, or the chart runtime is missing.
+    let overlay = null;
     if (chartUnavailable) {
-        return (
-            <div
-                style={{
-                    border: 'var(--xc-card-border)',
-                    background: 'var(--xc-card-bg)',
-                    borderRadius: 'var(--xc-card-radius)',
-                    padding: 'var(--xc-card-pad)',
-                    minHeight: '6rem',
-                }}
-            >
+        overlay = (
+            <div style={STAGE_OVERLAY}>
                 <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>{t('components.marketChart.chart')}</p>
                 <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: '0.875rem' }}>
                     {t('components.marketChart.thePriceChartIsUnavailable')}
+                </p>
+            </div>
+        );
+    } else if (loading) {
+        overlay = (
+            <div style={STAGE_OVERLAY} role="status" aria-label={t('components.marketChart.loadingPriceChart')}>
+                <Skeleton.List rows={3} avatar={false} rowHeight={28} />
+            </div>
+        );
+    } else if (loadError && !pageShowsError) {
+        overlay = (
+            <div style={STAGE_OVERLAY}>
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setRetryKey((value) => value + 1) }}
+                >
+                    {loadError}
+                </StatusMessage>
+            </div>
+        );
+    } else if (!loadError && points.length === 0) {
+        overlay = (
+            <div style={{ ...STAGE_OVERLAY, alignItems: 'center', textAlign: 'center' }}>
+                <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                    {t('components.marketChart.noTradesYetInThis')}
                 </p>
             </div>
         );
@@ -252,7 +276,6 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
 
     return (
         <div
-            aria-busy={loading || undefined}
             style={{
                 border: 'var(--xc-card-border)',
                 background: 'var(--xc-card-bg)',
@@ -277,40 +300,45 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     size="sm"
                     value={periodId}
                     onChange={(e) => setPeriodId(e.target.value)}
+                    disabled={chartUnavailable}
                     aria-label={t('components.marketChart.chartTimeframe')}
                 >
                     {PERIODS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
+                        <Select.Option key={p.id} value={p.id} icon={<Icon.ClockIcon />}>{p.label}</Select.Option>
                     ))}
                 </Select>
             </div>
             <div
-                ref={containerRef}
-                style={{ width: '100%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', height }}
-                role="img"
-                aria-label={chartLabel}
-            />
-            {loading ? (
-                <div role="status" aria-label={t('components.marketChart.loadingPriceChart')}>
-                    <Skeleton.List rows={3} avatar={false} rowHeight={28} />
-                </div>
-            ) : null}
-            {loadError && !pageShowsError ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={{ label: t('common.tryAgain'), onAction: () => setRetryKey((value) => value + 1) }}
-                >
-                    {loadError}
-                </StatusMessage>
-            ) : null}
-            {!loading && !loadError && points.length === 0 ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                    {t('components.marketChart.noTradesYetInThis')}
-                </p>
-            ) : null}
+                data-chart-stage=""
+                aria-busy={(loading && !chartUnavailable) || undefined}
+                style={{ position: 'relative', width: '100%', minWidth: 0, maxWidth: '100%', height }}
+            >
+                {chartUnavailable ? null : (
+                    <div
+                        ref={containerRef}
+                        style={{ width: '100%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', height: '100%' }}
+                        role="img"
+                        aria-label={chartLabel}
+                    />
+                )}
+                {overlay}
+            </div>
         </div>
     );
 }
+
+// A state drawn over the chart stage: it fills the stage, sits on the card
+// background so the empty or stale plot does not show through, and scrolls
+// inside the stage rather than growing the card.
+const STAGE_OVERLAY = {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    overflow: 'auto',
+    background: 'var(--xc-card-bg)',
+};
 
 function readChartColors(container) {
     const cs = container ? getComputedStyle(container) : null;
@@ -361,7 +389,7 @@ function extractRows(resp) {
 }
 
 function formatChartPrice(value) {
-    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
+    return new Intl.NumberFormat(getFormatLocale(), { maximumSignificantDigits: 8 }).format(value);
 }
 
 // The price scale and its last-value tag show a price below 1 to four

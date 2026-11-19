@@ -20,7 +20,8 @@ async function measureAcknowledgement(checkbox) {
     return checkbox.evaluate((input) => {
         const row = input.closest('label');
         const box = input.nextElementSibling;
-        const text = box.nextElementSibling.firstElementChild;
+        // The label span itself: its line also holds the help button.
+        const text = box.nextElementSibling.querySelector('[id$="-label"]');
         const rect = (element) => {
             const bounds = element.getBoundingClientRect();
             return {
@@ -51,6 +52,12 @@ async function scrollTermsToEnd(terms) {
     });
 }
 
+// Accept stays tappable and refuses until the terms are read and agreed to.
+async function expectAcceptRefused(form, accept) {
+    await accept.click();
+    await expect(form).toBeVisible();
+}
+
 for (const viewport of VIEWPORTS) {
     test(`license acknowledgement row fits at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -73,29 +80,34 @@ for (const viewport of VIEWPORTS) {
             );
         });
 
-        if (viewport.name === 'desktop') {
-            const widths = await form.evaluate((element) => {
+        let termsBox;
+        if (viewport.width >= 834) {
+            const layout = await form.evaluate((element) => {
                 const termsPanel = element.querySelector('[aria-label="License terms"]');
                 const paragraphs = [...termsPanel.querySelectorAll('p')];
                 return {
                     form: element.getBoundingClientRect().width,
                     terms: termsPanel.getBoundingClientRect().width,
+                    termsBox: termsPanel.getBoundingClientRect().toJSON(),
                     narrowestParagraph: Math.min(
                         ...paragraphs.map((paragraph) => paragraph.getBoundingClientRect().width),
                     ),
                 };
             });
-            expect(widths.terms).toBeGreaterThanOrEqual(widths.form * 0.9);
-            expect(widths.narrowestParagraph).toBeGreaterThanOrEqual(widths.terms * 0.9);
+            expect(Math.abs(layout.terms - (layout.form * 2) / 3)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.narrowestParagraph).toBeGreaterThanOrEqual(layout.terms * 0.9);
+            termsBox = layout.termsBox;
         }
 
         const buttonBox = await accept.boundingBox();
         expect(buttonBox).not.toBeNull();
-        expect(viewport.height - buttonBox.y - buttonBox.height)
-            .toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
-        expect(viewport.height - buttonBox.y - buttonBox.height).toBeLessThanOrEqual(24);
+        if (termsBox) {
+            const gapBelowTerms = buttonBox.y - (termsBox.y + termsBox.height);
+            expect(gapBelowTerms).toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
+            expect(gapBelowTerms).toBeLessThanOrEqual(96);
+        }
 
-        await expect(accept).toBeDisabled();
+        await expectAcceptRefused(form, accept);
 
         const requiresScroll = await terms.evaluate(
             (element, tolerance) => element.scrollHeight > element.clientHeight + tolerance,
@@ -109,13 +121,13 @@ for (const viewport of VIEWPORTS) {
                 element.dispatchEvent(new Event('scroll', { bubbles: true }));
             });
             await expect(checkbox).toBeDisabled();
-            await expect(accept).toBeDisabled();
+            await expectAcceptRefused(form, accept);
         }
 
         await scrollTermsToEnd(terms);
         await expect(checkbox).toBeEnabled();
         await expect(checkbox).toHaveAccessibleName('I have read and agree to these terms.');
-        await expect(accept).toBeDisabled();
+        await expectAcceptRefused(form, accept);
 
         const acknowledgement = await measureAcknowledgement(checkbox);
         expect(acknowledgement.text.left)

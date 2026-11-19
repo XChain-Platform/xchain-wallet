@@ -23,6 +23,7 @@
 // action + amount + destinations, and whether it is within policy.
 
 import { buildAccountWindowStore } from '../cosigner/vaultWindowPersistence.js';
+import { evaluateAllowedTicks, nativeTickForChain, sdkValueUnreadable } from '../cosigner/allowedTicks.js';
 import { CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 
 /**
@@ -38,6 +39,7 @@ import { CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
  * @property {boolean} policyOk                 whether the stored policy would allow it
  * @property {string|null} policyReason         violation code when policyOk is false
  * @property {boolean} needsConfirmation        policy flagged it above the confirm threshold
+ * @property {string[]} clockWarnings           spending-window clock anomalies noticed at load; empty when none
  */
 
 /**
@@ -98,16 +100,19 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
             policyOk: false,
             policyReason: 'UNDECODABLE',
             needsConfirmation: false,
+            clockWarnings: [],
         };
     }
 
     // 2. Dry-run the policy against the current spending-window snapshot
     //    (read-only: load the window but never record).
     let windowUsage;
+    let clockWarnings = [];
     const windowStore = buildAccountWindowStore({ vault, account, now });
     if (windowStore) {
         await windowStore.load();
         windowUsage = windowStore.snapshot();
+        if (typeof windowStore.clockWarnings === 'function') clockWarnings = windowStore.clockWarnings();
     }
     // The decoded VERSION rides along: without it the evaluator cannot tell
     // whether an amount cap can bind this exact format (G2), and the preview
@@ -119,6 +124,31 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
     );
 
     const evalu = verdict.evaluation || {};
+    // The SDK evaluator has no allowed-tokens rule; the wallet applies it next,
+    // so the approval screen refuses what the signing decision would refuse.
+    // Both read a ^<id> only through the policy's saved tickIds; no explorer.
+    const tokenVerdict = verdict.ok === true
+        ? evaluateAllowedTicks(
+            account.policy,
+            { action: decoded.action, version: decoded.version, params: decoded.params },
+            { nativeTick: nativeTickForChain(account.chainId), valueUnreadable: sdkValueUnreadable(sdk) },
+        )
+        : null;
+    if (tokenVerdict && !tokenVerdict.ok) {
+        return {
+            account: accountSummary,
+            decodeOk: true,
+            decodeReason: null,
+            action: decoded.action,
+            params: decoded.params,
+            amount: evalu.amount,
+            tick: tokenVerdict.violation.details.tick ?? evalu.tick,
+            destinations: Array.isArray(evalu.destinations) ? evalu.destinations : [],
+            policyOk: false,
+            policyReason: tokenVerdict.violation.code,
+            needsConfirmation: false,
+        };
+    }
     return {
         account: accountSummary,
         decodeOk: true,
@@ -131,5 +161,6 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
         policyOk: verdict.ok === true,
         policyReason: verdict.ok ? null : (verdict.violation && verdict.violation.code) || 'POLICY_DENIED',
         needsConfirmation: Boolean(evalu.needsConfirmation),
+        clockWarnings,
     };
 }

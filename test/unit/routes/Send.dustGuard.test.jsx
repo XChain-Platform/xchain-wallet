@@ -28,6 +28,19 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the dust floor.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPECREATURE' })}>Pick PEPECREATURE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -120,7 +133,8 @@ function mount(coin, { tokens = [] } = {}) {
 async function fill({ to, amount, tick }) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: to } });
     if (tick) {
-        fireEvent.change(await screen.findByLabelText(/^Token$/), { target: { value: tick } });
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole('button', { name: `Pick ${tick}` }));
     }
     fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: amount } });
 }

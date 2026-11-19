@@ -133,25 +133,18 @@ describe('primary actions explain missing form input', () => {
         await submitAndExpect(container, 'Enter what you want in return and a price greater than 0.');
     });
 
-    it('SellOwnershipForm keeps one tab stop in each segmented choice', async () => {
+    it('SellOwnershipForm keeps one tab stop in each choice', async () => {
+        // The sale choice and the payment asset are single dropdown and picker
+        // buttons now, so each is one tab stop and no segmented tabs remain.
         mount(<SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />);
-        const openOrder = await screen.findByRole('tab', { name: 'Open order' });
-        const instantBuy = screen.getByRole('tab', { name: 'Instant buy' });
-        const nativeCoin = screen.getByRole('tab', { name: /Native coin/ });
-        const anotherToken = screen.getByRole('tab', { name: 'Another token' });
+        const sellVia = await screen.findByRole('button', { name: /^Sell via/ });
+        const getPaidIn = screen.getByRole('button', { name: /^Get paid in/ });
 
-        expect(openOrder).toHaveAttribute('tabindex', '0');
-        expect(instantBuy).toHaveAttribute('tabindex', '-1');
-        expect(nativeCoin).toHaveAttribute('tabindex', '0');
-        expect(anotherToken).toHaveAttribute('tabindex', '-1');
-
-        fireEvent.click(instantBuy);
-        fireEvent.click(anotherToken);
-
-        expect(openOrder).toHaveAttribute('tabindex', '-1');
-        expect(instantBuy).toHaveAttribute('tabindex', '0');
-        expect(nativeCoin).toHaveAttribute('tabindex', '-1');
-        expect(anotherToken).toHaveAttribute('tabindex', '0');
+        expect(screen.queryAllByRole('tab')).toHaveLength(0);
+        expect(sellVia).not.toHaveAttribute('tabindex', '-1');
+        expect(getPaidIn).not.toHaveAttribute('tabindex', '-1');
+        expect(screen.getAllByRole('button', { name: /^Sell via/ })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: /^Get paid in/ })).toHaveLength(1);
     });
 
     it('SellOwnershipForm rejects native-coin prices below the coin scale', async () => {
@@ -159,12 +152,14 @@ describe('primary actions explain missing form input', () => {
             <SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />,
         );
         const field = await waitFor(() => getByLabelText(/^Price/));
+        // The Price field refuses the ninth decimal as it is typed and says why.
         fireEvent.change(field, { target: { value: '0.000000001' } });
-        await submitAndExpect(container, 'Price can have at most 8 decimal places for BTC.');
+        await waitFor(() => expect(container.textContent).toContain('at most 8 decimal places'));
+        expect(field.value).not.toBe('0.000000001');
     });
 
-    it('AirdropForm explains that its token is required', async () => {
+    it('AirdropForm explains that its token must be picked', async () => {
         const { container } = mount(<AirdropForm walletId="w" onBack={() => {}} />);
-        await submitAndExpect(container, 'Token is required.');
+        await submitAndExpect(container, 'Pick the token to drop.');
     });
 });

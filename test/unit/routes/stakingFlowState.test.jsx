@@ -9,17 +9,23 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
 import { StakeNew } from '../../../packages/core/src/shared/routes/StakeNew.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const PUBKEY = 'a'.repeat(64);
+const WATCHER_HINT = 'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.';
 const VALID_ADDRESS = 'bc1qdevmockabcdef';
 const ADDRESS_ROW = {
     id: 'addr-1',
@@ -80,7 +86,15 @@ function messaging(overrides = {}) {
     });
 }
 
+// A wallet's mode is published by the shell from the wallet list, not read
+// from settings; the harness publishes the mode the settings mock names.
 function withMessaging(child, methods = messaging()) {
+    Promise.resolve(methods.getSettings?.()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'w', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'w',
+        });
+    });
     return render(
         <MessagingProvider shell="web" messaging={methods}>
             {child}
@@ -88,7 +102,10 @@ function withMessaging(child, methods = messaging()) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 describe('staking chooser and list read states', () => {
     it('does not repeat a staking row network kind beside its chain overlay', async () => {
@@ -108,8 +125,10 @@ describe('staking chooser and list read states', () => {
 
         await screen.findByRole('listitem');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
-        // The chain filter stays (operator ruling); it names chains, never network kinds.
-        expect(screen.getByRole('button', { name: 'Filter by network' })).toBeInTheDocument();
+        // The chain filter stays (operator ruling) inside the title-bar filter panel; it names chains, never network kinds.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter staking' }));
+        expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
@@ -171,7 +190,7 @@ describe('staking chooser and list read states', () => {
 });
 
 describe('stake detail state', () => {
-    it('labels a missing contract position inactive', async () => {
+    it('shows a missing contract position as nothing staked, with its action rows locked', async () => {
         withMessaging(
             <StakeDetail
                 walletId="w"
@@ -179,12 +198,17 @@ describe('stake detail state', () => {
                 chainId={CHAIN}
                 address={ADDRESS}
                 contractActionIndex="12"
+                onUnstake={() => {}}
                 onBack={() => {}}
             />,
         );
 
-        expect(await screen.findByText('Nothing staked in this contract')).toBeInTheDocument();
-        expect(screen.getByText('inactive')).toBeInTheDocument();
+        expect(await screen.findByLabelText('0 staked')).toBeInTheDocument();
+        const unstake = screen.getByRole('button', { name: /^Unstake\b/ });
+        expect(unstake).toHaveAttribute('aria-disabled', 'true');
+        expect(unstake).toHaveAccessibleDescription('Nothing is staked.');
+        expect(screen.getByRole('button', { name: /^Delegate\b/ })).toHaveAccessibleDescription('Not available in this wallet yet.');
+        fireEvent.click(screen.getByRole('tab', { name: 'Positions' }));
         expect(screen.getByText('Staking positions for this contract appear here.')).toBeInTheDocument();
     });
 
@@ -202,7 +226,9 @@ describe('stake detail state', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('tab', { name: 'Positions' })).toHaveAttribute('aria-selected', 'true');
+        // Every position opens on Actions again.
+        expect(await screen.findByRole('tab', { name: 'Positions' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.getByRole('tab', { name: 'Actions' })).toHaveAttribute('aria-selected', 'true');
     });
 });
 
@@ -259,11 +285,12 @@ describe('stake amount and review state', () => {
         );
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
+        await typeCustomRate('');
         fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
-        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
+        expect(await screen.findAllByText('Enter a custom network fee.')).toHaveLength(1);
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -301,10 +328,11 @@ describe('stake amount and review state', () => {
         );
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.23000000' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review stake$/i }));
         expect(await screen.findByText(/Stake 1.23000000 XCHAIN for signing public key/)).toBeInTheDocument();
         expect(screen.getByText('After 6 BTC blocks')).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
@@ -324,7 +352,7 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         const amount = screen.getByLabelText(/^Amount/);
-        const submit = screen.getByRole('button', { name: 'Claim rewards' });
+        const submit = screen.getByRole('button', { name: /^Claim Rewards$/ });
 
         fireEvent.change(amount, { target: { value: '' } });
         fireEvent.click(submit);
@@ -345,7 +373,7 @@ describe('staking action load and review state', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(/available staking balance/i);
         expect(screen.getByText('Unavailable')).toBeInTheDocument();
         expect(screen.queryByText('Loading…')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Claim Rewards$/ })).toBeDisabled();
     });
 
     it('does not treat a failed claim-ledger read as no prior claims', async () => {
@@ -362,7 +390,7 @@ describe('staking action load and review state', () => {
         expect(alert).toHaveTextContent("Couldn't load the available staking balance. Something went wrong. Try again.");
         expect(screen.getByText('Unavailable')).toBeInTheDocument();
         expect(alert).not.toHaveTextContent('indexer.invalid');
-        expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Claim Rewards$/ })).toBeDisabled();
     });
 
     it('blocks review when an invalid custom fee would be omitted from the COLLECT build', async () => {
@@ -374,11 +402,12 @@ describe('staking action load and review state', () => {
             methods,
         );
         await screen.findByText('10 XCHAIN available');
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
+        await typeCustomRate('');
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
 
-        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
+        expect(await screen.findAllByText('Enter a custom network fee.')).toHaveLength(1);
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -393,9 +422,17 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '4.50000000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        // U57: the claim explanation lives in the Amount help tip, not a loose paragraph.
+        const claimTip = Array.from(document.querySelectorAll('[role="tooltip"]'))
+            .find((tip) => /Claimed rewards land in your balance/.test(tip.textContent));
+        expect(claimTip).toBeTruthy();
+        expect(Array.from(document.querySelectorAll('form p')).some((p) => /Claimed rewards land/.test(p.textContent))).toBe(false);
+        // U63: the named action carries an icon.
+        expect(screen.getByRole('button', { name: /^Review claim rewards$/i }).querySelector('svg')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Review claim rewards$/i }));
         expect(await screen.findByText(/Claim 4.50000000 XCHAIN/)).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
@@ -409,7 +446,7 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '11' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         expect(await screen.findByText('Amount exceeds the 10 XCHAIN available.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '5' } });
@@ -434,7 +471,7 @@ describe('delegation validation and review state', () => {
             methods,
         );
 
-        const submit = await screen.findByRole('button', { name: 'Delegate signing key' });
+        const submit = await screen.findByRole('button', { name: 'Delegate Signing Key' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         expect(await screen.findByText('Enter the new signing public key.')).toBeInTheDocument();
@@ -467,24 +504,26 @@ describe('delegation validation and review state', () => {
             methods,
         );
         fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: PUBKEY } });
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        // The fee selector sits in the Network fee section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
+        await typeCustomRate('');
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
 
-        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
+        expect(await screen.findAllByText('Enter a custom network fee.')).toHaveLength(1);
 
-        for (const rate of ['0', '-1']) {
-            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
-            fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
-            expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
+        for (const [rate, message] of [
+            ['0', 'Custom fee rate must be greater than zero.'],
+            ['-1', 'Enter a valid non-negative network fee amount.'],
+        ]) {
+            await typeCustomRate(rate);
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
+            expect(await screen.findAllByText(message)).toHaveLength(1);
         }
+        // The one editor takes a fee, so a rate with more than 8 decimals cannot
+        // be typed; FeeSelector.test covers that message.
 
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
-        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
-
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        await typeCustomRate('1001');
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate Signing Key' }));
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -499,10 +538,11 @@ describe('delegation validation and review state', () => {
         );
         const key = 'B'.repeat(64);
         fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: key } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review delegate signing key$/i }));
 
         expect(await screen.findByText(key.toLowerCase())).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByLabelText('New signing pubkey')).toHaveValue(key);
@@ -539,9 +579,13 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
 
             const duration = await screen.findByText(/Releasing: 30 blocks to go/);
             expect(duration.className).toMatch(/duration/);
-            expect(duration.parentElement?.className).toMatch(/trailing/);
+            // The period rides in line two's one-line text, beside the amount and the pill.
+            expect(duration.parentElement?.className).toMatch(/statusLineText/);
+            // The amount leads the row's second line and is not repeated
+            // beside the period (U18).
+            expect(screen.getAllByText('123,456,789.12345678 LONGTOKEN')).toHaveLength(1);
             expect(screen.getAllByText('123,456,789.12345678 LONGTOKEN')
-                .some((node) => /amount/.test(node.className))).toBe(true);
+                .some((node) => /amount/.test(node.className))).toBe(false);
 
             cleanup();
             withMessaging(
@@ -566,12 +610,15 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
 
-            const rewardList = await screen.findByRole('list', { name: 'Reward events' });
+            fireEvent.click(await screen.findByRole('tab', { name: 'Rewards' }));
+            const rewardList = screen.getByRole('list', { name: 'Reward events' });
             const rewardItem = within(rewardList).getByRole('listitem');
             const rewardRow = rewardItem.querySelector(`.${listRowStyles.row}`);
             expect(rewardRow).toBeInTheDocument();
-            expect(rewardItem).toHaveTextContent('987,654,321.12345678 XCHAIN');
-            expect(within(rewardItem).getByText('block 98')).toBeInTheDocument();
+            expect(rewardItem).toHaveTextContent('Earned');
+            expect(rewardItem).toHaveTextContent('+987,654,321.12345678 XCHAIN');
+            // Line 2 is the block's projected date, or the block when no tip is known.
+            expect(rewardItem.textContent).toMatch(/~\w{3} \d{1,2}, \d{4}|Block 98/);
             expect(within(rewardItem).queryByRole('button')).toBeNull();
             expect(within(rewardItem).queryByRole('link')).toBeNull();
 
@@ -582,9 +629,9 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
             );
             fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
             fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-            expect(await screen.findByRole('form', { name: 'Review stake' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+            fireEvent.click(screen.getByRole('button', { name: /^Review stake$/i }));
+            expect(await screen.findByRole('form', { name: /^Review stake$/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Create Unsigned Transaction$/ })).toBeEnabled();
 
             cleanup();
             withMessaging(
@@ -599,9 +646,9 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
             await screen.findByText('10 XCHAIN available');
-            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-            expect(await screen.findByRole('form', { name: 'Review unstake' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+            fireEvent.click(screen.getByRole('button', { name: /^Review unstake$/i }));
+            expect(await screen.findByRole('form', { name: /^Review unstake$/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Create Unsigned Transaction$/ })).toBeEnabled();
 
             const listNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/routes/StakingList.module.css',
@@ -609,7 +656,10 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
             expect(ruleBody(listNarrow, '.row')).toMatch(
                 /grid-template-columns:\s*var\(--xc-control-h-md\)\s+minmax\(0, 1fr\)/,
             );
-            expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
+            // The amount, period, reward chip and pill share line two of the body, so there is no
+            // trailing block to place on a phone.
+            expect(ruleBody(listNarrow, '.body')).toMatch(/grid-column:\s*2/);
+            expect(listNarrow).not.toMatch(/\.trailing\b/);
 
             const amountNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/components/AmountField.module.css',

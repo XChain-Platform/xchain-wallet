@@ -34,6 +34,9 @@
 // extension-onboarding.smoke.js both import sdkFactory.js directly.
 
 import * as sdkModule from 'xchain-sdk';
+// The pre-flight amount validators sit on no SDK index export, so they are read by path.
+import * as preflightNumeric from 'xchain-sdk/src/preflight/numeric.js';
+import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_format.js';
 
 /**
  * The real SDK class. Undefined only if the package's export shape changes,
@@ -43,3 +46,9 @@ import * as sdkModule from 'xchain-sdk';
 export const XChainSDK = sdkModule?.XChainSDK
     ?? sdkModule?.default?.XChainSDK
     ?? sdkModule?.default;
+
+/** The SDK modules flows.amountRulesFromSdk reads the amount validators from. */
+export const preflightAmountModules = Object.freeze({
+    numeric: preflightNumeric,
+    amountFormat: preflightAmountFormat,
+});

@@ -31,6 +31,7 @@
 import {
     base64ToBytes,
     decrypt,
+    decryptWalletSeed,
     deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
@@ -49,8 +50,8 @@ export class NoKeyForAddressError extends Error {
     constructor(reason) {
         const detail =
             reason === 'hardware'
-                ? 'private key lives on the hardware device and is not accessible to the wallet'
-                : 'watch-only addresses have no private key in this wallet';
+                ? 'the private key stays on the hardware wallet and never reaches this wallet'
+                : 'this address signs on another phone, so its private key is not in this wallet';
         super(`exportPrivateKey: ${detail}`);
         this.name = 'NoKeyForAddressError';
         this.reason = reason;
@@ -239,7 +240,11 @@ export async function exportPrivateKey({
             } else {
                 let seedBytes;
                 try {
-                    seedBytes = await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
+                    seedBytes = await decryptWalletSeed({
+                        encryptedSeed: wallet.encryptedSeed,
+                        kdfParams: wallet.kdfParams,
+                        masterKey,
+                    });
                 } catch (err) {
                     throw passwordProbeError(err);
                 } finally {

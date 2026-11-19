@@ -19,7 +19,10 @@ import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import dropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
 import filterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
+import fieldStyles from '../../../packages/core/src/ui/ChainPicker.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
@@ -70,10 +73,12 @@ function mount(overrides = {}) {
     return { ...render(<NetworkFilter {...props} />), props };
 }
 
+// The filter opens the standard full-screen network list, a dialog of row
+// buttons named "Select <network>".
 function openList() {
     const trigger = screen.getByRole('button', { name: /All networks|Bitcoin|Dogecoin|unknown/i });
     fireEvent.click(trigger);
-    return { trigger, listbox: screen.getByRole('listbox') };
+    return { trigger, list: screen.getByRole('dialog', { name: 'Network' }) };
 }
 
 afterEach(() => {
@@ -118,27 +123,33 @@ describe('NetworkFilter trigger', () => {
 });
 
 describe('NetworkFilter selection', () => {
-    it('opens an expanded list with All networks first', () => {
+    it('opens the full-screen network list with All networks first', () => {
         mount();
 
-        const { trigger, listbox } = openList();
+        const { trigger, list } = openList();
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
-        expect(within(listbox).getAllByRole('option')[0]).toHaveTextContent('All networks');
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(screen.queryByRole('listbox')).toBeNull();
+        const rows = within(list).getAllByRole('button', { name: /^Select / });
+        expect(rows).toHaveLength(knownFamilies.length + 1);
+        expect(rows[0]).toHaveAccessibleName('Select All networks');
+        expect(rows[0]).toHaveAttribute('aria-current', 'true');
     });
 
     it.each([
-        ['all', /^All networks/],
-        ['dogecoin', /^Dogecoin/],
-    ])('reports %s and closes the list', (selection, optionName) => {
+        ['all', 'Select All networks'],
+        ['dogecoin', 'Select Dogecoin'],
+    ])('reports %s and closes the list', (selection, rowName) => {
         const { props } = mount({ value: 'bitcoin' });
         const trigger = screen.getByRole('button', { name: /Bitcoin/ });
         fireEvent.click(trigger);
 
-        fireEvent.click(screen.getByRole('option', { name: optionName }));
+        fireEvent.click(screen.getByRole('button', { name: rowName }));
         expect(props.onChange).toHaveBeenCalledOnce();
         expect(props.onChange).toHaveBeenCalledWith(selection);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveFocus();
     });
 
     it('keeps repeated family rows uniquely keyed', () => {
@@ -147,7 +158,7 @@ describe('NetworkFilter selection', () => {
 
         openList();
 
-        expect(screen.getAllByRole('option', { name: /^Bitcoin/ })).toHaveLength(2);
+        expect(screen.getAllByRole('button', { name: 'Select Bitcoin' })).toHaveLength(2);
         expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique "key" prop/i);
     });
 });
@@ -160,144 +171,164 @@ describe('NetworkFilter dismissal', () => {
         if (compact) render(<NetworkFilterDropdown value="all" onChange={() => {}} />);
         else mount();
         const trigger = compact
-            ? screen.getByRole('button', { name: 'Filter by network' })
+            ? screen.getByRole('button', { name: /^Filter by network/ })
             : screen.getByRole('button', { name: /All networks/ });
         fireEvent.click(trigger);
-        expect(screen.getByRole('listbox')).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
 
         act(() => nativeBack({ canGoBack: false }));
 
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
-    it('closes on Escape', () => {
+    it('closes on Escape and returns focus to the trigger', () => {
         mount();
         const { trigger } = openList();
-        screen.getByRole('option', { name: /^Bitcoin/ }).focus();
+        screen.getByRole('button', { name: 'Select Bitcoin' }).focus();
 
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(document.activeElement).toBe(trigger);
     });
 
-    it('closes on a mousedown outside the filter', () => {
-        mount();
-        openList();
+    it('closes from the list Back without changing the filter', () => {
+        const { props } = mount();
+        const { trigger, list } = openList();
 
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        fireEvent.click(within(list).getByRole('button', { name: /Back/ }));
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(props.onChange).not.toHaveBeenCalled();
     });
 
-    it('stays open on a mousedown inside the popover', () => {
+    it('stays open on a mousedown inside the list', () => {
         mount();
-        const { listbox } = openList();
+        const { list } = openList();
 
-        fireEvent.mouseDown(listbox);
-        expect(screen.getByRole('listbox')).toBe(listbox);
+        fireEvent.mouseDown(list);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBe(list);
     });
 });
 
 describe('NetworkFilter keyboard navigation', () => {
-    it('opens on ArrowDown, moves among options, and returns focus on Escape', () => {
+    it('opens on ArrowDown, moves among rows with the arrows, and returns focus on Escape', () => {
         mount({ value: 'litecoin' });
         const trigger = screen.getByRole('button', { name: /Litecoin/ });
 
         fireEvent.keyDown(trigger, { key: 'ArrowDown' });
-        const selected = screen.getByRole('option', { name: /^Litecoin/ });
-        expect(selected).toHaveFocus();
+        const litecoin = screen.getByRole('button', { name: 'Select Litecoin' });
+        expect(litecoin).toHaveAttribute('aria-current', 'true');
+        litecoin.focus();
 
-        fireEvent.keyDown(selected, { key: 'ArrowDown' });
-        expect(screen.getByRole('option', { name: /^Dogecoin/ })).toHaveFocus();
+        fireEvent.keyDown(litecoin, { key: 'ArrowDown' });
+        expect(screen.getByRole('button', { name: 'Select Dogecoin' })).toHaveFocus();
         fireEvent.keyDown(document.activeElement, { key: 'Home' });
-        expect(screen.getByRole('option', { name: /^All networks/ })).toHaveFocus();
+        expect(screen.getByRole('button', { name: 'Select All networks' })).toHaveFocus();
+        fireEvent.keyDown(document.activeElement, { key: 'End' });
+        expect(screen.getByRole('button', { name: 'Select Dogecoin' })).toHaveFocus();
 
         fireEvent.keyDown(document.activeElement, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
-    });
-
-    it('moves from a large-list search field into the options', () => {
-        mount({ coinFamilies: manyFamilies });
-        openList();
-        const search = screen.getByPlaceholderText('Search networks…');
-
-        expect(search).toHaveFocus();
-        fireEvent.keyDown(search, { key: 'ArrowDown' });
-        expect(screen.getByRole('option', { name: /^All networks/ })).toHaveFocus();
-    });
-
-    it('selects with Enter and closes on Tab without trapping focus', () => {
-        const { props } = mount();
-        const { trigger } = openList();
-        const bitcoin = screen.getByRole('option', { name: /^Bitcoin/ });
-        bitcoin.focus();
-        fireEvent.keyDown(bitcoin, { key: 'Enter' });
-        expect(props.onChange).toHaveBeenCalledWith('bitcoin');
-        expect(trigger).toHaveAttribute('aria-expanded', 'false');
-
-        fireEvent.click(trigger);
-        const selected = screen.getByRole('option', { name: /^All networks/ });
-        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-        fireEvent(selected, event);
-        expect(screen.queryByRole('listbox')).toBeNull();
-        expect(event.defaultPrevented).toBe(false);
     });
 });
 
-describe('NetworkFilter search', () => {
-    it('only offers search for more than six families', () => {
-        mount();
-        openList();
-        expect(screen.queryByPlaceholderText('Search networks…')).toBeNull();
-        cleanup();
-
+describe('NetworkFilter list rows', () => {
+    it('draws each family like a token row: icon, name, ticker line and right chevron', () => {
         mount({ coinFamilies: manyFamilies });
-        openList();
-        expect(screen.getByRole('searchbox', { name: 'Search networks' })).toBeInTheDocument();
+        const { list } = openList();
+
+        const bitcoin = within(list).getByRole('button', { name: 'Select Bitcoin' });
+        expect(bitcoin.querySelector('[data-asset-mark]')).not.toBeNull();
+        expect(bitcoin).toHaveTextContent('Bitcoin');
+        expect(bitcoin.querySelector('[data-network-description]')).toHaveTextContent('BTC');
+        expect(bitcoin.querySelector(`.${listRowStyles.chevron} svg`)).not.toBeNull();
+        for (const [name, ticker] of [['Litecoin', 'LTC'], ['Dogecoin', 'DOGE'], ['Ethereum', 'ETHEREUM']]) {
+            const row = within(list).getByRole('button', { name: `Select ${name}` });
+            expect(row.querySelector('[data-network-description]')).toHaveTextContent(ticker);
+        }
+        const all = within(list).getByRole('button', { name: 'Select All networks' });
+        expect(all.querySelector('[data-network-description]')).toHaveTextContent('7 networks');
+        expect(all.querySelector('svg[data-xc-icon]')).not.toBeNull();
     });
+});
 
-    it('gives the search field a name independent of its placeholder', () => {
-        mount({ coinFamilies: manyFamilies });
-        openList();
+// Each filter panel closes on an outside press, focus or Escape; the network
+// list is portaled outside the panel, so each must leave that list alone or
+// the panel unmounts the list before the pick lands.
+describe('NetworkFilter inside a list filter panel', () => {
+    const hosts = [
+        ['ListFilterMenu', 'Filter coins and tokens', async (onPick) => {
+            const { ListFilterMenu } = await import('../../../packages/core/src/shared/components/ListFilterMenu.jsx');
+            return (
+                <ListFilterMenu
+                    query=""
+                    onQueryChange={() => {}}
+                    label="Filter coins and tokens"
+                    searchPlaceholder="Search"
+                    searchLabel="Search coins"
+                    chainRegistry={chainRegistry}
+                    coinFamilies={knownFamilies}
+                    networkFilter="all"
+                    onNetworkFilterChange={onPick}
+                />
+            );
+        }],
+        ['ListFilterPopover', 'Filter', async (onPick) => {
+            const { ListFilterPopover } = await import('../../../packages/core/src/shared/components/ListFilterPopover.jsx');
+            return (
+                <ListFilterPopover label="Filter">
+                    <NetworkFilterDropdown value="all" onChange={onPick} iconOnly={false} />
+                </ListFilterPopover>
+            );
+        }],
+        ['HomeListFilterMenu', 'Filter and sort', async (onPick) => {
+            const { HomeListFilterMenu } = await import('../../../packages/core/src/shared/components/HomeListFilterMenu.jsx');
+            return (
+                <HomeListFilterMenu
+                    sortBy="name"
+                    onSortChange={() => {}}
+                    chainRegistry={chainRegistry}
+                    coinFamilies={knownFamilies}
+                    networkFilter="all"
+                    onNetworkFilterChange={onPick}
+                    tokenQuery=""
+                    onTokenQueryChange={() => {}}
+                />
+            );
+        }],
+    ];
 
-        const search = screen.getByRole('searchbox', { name: 'Search networks' });
-        expect(search).toHaveAttribute('placeholder', 'Search networks…');
-    });
+    it.each(hosts)('%s keeps its panel open under the list and reports the pick', async (_host, panelName, build) => {
+        const onPick = vi.fn();
+        render(await build(onPick));
 
-    it('filters labels and tickers case-insensitively', () => {
-        mount({ coinFamilies: manyFamilies });
-        openList();
-        const search = screen.getByPlaceholderText('Search networks…');
+        fireEvent.click(screen.getByRole('button', { name: panelName }));
+        const panel = screen.getByRole('dialog', { name: panelName });
+        fireEvent.click(within(panel).getByRole('button', { name: /Filter by network/ }));
+        const list = screen.getByRole('dialog', { name: 'Network' });
 
-        fireEvent.change(search, { target: { value: 'bitCOIN' } });
-        expect(screen.getByRole('option', { name: /^Bitcoin/ })).toBeInTheDocument();
-        expect(screen.queryByRole('option', { name: /^Litecoin/ })).toBeNull();
+        // The press, the focus and an Escape land in the portaled list,
+        // outside the panel; only the list may answer them.
+        const litecoin = within(list).getByRole('button', { name: 'Select Litecoin' });
+        fireEvent.mouseDown(litecoin);
+        fireEvent.focusIn(litecoin);
+        expect(screen.getByRole('dialog', { name: panelName })).toBeInTheDocument();
+        fireEvent.click(litecoin);
 
-        fireEvent.change(search, { target: { value: 'ltC' } });
-        expect(screen.getByRole('option', { name: /^Litecoin/ })).toBeInTheDocument();
-        expect(screen.queryByRole('option', { name: /^Bitcoin/ })).toBeNull();
-    });
+        expect(onPick).toHaveBeenCalledWith('litecoin');
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
+        expect(screen.getByRole('dialog', { name: panelName })).toBeInTheDocument();
 
-    it('shows the empty result message', () => {
-        mount({ coinFamilies: manyFamilies });
-        openList();
-
-        fireEvent.change(screen.getByPlaceholderText('Search networks…'), {
-            target: { value: 'not-a-network' },
-        });
-        expect(screen.getByText('No matching networks.')).toBeInTheDocument();
-    });
-
-    it('uses known short tickers and uppercases other coin codes', () => {
-        mount({ coinFamilies: manyFamilies });
-        const { listbox } = openList();
-
-        expect(within(listbox).getByRole('option', { name: /^Bitcoin/ })).toHaveTextContent('BTC');
-        expect(within(listbox).getByRole('option', { name: /^Litecoin/ })).toHaveTextContent('LTC');
-        expect(within(listbox).getByRole('option', { name: /^Dogecoin/ })).toHaveTextContent('DOGE');
-        expect(within(listbox).getByRole('option', { name: /^Ethereum/ })).toHaveTextContent('ETHEREUM');
+        // Escape inside a reopened list closes the list, not the panel.
+        fireEvent.click(within(screen.getByRole('dialog', { name: panelName }))
+            .getByRole('button', { name: /Filter by network/ }));
+        const reopened = screen.getByRole('dialog', { name: 'Network' });
+        fireEvent.keyDown(within(reopened).getByRole('button', { name: 'Select Bitcoin' }), { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
+        expect(screen.getByRole('dialog', { name: panelName })).toBeInTheDocument();
     });
 });
 
@@ -311,7 +342,7 @@ describe('shared network filter surfaces', () => {
         );
 
         const search = screen.getByRole('searchbox', { name: 'Search contacts' });
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
         const dropdown = trigger.closest(`.${dropdownStyles.networkWrap}`);
         const filter = trigger.closest(`.${filterStyles.wrap}`);
         const css = readFileSync(resolve(
@@ -348,15 +379,16 @@ describe('shared network filter surfaces', () => {
     it('uses the canonical filter for compact dropdowns and clears through All networks', () => {
         const onChange = vi.fn();
         render(<NetworkFilterDropdown value="dogecoin" onChange={onChange} />);
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
 
-        expect(trigger).toHaveTextContent('Dogecoin');
+        expect(trigger).not.toHaveTextContent('Dogecoin');
+        expect(trigger).toHaveAttribute('title', 'Dogecoin');
         fireEvent.click(trigger);
-        fireEvent.click(screen.getByRole('option', { name: /^All networks/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select All networks' }));
         expect(onChange).toHaveBeenCalledWith('all');
     });
 
-    it('preserves the label and wraps the shared toolbar at 320px', () => {
+    it('keeps the icon-only trigger and wraps the shared toolbar at 320px', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
         window.dispatchEvent(new Event('resize'));
         render(
@@ -372,7 +404,7 @@ describe('shared network filter surfaces', () => {
             </div>,
         );
 
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: 'Filter by network: All networks' });
         const dropdown = trigger.closest(`.${dropdownStyles.networkWrap}`);
         const filter = trigger.closest(`.${filterStyles.wrap}`);
         const toolbar = trigger.closest(`.${listPageStyles.toolbar}`);
@@ -396,9 +428,10 @@ describe('shared network filter surfaces', () => {
         expect(dropdown).toBeInTheDocument();
         expect(filter).toBeInTheDocument();
         expect(toolbar).toBeInTheDocument();
-        expect(trigger).toHaveTextContent('All networks');
-        // The network count is announced, not drawn, so the label keeps the width.
+        expect(trigger).not.toHaveTextContent('All networks');
         expect(trigger).not.toHaveTextContent('3 networks');
+        expect(trigger).toHaveAttribute('title', 'All networks');
+        expect(trigger.querySelector(`.${filterStyles.triggerIcon}`)).toBeInTheDocument();
         expect(dropdownRule).toMatch(/flex:\s*1 1 10rem/);
         expect(dropdownRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
         expect(filterRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
@@ -439,16 +472,157 @@ describe('shared network filter surfaces', () => {
         ), 'utf8');
 
         expect(window.innerWidth).toBe(411);
-        expect(trigger).toHaveTextContent('All networks');
+        expect(trigger).not.toHaveTextContent('All networks');
         expect(trigger).not.toHaveTextContent('3 networks');
+        expect(trigger).toHaveAttribute('title', 'All networks');
         expect(filter).toHaveClass(filterStyles.md);
         // The kit Chip owns the trigger height; the filter only lets it fill and shrink.
         expect(filterCss).toMatch(/\.trigger\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/s);
         expect(filterCss).toMatch(/\.triggerLabel\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
-        // Both screens share the ListToolbar, whose class must exist: an undefined one left the controls stacked.
+        // The shared ListToolbar class must exist: an undefined one left the controls stacked.
         expect(toolbarCss).toMatch(/\.toolbar\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
-        expect(contactsSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
-        expect(dispensersSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+        // Contacts moved its filters to the title line panel (G95), keeping the counted network name.
+        expect(contactsSource).toMatch(/<ListFilterMenu\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+        expect(contactsSource).not.toMatch(/<ListToolbar\b/);
+        // Dispensers moved its filter to the title line: the standard ListFilterMenu carries the network filter.
+        expect(dispensersSource).toMatch(/<ListFilterMenu\b[\s\S]*onNetworkFilterChange=\{setNetwork\}/);
+        expect(dispensersSource).not.toMatch(/<ListToolbar\b/);
+    });
+});
+
+describe('NetworkFilterDropdown default icon-only trigger', () => {
+    it('names All networks accessibly without drawing the name', () => {
+        render(<NetworkFilterDropdown value="all" onChange={() => {}} />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network: All networks' });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('All networks');
+        expect(trigger).toHaveAccessibleName('Filter by network: All networks');
+        expect(trigger).toHaveAttribute('title', 'All networks');
+        expect(trigger.querySelector(`.${filterStyles.triggerIcon} svg`)).not.toBeNull();
+        expect(trigger.closest(`.${filterStyles.wrap}`)).toHaveClass(filterStyles.iconOnly);
+    });
+
+    it('names the selected network accessibly without drawing the name', () => {
+        render(<NetworkFilterDropdown value="dogecoin" onChange={() => {}} />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network: Dogecoin' });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('Dogecoin');
+        expect(trigger).toHaveAccessibleName('Filter by network: Dogecoin');
+        expect(trigger).toHaveAttribute('title', 'Dogecoin');
+    });
+});
+
+describe('NetworkFilterDropdown icon-only trigger', () => {
+    it.each([
+        { announce: false, name: 'Filter by network: All networks' },
+        { announce: true, name: 'Filter by network: All networks, 3 networks' },
+    ])('draws no All networks text when announceNetworkCount is $announce', ({ announce, name }) => {
+        render(
+            <NetworkFilterDropdown
+                value="all"
+                onChange={() => {}}
+                announceNetworkCount={announce}
+                iconOnly
+            />,
+        );
+
+        const trigger = screen.getByRole('button', { name });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('All networks');
+        expect(trigger.textContent.trim()).toBe('');
+        expect(trigger).toHaveAccessibleName(name);
+        expect(trigger).toHaveAttribute('title', 'All networks');
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+        const icon = trigger.querySelector(`.${filterStyles.triggerIcon}`);
+        expect(icon).toBeInTheDocument();
+        expect(icon.querySelector('svg')).not.toBeNull();
+        expect(trigger.closest(`.${filterStyles.wrap}`)).toHaveClass(filterStyles.iconOnly);
+    });
+
+    it('shows the selected coin icon with no coin name text', () => {
+        render(<NetworkFilterDropdown value="dogecoin" onChange={() => {}} iconOnly />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network: Dogecoin' });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('Dogecoin');
+        expect(trigger.textContent.trim()).toBe('');
+        expect(trigger).toHaveAttribute('title', 'Dogecoin');
+        expect(trigger).toHaveAttribute('aria-pressed', 'true');
+        expect(trigger.querySelector(`.${filterStyles.triggerIcon} img`)).not.toBeNull();
+    });
+
+    it('keeps the label on a direct NetworkFilter trigger', () => {
+        mount();
+
+        const trigger = screen.getByRole('button', { name: /All networks/ });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toHaveTextContent('All networks');
+        expect(trigger.closest(`.${filterStyles.wrap}`)).not.toHaveClass(filterStyles.iconOnly);
+    });
+});
+
+describe('NetworkFilterDropdown field trigger (fieldTrigger)', () => {
+    it('draws the network name, a list icon and the field classes with no chip or pressed fill', () => {
+        render(<NetworkFilterDropdown value="dogecoin" onChange={() => {}} iconOnly={false} fieldTrigger />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network: Dogecoin' });
+        expect(trigger).toHaveTextContent('Dogecoin');
+        expect(trigger).toHaveClass(buttonStyles.btn, fieldStyles.trigger);
+        expect(trigger).not.toHaveClass(chipStyles.chip);
+        expect(trigger).not.toHaveAttribute('aria-pressed');
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(trigger.querySelector('img')).not.toBeNull();
+        expect(trigger.querySelector(`.${fieldStyles.triggerCaret} svg`)).not.toBeNull();
+        expect(trigger.closest(`.${filterStyles.wrap}`)).not.toHaveClass(filterStyles.iconOnly);
+    });
+
+    it('shows All networks with the filter icon, still unpressed', () => {
+        render(<NetworkFilterDropdown value="all" onChange={() => {}} iconOnly={false} fieldTrigger />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network: All networks' });
+        expect(trigger).toHaveTextContent('All networks');
+        expect(trigger.querySelector(`.${fieldStyles.triggerIcon} svg`)).not.toBeNull();
+        expect(trigger).not.toHaveAttribute('aria-pressed');
+    });
+
+    it('opens the network list and reports a chosen network', () => {
+        const onChange = vi.fn();
+        render(<NetworkFilterDropdown value="all" onChange={onChange} iconOnly={false} />);
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
+
+        fireEvent.click(trigger);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Select Litecoin' }));
+        expect(onChange).toHaveBeenCalledWith('litecoin');
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('opens from the keyboard', () => {
+        render(<NetworkFilterDropdown value="litecoin" onChange={() => {}} iconOnly={false} />);
+        fireEvent.keyDown(screen.getByRole('button', { name: /^Filter by network/ }), { key: 'ArrowDown' });
+        expect(screen.getByRole('button', { name: 'Select Litecoin' })).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('leaves the default dropdown and a direct filter on their current markup', () => {
+        const { unmount } = render(<NetworkFilterDropdown value="dogecoin" onChange={() => {}} />);
+        const iconOnly = screen.getByRole('button', { name: /^Filter by network/ });
+        expect(iconOnly).toHaveClass(chipStyles.chip);
+        expect(iconOnly).not.toHaveClass(fieldStyles.trigger);
+        unmount();
+
+        mount({ value: 'dogecoin' });
+        const direct = screen.getByRole('button', { name: /Dogecoin/ });
+        expect(direct).toHaveClass(chipStyles.chip);
+        expect(direct).not.toHaveClass(fieldStyles.trigger);
+    });
+
+    it('applies only when a NetworkFilter opts in with fieldTrigger', () => {
+        mount({ value: 'bitcoin', fieldTrigger: true });
+        const trigger = screen.getByRole('button', { name: /Bitcoin/ });
+        expect(trigger).toHaveClass(fieldStyles.trigger);
+        expect(trigger).not.toHaveClass(chipStyles.chip);
     });
 });
 

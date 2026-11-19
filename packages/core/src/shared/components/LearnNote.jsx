@@ -13,7 +13,7 @@
 // hide help for a different kind of signature.
 
 import { useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Notice } from '@xchain-wallet/core/ui';
 import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
 import { t } from '../../i18n/index.js';
@@ -22,7 +22,6 @@ import '../../i18n/locales/en/components.js';
 const DOCS_URL = 'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails';
 const DISMISSED_KEY_PREFIX = 'xc:learn-note:dismissed:';
 const DISMISS_LABEL = 'Dismiss learn note';
-const DISMISS_TEXT = 'Dismiss';
 const LEARN_MORE_TEXT = 'Learn more';
 
 function dismissalKey(variant) {
@@ -74,26 +73,22 @@ export function LearnNote({ variant = 'action', chainLabel, title = t('component
     };
 
     return (
-        <div className={styles.note} data-testid="learn-note">
-            <div className={styles.header}>
-                <span className={styles.title}>{title}</span>
-                <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    icon={null}
-                    onClick={dismiss}
-                    aria-label={DISMISS_LABEL}
-                >
-                    {DISMISS_TEXT}
-                </Button>
-            </div>
-            <p className={styles.body}>
+        // Help, not a fault: an info Notice that is part of the page, so it is
+        // not a live region, with the close X in its top end corner.
+        <Notice
+            tone="info"
+            role={null}
+            title={title}
+            testId="learn-note"
+            onDismiss={dismiss}
+            dismissLabel={DISMISS_LABEL}
+        >
+            <p className={styles.body} data-learn-note-body="">
                 {body}{' '}
                 <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
                     {LEARN_MORE_TEXT} <span aria-hidden="true">↗</span>
                 </a>
             </p>
-        </div>
+        </Notice>
     );
 }

@@ -87,10 +87,13 @@ assert.ok(/function EntryRow\(\{[^}]*\bchainTip\b[^}]*\bindexerWatermark\b[^}]*\
     'EntryRow declares the chainTip + indexerWatermark props');
 assert.ok(/<DetailCard[\s\S]{0,300}?chainTip=\{chainTip\}[\s\S]{0,300}?indexerWatermark=\{indexerWatermark\}[\s\S]{0,300}?walletId=\{walletId\}[\s\S]{0,300}?\/>/.test(historySrc),
     'EntryRow forwards chainTip + indexerWatermark to DetailCard');
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId,?[^}]*\}\)/.test(historySrc),
-    'DetailCard declares the chainTip + indexerWatermark props');
-assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} \/>/.test(historySrc),
-    'DetailCard forwards chainTip + indexerWatermark to TxStatusTimeline');
+// The inline card keeps chainTip for its Confirmations fact. It no longer
+// draws a status timeline: the shared Actions | Details toggle replaced its
+// Status view (operator ruling 2026-11-13).
+assert.ok(/function DetailCard\(\{ entry, chainTip, walletId,?[^}]*\}\)/.test(historySrc),
+    'DetailCard declares the chainTip prop');
+assert.ok(!/<TxStatusTimeline\b/.test(historySrc),
+    'DetailCard draws no status timeline');
 
 // History.jsx fetches the per-chain indexer watermark and threads
 // it through every EntryRow alongside chainTip.

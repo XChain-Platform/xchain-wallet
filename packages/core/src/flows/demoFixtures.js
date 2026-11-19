@@ -44,6 +44,9 @@ export const DEMO_TOKEN_ICONS = {
     PEPECASH: nftImg('CASH', '#16A34A', '#A16207'),
     XCP: nftImg('XCP', '#1E90C7', '#7B2C8F'),
     DOGINAL: nftImg('DOGE', '#EAB308', '#92400E'),
+    BEANCOIN: nftImg('BEAN', '#B45309', '#78350F'),
+    STUDIOPASS: nftImg('PASS', '#0E7490', '#1E3A8A'),
+    HARBORFEST: nftImg('HARBR', '#BE185D', '#6D28D9'),
 };
 //
 // Demo wallets are real BIP39 wallets. They have real addresses on
@@ -71,10 +74,18 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             // populated) lives in demoExampleTis.json; holding it lets the
             // demo show a maxed-out token info surface.
             { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
+            // The platform token, so the demo's mainnet wallet holds XCHAIN like
+            // the regtest one does.
+            { tick: 'XCHAIN', displayName: 'XChain', divisibility: 8, quantity: '200000000000', fiatRate: 1.25 }, // 2,000 XCHAIN
             // Divisible mainnet tokens
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
             { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: DEMO_TOKEN_ICONS.PEPECASH }, // 100 PEPECASH
             { tick: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
+            // Tokens this demo wallet issued (listed in My Tokens by
+            // synthesizeDemoOwnedTokens), with the supply it still holds.
+            { tick: 'BEANCOIN', displayName: 'Bean Coin', divisibility: 8, quantity: '2500000000000', fiatRate: 0.08, imageUrl: DEMO_TOKEN_ICONS.BEANCOIN }, // 25,000 BEANCOIN
+            { tick: 'STUDIOPASS', displayName: 'Studio North Pass', divisibility: 0, quantity: '12', fiatRate: 120, imageUrl: DEMO_TOKEN_ICONS.STUDIOPASS },
+            { tick: 'HARBORFEST', displayName: 'Harbor Fest 2027 Ticket', divisibility: 0, quantity: '8', fiatRate: 45, imageUrl: DEMO_TOKEN_ICONS.HARBORFEST },
             { tick: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
             // Indivisible; surfaced in NFTs because they carry imageUrl
             { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
@@ -205,23 +216,78 @@ export function synthesizeDemoBalances(addressesByChain) {
 
 // Fixed 24-hour moves for the demo wallet's native coins, one per
 // coin family (the three networks of a family share a figure, the way
-// they share a fixture). Chosen to read as an ordinary day rather than
-// a rally: one coin up, one flat-ish, one down, so the hero's change
-// line and its colour states are both visible in a demo.
+// they share a fixture). Every coin is up: a demo never advertises a
+// loss, and the synthesized charts rise to match.
 //
-// These exist because a demo wallet used to take its 24h change from
-// the LIVE price oracle while every other number on the screen was
-// synthetic - so the figure was a real market move applied to
-// imaginary holdings, it made a third-party request from a wallet that
-// is supposed to fetch nothing, and it was the last input keeping two
-// store-listing captures of one tree from matching: whether the fetch
-// landed before the screenshot decided whether the whole card below it
-// sat 24px lower.
+// They are fixed rather than read from the live price oracle: every
+// other number on a demo screen is synthetic, a demo wallet fetches
+// nothing, and two store-listing captures of one tree must match, which
+// a fetch racing the screenshot (moving the card below by 24px) breaks.
 const DEMO_NATIVE_CHANGE_24H_PCT = /** @type {Record<string, number>} */ ({
     bitcoin: 1.24,
-    litecoin: -0.72,
+    litecoin: 0.72,
     dogecoin: 3.15,
 });
+
+// Tokens the demo wallet has issued and still owns, for My Tokens. Bitcoin
+// only (the demo's token chain). Supplies are in whole units.
+const DEMO_OWNED_TOKENS_BY_CHAIN = {
+    'bitcoin-mainnet': [
+        {
+            tick: 'BEANCOIN',
+            description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+            divisibility: 8,
+            totalSupply: '1250000',
+            maxSupply: '10000000',
+            locked: false,
+            holders: 412,
+            fiatRate: 0.08,
+            displayName: 'Bean Coin',
+            quantity: '2500000000000',
+            imageUrl: DEMO_TOKEN_ICONS.BEANCOIN,
+        },
+        {
+            tick: 'STUDIOPASS',
+            description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+            divisibility: 0,
+            totalSupply: '500',
+            maxSupply: '500',
+            locked: true,
+            holders: 187,
+            fiatRate: 120,
+            displayName: 'Studio North Pass',
+            quantity: '12',
+            imageUrl: DEMO_TOKEN_ICONS.STUDIOPASS,
+        },
+        {
+            tick: 'HARBORFEST',
+            description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+            divisibility: 0,
+            totalSupply: '2000',
+            maxSupply: '2000',
+            // Fully issued and supply-locked, so the indivisible ticket also
+            // classifies as a collectible on the NFTs tab.
+            locked: true,
+            holders: 1206,
+            fiatRate: 45,
+            displayName: 'Harbor Fest 2027 Ticket',
+            quantity: '8',
+            imageUrl: DEMO_TOKEN_ICONS.HARBORFEST,
+        },
+    ],
+};
+
+/**
+ * The tokens a demo wallet issued and owns, shaped like the rows
+ * `messaging.getOwnedTokens` returns for an address (My Tokens adds the chain
+ * and owner address itself).
+ *
+ * @param {string} chainId
+ * @returns {Array<{ tick: string, description: string, divisibility: number, totalSupply: string, maxSupply: string, locked: boolean, holders: number, fiatRate: number, youOwn: boolean }>}
+ */
+export function synthesizeDemoOwnedTokens(chainId) {
+    return (DEMO_OWNED_TOKENS_BY_CHAIN[chainId] || []).map((t) => ({ ...t, youOwn: true, demo: true }));
+}
 
 /**
  * Native-coin price entries for a demo wallet, in the shape
@@ -791,6 +857,7 @@ const DEMO_CONTRACT_STAKES_BY_CHAIN = {
                 target_contract_index: '1024',
                 tick: 'EXAMPLE',
                 amount: '1000',
+                block_index: 12_405,
                 signing_pubkey: '02a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f901',
             },
             {
@@ -798,6 +865,17 @@ const DEMO_CONTRACT_STAKES_BY_CHAIN = {
                 target_contract_index: '2048',
                 tick: 'PEPECASH',
                 amount: '25000',
+                block_index: 12_390,
+                signing_pubkey: '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9',
+            },
+            // A later top-up keeps this position's staked-balance chart net up
+            // across the slash below.
+            {
+                action_index: 'demo-cstake-2048b',
+                target_contract_index: '2048',
+                tick: 'PEPECASH',
+                amount: '2000',
+                block_index: 12_520,
                 signing_pubkey: '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9',
             },
         ],
@@ -847,7 +925,7 @@ export function synthesizeDemoContractStakes(chainId) {
 // Deploy-time staking metadata for the demo contracts above, shaped like
 // the row `contracts.byActionIndex` returns. Without this, the demo
 // StakeDetail hero can't show cooldown/slash destination and
-// ContractStakeForm's stakeable gate (cooldown_blocks set at DEPLOY)
+// the Staking form's contract stakeable gate (cooldown_blocks set at DEPLOY)
 // rejects the very contracts the demo says you hold positions in. The
 // slash destination matches the slash-event fixture so the #2048 story
 // stays coherent.
@@ -1191,6 +1269,27 @@ const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
     ],
 });
 
+const DEMO_MARKET_DISPENSERS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4202001', tx_hash: 'demo-market-disp-btc-1', block_index: 962101,
+            status: 'open', give_tick: 'PEPECASH', give_coin: '', give_amount: '500',
+            get_tick: 'XCP', get_coin: '', get_amount: '5',
+            source: 'bc1qdemomarketselleralpha000000000000000001',
+            address: 'bc1qdemomarketdispenseralpha00000000000001',
+            escrow_remaining: '12500', dispense_count: 4,
+        },
+        {
+            action_index: '4202002', tx_hash: 'demo-market-disp-btc-2', block_index: 962099,
+            status: 'open', give_tick: 'RAREPEPE', give_coin: '', give_amount: '1',
+            get_tick: 'PEPECASH', get_coin: '', get_amount: '2500',
+            source: 'bc1qdemomarketsellerbravo00000000000000002',
+            address: 'bc1qdemomarketdispenserbravo0000000000002',
+            escrow_remaining: '18', dispense_count: 2,
+        },
+    ],
+});
+
 /**
  * Fabricated fill events per dispenser action_index, for the detail page's
  * "Recent dispenses" list. Buyer addresses are vanity fakes.
@@ -1226,6 +1325,27 @@ export function synthesizeDemoDispensers(chainId, sourceAddress) {
 }
 
 /**
+ * Marketplace dispensers across all sellers for one selected token. The same
+ * bulk fixture contains both directions so Buy and Sell filter one response.
+ * An empty token returns the full chain fixture for detail lookup.
+ *
+ * @param {string} chainId
+ * @param {string} [token]
+ * @returns {any[]}
+ */
+export function synthesizeDemoMarketDispensers(chainId, token = '') {
+    const rows = DEMO_MARKET_DISPENSERS[chainId]
+        || DEMO_MARKET_DISPENSERS[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
+        || [];
+    const selected = String(token || '').toUpperCase();
+    return rows
+        .filter((row) => !selected
+            || String(row.give_tick || row.give_coin || '').toUpperCase() === selected
+            || String(row.get_tick || row.get_coin || '').toUpperCase() === selected)
+        .map((row) => ({ ...row }));
+}
+
+/**
  * The demo dispenser fixture rows for `chainId`. Regtest and testnet ids
  * reuse their mainnet fixture, so every network the demo wallet can show
  * resolves the same dispensers.
@@ -1257,4 +1377,358 @@ export function synthesizeDemoDispenses(actionIndex, opts = {}) {
     const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
     const now = Math.floor(nowMs / 1000);
     return rows.map(({ ageSec, ...r }) => ({ ...r, timestamp: now - (ageSec || 0) }));
+}
+
+/**
+ * Fabricated ORDER rows per chain, shaped like the explorer's orders feed
+ * with the `state` block hydrated, so My orders reads them without a
+ * detail fetch. Ages and expiry offsets are seconds relative to the
+ * injected clock; an open order expires in the future, a closed one shows
+ * its terminal status.
+ */
+const DEMO_ORDERS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4201240', tx_hash: 'demo-order-btc-1', block_index: 960512,
+            give_tick: 'RAREPEPE', give_coin: '', give_amount: '2', give_ownership: 0,
+            get_tick: '', get_coin: 'BTC', get_amount: '0.012', get_ownership: 0,
+            ageSec: 3 * 3_600, expiresInSec: 4 * 86_400, state: 'open', giveRemaining: '2',
+        },
+        {
+            action_index: '4201118', tx_hash: 'demo-order-btc-2', block_index: 960431,
+            give_tick: 'PEPECASH', give_coin: '', give_amount: '1000', give_ownership: 0,
+            get_tick: 'XCP', get_coin: '', get_amount: '10', get_ownership: 0,
+            ageSec: 2 * 86_400, expiresInSec: 12 * 86_400, state: 'open', giveRemaining: '400',
+        },
+        {
+            action_index: '4200655', tx_hash: 'demo-order-btc-3', block_index: 959870,
+            give_tick: 'EXAMPLE', give_coin: '', give_amount: '50', give_ownership: 0,
+            get_tick: '', get_coin: 'BTC', get_amount: '0.001', get_ownership: 0,
+            ageSec: 9 * 86_400, expiresInSec: 21 * 86_400, state: 'filled', giveRemaining: '0',
+        },
+    ],
+    'litecoin-mainnet': [
+        {
+            action_index: '2107902', tx_hash: 'demo-order-ltc-1', block_index: 3159588,
+            give_tick: 'MWEB', give_coin: '', give_amount: '5', give_ownership: 0,
+            get_tick: '', get_coin: 'LTC', get_amount: '1.25', get_ownership: 0,
+            ageSec: 6 * 3_600, expiresInSec: 7 * 86_400, state: 'open', giveRemaining: '5',
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            action_index: '7301702', tx_hash: 'demo-order-doge-1', block_index: 6334251,
+            give_tick: 'DOGI', give_coin: '', give_amount: '1000', give_ownership: 0,
+            get_tick: '', get_coin: 'DOGE', get_amount: '400', get_ownership: 0,
+            ageSec: 40 * 60, expiresInSec: 3 * 86_400, state: 'open', giveRemaining: '1000',
+        },
+        {
+            action_index: '7299015', tx_hash: 'demo-order-doge-2', block_index: 6330760,
+            give_tick: 'WOW', give_coin: '', give_amount: '20', give_ownership: 0,
+            get_tick: 'DOGI', get_coin: '', get_amount: '100', get_ownership: 0,
+            ageSec: 16 * 86_400, expiresInSec: -2 * 86_400, state: 'expired', giveRemaining: '0',
+        },
+    ],
+});
+
+/**
+ * Fabricated SWAP rows per chain, shaped like the explorer's swaps feed
+ * with `swap_status` and the hydrated `state` block.
+ */
+const DEMO_SWAPS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4201260', tx_hash: 'demo-swap-btc-1', block_index: 960530,
+            give_tick: 'RAREPEPE', give_coin: '', give_amount: '1', give_ownership: 0,
+            get_tick: 'PEPECASH', get_coin: '', get_amount: '2500', get_ownership: 0,
+            ageSec: 90 * 60, expiresInSec: 2 * 86_400, state: 'open',
+        },
+        {
+            action_index: '4200702', tx_hash: 'demo-swap-btc-2', block_index: 959911,
+            give_tick: 'EXAMPLE', give_coin: '', give_amount: '25', give_ownership: 0,
+            get_tick: 'XCP', get_coin: '', get_amount: '3', get_ownership: 0,
+            ageSec: 6 * 86_400, expiresInSec: 8 * 86_400, state: 'settled',
+        },
+    ],
+    'litecoin-mainnet': [
+        {
+            action_index: '2107955', tx_hash: 'demo-swap-ltc-1', block_index: 3159640,
+            give_tick: 'MWEB', give_coin: '', give_amount: '1', give_ownership: 0,
+            get_tick: 'LITECRED', get_coin: '', get_amount: '200', get_ownership: 0,
+            ageSec: 5 * 3_600, expiresInSec: 5 * 86_400, state: 'open',
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            action_index: '7301730', tx_hash: 'demo-swap-doge-1', block_index: 6334280,
+            give_tick: 'DOGI', give_coin: '', give_amount: '500', give_ownership: 0,
+            get_tick: 'WOW', get_coin: '', get_amount: '40', get_ownership: 0,
+            ageSec: 25 * 60, expiresInSec: 86_400, state: 'open',
+        },
+    ],
+});
+
+/**
+ * The fixture rows in `table` for `chainId`. Regtest and testnet ids reuse
+ * their mainnet fixture, so every network the demo wallet can show
+ * resolves the same rows.
+ *
+ * @param {Record<string, any[]>} table
+ * @param {string} chainId
+ * @returns {any[]}
+ */
+function demoMarketRows(table, chainId) {
+    return table[chainId]
+        || table[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
+        || [];
+}
+
+/**
+ * Orders the demo wallet placed on `chainId`, sourced from its first
+ * address so My orders lists them as the wallet's own. Each row carries
+ * the hydrated `state` block (status, give_remaining, expiration) the
+ * list feed returns, so the view needs no detail read.
+ *
+ * @param {string} chainId
+ * @param {string} sourceAddress   the demo wallet's address on that chain
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture (flows/demoCapture.js)
+ * @returns {any[]}
+ */
+export function synthesizeDemoOrders(chainId, sourceAddress, opts = {}) {
+    if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
+    const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Math.floor(nowMs / 1000);
+    return demoMarketRows(DEMO_ORDERS, chainId).map(({
+        ageSec, expiresInSec, state, giveRemaining, ...row
+    }) => ({
+        ...row,
+        source: sourceAddress,
+        status: 'valid',
+        timestamp: now - ageSec,
+        expiration: now + expiresInSec,
+        state: { status: state, give_remaining: giveRemaining, expiration: now + expiresInSec },
+    }));
+}
+
+/**
+ * Swaps the demo wallet offered on `chainId`, sourced from its first
+ * address so My swaps lists them as the wallet's own. Each row carries
+ * `swap_status` and the hydrated `state` block the list feed returns.
+ *
+ * @param {string} chainId
+ * @param {string} sourceAddress   the demo wallet's address on that chain
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture (flows/demoCapture.js)
+ * @returns {any[]}
+ */
+export function synthesizeDemoSwaps(chainId, sourceAddress, opts = {}) {
+    if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
+    const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Math.floor(nowMs / 1000);
+    return demoMarketRows(DEMO_SWAPS, chainId).map(({
+        ageSec, expiresInSec, state, ...row
+    }) => ({
+        ...row,
+        source: sourceAddress,
+        status: 'valid',
+        swap_status: state,
+        timestamp: now - ageSec,
+        expiration: now + expiresInSec,
+        state: { status: state, expiration: now + expiresInSec },
+    }));
+}
+
+// Cosigner keys for the demo signing sessions: valid-shaped compressed
+// public keys hashed from each name, so no one holds the private keys.
+// "You" stands for the demo wallet's own cosigner key.
+const DEMO_COSIGNERS = {
+    you: { name: 'You (this wallet)', pubkey: '028aaf1887c041271b46b9f547a84a1e6dc6db2a285ae3924455710016c6231938' },
+    erin: { name: DEMO_CONTACTS[0].name, pubkey: '0321b018bd0e958f8a235ef569c68a9cc2e685d0f6355a009d8fa7781c1927ea31' },
+    marcus: { name: DEMO_CONTACTS[1].name, pubkey: '0390fced50ca3a3e5b75e987ed484483a50dc9106ed6a174a2a256ae92e42dc920' },
+    priya: { name: DEMO_CONTACTS[2].name, pubkey: '02fc217f0996828c2006440133dc9e4b5f90821a25c6dff0142f17632f7cd8c95b' },
+    diego: { name: DEMO_CONTACTS[3].name, pubkey: '0242515cdf95588a5122e3665b6b5cb465c0a33d23cdab00c09600e28c16c217fd' },
+    yuki: { name: DEMO_CONTACTS[4].name, pubkey: '02d170dbdcf6c6ec02c1f12bfc909e390c28c95099a2cf26b1fc9de02644482a8a' },
+};
+
+// Fixed hex blocks the sessions are built from (sighashes, txids, DER
+// signatures). They only have to be well formed: a demo session is never
+// finalized, exported or broadcast.
+const DEMO_SESSION_HEX = {
+    msg1: 'ecc15c3b49f62f640dc5f4d5ff8c1f2b623997abd7475ae7d83b9344b809ad9d',
+    msg2: '71ed4e6e8d9af2d284cbd140ab4acea6282251d4a1d75fa7045c75a4f1dabef3',
+    msg3: '3e7d5557ce3dd4d23bbccccf928c77fe118ad027093dca40906e1bf00c436e73',
+    msg4: 'b4c1b264b96e5b1f73612e70c4e4b2904cb48977e0ce9bbc108a37cb72bbbc3c',
+    tx3: '749999b4ed44b9294c7a9a7b2fcd77abf916c1812a4d05f53945abe67908bf97',
+    tx4: '34961311320abfdf4fc8263a149e1c2d1c6bce8aa2021e6d44870b05c7e5e056',
+    sig1: '304402208c4bba9e7c828a1bbd6fb23f09d445de192ac2e9fc0e580f8b236f5d6c7eb5c60220b2c21dbb68957cc0d5ed859319dd922e4b68ac4485519463f6ae8ce6e134c17c',
+    sig2: '30440220b604257892f6c012bf913cef1edd2d3a489850457173b549795f4551eb6b45e902209bc6e4fa5d522384082d1e5c1605de5475e40b01fd77c07b6669219edf7e82d5',
+    sig3: '30440220b266db9649984b4dd680ab7dd39fb64f2ce4ec3f154bfb588bc44eacb84e39a00220d5faee0062014a6c28aa4d626c62f78487c02d2a58cd35b4a6945fa481cf8460',
+    sig4: '30440220e64cc85c8ee32b61c4c3076eae1fdf058dfb786ca25fb66e4f5ceb2e404921cd022033f7772814ee8933a86eb3d9c498a57d8d04fc4417077a5eb148b2d12bbde766',
+    sig5: '30440220763cf3a267dda123334838bc50d8c5e80f70e8c550c009235b71bcd55cacfb05022052e631e20c1632dca5439643fa36aa1712574eb71471d231e4e5bcc569bc93eb',
+};
+
+/**
+ * Sample multisig signing sessions for a demo wallet's Multisig Signing
+ * Sessions page, one per state the list groups by:
+ *
+ *   1. Waiting on your signature: a 3-of-3 spend both other cosigners
+ *      have signed; this wallet's key is the only one left.
+ *   2. Waiting on others: a 2-of-3 spend this wallet signed (1 of 2).
+ *   3. Ready to broadcast: a 2-of-3 Classic spend, signed and finalized.
+ *   4. Broadcast: a 2-of-2 Taproot spend on Bitcoin testnet, sent.
+ *
+ * Records carry the vault's MultisigSigningSession shape plus
+ * `cosignerNames` (cosigner key to display name), so the session page names
+ * each signer, and `localPubkeys` (this wallet's key). They are served by demoMessaging and never written to a vault.
+ *
+ * @param {string} walletId
+ * @param {{ now?: number }} [opts]
+ * @returns {Array<Record<string, any>>}
+ */
+export function synthesizeDemoMultisigSessions(walletId, opts = {}) {
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const at = (minutesAgo) => new Date(now - minutesAgo * 60_000).toISOString();
+    const { you, erin, marcus, priya, diego, yuki } = DEMO_COSIGNERS;
+    const H = DEMO_SESSION_HEX;
+    const sig = (who, hex, minutesAgo) => ({ pubkey: who.pubkey, sig: hex, contributedAt: at(minutesAgo) });
+    const names = (...who) => Object.fromEntries(who.map((c) => [c.pubkey, c.name]));
+    const base = (id, chainId, scheme, threshold, cosigners, msgHash, actionSummary) => ({
+        schemaVersion: 1,
+        id,
+        walletId: String(walletId || ''),
+        chainId,
+        scheme,
+        threshold,
+        cosignerPubkeys: cosigners.map((c) => c.pubkey),
+        cosignerNames: names(...cosigners),
+        // This wallet's own key, so the list can tell a session waiting on
+        // your signature (Ready) from one waiting on others (Waiting).
+        localPubkeys: [you.pubkey],
+        msgHash,
+        psbtHex: '',
+        actionSummary,
+        nonces: [],
+        aggNonce: null,
+        partialSigs: [],
+        aggregatedSchnorrSig: null,
+        signatures: [],
+        status: 'collecting-sigs',
+        finalizedTxHex: null,
+        txid: null,
+    });
+    return [
+        {
+            ...base('demo-multisig-your-signature', 'bitcoin-mainnet', 'p2wsh-multisig', 3,
+                [you, erin, marcus], H.msg1, `Send 1.2 BTC to ${priya.name}`),
+            signatures: [sig(erin, H.sig1, 95), sig(marcus, H.sig2, 40)],
+            createdAt: at(120),
+            updatedAt: at(40),
+        },
+        {
+            ...base('demo-multisig-waiting-others', 'bitcoin-mainnet', 'p2wsh-multisig', 2,
+                [you, priya, yuki], H.msg2, `Send 0.35 BTC to ${erin.name}`),
+            signatures: [sig(you, H.sig3, 300)],
+            createdAt: at(310),
+            updatedAt: at(300),
+        },
+        {
+            ...base('demo-multisig-ready', 'bitcoin-mainnet', 'p2sh-multisig', 2,
+                [you, marcus, erin], H.msg3, `Send 0.08 BTC to ${diego.name}`),
+            signatures: [sig(you, H.sig4, 1_500), sig(marcus, H.sig5, 1_380)],
+            status: 'finalized',
+            finalizedTxHex: `0200000001${H.tx4}0000000000ffffffff0100127a000000000017a914${H.msg3.slice(0, 40)}8700000000`,
+            txid: H.tx3,
+            createdAt: at(1_560),
+            updatedAt: at(1_370),
+        },
+        {
+            ...base('demo-multisig-sent', 'bitcoin-testnet', 'taproot-musig2', 2,
+                [you, yuki], H.msg4, `Send 0.015 TBTC to ${yuki.name}`),
+            nonces: [
+                { pubkey: you.pubkey, publicNonce: `${H.msg1}${H.msg2}02a1`, contributedAt: at(4_400) },
+                { pubkey: yuki.pubkey, publicNonce: `${H.msg2}${H.msg3}03b2`, contributedAt: at(4_380) },
+            ],
+            aggNonce: `${H.msg3}${H.msg4}02c3`,
+            partialSigs: [
+                sig(you, H.msg1, 4_360),
+                sig(yuki, H.msg2, 4_340),
+            ],
+            aggregatedSchnorrSig: `${H.msg3}${H.msg4}`,
+            status: 'broadcast',
+            finalizedTxHex: `02000000000101${H.tx3}0000000000ffffffff01983a000000000000225120${H.msg4}0140${H.msg3}${H.msg4}00000000`,
+            txid: H.tx4,
+            createdAt: at(4_420),
+            updatedAt: at(4_320),
+        },
+    ];
+}
+
+/**
+ * The messaging module a demo wallet's views read through. Each read a view
+ * makes for a wallet's addresses answers from the fixtures above, in the
+ * response envelope the explorer route returns, so a view calls the same
+ * methods for a demo wallet and a real one and never asks which it has. A
+ * demo wallet's addresses never reach an explorer (issue #82). Every other
+ * method passes through to `messaging`.
+ *
+ * @param {Record<string, any>} messaging
+ * @returns {Record<string, any>}
+ */
+export function demoMessaging(messaging) {
+    const rows = (data) => Promise.resolve({ data });
+    const none = () => rows([]);
+    // The session records name the wallet the list was read for.
+    let sessionsWalletId = '';
+    return {
+        ...messaging,
+        getWalletBalances: async (walletId, ...rest) => synthesizeDemoBalances(
+            typeof messaging?.getAddressesByChain === 'function'
+                ? await messaging.getAddressesByChain(walletId, ...rest)
+                : {},
+        ),
+        getNativePricesRequest: async ({ chainIds } = {}) => ({
+            prices: synthesizeDemoNativePrices(Array.isArray(chainIds) ? chainIds : []),
+        }),
+        getAddressHistory: ({ chainId, address } = {}) => rows(synthesizeDemoHistory(chainId, address)),
+        // The value chart's batch reads: the demo line is synthesized, so
+        // these answer empty and a demo address never reaches an explorer.
+        getWalletHistoryBatch: async ({ addresses } = {}) => ({
+            amount_unit: 'base', addresses: Array.isArray(addresses) ? addresses : [], next_cursor: null, actions: [],
+        }),
+        getNativeHistoryBatch: async () => ({ transactions: [], cursor: null, history_from_height: 0 }),
+        getLinksForAddress: () => rows(synthesizeDemoLinks()),
+        getAddressMempool: none,
+        getPendingTxsForAddress: none,
+        getDispensersForSource: ({ chainId, address } = {}) => rows(synthesizeDemoDispensers(chainId, address)),
+        getDispensersForToken: ({ chainId, token, tick } = {}) => rows(synthesizeDemoMarketDispensers(chainId, token || tick)),
+        getOrdersForAddress: ({ chainId, address } = {}) => rows(synthesizeDemoOrders(chainId, address)),
+        getSwapsForAddress: ({ chainId, address } = {}) => rows(synthesizeDemoSwaps(chainId, address)),
+        getDispenserLifecycle: none,
+        getContractsForSource: none,
+        getDepositsForAddress: none,
+        getWithdrawalsForAddress: none,
+        getContractsBrowseAll: none,
+        getStakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).stakes),
+        getDelegationsForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).delegations),
+        getRewardsForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).rewards),
+        getRewardClaimsForAddress: none,
+        getContractStakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).stakes),
+        getContractUnstakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).unstakes),
+        // Signing sessions are vault reads, answered as the host answers
+        // them: a bare array, and one record by id.
+        listMultisigSigningSessions: ({ walletId } = {}) => {
+            sessionsWalletId = String(walletId || '');
+            return Promise.resolve(synthesizeDemoMultisigSessions(sessionsWalletId));
+        },
+        getMultisigSigningSession: ({ sessionId } = {}) => {
+            const found = synthesizeDemoMultisigSessions(sessionsWalletId).find((s) => s.id === sessionId);
+            if (found) return Promise.resolve(found);
+            return typeof messaging?.getMultisigSigningSession === 'function'
+                ? messaging.getMultisigSigningSession({ sessionId })
+                : Promise.resolve(null);
+        },
+    };
 }

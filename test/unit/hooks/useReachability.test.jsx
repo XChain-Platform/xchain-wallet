@@ -364,10 +364,10 @@ describe('ReachabilityBanner', () => {
             </MessagingContext.Provider>,
         );
 
-        await waitFor(() => expect(screen.getByText('Some balances may be out of date')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Some information may be out of date/)).toBeTruthy());
     });
 
-    it('discloses affected coin identities without service or network names', async () => {
+    it('keeps the banner hidden when only some services are unreachable', async () => {
         const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
         const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
         render(
@@ -376,14 +376,8 @@ describe('ReachabilityBanner', () => {
             </MessagingContext.Provider>,
         );
 
-        await waitFor(() => expect(screen.getByText('Some balances may be out of date')).toBeTruthy());
-        act(() => { screen.getByText('Details').click(); });
-        const affected = screen.getByRole('list', { name: 'Affected coins' });
-        expect(affected).toHaveTextContent('Bitcoin');
-        expect(affected).toHaveTextContent('Litecoin');
-        expect(affected).not.toHaveTextContent(/regtest|testnet/i);
-        expect(screen.queryByText(/hub|encoder|explorer/i)).toBeNull();
-        expect(screen.queryByText(/bitcoin-regtest|litecoin-regtest/)).toBeNull();
+        await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole('status')).toBeNull();
     });
 });
 
@@ -420,7 +414,7 @@ describe('useReachability: one verdict across hooks', () => {
     it('starts a later hook from the verdict an earlier hook already published', async () => {
         // The shell's notice and a screen's own empty state read separate
         // hooks; a screen mounting later must not sit on its own silent cold
-        // start while the notice says balances may be out of date.
+        // start while the notice says information may be out of date.
         const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
         const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
 

@@ -1,0 +1,176 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Every state of a My orders cancel or edit lays out through a page template:
+// the broadcast result, the unsigned result and the queued result each sit
+// inside a FormPage form, like the cancel and edit form itself. None of them
+// draws straight into the bare Screen.
+
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act as domAct, cleanup, fireEvent, render, within } from '@testing-library/react';
+import React from 'react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
+
+// The cancel and edit form moved out of MyOrdersView with the row actions,
+// and its layout into the Form Standard frame Order and Swap share.
+const SOURCE_PATH = 'packages/core/src/shared/routes/TradeOwnerActionForm.jsx';
+const CHAIN = 'dogecoin-testnet';
+const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
+const FUTURE = Math.floor(Date.now() / 1000) + 3600;
+
+const HD_ADDRESS = Object.freeze({
+    id: 'addr-hd-0', address: OWN, publicKey: '02aabbcc',
+    derivationPath: "m/44'/1'/0'/0/0", source: 'hd', signerId: 'signer-1',
+});
+
+const COMPOSED = Object.freeze({
+    psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
+    chainId: CHAIN, networkFeeSats: 1234,
+});
+
+const ROW = Object.freeze({
+    action_index: '700', source: OWN,
+    give_tick: 'DOGESWAP', give_coin: 'DOGE', give_amount: '500', give_ownership: 0,
+    get_tick: 'OTHER', get_coin: 'DOGE', get_amount: '10', get_ownership: 0,
+    expiration: FUTURE, block_index: '67882087', status: 'valid',
+});
+
+beforeEach(() => {
+    vi.useFakeTimers({
+        toFake: [
+            'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+            'setImmediate', 'clearImmediate', 'requestAnimationFrame',
+            'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
+        ],
+    });
+});
+afterEach(() => { cleanup(); resetWalletModes(); vi.useRealTimers(); });
+
+async function drain(rounds = 24) {
+    for (let i = 0; i < rounds; i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await Promise.resolve();
+    }
+}
+
+/** Mounts My orders with one open order; `signed` is what the cancel signer returns. */
+async function mount({ signed = { txid: 'cancel-txid' }, walletMode = 'full' } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
+    const target = {
+        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
+        signerReady: () => Promise.resolve({ ready: true }),
+        getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        getListsForSource: () => Promise.resolve({ data: [] }),
+        getListByActionIndex: () => Promise.resolve({ list: [] }),
+        getOrdersForAddress: () => Promise.resolve({ data: [ROW] }),
+        getOrderCancelsForAddress: () => Promise.resolve({ data: [] }),
+        // The explorer's order detail: the order's own fields and its state.
+        getOrderDetail: ({ actionIndex }) => Promise.resolve({
+            ...ROW, action: 'ORDER', action_index: actionIndex,
+            state: { give_remaining: '500', get_remaining: '10', expiration: String(FUTURE), status: 'open' },
+        }),
+        listAutopayOrders: () => Promise.resolve([]),
+        composeForConfirm: () => Promise.resolve({
+            ...COMPOSED,
+            decoded: {
+                summary: 'Cancel order (#700)',
+                details: [{ label: 'order action index', value: '700' }],
+                warnings: [],
+            },
+        }),
+        preflight: () => Promise.resolve({ verdict: 'pass', findings: [] }),
+        cancelOrder: () => Promise.resolve(signed),
+        buildActionPsbtRequest: () => Promise.resolve(signed),
+    };
+    const messaging = new Proxy(target, {
+        get(t, prop) {
+            if (prop in t) return t[prop];
+            return () => Promise.resolve({});
+        },
+        has: (t, prop) => prop in t,
+    });
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MyOrdersView walletId="w" onBack={() => {}} onCreateOrder={() => {}} />
+            </MessagingProvider>,
+        );
+        await drain();
+    });
+    return utils;
+}
+
+async function step(fn) {
+    await domAct(async () => { fn(); await drain(); });
+}
+
+/** Opens order #700's detail page from its row, then its Cancel form. */
+async function openCancel(utils) {
+    const row = utils.getByRole('list', { name: 'Orders' }).querySelector('[data-order-row$=":700"]');
+    await step(() => fireEvent.click(within(row).getByRole('button')));
+    // The detail page's Cancel order action row (G101) opens the form.
+    await step(() => fireEvent.click(utils.getByRole('button', { name: /^Cancel order/ })));
+}
+
+/** Opens the cancel for order #700 and signs it through the confirm page. */
+async function cancelOrder(utils) {
+    await openCancel(utils);
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Cancel Order' })));
+    const approve = utils.container.querySelector('[data-testid="confirm-approve"]');
+    expect(approve, 'the confirm page offers Approve').not.toBeNull();
+    await step(() => fireEvent.click(approve));
+}
+
+function byText(container, selector, text) {
+    return Array.from(container.querySelectorAll(selector)).find((node) => node.textContent.includes(text)) || null;
+}
+
+describe('My orders lays out every cancel and edit result through FormPage', () => {
+    it('puts the broadcast result and its Done action inside the FormPage form', async () => {
+        const utils = await mount();
+        await cancelOrder(utils);
+        const title = byText(utils.container, 'h2', 'Cancel broadcast');
+        expect(title).not.toBeNull();
+        const form = title.closest('form');
+        expect(form).not.toBeNull();
+        expect(form.textContent).toContain('cancel-txid');
+        expect(byText(form, 'button', 'Done')).not.toBeNull();
+    });
+
+    it('renders the queued result screen inside a FormPage form', async () => {
+        const utils = await mount({ signed: { queued: true } });
+        await cancelOrder(utils);
+        const notice = utils.container.querySelector('[data-testid="result-screen-notice"]');
+        expect(notice).not.toBeNull();
+        expect(notice.closest('form')).not.toBeNull();
+    });
+
+    it('renders the unsigned result screen inside a FormPage form', async () => {
+        const utils = await mount({ walletMode: 'watcher', signed: { psbtHex: '70736274ff' } });
+        await openCancel(utils);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
+        const notice = utils.container.querySelector('[data-testid="result-screen-notice"]');
+        expect(notice).not.toBeNull();
+        expect(notice.closest('form')).not.toBeNull();
+    });
+
+    it('hands every cancel and edit Screen state to a page template in the source', () => {
+        // The action panel's wrap() is a bare Screen, so each call names its template.
+        const full = readFileSync(SOURCE_PATH, 'utf8');
+        const source = full.slice(full.indexOf('function TradeOwnerActionForm('));
+        expect(full.indexOf('function TradeOwnerActionForm(')).toBeGreaterThan(0);
+        const roots = [...source.matchAll(/\bwrap\(\s*<(\w*)/g)].map((match) => match[1]);
+        expect(roots.length).toBeGreaterThan(0);
+        // The form itself is the standard FormFrame (a FormPage underneath).
+        expect(roots.filter((root) => root !== 'FormPage' && root !== 'FormFrame')).toEqual([]);
+    });
+});

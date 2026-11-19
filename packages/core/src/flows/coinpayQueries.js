@@ -14,12 +14,20 @@
 //
 // The primary entry point for the wallet is
 // `getCoinpayObligationsForAddress`, used by the Home resume card
-// to detect "does this wallet address owe a COINPAY?" Returns every
-// obligation touching the address (as payer *or* payee) joined with
-// its current status; callers filter to `pending_coinpay` on the
-// payer side to build the queue.
+// to detect "does this wallet address owe a COINPAY?" Returns the
+// obligations touching the address (as payer *or* payee) joined with
+// its current status, newest first, following the explorer's cursor past
+// page one up to a page cap (a read the cap stops carries `truncated`);
+// callers filter to `pending_coinpay` on the payer side to build the queue.
 
-import { classifyObligation, obligationBaseUnits } from '../market/obligationStatus.js';
+import {
+    classifyObligation,
+    extractObligationRows,
+    isPendingObligation,
+    obligationBaseUnits,
+    obligationStatus,
+} from '../market/obligationStatus.js';
+import { followObligationPages } from '../market/obligationPaging.js';
 import { OFFER_LIFECYCLE_REFUSAL } from './marketExpiry.js';
 import {
     BATCH_FEATURE_COINPAY,
@@ -156,7 +164,8 @@ function flushWindow(w) {
  * Obligations touching `address` on `chainId`. The explorer joins
  * `coinpay_obligations` with the current `coinpay_statuses` row, so
  * each item includes the `coinpay_status` column
- * (`pending_coinpay`, `fulfilled`, `expired`, `invalid`). The caller
+ * (`pending_coinpay`, `fulfilled`, `expired`; the indexer writes no other
+ * value, and only `pending_coinpay` is payable). The caller
  * filters to `pending_coinpay` and `payer_address === address` to
  * build the user's outstanding-payment queue.
  *
@@ -173,6 +182,10 @@ function flushWindow(w) {
  * re-read below). A caller that needs its own paging should read the SDK
  * directly rather than expect a window to keep two sets of query options.
  *
+ * An address whose obligations outgrow one page is read down the explorer's
+ * `next_before` cursor, up to OBLIGATION_PAGE_CAP further pages, and the rows
+ * come back merged under `data`; a read the cap stops carries `truncated: true`.
+ *
  * `fresh` is the one per-caller flag a window keeps: the sign-time re-read
  * passes it, and the window's reads (the batch POST and any per-address
  * fallback) then go past the explorer wrapper's read reuse and the HTTP cache.
@@ -180,6 +193,17 @@ function flushWindow(w) {
  * @param {SdkCtx & { address: string, opts?: object, fresh?: boolean }} params
  */
 export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, address, opts, fresh = false }) {
+    const first = await readFirstPage({ sdkRegistry, chainId, address, opts, fresh });
+    // A first page short of the reply's `total` hides older rows; the cursor
+    // walk reads the pages below it, one address at a time, outside any window.
+    return followObligationPages(first, (page) => readOneAddress(
+        sdkRegistry.get(chainId),
+        address,
+        { ...(opts || {}), ...page, ...(fresh ? { fresh: true } : {}) },
+    ));
+}
+
+async function readFirstPage({ sdkRegistry, chainId, address, opts, fresh }) {
     if (!sdkRegistry) throw new Error('getCoinpayObligationsForAddress: sdkRegistry is required');
     if (!chainId) throw new Error('getCoinpayObligationsForAddress: chainId is required');
     if (typeof address !== 'string' || address.length === 0) {
@@ -210,16 +234,29 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
 // verifier below, would fail closed on a legitimate payment). Exported for
 // the PC-16 auto-pay engine, which reads the same endpoints.
 export function extractCoinpayRows(resp) {
-    return extractRows(resp);
+    return extractObligationRows(resp);
 }
 
-function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    for (const key of ['data', 'rows', 'obligations', 'coinpay_obligations']) {
-        if (Array.isArray(resp[key])) return resp[key];
-    }
-    return [];
+// The payer's obligation for one ORDER_MATCH, or undefined. Read fresh, so an
+// obligation paid or expired a moment ago is never judged on the badge scan's
+// answer.
+async function locateObligation({ sdkRegistry, chainId, payerAddress, want }) {
+    const resp = await getCoinpayObligationsForAddress({
+        sdkRegistry,
+        chainId,
+        address: payerAddress,
+        fresh: true,
+    });
+    const matches = (r) => String(r.action_index ?? r.actionIndex) === want;
+    const row = extractCoinpayRows(resp).find(matches);
+    if (row || !resp || resp.truncated !== true || !/^\d+$/.test(want)) return row;
+    // The page cap stopped the walk above this match: read the one page that
+    // starts at it (the cursor is exclusive, so one past it includes it).
+    const exact = await readOneAddress(sdkRegistry.get(chainId), payerAddress, {
+        before: String(BigInt(want) + 1n),
+        fresh: true,
+    });
+    return extractCoinpayRows(exact).find(matches);
 }
 
 /**
@@ -258,17 +295,8 @@ export async function verifyCoinpayObligation({
     payeeAddress,
     coinAmount,
 }) {
-    // Fresh, so an obligation paid or expired a moment ago is never judged on
-    // the badge scan's answer.
-    const resp = await getCoinpayObligationsForAddress({
-        sdkRegistry,
-        chainId,
-        address: payerAddress,
-        fresh: true,
-    });
-    const rows = extractRows(resp);
     const want = String(orderMatchActionIndex);
-    const row = rows.find((r) => String(r.action_index ?? r.actionIndex) === want);
+    const row = await locateObligation({ sdkRegistry, chainId, payerAddress, want });
     if (!row) {
         throw new Error(
             `verifyCoinpayObligation: no COINPAY obligation for ORDER_MATCH #${want} on ${payerAddress}`,
@@ -276,11 +304,13 @@ export async function verifyCoinpayObligation({
     }
 
     // Paying an obligation that is already fulfilled or expired burns the coin
-    // for nothing: the protocol won't settle it twice.
-    const status = String(row.coinpay_status ?? row.status ?? '');
-    if (status && status !== 'pending_coinpay') {
+    // for nothing: the protocol won't settle it twice. A row that carries no
+    // status is refused too: the last check before signing never assumes a
+    // payable row.
+    if (!isPendingObligation(row)) {
+        const status = obligationStatus(row);
         throw new Error(
-            `verifyCoinpayObligation: ORDER_MATCH #${want} is "${status}", not pending; refusing to pay it`,
+            `verifyCoinpayObligation: ORDER_MATCH #${want} is "${status || 'missing'}", not pending; refusing to pay it`,
         );
     }
 

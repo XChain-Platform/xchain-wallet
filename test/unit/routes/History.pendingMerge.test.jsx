@@ -20,7 +20,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS, PENDING_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import { livePendingTxs } from '../../../packages/core/src/flows/pendingTxFeed.js';
 import { DROPPED_GRACE_MS } from '../../../packages/core/src/shared/utils/pendingHistory.js';
 
@@ -137,7 +137,8 @@ describe('History shows unconfirmed transactions', () => {
         // real one through it.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
+        // The row names no counterparty address; the detail page does.
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeNull();
     });
 
     it('does not drop the row for lacking an action index, which no pending row has', async () => {
@@ -168,9 +169,8 @@ describe('History shows unconfirmed transactions', () => {
             }],
         });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        // The row identifies a transaction by its counterparty, the same way it
-        // does for a confirmed one; on our own send that is the recipient.
-        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
+        // The row shows no recipient address, as for a confirmed one.
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeNull();
     });
 
     it('upgrades in place rather than showing the transaction twice once it confirms', async () => {
@@ -245,7 +245,7 @@ describe('History shows unconfirmed transactions', () => {
         // focus inside that window is dropped by design; age the rows past
         // one interval first. Only Date is faked: waitFor polls on setInterval.
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
     });
@@ -258,7 +258,7 @@ describe('History shows unconfirmed transactions', () => {
 
         vi.useFakeTimers({ toFake: ['Date'] });
         messaging.getAddressMempool.mockRejectedValueOnce(new Error('temporary outage'));
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + PENDING_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
         expect(view.container.querySelector(`[data-history-key="pending:${CHAIN}:${PENDING_HASH}"]`))
@@ -285,7 +285,8 @@ describe('History shows unconfirmed transactions', () => {
 
         vi.useFakeTimers({ toFake: ['Date'] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7712 });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        // A confirmed row only: its count follows the five-minute rule, not the pending beat.
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getIndexerWatermark).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(description()).toMatch(/6 Confirmations/));

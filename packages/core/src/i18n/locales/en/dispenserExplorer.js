@@ -16,8 +16,10 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'dispenserExplorer.loadMoreFor': 'Load more results for {name}',
-    'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
-    'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
+    'dispenserExplorer.cardLabel': '{give} for {price}, {chain}',
+    'dispenserExplorer.terms': 'Dispenser terms',
+    'dispenserExplorer.forPrice': ' for ',
+    'dispenserExplorer.opened': 'Opened {when}',
 };
 
 addEnglish(messages);

@@ -8,31 +8,36 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §33 command-palette trigger row in LeftNav. Desktop has no AppHeader, so
-// its visible palette entry is a search row in the nav; it appears only when
-// the shell wires `onCommandPalette` (web leaves it unset because it already
-// has a header search button, so it must NOT get a duplicate).
+// The side menu holds destinations only (U99, operator 2026-11-18). Its Search
+// row looked like a text field but opened the wallet menu, which belongs to
+// the app bar's menu button and Cmd/Ctrl+K, so it was removed. A shell that
+// still passes the old onCommandPalette prop gets no search control either.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 
 afterEach(() => cleanup());
 
-const baseProps = { currentView: 'home', onSelect: () => {} };
+const baseProps = { currentView: 'home', onSelect: () => {}, onOpenSettings: () => {}, onLock: () => {} };
 
-describe('LeftNav command-palette trigger', () => {
-    it('renders no search row when onCommandPalette is not provided', () => {
-        render(<LeftNav {...baseProps} />);
-        expect(screen.queryByRole('button', { name: 'Open command palette' })).toBeNull();
+function expectNoSearchControl(container) {
+    const nav = screen.getByRole('navigation');
+    expect(screen.queryByRole('button', { name: /wallet menu|search/i })).toBeNull();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(nav.querySelector('[aria-keyshortcuts]')).toBeNull();
+    expect(container.querySelector('input')).toBeNull();
+}
+
+describe('LeftNav has no search control', () => {
+    it('renders destinations with no search row', () => {
+        const { container } = render(<LeftNav {...baseProps} />);
+        expectNoSearchControl(container);
+        expect(screen.getByRole('button', { name: 'Home' })).toBeTruthy();
     });
 
-    it('renders a search row and fires the handler when onCommandPalette is provided', () => {
-        const onCommandPalette = vi.fn();
-        render(<LeftNav {...baseProps} onCommandPalette={onCommandPalette} />);
-        const btn = screen.getByRole('button', { name: 'Open command palette' });
-        expect(btn).toHaveAttribute('aria-keyshortcuts', 'Meta+K Control+K');
-        fireEvent.click(btn);
-        expect(onCommandPalette).toHaveBeenCalledOnce();
+    it('ignores a leftover onCommandPalette prop', () => {
+        const { container } = render(<LeftNav {...baseProps} onCommandPalette={() => {}} />);
+        expectNoSearchControl(container);
     });
 });

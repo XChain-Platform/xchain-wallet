@@ -1,0 +1,136 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Chip toggles, the NetworkFilter trigger, ChainPicker and IconSelect carry
+// Button's btn class (ruling U07: one shared sizing base), and each keeps its
+// own 1px edge, surface and pressed fill on top of it. A cross-file
+// `composes` from Button.module.css inlines a copy of Button's sheet that
+// re-asserts `.btn { border: 1px solid transparent }` over every sheet loaded
+// before it, which left the border 1px wide but invisible and gave the
+// pressed chip the button's ring. A jsdom test blanks CSS modules and cannot
+// see the cascade, so this reads computed styles in the real app: once on a
+// cold load, and again after the cross-chain swap form, whose TokenField
+// composes Button and so loads such a copy late.
+
+import {
+    dismissIntroCarousel,
+    expect,
+    gotoSection,
+    openFromSection,
+    test,
+    unlockedShell,
+} from '../../fixtures/wallet.js';
+import { enterDemoWallet } from '../../fixtures/responsive.js';
+
+/** Alpha of a computed `rgb()` or `rgba()` colour; 0 when it is transparent. */
+function alpha(colour) {
+    if (colour === 'transparent') return 0;
+    const parts = /rgba?\(([^)]+)\)/.exec(colour)?.[1].split(/[\s,/]+/).filter(Boolean) ?? [];
+    return parts.length === 4 ? Number(parts[3]) : 1;
+}
+
+async function expectVisibleEdge(label, control, { pressed = false, surface = false } = {}) {
+    await expect(control, `${label} is not visible`).toBeVisible();
+    const style = await control.evaluate((element) => {
+        const s = getComputedStyle(element);
+        return {
+            width: s.borderTopWidth,
+            style: s.borderTopStyle,
+            colour: s.borderTopColor,
+            background: s.backgroundColor,
+            boxShadow: s.boxShadow,
+        };
+    });
+    const detail = `${label}: ${JSON.stringify(style)}`;
+    expect(parseFloat(style.width), `${detail}\nborder is not at least 1px`).toBeGreaterThanOrEqual(1);
+    expect(style.style, `${detail}\nborder has no style`).not.toBe('none');
+    expect(alpha(style.colour), `${detail}\nborder colour is transparent`).toBeGreaterThan(0);
+    if (surface) expect(alpha(style.background), `${detail}\nsurface is transparent`).toBeGreaterThan(0);
+    // The pressed Chip shows its selected fill, never the shared button's ring.
+    if (pressed) expect(style.boxShadow, `${detail}\npressed chip draws a ring`).toBe('none');
+}
+
+async function openPaletteRoute(page, query, option) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(palette).toBeVisible();
+    await palette.getByRole('combobox').fill(query);
+    await palette.getByRole('option', { name: option }).first().click();
+    await expect(palette).toBeHidden();
+}
+
+// Contacts and Addresses keep their network filter in the title bar's filter
+// panel (2b842b099), so the trigger is read inside that panel, which is then
+// closed so the palette shortcut is not typed into its search box.
+async function expectPanelNetworkFilterEdge(page, label, panelName) {
+    const toggle = page.getByRole('button', { name: panelName, exact: true });
+    await toggle.click();
+    const panel = page.getByRole('dialog', { name: panelName });
+    await expect(panel).toBeVisible();
+    await expectVisibleEdge(label, panel.getByRole('button', { name: /^Filter by network/ }), { surface: true });
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+}
+
+async function checkControls(page, pass) {
+    const main = page.getByRole('main');
+
+    await test.step(`${pass} / History chips`, async () => {
+        await gotoSection(page, 'History');
+        // The date presets and the fiat chip sit in the History filters panel.
+        await page.getByRole('button', { name: 'History filters' }).click();
+        const presets = page.getByRole('group', { name: 'Date range presets' });
+        await expectVisibleEdge('7 days preset', presets.getByRole('button', { name: '7 days', exact: true }));
+        const thirty = presets.getByRole('button', { name: '30 days', exact: true });
+        await expect(thirty).toHaveAttribute('aria-pressed', 'true');
+        await expectVisibleEdge('pressed 30 days preset', thirty, { pressed: true });
+        await expectVisibleEdge('All dates preset', presets.getByRole('button', { name: 'All dates', exact: true }));
+        await expectVisibleEdge('fiat chip', page.getByRole('button', { name: /^(?:Show fiat|Fiat):/ }));
+    });
+
+    await test.step(`${pass} / NetworkFilter trigger on Contacts`, async () => {
+        await gotoSection(page, 'Contacts');
+        await expectPanelNetworkFilterEdge(page, 'Contacts network filter', 'Filter contacts');
+    });
+
+    await test.step(`${pass} / NetworkFilter trigger on Addresses`, async () => {
+        await openPaletteRoute(page, 'Addresses', /^Addresses/);
+        await expectPanelNetworkFilterEdge(page, 'Addresses network filter', 'Filter addresses');
+    });
+
+    await test.step(`${pass} / IconSelect triggers`, async () => {
+        await gotoSection(page, 'Messaging');
+        // New message is a title bar button on a phone and a row of the More menu on a wide screen.
+        const newMessage = page.getByRole('button', { name: 'New message', exact: true });
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        await newMessage.or(more).first().waitFor();
+        if (await newMessage.count() === 0) await more.click();
+        await newMessage.or(page.getByRole('menuitem', { name: 'New message' })).first().click();
+        await expectVisibleEdge('encryption select', main.getByRole('button', { name: /^Encryption:/ }), { surface: true });
+        await openFromSection(main);
+        await expectVisibleEdge('compose network field', main.getByRole('button', { name: /^Network:/ }), { surface: true });
+    });
+
+    await test.step(`${pass} / ChainPicker triggers`, async () => {
+        await openPaletteRoute(page, 'Cross-chain swap', /^Cross-chain swap/);
+        // The swap's one network picker (the give network) sits in the closed
+        // From section; the get network follows the Get token.
+        await openFromSection(main);
+        await expectVisibleEdge('network picker', main.getByRole('button', { name: /^Network:/ }), { surface: true });
+        // The same form mounts TokenField, so its Button copy is loaded from here on.
+        await expect(main.getByRole('button', { name: /^Give token:/ })).toBeVisible();
+    });
+}
+
+test('chip and picker triggers keep a visible edge over the shared button base', async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+
+    await checkControls(page, 'cold');
+    // The first pass ended on the cross-chain swap form, whose TokenField
+    // composes Button and so has loaded a late Button.module.css copy.
+    await checkControls(page, 'after TokenField');
+});

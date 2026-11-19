@@ -173,6 +173,17 @@ const V2 = {
         'without --gpg-key the summary says so rather than implying the stronger check ran');
 }
 
+{
+    // A `./name` url is the same file to the client, which strips the prefix.
+    const dotted = Object.entries(V1).map(([name, body]) => [`./${name}`, body]);
+    const pointer = updateInfo('0.333.1', dotted);
+    const artifacts = V1;
+    const manifests = { 'v0.333.1': Object.keys(V1) };
+    buildFeed(root, { artifacts, manifests, pointers: { 'stable-linux.yml': pointer } });
+    assert.deepEqual(sweep(root).findings, [], 'a ./ url reads as the manifest key the client reads');
+    assert.equal(clientVerdict(pointer, manifests, artifacts).ok, true, 'and the client accepts it');
+}
+
 // ------------------------------------- the attack this tool exists for
 
 {
@@ -232,11 +243,12 @@ function clientVerdict(pointerText, manifests, artifacts) {
     const info = parseUpdateInfo(pointerText);
     const own = manifests[`v${info.version}`] ?? [];
     const [first] = info.files;
+    const bare = first.url.split('/').pop();
     return verifyChannelPointer({
         pointerText,
         expectedVersion: info.version,
-        artifactName: first.url,
-        artifactSha512: createHash('sha512').update(artifacts[first.url]).digest('hex'),
+        artifactName: bare,
+        artifactSha512: createHash('sha512').update(artifacts[bare]).digest('hex'),
         entries: new Map(own.map((n) => [n, sha256(artifacts[n])])),
     });
 }
@@ -375,7 +387,11 @@ function clientVerdict(pointerText, manifests, artifacts) {
     // With it, a manifest signed by anything but K1 is refused ENTRY to
     // the baseline, so the payload it was planted to launder shows up.
     const K1 = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333';
-    const runGood = () => ({ stdout: `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`, status: 0 });
+    const runGood = () => ({
+        stdout: `[GNUPG:] GOODSIG ${K1.slice(-16)} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`,
+        status: 0,
+    });
     const runAttacker = () => ({ stdout: '[GNUPG:] VALIDSIG 9999888877776666 2026\n', status: 0 });
 
     buildFeed(root, {
@@ -395,6 +411,19 @@ function clientVerdict(pointerText, manifests, artifacts) {
         + 'still uncovered - a rejected manifest that still fed the union would make '
         + 'this sweep the attacker\'s alibi');
     assert.match(anchored.signatureMode, /gpg-verified/, 'the mode is stated in the summary');
+
+    for (const invalid of ['REVKEYSIG', 'EXPKEYSIG', 'EXPSIG']) {
+        const runInvalid = () => ({
+            stdout: `[GNUPG:] ${invalid} ${K1.slice(-16)} Release key\n`
+                + `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`,
+            status: 0,
+        });
+        const rejected = sweep(root, { gpgKey: K1, run: runInvalid });
+        assert.ok(codes(rejected).includes('MANIFEST-BAD-SIG'),
+            `${invalid} from the pinned key is kept out of the baseline`);
+        assert.ok(codes(rejected).includes('UNCOVERED'),
+            `${invalid} cannot launder the planted payload into the baseline`);
+    }
 }
 
 {
@@ -535,6 +564,16 @@ function clientVerdict(pointerText, manifests, artifacts) {
     assert.equal(clean.pointers, 1, 'the JSON pointer is recognised as a pointer');
     assert.deepEqual(codes(clean), [], 'a feed that matches its signed manifest is clean');
 
+    const manifestPath = join(root, 'RELEASE_HASHES', 'v0.336.0.txt');
+    const enforcedManifest = readFileSync(manifestPath, 'utf8');
+    writeFileSync(manifestPath,
+        enforcedManifest.replace('# dev-mock-gate: enforced', '# dev-mock-gate: SKIPPED'));
+    const ungated = sweep(root);
+    assert.deepEqual(codes(ungated), ['POINTER-UNGATED'],
+        'an Android JSON pointer reports its own skipped-gate manifest');
+    assert.equal(ungated.findings[0].path, 'android/latest.json');
+    writeFileSync(manifestPath, enforcedManifest);
+
     // The swap this tool exists to detect, on the only binary we ship.
     writeFileSync(join(root, 'android', apk), `${bytes}-tampered`);
     assert.deepEqual(codes(sweep(root)), ['MISMATCH'],
@@ -629,7 +668,11 @@ function clientVerdict(pointerText, manifests, artifacts) {
             writeFileSync(manifest,
                 `${readFileSync(manifest, 'utf8')}${sha256('malware')}  ./${evil}\n`);
         }
-        return { stdout: `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`, status: 0 };
+        return {
+            stdout: `[GNUPG:] GOODSIG ${K1.slice(-16)} Release key\n`
+                + `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`,
+            status: 0,
+        };
     };
 
     const result = sweep(root, { gpgKey: K1, run: runThenSwap });

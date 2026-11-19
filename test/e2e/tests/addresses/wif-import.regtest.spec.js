@@ -59,8 +59,9 @@
 //      `getByRole('button', { name: 'Import address' })` matches nothing here
 //      and burns its whole budget; the earlier draft died one step later, at
 //      `getByLabel('WIF private key')`, with the page still on the list.
-//   3. The filter strip is a `role="tablist"` of `role="tab"`s. Same trap:
-//      "Imported" is not a button.
+//   3. The address-type filter lives in the title bar's "Filter addresses"
+//      menu, outside `main`, as a dropdown whose rows are `role="option"`.
+//      Same trap: "Imported" is not a button or a tab.
 //   4. **Use NAVIGATES AWAY.** `setAsActive` persists, then calls `onBack()` on
 //      purpose, so Home remounts and refetches balances against the new active
 //      address. The detail screen the button lives on is gone by the time the
@@ -77,15 +78,21 @@ import wifCodec from 'wif';
 import * as ecc from 'tiny-secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
+    closeListFilter,
+    openListFilter,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The address list's title-bar filter menu, button and panel alike. */
+const ADDRESS_FILTER = 'Filter addresses';
 
 /**
  * A throwaway regtest key, from a fixed scalar so the vector never moves.
@@ -134,13 +141,16 @@ function expectedP2wpkh(wif, hrp) {
  *
  * The Addresses route has three screens - list, address detail, import form -
  * and the two inner ones are STATES of the same route, not routes of their own.
- * So the command palette cannot leave them: navigating to Addresses while
+ * So the wallet menu cannot leave them: navigating to Addresses while
  * already on Addresses changes nothing, the list never renders, and the wait
  * that follows burns its whole budget on a screen that was never coming. Both
  * inner screens carry a header Back, which is the only control that pops them.
+ *
+ * The list is recognised by its title-bar "Filter addresses" menu button,
+ * which only the list screen carries (it sits in the banner, outside main).
  */
 async function gotoAddressList(page) {
-    const filters = page.getByRole('tablist', { name: 'Filter by address type' });
+    const filters = page.getByRole('button', { name: ADDRESS_FILTER, exact: true });
     for (let i = 0; i < 3 && await filters.count() === 0; i++) {
         const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
@@ -152,11 +162,22 @@ async function gotoAddressList(page) {
         + 'palette cannot leave the detail or the import form').toBeVisible({ timeout: 60_000 });
 }
 
-/** Opens the Imported filter on the address list. */
+/**
+ * Opens the Imported filter on the address list. The address-type filter is a
+ * dropdown ("Filter by address type: All addresses") inside the title bar's
+ * "Filter addresses" menu, and the pick stays applied once the menu closes.
+ */
 async function showImportedOnly(page) {
     await gotoAddressList(page);
-    await page.getByRole('tablist', { name: 'Filter by address type' })
-        .getByRole('tab', { name: 'Imported', exact: true }).click();
+    const panel = await openListFilter(page, ADDRESS_FILTER);
+    const type = panel.getByRole('button', { name: /^Filter by address type: / });
+    if ((await type.getAttribute('aria-label')) !== 'Filter by address type: Imported') {
+        await type.click();
+        await panel.getByRole('option', { name: 'Imported', exact: true }).click();
+    }
+    await expect(type, 'the address list did not take the Imported filter')
+        .toHaveAttribute('aria-label', 'Filter by address type: Imported', { timeout: 15_000 });
+    await closeListFilter(page, ADDRESS_FILTER);
 }
 
 /** Walks to Addresses and opens the Import-address page. */
@@ -167,7 +188,7 @@ async function openImportForm(page) {
     // `aria-haspopup="menu"` over a `role="menu"` list. Asking for a button
     // here matches nothing and waits out the full timeout.
     await page.getByRole('menuitem', { name: 'Import address' }).click();
-    await expect(page.getByLabel('WIF private key'), 'the + menu did not reach the import form')
+    await expect(fieldByLabel(page, 'WIF private key'), 'the + menu did not reach the import form')
         .toBeVisible({ timeout: 30_000 });
 }
 
@@ -186,7 +207,8 @@ async function selectImportChain(page) {
     await expect(trigger, 'the import form has no Network picker').toBeVisible({ timeout: 30_000 });
     if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
     await trigger.click();
-    await page.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: new RegExp(`^Select ${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
     await expect(trigger, `the Network picker would not move to ${REGTEST_CHAIN_LABEL}`)
         .toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL), { timeout: 15_000 });
 }
@@ -196,13 +218,13 @@ async function submitImport(page, { wif, label }) {
     await selectImportChain(page);
     // Pinned, not defaulted: the assertion downstream is an EXACT address, and
     // the chain default is free to move.
-    await page.getByLabel('Address type').selectOption('p2wpkh');
-    await page.getByLabel('WIF private key').fill(wif);
-    if (label) await page.getByLabel('Label (optional)').fill(label);
+    await pickOption(fieldByLabel(page, 'Address type'), 'p2wpkh');
+    await fieldByLabel(page, 'WIF private key').fill(wif);
+    if (label) await fieldByLabel(page, 'Label').fill(label);
     // The password field renders only while the signer is NOT ready: unlocked,
     // the vault key is already in hand. Conditional rather than assumed, so
     // this spec does not depend on which side of that fork the shell is on.
-    const password = page.getByLabel('Wallet password', { exact: true });
+    const password = fieldByLabel(page, 'Wallet password');
     if (await password.count() > 0) await password.fill(PASSWORD);
     await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Import', exact: true }).click();
@@ -267,15 +289,12 @@ test.describe('Addresses: importing a private key', () => {
             await test.step('D-65: pressing Use really makes it the active address', async () => {
                 await page.getByRole('button', { name: `View address ${imported}` }).click();
 
-                const use = page.getByRole('button', { name: 'Use', exact: true });
-                await expect(use, 'the address detail offers no Use action').toBeVisible({ timeout: 30_000 });
-                // A negative control, and it is not decoration: if the address
+                // Set active is offered only on an address that is not active
+                // yet, so its presence is the negative control: if the address
                 // were already active the flip below would pass without the
                 // button ever having worked.
-                await expect(use,
-                    'Use already reports this address as active before it was pressed, so the '
-                    + 'assertion below would pass without the button working')
-                    .toHaveAttribute('title', 'Make this the active address');
+                const use = page.getByRole('button', { name: /^Set active/ });
+                await expect(use, 'the address detail offers no Set active action, or the address was already active before it was pressed').toBeVisible({ timeout: 30_000 });
 
                 await use.click();
 
@@ -292,18 +311,23 @@ test.describe('Addresses: importing a private key', () => {
 
                 await openPaletteCommand(page, 'Addresses');
                 await showImportedOnly(page);
-                await page.getByRole('button', { name: `View address ${imported}` }).click();
 
-                // The detail marks the active address with an "Active" badge
-                // beside its label and offers no Use action for it, so both
-                // halves are read: the badge appearing and Use going away.
+                // The address LIST marks the active address with an "Active"
+                // badge beside its label (AddressList addrActive), and the
+                // detail offers no Set active action for it, so both halves are
+                // read: the row's badge appearing and Set active going away.
                 const notActivated = 'Use did not make the imported address active - D-65 and its '
                     + 'fourth sibling in resolveActiveAddresses both present exactly this way, and Send '
                     + 'spends the ACTIVE address, so an imported key that cannot be activated cannot be spent';
-                await expect(page.getByRole('main').getByText('Active', { exact: true }), notActivated)
+                const importedRow = page.getByRole('button', { name: `View address ${imported}` });
+                await expect(importedRow.getByText('Active', { exact: true }), notActivated)
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('group', { name: 'Address actions' })
-                    .getByRole('button', { name: 'Use', exact: true }), notActivated)
+                await importedRow.click();
+                await expect(page.getByRole('list', { name: 'Actions', exact: true }),
+                    'the imported address detail never opened its Actions list')
+                    .toBeVisible({ timeout: 30_000 });
+                await expect(page.getByRole('list', { name: 'Actions', exact: true })
+                    .getByRole('button', { name: /^Set active/ }), notActivated)
                     .toHaveCount(0);
             });
 

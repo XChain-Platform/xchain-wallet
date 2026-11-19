@@ -72,19 +72,19 @@
 // ship" - `rehearse.mjs coverage` refuses to call such a lane launch-
 // ready, and says so rather than passing quietly.
 //
-// DD4 IS NOW ANSWERED FOR ALL EIGHT LANES (the last two by operator
-// decision 2026-08-03). No lane carries `device: null`, and
-// `rehearsal.smoke.js` refuses a new one that does, rather than letting it
-// inherit the old unanswered state silently.
+// Every lane has carried a non-null device since the operator decision of
+// 2026-08-03, and `rehearsal.smoke.js` refuses a new null. A name answers
+// DD4 only when that device can witness the lane's own swap. The
+// linux-x64-appimage and linux-x64-deb names are CI runners, so an x64
+// desktop or workstation is still owed. mac-x64 is waived until a native
+// Intel Mac is named.
 //
 // NAMING A DEVICE IS NOT A CLAIM THAT THE LANE HAS BEEN REHEARSED. It says
-// only which machine the swap will be watched on. `coverage` still reports
-// an un-rehearsed lane as ⬜ and still exits non-zero; naming changes only
-// the REASON it gives, from "DD4 unanswered" to "never rehearsed". Those
-// are different blockers with different owners and the output must not
-// conflate them. What blocks a named lane now is the swap itself, watched
-// on its device and recorded with `rehearse.mjs attest --by <who>`;
-// `rehearse.mjs coverage` is the live list of lanes that still owe one.
+// where a swap is intended to be watched. For the other five lanes the open
+// item is the swap itself, watched on that device and recorded with
+// `rehearse.mjs attest --by <who>`. `coverage` reports the two runner lanes
+// as BLOCKED, mac-x64 as WAIVED, and remains the live list of swaps owed.
+// A device name is therefore inventory, while witness capability is evidence.
 //
 // WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
 // obvious idea and it was measured rather than dismissed. A
@@ -178,7 +178,9 @@ export const LANES = [
         arch: 'x64',
         format: 'AppImage',
         device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
-        note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing.',
+        note: 'Shares stable-linux.yml with the x64 deb, so format selection is load-bearing. '
+            + 'The named device is a runner, which cannot witness a swap: `coverage` reports this lane '
+            + 'blocked and `attest` refuses it until an x64 desktop is named here.',
     },
     {
         id: 'linux-arm64-appimage',
@@ -195,18 +197,34 @@ export const LANES = [
         format: 'deb',
         device: 'linux-x86_64 CI runner (Ubuntu 24.04)',
         note: 'DebUpdater. The only shipped update path that ends in a root install '
-            + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed.',
+            + '(pkexec dpkg -i), and therefore the one that least deserved to be unrehearsed. '
+            + 'The named device is a runner, which cannot answer the pkexec prompt or witness a swap: '
+            + '`coverage` reports this lane blocked and `attest` refuses it until an x64 desktop is named here.',
     },
     {
         id: 'linux-arm64-deb',
         os: 'linux',
         arch: 'arm64',
         format: 'deb',
-        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
-        note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage. The swap itself '
-            + 'has been observed once, in a container, by drills/deb-update-swap.mjs.',
+        device: 'Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop, clean profile)',
+        note: 'DebUpdater on arm64. Same pointer as the arm64 AppImage, and the same desktop VM: '
+            + 'the pkexec prompt of the root install needs a desktop session to be answered in. '
+            + 'The swap itself has been observed once, in a container, by drills/deb-update-swap.mjs.',
     },
 ];
+
+/**
+ * Whether a device string names a CI or hosted runner. A runner has no person at it, so it can
+ * never be where a swap is watched; `attest` and `coverage` refuse such a device rather than let a
+ * record say a person watched a swap on one.
+ *
+ * @param {string|null|undefined} device
+ * @returns {boolean}
+ */
+export function deviceNamesCiRunner(device) {
+    return /\b(?:ci|hosted|github[- ]hosted|github[- ]actions?)\s+runner\b|\bgithub[- ]actions?\b/i
+        .test(String(device ?? ''));
+}
 
 /**
  * @typedef {Object} DirectLane
@@ -388,6 +406,8 @@ export const ALL_OS_TRIGGER_PATHS = [
     'packages/core/src/storage/',
     'packages/core/src/crypto/',
     'packages/core/src/schemas/',
+    // The stored upload record validates its size against this ceiling.
+    'packages/core/src/flows/fileSizeLimits.js',
     'packages/core/src/registry/coinTicker.js',
     'packages/core/src/shared/utils/textHardening.js',
     'packages/core/src/util/display_name.js',
@@ -408,8 +428,9 @@ export function isAllOsTriggerPath(file) {
  *
  * Most of the download-and-swap code is not ours: electron-updater and its
  * runtime (the per-OS updaters), the Electron shell, and the builders that
- * write each OS's installer. A bump of any of them changes the swap on every
- * OS while touching no path above. Keyed on the lockfile's resolution, not on
+ * write each OS's installer, plus the library that verifies update signatures.
+ * A bump of any of them changes the swap on every OS while touching no path
+ * above. Keyed on the lockfile's resolution, not on
  * packages/desktop/package.json, whose `version` moves on every release.
  */
 export const ALL_OS_TRIGGER_PACKAGES = [
@@ -419,6 +440,7 @@ export const ALL_OS_TRIGGER_PACKAGES = [
     'electron-builder',
     'app-builder-lib',
     'dmg-builder',
+    'openpgp',
 ];
 
 /** @param {string} id */

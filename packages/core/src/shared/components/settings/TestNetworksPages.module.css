@@ -1,0 +1,180 @@
+/* Test Networks pages (Developer options): the network list, the Add
+   Network picker, a network's own page, the custom network form and the
+   regtest faucet. */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* The uppercase label over a card, as on the Settings group pages. */
+.groupLabel {
+    margin-block: var(--xc-space-2) 0;
+    margin-inline: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* One flush list card with divider lines (G08 rows). */
+.card {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    list-style: none;
+}
+
+.card > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.selectedRow {
+    background: var(--xc-row-active-bg);
+}
+
+/* A network's icon: its bundled image, or its first letter on its colour. */
+.mark {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background: var(--net-color, var(--xc-text-muted));
+    color: var(--xc-on-accent, #fff);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+.mark img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+}
+
+.markLarge {
+    inline-size: 44px;
+    block-size: 44px;
+    font-size: var(--xc-text-lg, 1.125rem);
+}
+
+/* A network row's icon box: the 36px an action row's icon fills
+   (ActionList .iconTile), so every row's title starts on one line. */
+.rowIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    inline-size: calc(var(--xc-space-8) + var(--xc-space-1));
+    block-size: calc(var(--xc-space-8) + var(--xc-space-1));
+}
+
+/* The identity card at the top of a network's page. */
+.identity {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.rowMeta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.note {
+    margin: 0;
+    padding-inline: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.reason {
+    color: var(--xc-warning, var(--xc-text-muted));
+}
+
+/* The in-place activation: one password field and the green button. */
+.activate {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* A read-only value in the field layout: its label over a boxed value. */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-inline-size: 0;
+}
+
+.fieldLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.fieldValue {
+    display: block;
+    min-inline-size: 0;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+}
+
+.descriptor {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+}
+
+.mono {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: var(--xc-font-mono, monospace);
+}
+
+/* A faucet history row: amount and network on the first line, the address
+   under it, the time and status at the trailing edge. */
+.historyTrailing {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: calc(var(--xc-space-1) / 2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    white-space: nowrap;
+}
+
+.statusSent {
+    color: var(--xc-success);
+    font-weight: 600;
+}
+
+.statusFailed {
+    color: var(--xc-danger, var(--xc-text));
+    font-weight: 600;
+}
+
+.historyAddress {
+    display: block;
+    min-inline-size: 0;
+}

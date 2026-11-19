@@ -1,0 +1,44 @@
+.legend {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
+    font-weight: 600;
+}
+
+/* A limit, threshold, recipient or output row stacks its fields at
+   the full width of the section card; Remove sits at the row's right. */
+.policyRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-2);
+    padding-block-end: var(--xc-space-2);
+    border-block-end: 1px solid var(--xc-border);
+}
+
+.policyRow > * {
+    min-width: 0;
+    width: 100%;
+}
+
+.policyRow > button {
+    width: auto;
+    justify-self: end;
+}
+
+/* A group's label line: its name, then the '?' tip (G25), in the field label style. */
+.groupLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+/* An Add button with the group's '?' tip beside it. */
+.addRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}

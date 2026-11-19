@@ -34,6 +34,7 @@ import { act, render, fireEvent, waitFor, cleanup, within } from '@testing-libra
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 // Both addresses are checksum-valid mainnet bech32 (the BIP173 vectors),
@@ -78,6 +79,9 @@ async function mountSweep({
     props = {},
 } = {}) {
     const onBack = vi.fn();
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
         getActiveAddresses: vi.fn().mockResolvedValue(activeByChain),
@@ -106,8 +110,9 @@ async function mountSweep({
         container,
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
-        memo: () => labelledInput(container, 'Memo (optional)'),
-        category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
+        // The lone memo has no label row; its accessible name is Memo.
+        memo: () => container.querySelector('[data-form-section="memo"] textarea[aria-label="Memo"]'),
+        category: (text) => within(container).getByRole('switch', { name: new RegExp(text) }),
         button: (label) => container.querySelector(`button[aria-label="${label}"]`),
         /** Text of every rendered alert, joined. Cheap and dump-free. */
         alerts: () => Array.from(container.querySelectorAll('[role="alert"]'))
@@ -175,6 +180,7 @@ async function mountGatedSweep() {
         ]),
         listGatedKeys: () => Promise.resolve([{ keyHash: 'a'.repeat(64) }]),
         copyGatedKeysToWallet: () => Promise.resolve({ copied: 1, skipped: 0 }),
+        gatedContentScan: vi.fn().mockResolvedValue({}),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -196,7 +202,7 @@ async function mountGatedSweep() {
             }),
         ),
     );
-    return { container, missingHash };
+    return { container, missingHash, messaging };
 }
 
 /** The <input> whose <label> text matches, without a role-tree scan. */
@@ -209,9 +215,39 @@ function labelledInput(container, labelText) {
     return id ? container.querySelector(`#${CSS.escape(id)}`) : label.querySelector('input');
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 describe('SweepForm form-level errors (D-58)', () => {
+    it('gives the network field a help tip and keeps each category description visible (U83)', async () => {
+        const q = await mountSweep();
+
+        expect(q.button('About Network')).toBeInTheDocument();
+        expect(q.container).toHaveTextContent('Every token balance this address holds.');
+        expect(within(q.container).queryByRole('button', { name: /^About Token balances/ })).toBeNull();
+    });
+
+    it('shows each What to sweep option as a switch row with a leading icon in one card', async () => {
+        const q = await mountSweep();
+
+        const list = q.container.querySelector('[data-sweep-what-list]');
+        expect(list).toBeTruthy();
+        const switches = within(list).getAllByRole('switch');
+        expect(switches).toHaveLength(5);
+        expect(within(list).queryAllByRole('checkbox')).toHaveLength(0);
+        for (const input of switches) {
+            const row = input.closest('label');
+            expect(row.querySelector('svg')).toBeTruthy();
+            expect(row.querySelector('[aria-hidden="true"] svg')).toBeTruthy();
+        }
+        // Protocol defaults: balances and ownerships on, the force-closes off.
+        expect(q.category('Token balances').checked).toBe(true);
+        expect(q.category('Token ownerships').checked).toBe(true);
+        expect(q.category('Open orders').checked).toBe(false);
+    });
+
     it('keeps network-kind text out of a regtest validation error', async () => {
         const chainId = 'bitcoin-regtest';
         const source = { ...SOURCE, id: 'regtest-source', address: 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt' };
@@ -227,7 +263,7 @@ describe('SweepForm form-level errors (D-58)', () => {
         expect(q.container).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
-    it('says a malformed destination once, under the field only', async () => {
+    it('says a malformed destination in the top summary and under the field', async () => {
         const q = await mountSweep();
 
         fireEvent.change(q.destination(), { target: { value: 'not-an-address' } });
@@ -235,7 +271,8 @@ describe('SweepForm form-level errors (D-58)', () => {
 
         await waitFor(() => expect(q.alerts()).toMatch(/not a valid Bitcoin address/i));
         const copies = q.container.textContent.split('is not a valid Bitcoin address').length - 1;
-        expect(copies).toBe(1);
+        expect(copies).toBe(2);
+        expect(q.destination()).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('an empty destination errors with the reason instead of a dead button', async () => {
@@ -336,6 +373,22 @@ describe('SweepForm destination spelling', () => {
 });
 
 describe('SweepForm gated key details', () => {
+    it('keeps Recover Keys enabled and reports a missing scan password', async () => {
+        const { container, messaging } = await mountGatedSweep();
+        await waitFor(() => expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing'));
+        fireEvent.click(within(container).getByRole('button', { name: /^Gated-Content Keys/ }));
+
+        const recover = within(container).getByRole('button', { name: 'Recover Keys' });
+        expect(recover).not.toBeDisabled();
+        fireEvent.click(recover);
+
+        await waitFor(() => expect(container.querySelector('[data-form-errors]'))
+            .toHaveTextContent('Enter the wallet password to scan.'));
+        expect(labelledInput(container, 'Wallet password (key recovery scan)'))
+            .toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.gatedContentScan).not.toHaveBeenCalled();
+    });
+
     it('lists every missing unlock key hash', async () => {
         const { container, missingHash } = await mountGatedSweep();
 
@@ -343,16 +396,92 @@ describe('SweepForm gated key details', () => {
             expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing');
             expect(container.textContent).toContain(missingHash);
         });
+        // The keys group is a closed section; open it first. It carries no
+        // "I understand" acknowledgement box: the confirm step says it instead.
+        fireEvent.click(within(container).getByRole('button', { name: /^Gated-Content Keys/ }));
+        expect(within(container).queryByRole('checkbox', { name: /Sweep anyway|I understand/ })).toBeNull();
+        expect(container.textContent).not.toMatch(/I understand/);
+    });
+
+    it('lets the sweep continue with keys missing and says so at the confirm step', async () => {
+        // Watcher mode stops at the review page, the confirm step this lane shows.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+        const { container } = await mountGatedSweep();
+        await waitFor(() => expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing'));
+        // The form itself says nothing about missing keys beyond the key list.
+        expect(container.textContent).not.toContain('their gated content may never open');
+
+        const submit = container.querySelector('button[type="submit"]');
+        await waitFor(() => expect(submit).toBeEnabled());
+        fireEvent.click(submit);
+
+        await waitFor(() => expect(container.textContent).toContain(
+            "Unlock keys for GATED aren't in the vault, so their gated content may never open in the new wallet.",
+        ));
+        expect(container.textContent).not.toMatch(/acknowledge sweeping without them/);
     });
 });
 
 describe('SweepForm preview and navigation states', () => {
+    it('shows snapshot counts without item rows and starts with the visually untitled Network field', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => Promise.resolve({
+                ...EMPTY_PREVIEW,
+                balances: {
+                    rows: [
+                        { tick: 'HIDDEN_ONE', quantity: '1', divisibility: 0 },
+                        { tick: 'HIDDEN_TWO', quantity: '2', divisibility: 0 },
+                    ],
+                    error: null,
+                },
+            }),
+        });
+
+        await waitFor(() => expect(q.category('Token balances \\(2\\)')).toBeTruthy());
+
+        // The standing notice is now the "About sweeping" help tip on the
+        // plain What to sweep label; it carries the snapshot warning.
+        fireEvent.click(q.button('About sweeping'));
+        const tip = within(q.container.ownerDocument.body).getByRole('tooltip');
+        expect(tip.textContent.replace(/\s+/g, ' ').trim()).toBe(
+            'A sweep moves everything you tick here from this address to the destination '
+            + 'address in one transaction, for example when you retire an address or move to a new wallet. '
+            + 'The counts show what the address holds now; the sweep moves whatever it holds '
+            + 'when the transaction confirms.',
+        );
+        expect(q.container).not.toHaveTextContent(/indicative/i);
+
+        const categoriesSection = q.container.querySelector('[data-form-section="sweep"]');
+        // What to sweep is a plain field label inside the main section, not
+        // the section's heading.
+        expect(categoriesSection.querySelector('[data-form-section-title]')).toHaveTextContent(/^Sweep Details$/);
+        const whatLabel = categoriesSection.querySelector('[data-sweep-what-label]');
+        expect(whatLabel).toHaveTextContent('What to sweep');
+        expect(whatLabel.tagName).toBe('SPAN');
+        expect(whatLabel).toContainElement(q.button('About sweeping'));
+        expect(categoriesSection).toHaveTextContent('Token balances (2)');
+        expect(categoriesSection).toHaveTextContent('Every token balance this address holds.');
+        expect(categoriesSection).not.toHaveTextContent('HIDDEN_ONE');
+        expect(categoriesSection).not.toHaveTextContent('HIDDEN_TWO');
+        expect(categoriesSection.querySelector('ul')).toBeNull();
+
+        // The first section is the closed From section, and Network leads it.
+        const firstSection = q.container.querySelector('form [data-form-section]');
+        expect(firstSection.getAttribute('data-form-section')).toBe('from');
+        expect(firstSection).toHaveTextContent('From');
+        expect(firstSection.querySelector('button[aria-label^="Network:"]').getAttribute('aria-label'))
+            .toMatch(/^Network:/);
+    });
+
     it('shows a clear empty state after every selected preview category resolves empty', async () => {
         const q = await mountSweep();
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain(
-                'Nothing is currently shown in the selected categories.',
+            const hint = Array.from(q.container.querySelectorAll('p'))
+                .find((node) => node.textContent.includes('Nothing is in the selected categories'));
+            // U57: only the live line stays; the snapshot fact is the What to sweep tip.
+            expect(hint.textContent.replace(/\s+/g, ' ').trim()).toBe(
+                'Nothing is in the selected categories right now.',
             );
         });
     });
@@ -368,7 +497,7 @@ describe('SweepForm preview and navigation states', () => {
 
         await waitFor(() => {
             const copies = Array.from(q.container.querySelectorAll('p'))
-                .filter((node) => node.textContent === 'Preview unavailable for this category; the sweep still moves it.');
+                .filter((node) => node.textContent === 'Count unavailable for this category; the sweep still moves it.');
             expect(copies).toHaveLength(1);
         });
     });
@@ -379,7 +508,7 @@ describe('SweepForm preview and navigation states', () => {
         });
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).toContain('Counts unavailable.');
             expect(q.container.textContent).not.toContain('upstream host secret detail');
         });
     });
@@ -390,7 +519,7 @@ describe('SweepForm preview and navigation states', () => {
         });
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).toContain('Counts unavailable.');
             expect(q.container.textContent).not.toContain('transport disconnected');
         });
     });
@@ -418,8 +547,7 @@ describe('SweepForm preview and navigation states', () => {
             address: SOURCE.address,
         }));
         fireEvent.click(q.container.querySelector('button[aria-label^="Network:"]'));
-        const litecoin = Array.from(q.container.querySelectorAll('[role="option"]'))
-            .find((option) => option.textContent.includes('Litecoin'));
+        const litecoin = q.container.querySelector('button[aria-label="Select Litecoin"]');
         fireEvent.click(litecoin);
         await waitFor(() => expect(q.messaging.sweepPreview).toHaveBeenCalledWith({
             chainId: SECOND_CHAIN,
@@ -429,11 +557,17 @@ describe('SweepForm preview and navigation states', () => {
         await act(async () => {
             second.resolve({
                 ...EMPTY_PREVIEW,
-                balances: { rows: [{ tick: 'CURRENT', quantity: '1', divisibility: 0 }], error: null },
+                balances: {
+                    rows: [
+                        { tick: 'CURRENT_ONE', quantity: '1', divisibility: 0 },
+                        { tick: 'CURRENT_TWO', quantity: '2', divisibility: 0 },
+                    ],
+                    error: null,
+                },
             });
             await second.promise;
         });
-        await waitFor(() => expect(q.container.textContent).toContain('1 CURRENT'));
+        await waitFor(() => expect(q.category('Token balances \\(2\\)')).toBeTruthy());
 
         await act(async () => {
             first.resolve({
@@ -442,8 +576,8 @@ describe('SweepForm preview and navigation states', () => {
             });
             await first.promise;
         });
-        expect(q.container.textContent).toContain('1 CURRENT');
-        expect(q.container.textContent).not.toContain('1 STALE');
+        expect(q.category('Token balances \\(2\\)')).toBeTruthy();
+        expect(q.container.textContent).not.toContain('Token balances (1)');
     });
 
     it('opens the wallet address picker for the destination', async () => {
@@ -452,8 +586,12 @@ describe('SweepForm preview and navigation states', () => {
         fireEvent.click(q.button('Choose destination address'));
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Destination address');
-            expect(q.container.querySelector('input[aria-label="Search addresses"]')).toBeTruthy();
+            expect(q.container.textContent).toContain('Destination Address');
+        });
+        // Search now lives in the picker's filter menu on the title line.
+        fireEvent.click(q.button('Filter addresses'));
+        await waitFor(() => {
+            expect(q.container.ownerDocument.querySelector('input[aria-label="Search addresses"]')).toBeTruthy();
         });
     });
 
@@ -463,7 +601,7 @@ describe('SweepForm preview and navigation states', () => {
         fireEvent.click(q.submit());
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Review sweep');
+            expect(q.container.querySelector('[data-testid="confirm-modal"]')).not.toBeNull();
         });
         fireEvent.click(q.button('Back to previous screen'));
 

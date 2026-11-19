@@ -50,6 +50,11 @@ function mountDestroy({ balances }) {
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'DESTROY|0|ART|2', version: 1,
             releaseEncoderInputsToken: 'release-1',
+            decoded: {
+                summary: 'Destroy 2 ART',
+                details: [{ label: 'Amount', value: '2 ART' }],
+                warnings: ['Destroy is irreversible.'],
+            },
             simulation: { deltas: [{ tick: 'ART', before: '2', after: '0' }] },
         }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
@@ -96,16 +101,24 @@ describe('DestroyForm balance freshness', () => {
     it('enables approval only for exact uppercase DESTROY', async () => {
         mountDestroy({ balances: balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]) });
         expect(await screen.findByText('2 ART available')).toBeInTheDocument();
+        expect(screen.queryByText('Destroy is irreversible.')).toBeNull();
+        expect(screen.queryByText('The burned amount cannot be recovered.')).toBeNull();
         await reviewAmount('2');
         const field = await screen.findByLabelText('Type "DESTROY" to confirm');
         const approve = await screen.findByTestId('confirm-approve');
+        expect(screen.getByText('Destroy is irreversible.')).toBeInTheDocument();
+        // G130: Approve keeps its colour; a tap before the exact word is
+        // typed is answered at the top of the page and signs nothing.
+        expect(approve).toBeEnabled();
 
         for (const value of ['destroy', ' DESTROY', 'DESTROY ', 'Destroy']) {
             fireEvent.change(field, { target: { value } });
-            expect(approve).toBeDisabled();
+            fireEvent.click(approve);
+            expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Finish the step above Approve, then approve.');
         }
         fireEvent.change(field, { target: { value: 'DESTROY' } });
         expect(approve).toBeEnabled();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
     });
 
     it('bypasses a balance cached under two seconds old and refuses when the token is gone', async () => {

@@ -27,6 +27,7 @@ import {
     Button,
     FieldNote,
     FormPage,
+    Icon,
     PageHeader,
     QrScanner,
     Screen,
@@ -44,6 +45,7 @@ import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
+const PASTE_HELP = 'Paste an xchain: or bitcoin: payment link, an address, or a transaction code. The wallet will identify it and open the matching next step.';
 
 /**
  * @typedef {(
@@ -69,6 +71,8 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
     const [paste, setPaste] = useState('');
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [stopped, setStopped] = useState(false);
+    const [pasteError, setPasteError] = useState(/** @type {string | null} */ (null));
+    const pasteRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const claimedRef = useRef(false);
 
     const classify = useCallback((raw) => {
@@ -254,10 +258,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const handleFrame = useCallback((text) => { classify(text); }, [classify]);
 
+    // The action stays enabled (G22): pressed with nothing pasted, the field
+    // itself turns red with its message and takes the cursor.
     const handlePaste = useCallback(() => {
         const text = paste.trim();
         if (!text) {
-            setStatus(t('scan.error.pasteEmpty'));
+            setPasteError(t('scan.error.pasteEmpty'));
+            pasteRef.current?.focus();
             return;
         }
         classify(text);
@@ -290,8 +297,9 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        variant="secondary"
-                        disabled={!paste.trim() || stopped}
+                        variant="success"
+                        icon={<Icon.CheckIcon />}
+                        disabled={stopped}
                     >
                         {t('scan.classifyPaste')}
                     </Button>
@@ -304,9 +312,15 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     <FieldNote variant="success">{t('scan.routing')}</FieldNote>
                 )}
                 <Textarea
+                    ref={pasteRef}
                     label={t('scan.pasteLabel')}
+                    help={PASTE_HELP}
                     value={paste}
-                    onChange={(e) => setPaste(e.target.value)}
+                    error={pasteError || undefined}
+                    onChange={(e) => {
+                        setPaste(e.target.value);
+                        if (pasteError && e.target.value.trim()) setPasteError(null);
+                    }}
                     placeholder={t('scan.pastePlaceholder')}
                     rows={4}
                     spellCheck={false}

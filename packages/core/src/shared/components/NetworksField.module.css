@@ -1,0 +1,51 @@
+/* NetworksField takes ListField's chrome (TokenField.module.css and
+   ListField.module.css); this sheet only lays out the chosen networks inside
+   the value text, so the field's height, border and icon slots stay shared. */
+
+.names {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.network {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.networkIcon {
+    flex: 0 0 auto;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+    border-radius: var(--xc-radius-pill);
+}
+
+.networkName {
+    white-space: nowrap;
+}
+
+/* The longer choice: at most five icons side by side, then "+N more". */
+.stack {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+/* A chain with no icon shows its initial in the icon's round slot. */
+.networkLetter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.more {
+    margin-inline-start: var(--xc-space-1);
+    white-space: nowrap;
+    color: var(--xc-text-muted);
+}

@@ -384,6 +384,18 @@ if xr_has_header "$SNAP_MANIFEST"; then
         echo "  is not evidence that the release omitted that artifact." >&2
     fi
 
+    # A signing host without unsquashfs or dpkg-deb signs the manifest with
+    # the skipped payload checks recorded in its header. A matching hash
+    # proves the bytes, not that the snap and deb contents were inspected.
+    if [[ "$(xr_header_field "$SNAP_MANIFEST" 'payload-check')" == "partial" ]]; then
+        echo "verify.sh: WARNING - payload checks were PARTIAL when this release was signed." >&2
+        echo "  These checks never ran on the signing host:" >&2
+        { grep '^# payload-unchecked ' "$SNAP_MANIFEST" || true; } \
+            | sed 's/^# payload-unchecked /    /' | LC_ALL=C tr -d '\000-\010\013-\037' >&2
+        echo "  A matching hash covers the bytes only: those artifacts' architecture" >&2
+        echo "  and native addons were not inspected." >&2
+    fi
+
     if [[ "$M_GATE" != "enforced" ]]; then
         echo "verify.sh: WARNING - dev-mock gate state is '$M_GATE', not 'enforced'." >&2
         echo "  This release was signed without the gate that keeps the" >&2

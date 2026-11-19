@@ -375,6 +375,17 @@ export function selectUpdater(mod, {
     return { updater: new AppImageUpdater(), mislabelledAs: packageType };
 }
 
+export function desktopInstallChannel({
+    mas = process.mas,
+    windowsStore = process.windowsStore,
+    env = process.env,
+} = {}) {
+    if (mas) return 'macos-appstore';
+    if (windowsStore) return 'windows-store';
+    if (env?.SNAP && env?.SNAP_NAME) return 'snap';
+    return 'desktop-direct';
+}
+
 /**
  * @typedef {Object} UpdaterEvent
  * @property {'checking' | 'available' | 'not-available' | 'error' | 'downloaded' | 'progress' | 'verifying' | 'ready' | 'rejected'} type

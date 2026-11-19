@@ -1,62 +1,114 @@
+/* The Network field lives in the title-line filter, so the toolbar row
+   holds only the All | My bets | My markets tabs, full width, directly
+   above the list. */
 .toolbarRow {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: var(--xc-space-2);
     width: 100%;
 }
 
-.toolbarNetwork {
-    flex: 1 1 12rem;
+.toolbarActions {
     min-width: 0;
 }
 
-.toolbarNetwork > * {
-    margin-bottom: 0;
+.toolbarActions > * {
+    flex: 1 1 auto;
+    width: 100%;
 }
 
-.toolbarActions {
+/* Kept for callers that still pass the old network-field wrapper class. */
+.toolbarControl.toolbarControl > * {
+    --chain-picker-font-size: var(--xc-control-font-sm);
+}
+
+/* Each tab is an icon and its word. */
+.tabLabel {
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+.tabLabel svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+}
+
+/* The card grid of All, My bets and My markets. As many cards as fit sit
+   side by side, 8px apart. A phone or the popup has room for one, which
+   then spans the row; min(100%, ...) keeps a narrow popup from overflowing.
+   The 290px floor also caps the cards near 440px with no gap-widening
+   max-width: a second column joins at 588px, a third at 886px, so the
+   widest a card gets with two or more columns is (885 - 8) / 2 = 438.5px. */
+.cardArea {
+    width: 100%;
+    min-width: 0;
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .cardArea {
+        container-type: inline-size;
+    }
 }
 
 .marketList {
     list-style: none;
     margin: 0;
     padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+    gap: var(--xc-space-2);
+}
+
+.marketList > * {
+    min-width: 0;
+}
+
+.marketList > li {
+    display: flex;
+}
+
+/* The wide split turns the narrow card grid into one framed row stack. The
+   list scroller supplies the 8px gap above the card. */
+.marketList[data-xc-split-list] {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    gap: 0;
 }
 
-.marketHeader {
+.marketList[data-xc-split-list] > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.splitRow.splitRow {
     width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
+    margin-inline: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
-.marketCard {
-    composes: card from '../../ui/Card.module.css';
-    min-height: var(--xc-tap-min);
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    text-align: start;
-    color: var(--xc-text);
-    box-shadow: var(--xc-list-shadow);
-    cursor: pointer;
+@media (hover: hover) and (pointer: fine) {
+    .splitRow.splitRow:hover {
+        border-color: transparent;
+        background: var(--xc-row-hover-bg);
+    }
 }
 
-.marketCard:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+.splitRow.splitRow[aria-current='true'] {
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
 }
 
-.marketDetail {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+/* A backstop for the arithmetic above: once two cards share a row, none
+   grows past 440px. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container (min-width: 588px) {
+        .marketList > * {
+            max-width: 440px;
+        }
+    }
 }

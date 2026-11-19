@@ -77,10 +77,14 @@ assert.match(tl, /give_action_index/, 'filters matches by the matched-order inde
 assert.match(tl, /created/, 'merges the trade creation into the timeline');
 
 // ---- Wired into both views ----
-for (const [view, kind] of [['MyOrdersView.jsx', 'order'], ['MySwapsView.jsx', 'swap']]) {
+// An order's timeline moved from its My Orders row to its detail page, and a
+// swap's from its My Swaps row to Swap Details. In the ring layout
+// (wallet-orders-layout-1-ring) each page hands it to the Matches tab of its
+// Actions | Details | Matches toggle, which mounts it only while Matches is chosen.
+for (const [view, kind, expanded] of [['OrderDetail.jsx', 'order', /matches=\{matches\}/], ['SwapDetail.jsx', 'swap', /matches=\{matches\}/]]) {
     const src = read('packages', 'core', 'src', 'shared', 'routes', view);
     assert.match(src, /MarketLifecycleTimeline/, `${view} renders the lifecycle timeline`);
-    assert.match(src, /timelineKey/, `${view} tracks the expanded row`);
+    assert.match(src, expanded, `${view} tracks whether the timeline is open`);
     assert.match(src, new RegExp(`kind="${kind}"`), `${view} renders the ${kind} timeline`);
 }
 

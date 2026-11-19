@@ -24,6 +24,7 @@ import {
     fingerprintSessionRef,
 } from '../../../packages/core/src/uri/index.js';
 import { signedTxFor } from '../../helpers/signedTx.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 // Real finalized bytes and the prevouts the session PSBT records: the
 // broadcast verifies every signature before it sends.
@@ -37,6 +38,13 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
     screenVariantFor: () => 'full',
 }));
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => React.createElement(
+        'button',
+        { type: 'button', onClick: () => onPick(LOCAL_ADDRESS) },
+        'Pick local address',
+    ),
+}));
 
 const { MultisigCreate } = await import(
     '../../../packages/core/src/shared/routes/MultisigCreate.jsx');
@@ -48,7 +56,7 @@ const { MultisigSigningSession } = await import(
 const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
 const WALLET_ID = 'wallet-1';
 const CHAIN_ID = 'bitcoin-testnet';
-const PSBT_HEX = '70736274ff';
+const PSBT_HEX = '';
 const MSG_HASH = 'ab'.repeat(32);
 // A broadcast reply counts only as a 64-hex txid matching the finalized one.
 const TXID = 'e7'.repeat(32);
@@ -100,10 +108,22 @@ function makeHarness() {
         txid: TXID,
     }));
     const broadcastTx = vi.fn(async () => ({ txid: TXID }));
+    const getUTXOs = vi.fn(async () => ({
+        utxos: FINALIZED.prevouts.map((prevout) => ({
+            txid: prevout.prevTxHash,
+            vout: prevout.prevTxIndex,
+            value: prevout.value,
+            scriptPubKey: prevout.scriptPubKeyHex,
+        })),
+    }));
     const sdkRegistry = {
         get: vi.fn(() => ({
-            wallet: { finalizeMultisigPsbt, decomposePsbt: () => ({ inputs: FINALIZED.prevouts }) },
-            encoder: { broadcastTx },
+            wallet: {
+                finalizeMultisigPsbt,
+                decomposePsbt: () => ({ inputs: FINALIZED.prevouts }),
+                getBitcoinNetwork: () => ({ bech32: 'bc', pubKeyHash: 0, scriptHash: 5 }),
+            },
+            encoder: { broadcastTx, getUTXOs },
         })),
     };
     return {
@@ -115,10 +135,10 @@ function makeHarness() {
 }
 
 async function fillExternalRows() {
-    const xpubs = screen.getAllByLabelText(/^xpub$/i);
-    const pubkeys = screen.getAllByLabelText(/Public key \(hex/i);
+    const xpubs = screen.getAllByLabelText(/^Account public key$/i);
+    const pubkeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
-    const paths = screen.getAllByLabelText(/^Derivation path/i);
+    const paths = screen.getAllByLabelText(/^Account path/i);
     fireEvent.change(xpubs[0], { target: { value: BOB.xpub } });
     fireEvent.change(pubkeys[1], { target: { value: BOB.pubkey } });
     fireEvent.change(fingerprints[1], { target: { value: BOB.fingerprint } });
@@ -136,6 +156,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -158,17 +179,16 @@ describe('multisig jsdom flow', () => {
         };
 
         render(<MultisigCreate walletId={WALLET_ID} onBack={() => {}} />);
-        await screen.findByLabelText(/Use one of this wallet's addresses/i);
-        fireEvent.click(screen.getByRole('button', { name: /Add cosigner/i }));
-        fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), {
-            target: { value: LOCAL_ADDRESS.id },
-        });
+        await screen.findByLabelText("Use one of this wallet's addresses");
+        fireEvent.click(screen.getByRole('button', { name: /Add Cosigner/ }));
+        fireEvent.click(screen.getByRole('button', { name: "Choose one of this wallet's addresses" }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick local address' }));
         await waitFor(() => expect(screen.getAllByLabelText(/Master fingerprint/i)[0])
             .toHaveValue(LOCAL.fingerprint));
         await fillExternalRows();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByText(/2-of-3 SegWit multi-signature/i)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
+        expect(await screen.findByText(/2-of-3 SegWit/i)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm Multisig' }));
         expect(await screen.findByText('Multisig configured')).toBeTruthy();
 
         const wallet = await harness.vault.wallets.get(WALLET_ID);
@@ -183,13 +203,12 @@ describe('multisig jsdom flow', () => {
         render(
             <MultisigCosignerShare
                 walletId={WALLET_ID}
-                addresses={[LOCAL_ADDRESS]}
-                networkKind="testnet"
+                onBack={() => {}}
             />,
         );
-        fireEvent.change(screen.getByLabelText('Address to share'), {
-            target: { value: LOCAL_ADDRESS.id },
-        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose address to share' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick local address' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
         await waitFor(() => expect(toDataURL).toHaveBeenCalled());
         const shared = JSON.parse(toDataURL.mock.calls.at(-1)[0]);
         expect(shared).toEqual({
@@ -241,8 +260,9 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const sessionRef = {
+            chainId: session.chainId,
             scheme: session.scheme,
             threshold: session.threshold,
             cosignerPubkeys: session.cosignerPubkeys,
@@ -258,15 +278,15 @@ describe('multisig jsdom flow', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: chunks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         await screen.findByText(/Signature from .* accepted/i);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to tracker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Tracker' }));
 
-        const finalize = await screen.findByRole('button', { name: 'Finalize transaction' });
+        const finalize = await screen.findByRole('button', { name: 'Finalize Transaction' });
         expect((await harness.vault.multisigSigningSessions.get(session.id)).signatures)
             .toHaveLength(2);
         fireEvent.click(finalize);
-        const broadcast = await screen.findByRole('button', { name: 'Broadcast transaction' });
+        const broadcast = await screen.findByRole('button', { name: 'Broadcast Transaction' });
         expect(harness.finalizeMultisigPsbt).toHaveBeenCalledWith(PSBT_HEX);
         expect((await harness.vault.multisigSigningSessions.get(session.id))).toMatchObject({
             msgHash: MSG_HASH,
@@ -296,7 +316,7 @@ describe('multisig jsdom flow', () => {
             threshold: 2,
             cosignerPubkeys: [LOCAL.pubkey, BOB.pubkey, CAROL.pubkey],
             msgHash: MSG_HASH,
-            psbtHex: PSBT_HEX,
+            psbtHex: '70736274ff',
             actionSummary: 'Send from watcher',
             nonces: [],
             aggNonce: null,
@@ -309,8 +329,11 @@ describe('multisig jsdom flow', () => {
             createdAt: '2026-10-13T12:00:00.000Z',
             updatedAt: '2026-10-13T12:00:00.000Z',
         };
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode: 'watcher' }], activeWalletId: WALLET_ID });
         messaging = {
-            getSettings: vi.fn(async () => ({ walletMode: 'watcher' })),
+            getSettings: vi.fn(async () => ({})),
+            listWallets: vi.fn(async () => [{ id: WALLET_ID, name: 'W', walletMode: 'watcher' }]),
             listMultisigSigningSessions: vi.fn(async () => [active]),
             getMultisigSigningSession: vi.fn(async () => active),
             signMultisigLocally: vi.fn(),
@@ -320,8 +343,8 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         expect(await screen.findByText(/Watcher mode exports signing data/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export signing request' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Sign with my key' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Export signing request/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Sign with my key/i })).toBeNull();
         expect(screen.queryByLabelText('Wallet password')).toBeNull();
         expect(messaging.signMultisigLocally).not.toHaveBeenCalled();
     });

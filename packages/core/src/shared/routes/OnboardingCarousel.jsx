@@ -27,10 +27,10 @@ import styles from './OnboardingCarousel.module.css';
  * renders every frame stacked in a single scrollable column so a user who
  * can't tolerate movement still gets the full explainer without stepping
  * through it. Auto-advance is opt-in (`autoAdvance`) and, when on, stops
- * permanently the moment the user interacts (Next / Back / a dot / Skip)
+ * permanently the moment the user interacts (Next / a dot / an arrow key / Skip)
  * so it never fights a reader who has taken control.
  *
- * `onDone` fires for both "Get started" (finished) and "Skip": the caller
+ * `onDone` fires for both the last frame's "Next" (finished) and "Skip": the caller
  * only needs to know the explainer has been dismissed so it can persist
  * the seen-flag. The boolean argument (`completed`) lets a caller that
  * cares distinguish the two without forcing every caller to.
@@ -52,7 +52,7 @@ export function OnboardingCarousel({
 }) {
     const isFull = variant === 'full';
     const [index, setIndex] = useState(0);
-    // Once the user drives the carousel (Next/Back/dot/Skip), auto-advance
+    // Once the user drives the carousel (Next/dot/arrow/Skip), auto-advance
     // is retired for the rest of the session. A reader who takes the wheel
     // should never have the slide yanked out from under them.
     const [userDrove, setUserDrove] = useState(false);
@@ -123,12 +123,6 @@ export function OnboardingCarousel({
         }
     }
 
-    const skipAction = (
-        <button type="button" className={styles.skipBtn} onClick={handleSkip}>
-            {t('onboarding.carousel.skip')}
-        </button>
-    );
-
     const progressTabs = (
         <div
             className={styles.dots}
@@ -159,25 +153,34 @@ export function OnboardingCarousel({
         </div>
     );
 
+    // Back and Next stay visually matched. The first Back keeps its grid cell,
+    // but is hidden from sight, assistive technology and keyboard focus.
     const navigation = (
         <>
             <Button
-                variant="ghost"
+                variant="success"
+                block
+                className={index <= 0 ? styles.hiddenBack : undefined}
+                aria-hidden={index <= 0 ? 'true' : undefined}
+                tabIndex={index <= 0 ? -1 : undefined}
                 onClick={() => goTo(index - 1)}
-                disabled={index === 0}
                 icon={<Icon.BackIcon />}
+                iconPlacement="leading-edge"
             >
                 {t('common.back')}
             </Button>
-            {atLast ? (
-                <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                    {t('onboarding.carousel.getStarted')}
-                </Button>
-            ) : (
-                <Button variant="primary" onClick={() => goTo(index + 1)} icon={null}>
-                    {t('onboarding.carousel.next')}
-                </Button>
-            )}
+            <Button variant="primary" block onClick={handleSkip} icon={<Icon.XIcon />}>
+                {t('onboarding.carousel.skip')}
+            </Button>
+            <Button
+                variant="success"
+                block
+                onClick={atLast ? handleFinish : () => goTo(index + 1)}
+                icon={<Icon.ForwardIcon />}
+                iconPlacement="trailing-edge"
+            >
+                {t('onboarding.carousel.next')}
+            </Button>
         </>
     );
 
@@ -189,29 +192,33 @@ export function OnboardingCarousel({
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
             >
-                <div className={styles.skipRow}>{skipAction}</div>
-                <div className={styles.stack}>
-                    {frames.map((frame, i) => {
-                        const Heading = i === 0 ? 'h1' : 'h2';
-                        return (
-                            <section key={frame.id || i} className={styles.stackFrame}>
-                                {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
-                                <Heading className={styles.frameTitle}>{frame.title}</Heading>
-                                <p className={styles.frameBody}>{frame.body}</p>
-                            </section>
-                        );
-                    })}
-                </div>
-                <div className={styles.actions}>
-                    <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                        {t('onboarding.carousel.getStarted')}
-                    </Button>
+                <div className={styles.column}>
+                    <div className={styles.stack}>
+                        {frames.map((frame, i) => {
+                            const Heading = i === 0 ? 'h1' : 'h2';
+                            return (
+                                <section key={frame.id || i} className={styles.stackFrame}>
+                                    {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
+                                    <Heading className={styles.frameTitle}>{frame.title}</Heading>
+                                    <p className={styles.frameBody}>{frame.body}</p>
+                                </section>
+                            );
+                        })}
+                    </div>
+                    <div className={styles.actionsRow}>
+                        <Button variant="primary" block onClick={handleSkip} icon={<Icon.XIcon />}>
+                            {t('onboarding.carousel.skip')}
+                        </Button>
+                        <Button variant="success" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
+                            {t('onboarding.carousel.getStarted')}
+                        </Button>
+                    </div>
                 </div>
             </div>
         );
     }
 
-    // --- Default: one frame at a time with dots + prev/next + skip.
+    // --- Default: one frame at a time with dots + next + skip.
     return (
         <div
             className={isFull ? styles.centeredFull : styles.rootPopup}
@@ -219,34 +226,34 @@ export function OnboardingCarousel({
             data-reduced-motion="false"
             onKeyDown={handleCarouselKeyDown}
         >
-            <div className={styles.skipRow}>{skipAction}</div>
+            <div className={styles.column}>
+                <div
+                    className={styles.frameViewport}
+                    aria-live="polite"
+                    aria-atomic="true"
+                >
+                    {frames.map((item, i) => {
+                        const Heading = i === index ? 'h1' : 'h2';
+                        return (
+                            <section
+                                key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
+                                id={`${idPrefix}-panel-${i}`}
+                                role="tabpanel"
+                                aria-labelledby={`${idPrefix}-tab-${i}`}
+                                hidden={i !== index}
+                                className={styles.frame}
+                            >
+                                {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
+                                <Heading className={styles.frameTitle}>{item.title}</Heading>
+                                <p className={styles.frameBody}>{item.body}</p>
+                            </section>
+                        );
+                    })}
+                </div>
 
-            <div
-                className={styles.frameViewport}
-                aria-live="polite"
-                aria-atomic="true"
-            >
-                {frames.map((item, i) => {
-                    const Heading = i === index ? 'h1' : 'h2';
-                    return (
-                        <section
-                            key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
-                            id={`${idPrefix}-panel-${i}`}
-                            role="tabpanel"
-                            aria-labelledby={`${idPrefix}-tab-${i}`}
-                            hidden={i !== index}
-                            className={styles.frame}
-                        >
-                            {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
-                            <Heading className={styles.frameTitle}>{item.title}</Heading>
-                            <p className={styles.frameBody}>{item.body}</p>
-                        </section>
-                    );
-                })}
+                {progressTabs}
+                <div className={styles.nav}>{navigation}</div>
             </div>
-
-            {progressTabs}
-            <div className={styles.nav}>{navigation}</div>
         </div>
     );
 }

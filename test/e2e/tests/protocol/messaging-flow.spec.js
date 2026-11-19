@@ -12,6 +12,8 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openFormSection,
+    openFromSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -29,8 +31,7 @@ const VIEWPORTS = [
 
 const RECIPIENT = 'bc1qdevmock02aabbcc';
 const MESSAGE = 'Review this encrypted message before sending.';
-const NORMAL_FEE = '0.25';
-const NORMAL_RATE = '1 DOGE/kB';
+const NORMAL_FEE = '0.005';
 
 async function settleLayout(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -83,6 +84,10 @@ for (const viewport of VIEWPORTS) {
     test(`messaging compose stops at the demo note at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        const phone = viewport.name === 'phone';
+        const filterName = phone ? 'Filter conversations' : 'Filter messaging';
+        const filter = page.getByRole('button', { name: filterName, exact: true });
+        const newMessage = page.getByRole('button', { name: 'New message', exact: true });
 
         await test.step('encrypted inbox renders without a horizontal leak', async () => {
             await gotoSection(page, 'Messaging');
@@ -91,10 +96,17 @@ for (const viewport of VIEWPORTS) {
             await expect(conversations).toBeVisible({ timeout: 30_000 });
             await expect(conversations.getByRole('button', { name: /Erin Calloway/ })).toBeVisible();
             await expectHeading(page, 'Messaging');
-            await expectSameLineHeights('inbox filter row', [
-                main.getByRole('searchbox', { name: 'Search conversations' }),
-                main.getByRole('button', { name: 'Filter by network' }),
+            // The title bar holds the New message plus, then the filter icon.
+            // Desktop folds New message into the More menu beside the filter.
+            await expectSameLineHeights('inbox title bar actions', [
+                phone ? newMessage : page.getByRole('button', { name: 'More', exact: true }),
+                filter,
             ]);
+            // The search lives in the filter panel, never on the page itself.
+            await expect(main.getByRole('searchbox', { name: 'Search conversations' })).toHaveCount(0);
+            await filter.click();
+            await expect(page.getByRole('dialog', { name: filterName }).getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+            await page.keyboard.press('Escape');
             await expectNoHorizontalOverflow(page, `${viewport.name} inbox`);
         });
 
@@ -103,21 +115,25 @@ for (const viewport of VIEWPORTS) {
                 .getByRole('list', { name: 'Conversations' })
                 .getByRole('button', { name: /Erin Calloway/ })
                 .click();
-            await expectHeading(page, 'Erin Calloway');
+            // Two panels keep the inbox title; a phone opens the thread as its own page.
+            await expectHeading(page, phone ? 'Erin Calloway' : 'Messaging');
             await expect(page.getByRole('main').getByText('Moved the savings stash to the new address. All set.'))
                 .toBeVisible();
             await expect(page.getByRole('main').getByText(/ECIES/).first()).toBeVisible();
-            await expectSameLineHeights('thread reply row', [
-                page.getByRole('textbox', { name: 'Message' }),
-                page.getByRole('button', { name: 'Send message' }),
-            ]);
+            // The reply row is one full-width input; Enter sends, no button.
+            await expect(page.getByRole('textbox', { name: 'Reply, press Enter to send' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
             await expectNoHorizontalOverflow(page, `${viewport.name} thread`);
         });
 
         await test.step('compose renders the selected fee and aligned address controls', async () => {
-            await page.getByRole('button', { name: 'Back to previous screen' }).click();
+            if (phone) await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expectHeading(page, 'Messaging');
-            await page.getByRole('button', { name: 'New conversation' }).click();
+            if (phone) await newMessage.click();
+            else {
+                await page.getByRole('button', { name: 'More', exact: true }).click();
+                await page.getByRole('menuitem', { name: 'New Message', exact: true }).click();
+            }
 
             const main = page.getByRole('main');
             await expectHeading(page, 'New message');
@@ -126,29 +142,43 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByText(/Recipient public key found/)).toBeVisible({ timeout: 15_000 });
             await expect(main.getByRole('button', { name: /^Encryption: Standard \(ECIES\)/ }))
                 .toBeVisible();
-            await expect(main.getByRole('button', { name: /^Delivery network: Dogecoin/ }))
+            await openFromSection(main);
+            await expect(main.getByRole('button', { name: /^Network: Dogecoin/ }))
                 .toBeVisible();
 
-            // The address book opens from an icon button inside the field box,
-            // so it must sit within the field rather than match its height.
+            // The address book opens from a plain icon inside the field at its
+            // trailing edge (U53, superseding U36): never on the label row and
+            // never a full-width button.
             const addressBox = await main.getByLabel('Address', { exact: true }).boundingBox();
             const bookBox = await main.getByRole('button', { name: 'Open address book' }).boundingBox();
             expect(addressBox && bookBox, 'compose address row: controls have no rendered box').toBeTruthy();
-            expect(bookBox.y, 'compose address row: address book button rises above the field')
-                .toBeGreaterThanOrEqual(addressBox.y - 1);
-            expect(bookBox.y + bookBox.height, 'compose address row: address book button drops below the field')
+            expect(bookBox.y, 'compose address row: address book button sits above the field').toBeGreaterThanOrEqual(addressBox.y - 1);
+            expect(bookBox.y + bookBox.height, 'compose address row: address book button sits below the field')
                 .toBeLessThanOrEqual(addressBox.y + addressBox.height + 1);
-            const feeAmount = main.getByRole('button', { name: 'Edit exact fee amount' });
-            const feeRate = main.getByRole('button', { name: 'Edit fee rate (DOGE/kB)' });
+            expect(bookBox.x + bookBox.width, 'compose address row: address book button runs past the field end')
+                .toBeLessThanOrEqual(addressBox.x + addressBox.width + 1);
+            expect(bookBox.x, 'compose address row: address book button is not at the trailing edge')
+                .toBeGreaterThan(addressBox.x + addressBox.width / 2);
+            expect(bookBox.width, 'compose address row: address book button is not an icon button')
+                .toBeLessThan(addressBox.width / 2);
+            // The Fees section's Network fee line: the label and its help
+            // tip on the left, the click-to-edit fee on the right.
+            await openFormSection(main, 'Speed and Fees');
+            const feeLine = main.locator('[data-fees-row="network"]');
+            const feeAmount = feeLine.getByRole('button', { name: 'Edit exact fee amount' });
             await expect(feeAmount).toHaveText(NORMAL_FEE);
-            await expect(feeRate).toHaveText(NORMAL_RATE);
-            await expectSameLineHeights('compose fee row', [feeAmount, feeRate]);
+            await expect(feeLine).toContainText('Network fee');
+            await expect(feeLine.getByRole('button', { name: 'Network fee help' })).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} compose`);
 
-            // A demo wallet cannot broadcast, so compose stops at the demo note;
-            // the review screen is covered by the regtest messaging specs.
+            // A demo wallet cannot broadcast: no notice warns in advance, and
+            // pressing Send message stops at the refusal; the review screen is
+            // covered by the regtest messaging specs.
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-            await expect(main.getByRole('button', { name: 'Send message' })).toBeDisabled();
+            await expect(main.getByText(/Demo wallets can.t move funds/)).toHaveCount(0);
+            const sendMessage = main.getByRole('button', { name: 'Send message' });
+            await expect(sendMessage).toBeEnabled();
+            await sendMessage.click();
             await expect(main.getByText(/Demo wallets can.t move funds/)).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} compose demo note`);
         });

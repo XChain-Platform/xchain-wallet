@@ -10,6 +10,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
+import { BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
+import { chooseBackupFile, openBackupTab } from '../../helpers/backupFileChoice.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
@@ -43,9 +45,9 @@ describe('ImportWallet secret lifecycle', () => {
         renderImport();
         fillPhraseImport();
         fireEvent.click(screen.getByRole('switch', {
-            name: /This wallet uses a BIP39 passphrase/,
+            name: /This wallet uses an extra passphrase/,
         }));
-        fireEvent.change(screen.getByLabelText('BIP39 passphrase'), {
+        fireEvent.change(screen.getByLabelText('Extra passphrase'), {
             target: { value: 'phrase-password' },
         });
 
@@ -57,19 +59,19 @@ describe('ImportWallet secret lifecycle', () => {
         fireEvent.change(screen.getByLabelText('WIF private key'), { target: { value: WIF } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByLabelText(/isn't recoverable from a recovery phrase/));
+        fireEvent.click(screen.getByRole('checkbox', { name: /isn't recoverable from a recovery phrase/ }));
         fireEvent.click(screen.getByRole('tab', { name: 'Recovery phrase' }));
 
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByRole('switch', {
-            name: /This wallet uses a BIP39 passphrase/,
+            name: /This wallet uses an extra passphrase/,
         })).not.toBeChecked();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
         expect(screen.getByLabelText('WIF private key')).toHaveValue('');
-        expect(screen.getByLabelText(/isn't recoverable from a recovery phrase/)).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /isn't recoverable from a recovery phrase/ })).not.toBeChecked();
     });
 
     it('locks same-tick submissions before the busy render commits', async () => {
@@ -88,7 +90,7 @@ describe('ImportWallet secret lifecycle', () => {
 
         expect(importMnemonic).toHaveBeenCalledTimes(1);
         await act(async () => finishImport({ walletId: 'wallet-1' }));
-        expect(await screen.findByText('Automatic Donation System')).toBeTruthy();
+        expect(await screen.findByText('Automatic Donations')).toBeTruthy();
     });
 
     it('catches a rejected continuation and makes Continue retryable', async () => {
@@ -111,29 +113,28 @@ describe('ImportWallet secret lifecycle', () => {
         await waitFor(() => expect(onImported).toHaveBeenCalledTimes(2));
     });
 
-    it('scrubs every backup secret before invoking Back', () => {
+    it('scrubs every backup secret before invoking Back', async () => {
         const onBack = vi.fn();
-        renderImport({ onBack });
-        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
-        fireEvent.change(screen.getByLabelText('Backup file contents'), {
-            target: { value: '{"encrypted":"content"}' },
+        renderImport({
+            onBack,
+            messaging: { importBackupFresh: vi.fn().mockRejectedValue(new BackupSeedPasswordError('seed')) },
         });
+        openBackupTab();
+        await chooseBackupFile();
         fireEvent.change(screen.getByLabelText('Backup password'), {
             target: { value: 'file-password' },
         });
-        fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), {
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), {
             target: { value: 'wallet-password' },
-        });
-        fireEvent.change(screen.getByLabelText('Password for this device'), {
-            target: { value: 'device-password' },
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));
 
         expect(onBack).toHaveBeenCalledTimes(1);
-        expect(screen.getByLabelText('Backup file contents')).toHaveValue('');
+        // The chosen file, both passwords and the extra field all go.
+        expect(screen.queryByRole('region', { name: 'Chosen backup file' })).toBeNull();
         expect(screen.getByLabelText('Backup password')).toHaveValue('');
-        expect(screen.getByLabelText('Password of the wallet in this backup')).toHaveValue('');
-        expect(screen.getByLabelText('Password for this device')).toHaveValue('');
+        expect(screen.queryByLabelText('Wallet password')).toBeNull();
     });
 });

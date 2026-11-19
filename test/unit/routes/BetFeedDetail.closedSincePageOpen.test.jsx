@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The market page reads its market once, at open. A market that closed or was
-// cancelled while the page sat open still showed the bet form, and Review bet
+// cancelled while the page sat open still showed the bet form, and Place bet
 // composed a bet against it: with pre-flight off or local nothing warned, and
 // the bet paid the miner fee and the protocol fee and joined no pool.
 
@@ -82,10 +82,14 @@ async function reviewBet(messaging) {
         );
         await drain();
     });
-    const yes = utils.getByRole('button', { name: 'Yes' });
+    // Details is the default tab; the bet form shows only on the Bet tab.
+    const betTab = utils.getByRole('tab', { name: /^Buy$/ });
+    await domAct(async () => { fireEvent.click(betTab); await drain(); });
+    // Tapping Yes opens the Place Bet step, where the stake is.
+    const yes = utils.getByRole('button', { name: /^Buy Yes,/ });
     await domAct(async () => { yes.click(); await drain(); });
-    fireEvent.change(utils.getByLabelText(/Stake/), { target: { value: '30' } });
-    const review = utils.getByRole('button', { name: /Review bet/ });
+    fireEvent.change(utils.getByLabelText(/^Amount/), { target: { value: '30' } });
+    const review = utils.getByRole('form', { name: 'Buy a position' }).querySelector('button[type="submit"]');
     await domAct(async () => { review.click(); await drain(); });
     return utils;
 }
@@ -96,8 +100,8 @@ describe('Market page: a market that closed since the page opened', () => {
         const utils = await reviewBet(messaging);
         expect(calls.compose).toBe(0);
         const alert = utils.container.querySelector('[role="alert"]');
-        expect(alert?.textContent).toMatch(/no longer takes bets.*Nothing was sent/);
-        expect(utils.queryByRole('button', { name: /Review bet/ })).toBeNull();
+        expect(alert?.textContent).toMatch(/no longer accepts purchases.*Nothing was sent/);
+        expect(utils.queryByRole('form', { name: 'Buy a position' })).toBeNull();
     });
 
     it('refuses a cancelled market too', async () => {

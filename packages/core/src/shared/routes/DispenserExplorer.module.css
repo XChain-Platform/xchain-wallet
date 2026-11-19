@@ -1,121 +1,103 @@
-.searchForm,
 .resultGroup {
     width: 100%;
     min-width: 0;
-}
-
-.searchModes {
+    margin-top: var(--xc-space-3);
     margin-bottom: var(--xc-space-2);
 }
 
-.searchModes > div {
-    flex-flow: row wrap;
+/* The toggle is the first thing under the header, so the page's own 8px gap
+   (ListPage) is the only space above it. */
+.browse {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.tabLabel {
+    display: inline-flex;
     align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: 0;
-}
-
-/* Top-aligned: the search field carries its hint underneath, so bottom
-   alignment would push the Chain select down beside the hint. */
-.filterRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-}
-
-.chainSelect {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-
-.chainControl {
-    flex: 1 1 12rem;
-    min-width: 0;
-}
-
-.queryControl {
-    flex: 2 1 18rem;
-    min-width: 0;
-}
-
-.chainControl > *,
-.queryControl > * {
-    margin-bottom: 0;
-}
-
-.resultGroup {
-    margin-bottom: var(--xc-space-4);
-}
-
-.resultRow {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--xc-space-2);
-}
-
-/* The kit Button wraps its children in one inline-flex label span, so the
-   column layout has to reach that span too: without it the ticker, the
-   terms and the action number sat side by side and squeezed the terms into
-   a narrow middle column on a phone. */
-.resultRow > span {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--xc-space-2);
-    width: 100%;
-    min-width: 0;
-    text-align: start;
-}
-
-.resultFacts {
-    display: flex;
-    flex-direction: column;
+    justify-content: center;
     gap: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+.tabLabel svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     min-width: 0;
 }
 
-.factRow {
-    display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-1) var(--xc-space-3);
+/* One list card: rounded only at the top and bottom of the whole list, with a
+   divider line between rows. Each row carries its own padding. */
+.cardList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* A group's rows sit under their token or seller row, set in a step. */
+.groupCards {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding-inline-start: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    border-inline-start: 2px solid var(--xc-border);
+}
+
+.cardList > * + *,
+.groupCards > * + * {
+    border-top: 1px solid var(--xc-border);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
 }
 
-.factLabel {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+.sectionTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    white-space: nowrap;
 }
 
-.factValue {
-    min-width: 0;
-    margin: 0;
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
+.sectionTitle svg {
+    width: 1rem;
+    height: 1rem;
 }
 
-.numericValue {
-    direction: ltr;
-    unicode-bidi: isolate;
+.sellerAvatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-avatar-size-list, 40px);
+    height: var(--xc-avatar-size-list, 40px);
+    border-radius: var(--xc-avatar-shape, 50%);
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-primary);
 }
 
-.resultMeta {
-    display: block;
-    overflow-wrap: anywhere;
+.sellerAvatar svg {
+    width: 1.25rem;
+    height: 1.25rem;
 }
 
-@media not all and (min-width: 400px) {
-    .factRow {
-        grid-template-columns: minmax(0, 1fr);
-    }
+.laneFooter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-2);
 }

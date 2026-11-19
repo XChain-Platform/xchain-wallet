@@ -3,12 +3,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// The oracle console audit. The operator half went with the retired Operator
+// Dashboard; validator figures now live in Stake detail's Validator tab
+// (StakeDetail.validatorTab.test.jsx).
+
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -27,29 +30,6 @@ function proxy(target) {
             if (property in object) return object[property];
             return vi.fn().mockResolvedValue(null);
         },
-    });
-}
-
-function operatorMessaging() {
-    const getStakesForAddress = vi.fn()
-        .mockResolvedValueOnce([{ amount: '12.5', activation_block: 100, status: 'valid' }])
-        .mockRejectedValueOnce(new TypeError('Cannot read properties of undefined'));
-    return proxy({
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-        getStakesForAddress,
-        getDelegationsForAddress: vi.fn().mockResolvedValue([{
-            signing_pubkey: '02abcdefabcdefabcdefabcdefabcdef', block_index: 105, status: 'valid',
-        }]),
-        getRewardsForAddress: vi.fn().mockResolvedValue([{ amount: '3', block_index: 106, status: 'valid' }]),
-        getRewardClaimsForAddress: vi.fn().mockResolvedValue([{ amount: '1', status: 'valid' }]),
-        getBroadcastsForAddress: vi.fn().mockResolvedValue({ data: [{
-            action_format: 2, block_index: 107, message: 'BTC/USD', value: '42000', status: 'valid',
-        }] }),
-        getValidatorsForChain: vi.fn().mockResolvedValue([{
-            source: ADDRESS.address,
-            signing_pubkey: '02abcdefabcdefabcdefabcdefabcdef', score: 98, votes: 22, missed: 1,
-        }]),
-        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 200 }),
     });
 }
 
@@ -81,50 +61,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('operator and oracle dashboard audit', () => {
-    it('labels operator metrics and preserves the last values when refresh fails', async () => {
-        const messaging = operatorMessaging();
-        mount(OperatorDashboard, messaging, { chainId: CHAIN, address: ADDRESS.address });
-
-        expect(await screen.findByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
-        expect(screen.getByText(/Validator score: 98/)).toBeTruthy();
-        expect(screen.getByText(/Votes recorded: 22/)).toBeTruthy();
-        expect(screen.getByText(/Missed validations: 1/)).toBeTruthy();
-        expect(screen.getByText('Unclaimed rewards:').closest('p'))
-            .toHaveTextContent('Unclaimed rewards: 2 XCHAIN; Total rewards earned: 3 XCHAIN');
-        expect(screen.getByText(/Format version: 2/)).toHaveTextContent('published value: 42000; published at block: 107');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }));
-        expect(await screen.findByText("Couldn't load staking status.")).toBeTruthy();
-        expect(screen.queryByText(/Cannot read properties/)).toBeNull();
-        expect(screen.getByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
-    });
-
-    it('shows one error naming every section that failed, and one Try again reloads them all', async () => {
-        const down = () => vi.fn().mockRejectedValue(new Error('Failed to fetch'));
-        const messaging = proxy({
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-            getStakesForAddress: down(),
-            getDelegationsForAddress: down(),
-            getRewardsForAddress: down(),
-            getRewardClaimsForAddress: down(),
-            getBroadcastsForAddress: down(),
-            getValidatorsForChain: down(),
-        });
-        const { container } = mount(OperatorDashboard, messaging, { chainId: CHAIN, address: ADDRESS.address });
-        const message = await screen.findByText(/^Couldn't load staking status/);
-        expect(message).toHaveTextContent(
-            "Couldn't load staking status, delegation chain, validator performance, rewards trajectory and publishing activity.",
-        );
-        expect(container.querySelectorAll('[data-variant="error"]')).toHaveLength(1);
-        expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
-
-        const loaders = [messaging.getStakesForAddress, messaging.getValidatorsForChain, messaging.getBroadcastsForAddress];
-        const before = loaders.map((fn) => fn.mock.calls.length);
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => loaders.forEach((fn, i) => expect(fn.mock.calls.length).toBeGreaterThan(before[i])));
-    });
-
+describe('oracle dashboard audit', () => {
     it('uses plain market labels and keeps the last market after a failed refresh', async () => {
         const { messaging, betFeeds } = oracleMessaging([{
             action_index: '42', source: ADDRESS.address, label: 'Rain tomorrow',
@@ -134,10 +71,10 @@ describe('operator and oracle dashboard audit', () => {
         const { container } = mount(OracleConsole, messaging);
 
         expect(await screen.findByText(/Market number: #42; Rain tomorrow/)).toBeTruthy();
-        expect(screen.getByText('Market status: Taking bets')).toBeTruthy();
+        expect(screen.getByText('Market status: Positions available')).toBeTruthy();
         expect(container.textContent).not.toContain('Market status: open');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh markets' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh Markets' }));
         await waitFor(() => expect(betFeeds).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('Could not refresh your markets. The last known markets are still shown.')).toBeTruthy();
         expect(screen.getByText(/Market number: #42; Rain tomorrow/)).toBeTruthy();
@@ -147,7 +84,7 @@ describe('operator and oracle dashboard audit', () => {
         const empty = oracleMessaging([]);
         const emptyView = mount(OracleConsole, empty.messaging);
         expect(await screen.findByText('No markets yet')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Refresh markets' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Refresh Markets' })).toBeTruthy();
         emptyView.unmount();
 
         const failed = oracleMessaging([]);
@@ -155,26 +92,17 @@ describe('operator and oracle dashboard audit', () => {
         mount(OracleConsole, failed.messaging);
         expect(await screen.findByText('Could not load your markets. Check your connection and try again.')).toBeTruthy();
         expect(screen.queryByText('No markets yet')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Refresh markets' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Refresh Markets' })).toBeTruthy();
     });
 
-    it('gives both routes narrow-screen wrapping and card sizing rules', () => {
-        const operatorCss = readFileSync('packages/core/src/shared/routes/OperatorDashboard.module.css', 'utf8');
+    it('gives the console narrow-screen wrapping and card sizing rules', () => {
         const oracleCss = readFileSync('packages/core/src/shared/routes/OracleConsole.module.css', 'utf8');
 
-        expect(operatorCss).toMatch(/flex-wrap:\s*wrap/);
-        expect(operatorCss).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(operatorCss).toMatch(/@media \(max-width: 480px\)/);
         expect(oracleCss).toMatch(/flex-wrap:\s*wrap/);
         expect(oracleCss).toMatch(/@media \(max-width: 480px\)/);
-        expect(oracleCss).toMatch(/white-space:\s*normal/);
-    });
-
-    it('lays operator metrics out in readable columns on wide screens', () => {
-        const operatorCss = readFileSync('packages/core/src/shared/routes/OperatorDashboard.module.css', 'utf8');
-
-        expect(operatorCss).toMatch(/\.dashboard\s*\{[^}]*display:\s*grid/s);
-        expect(operatorCss).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(22rem,\s*100%\),\s*1fr\)\)/);
-        expect(operatorCss).toMatch(/\.dashboard > :not\(section\)\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+        // The actions are one ActionList per market (G101), whose rows wrap
+        // their own text, stacked under the market's card.
+        expect(oracleCss).toMatch(/\.market\s*\{[^}]*flex-direction:\s*column/);
+        expect(oracleCss).not.toMatch(/\.actionRow/);
     });
 });

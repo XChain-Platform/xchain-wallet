@@ -1,0 +1,7 @@
+/* The rows themselves are one flat list card (HomeTabs' activity list); only
+   the loading skeleton needs its own spacing. */
+.loading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}

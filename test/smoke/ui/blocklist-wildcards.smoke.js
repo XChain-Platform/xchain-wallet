@@ -32,6 +32,7 @@ import {
     isOriginBlocked,
     addBlockedOrigin,
 } from '../../../packages/core/src/flows/blocklist.js';
+import settingsMessages from '../../../packages/core/src/i18n/locales/en/settings.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -140,11 +141,26 @@ function makeFakeVault({ initialBlocked = [], sites = [] }) {
 
 // ─── 5. UI hint mentions wildcards ─────────────────────────────────────
 
-assert.match(sectionSrc, /\*\.example\.com/,
-    'BlockedOrigins panel hint mentions wildcards');
-assert.match(sectionSrc, /aria-label="Origin or wildcard to block"/,
-    'manual-block input aria-label updated for wildcards');
-assert.match(sectionSrc, /placeholder="https:\/\/example\.com or \*\.example\.com"/,
-    'manual-block input placeholder mentions both forms');
+assert.match(
+    settingsMessages['settings.connectedSites.siteToBlockHelp'],
+    /\*\.example\.com/,
+    'BlockedOrigins field help mentions wildcards',
+);
+assert.match(sectionSrc, /help=\{t\('settings\.connectedSites\.siteToBlockHelp'\)\}/,
+    'BlockedOrigins field renders the wildcard help tip');
+assert.equal(
+    settingsMessages['settings.connectedSites.originOrWildcardToBlock'],
+    'Origin or wildcard to block',
+    'manual-block input label mentions wildcards',
+);
+assert.match(sectionSrc, /label=\{t\('settings\.connectedSites\.originOrWildcardToBlock'\)\}/,
+    'manual-block input renders the localized label');
+assert.equal(
+    settingsMessages['settings.connectedSites.httpsExampleComOrExample'],
+    'https://example.com or *.example.com',
+    'manual-block input placeholder mentions both forms',
+);
+assert.match(sectionSrc, /placeholder=\{t\('settings\.connectedSites\.httpsExampleComOrExample'\)\}/,
+    'manual-block input renders the localized placeholder');
 
 console.log('blocklist-wildcards smoke OK');

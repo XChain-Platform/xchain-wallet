@@ -7,7 +7,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
@@ -73,17 +72,18 @@ describe('320x568 modal inventory', () => {
             ...modalFiles(COMPONENT_DIR),
             ...modalFiles(UI_DIR),
         ].sort()).toEqual([
-            'AlertsOverlay.jsx',
             'GatedFileViewer.jsx',
+            // The hardware sign page covers the Confirm page it opens over,
+            // which stays mounted underneath for Back, so it is a full-page modal.
+            'HardwareSignPage.jsx',
+            'NetworkPicker.jsx',
             'OverlaySurface.jsx',
         ]);
     });
 
     it('routes overlays through the shared surface and page-sized flows through page templates', () => {
         for (const name of [
-            'BottomTabBar.jsx',
             'ConfirmModal.jsx',
-            'HeaderSettingsButton.jsx',
             'NetworkStatusIndicator.jsx',
             'NoticeModal.jsx',
         ]) {
@@ -136,21 +136,6 @@ describe('320x568 modal renders', () => {
         expect(actions.previousElementSibling).toHaveTextContent('Long warning');
     });
 
-    it('keeps the Alerts close control above its scrolling body', () => {
-        const alerts = Array.from({ length: 20 }, (_, index) => ({
-            id: String(index),
-            severity: 'info',
-            title: `Alert ${index}`,
-            message: 'Detailed alert message',
-        }));
-        render(<AlertsOverlay alerts={alerts} onClose={() => {}} />);
-
-        const panel = screen.getByRole('dialog', { name: /^Alerts/ }).firstElementChild;
-        const close = screen.getByRole('button', { name: 'Close alerts' });
-        expect(close).toBe(panel.firstElementChild.lastElementChild);
-        expect(panel.lastElementChild).toContainElement(screen.getByText('Alert 19'));
-    });
-
     it('keeps the file viewer actions after its scrolling preview', () => {
         render(
             <GatedFileViewer
@@ -167,32 +152,6 @@ describe('320x568 modal renders', () => {
         expect(close.parentElement.previousElementSibling).toHaveTextContent('long preview');
     });
 
-    it('keeps the More sheet close control above its scrolling navigation', () => {
-        render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={() => {}}
-                onLock={() => {}}
-                onOpenSettings={() => {}}
-                onOpenWalletPicker={() => {}}
-                hasVmAddress
-                hasDexSurface
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-
-        const sheet = screen.getByRole('dialog', { name: 'More' });
-        const close = screen.getByRole('button', { name: 'Close more navigation' });
-        expect(sheet.firstElementChild).toHaveAttribute('data-overlay-surface', 'sheet');
-        expect(sheet.firstElementChild.querySelector(`.${overlayStyles.handle}`))
-            .toHaveAttribute('aria-hidden', 'true');
-        expect(sheet.firstElementChild).toContainElement(close);
-        expect(close).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
-        expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
-        fireEvent.click(close);
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-    });
-
     it('gives the phone command sheet a handle, header row, and close action', () => {
         const onClose = vi.fn();
         render(
@@ -203,11 +162,36 @@ describe('320x568 modal renders', () => {
             />,
         );
 
-        const dialog = screen.getByRole('dialog', { name: 'Command palette' });
-        const header = screen.getByRole('heading', { name: 'Command palette' }).closest('header');
-        expect(dialog.firstElementChild.firstElementChild).toBe(header);
+        const dialog = screen.getByRole('dialog', { name: 'Command Palette' });
+        const header = screen.getByRole('button', { name: 'Close command palette' }).closest('header');
+        expect(header.parentElement).toBe(dialog.firstElementChild);
         expect(header.querySelector('[aria-hidden="true"]')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Close command palette' }));
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('puts the wallet menu search box beside the close action with no title row', () => {
+        const onClose = vi.fn();
+        render(
+            <CommandPalette
+                open
+                onClose={onClose}
+                commands={[{ id: 'home', category: 'Navigate', title: 'Home', run: () => {} }]}
+                menu={{
+                    gates: { hasDexSurface: true, hasVmAddress: true, hasBtcAddress: true },
+                    currentView: 'home',
+                    onSelect: () => {},
+                    onOpenSettings: () => {},
+                    onLock: () => {},
+                }}
+            />,
+        );
+
+        const dialog = screen.getByRole('dialog', { name: 'Wallet menu' });
+        const header = screen.getByRole('combobox').closest('header');
+        expect(header.parentElement).toBe(dialog.firstElementChild);
+        expect(header).toContainElement(screen.getByRole('button', { name: 'Close menu' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
         expect(onClose).toHaveBeenCalledOnce();
     });
 });
@@ -228,12 +212,6 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
         expect(rule(overlay, '.footer')).toMatch(/flex:\s*0 0 auto/);
-
-        const alerts = css('AlertsOverlay.module.css');
-        expectPanelWithinViewport(rule(alerts, '.panel'), 380);
-        expect(rule(alerts, '.header')).toMatch(/flex:\s*0 0 auto/);
-        expect(rule(alerts, '.body')).toMatch(/min-height:\s*0/);
-        expect(rule(alerts, '.body')).toMatch(/overflow-y:\s*auto/);
 
         const viewer = css('GatedFileViewer.module.css');
         expectPanelWithinViewport(rule(viewer, '.panel'), 520);
@@ -296,12 +274,8 @@ describe('320x568 modal layout contracts', () => {
     });
 
     it('bounds route dialogs while keeping export actions outside the scroller', () => {
-        const contacts = readFileSync('packages/core/src/shared/routes/ContactsList.module.css', 'utf8');
-        const contactCard = rule(contacts, '.modalCard');
-        expect(contactCard).toMatch(/max-height:\s*calc\(/);
-        expect(contactCard).toMatch(/min-height:\s*0/);
-        expect(contactCard).toMatch(/overflow-y:\s*auto/);
-
+        // Contacts' add-address dialog is now the Add Address page (2026-11-15),
+        // so the History dialog is the route dialog left to bound.
         const history = readFileSync('packages/core/src/shared/routes/History.jsx', 'utf8');
         expect(history).toMatch(/const MODAL_CARD = \{[^}]*minHeight:\s*0[^}]*overflow:\s*'hidden'/s);
         expect(history).toMatch(/const MODAL_BODY = \{[^}]*flex:\s*'1 1 auto'[^}]*minHeight:\s*0[^}]*overflowY:\s*'auto'/s);
@@ -332,14 +306,7 @@ describe('320x568 modal layout contracts', () => {
         expect(shortcutPanel).toMatch(/min-height:\s*0/);
         expect(rule(shortcut, '.body')).toMatch(/min-height:\s*0/);
         expect(rule(shortcut, '.body')).toMatch(/overflow-y:\s*auto/);
-
-        const contacts = readFileSync(join(ROUTE_DIR, 'ContactsList.module.css'), 'utf8');
-        expect(rule(contacts, '.modalOverlay')).toMatch(/box-sizing:\s*border-box/);
-        const contactCard = rule(contacts, '.modalCard');
-        expect(contactCard).toMatch(/box-sizing:\s*border-box/);
-        expect(contactCard).toMatch(/max-height:\s*100%/);
-        expect(contactCard).toMatch(/min-height:\s*0/);
-        expect(contactCard).toMatch(/overflow-y:\s*auto/);
+        // Contacts no longer draws a dialog of its own (the Add Address page).
     });
 });
 
@@ -349,7 +316,10 @@ describe('desktop live resize contracts', () => {
         const layout = css('LeftNav.module.css');
         expect(tierSource).toMatch(/useLayoutEffect\(\(\) => \{/);
         expect(tierSource).toMatch(/useState\('compact'\)/);
-        expect(layout).toMatch(/\.sidebar\s*\{[^}]*transition:\s*flex-basis 120ms ease-out/s);
+        // G100: the side menu animates its width between states, switched on
+        // only after the first frame (so a reload paints in place) and off
+        // during a drag.
+        expect(layout).toMatch(/\.layout\[data-xc-side-menu-motion='on'\] > \.sidebar\s*\{[^}]*transition:\s*width 120ms ease-out/s);
         expect(layout).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.sidebar\s*\{[^}]*transition:\s*none/s);
     });
 });

@@ -8,47 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// One shape difference, three silent failures.
-//
-// The explorer's history rows do NOT carry their per-action fields at the top
-// level. `projectActionSummary` (xchain-explorer `src/db.js`) collects every
-// field in ACTION_SUMMARY_FIELDS - coin, tick, amount, source, destination,
-// memo, name, and the rest - into a `details` SUB-OBJECT, and leaves only
-// `status` and the row's own identity fields (action, action_index,
-// block_index, timestamp, tx_hash) beside it.
-//
-// Everything on the wallet side read them at the top level, so on this build:
-//
-//   * every History row's source chip rendered `-`,
-//   * `historyGrouping`'s `pickField` never found a tick, so issue-mint,
-//     dispenser-dispense and order-fill grouping did nothing at all - Grouped
-//     mode silently returned the flat list, and
-//   * `historyFilter`'s payload search matched nothing, leaving only action
-//     name, address and txid searchable.
-//
-// None of the three announced itself. A Grouped mode that never groups looks
-// like a chain with nothing to group, and a search that quietly cannot see
-// memos or ticks looks like a wallet with no matching history.
-//
-// All three consumers read `entry.raw`, which is why this is one normalization
-// at ingestion rather than a patch in each of them.
+// Lift explorer action fields from `details` once at ingestion because History
+// display, grouping, and filtering all consume the normalized raw row.
 
-/**
- * An explorer history row with its `details` fields lifted alongside the row's
- * own, so a reader can ask for `tick` and get one.
- *
- * CONSERVATIVE ON PURPOSE: a lifted field never overwrites a top-level value
- * that is already present and non-empty, and a null inside `details` never
- * clobbers anything. The two shapes overlap (`action_index` is in both), and
- * the row's own copy is the one the rest of the pipeline already keys on, so
- * where they disagree the row wins and nothing downstream shifts underneath.
- *
- * Returns the row unchanged when there is no `details` object, so this is safe
- * to apply to rows from any other source.
- *
- * @param {any} row A history row as the explorer publishes it.
- * @returns {any} The same row, or a flattened copy of it.
- */
+import { compareMergedEntries } from './pendingHistory.js';
+
+/** Lift non-null `details` beside a row; non-empty top-level values win.
+ * Rows without an object-shaped `details` field pass through unchanged. */
 export function flattenActionDetails(row) {
     if (!row || typeof row !== 'object') return row;
     const { details } = row;
@@ -92,4 +58,53 @@ export function normalizeHistoryRow(row, { chainId, address, link = null }) {
         raw: flat,
         link,
     };
+}
+
+/** Most rows the Home Activity tab lists; History holds the complete feed. */
+export const RECENT_ACTIVITY_LIMIT = 50;
+
+/** The row array of one explorer list response, or an empty array. */
+export function historyResponseRows(response) {
+    if (!response) return [];
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response.data)) return response.data;
+    if (Array.isArray(response.rows)) return response.rows;
+    return [];
+}
+
+function compareActionIndex(a, b) {
+    const left = String(a || '');
+    const right = String(b || '');
+    if (left.length !== right.length) return left.length - right.length;
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * The newest entries of a wallet's history, at most `limit` of them. An action
+ * read once per own address (a send between two of the wallet's addresses)
+ * lists once. Pending entries lead, then entries order newest first by their
+ * own time; same-chain ties use block and action order.
+ *
+ * @param {any[] | null | undefined} entries  normalized history entries
+ * @param {number} [limit]
+ * @returns {any[]}
+ */
+export function recentActivityEntries(entries, limit = RECENT_ACTIVITY_LIMIT) {
+    if (!Array.isArray(entries)) return [];
+    const seen = new Set();
+    const unique = [];
+    for (const entry of entries) {
+        if (!entry || !entry.chainId || !entry.actionIndex) continue;
+        const id = `${entry.chainId}:${entry.actionIndex}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        unique.push(entry);
+    }
+    unique.sort((a, b) => {
+        const mergedOrder = compareMergedEntries(a, b);
+        if (mergedOrder) return mergedOrder;
+        if (a.chainId !== b.chainId) return 0;
+        return compareActionIndex(b.actionIndex, a.actionIndex);
+    });
+    return unique.slice(0, Math.max(0, limit));
 }

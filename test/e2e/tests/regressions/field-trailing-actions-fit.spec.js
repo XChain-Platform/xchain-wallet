@@ -7,6 +7,7 @@ import {
     createWallet,
     expect,
     gotoSection,
+    revealChainPicker,
     test,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -76,15 +77,15 @@ async function fieldMetrics(input, actionNames) {
     }, actionNames);
 }
 
-async function expectTrailingActionsFit(input, label, actionNames) {
+async function expectTrailingActionsFit(input, label, actionNames, minTextWidth = 120) {
     await expect(input, `${label}: input is not visible`).toBeVisible();
     const metrics = await fieldMetrics(input, actionNames);
     const diagnostic = JSON.stringify(metrics, null, 2);
 
     expect(
         metrics.inputTextWidth,
-        `${label}: input has less than 120px for text\n${diagnostic}`,
-    ).toBeGreaterThanOrEqual(120);
+        `${label}: input has less than ${minTextWidth}px for text\n${diagnostic}`,
+    ).toBeGreaterThanOrEqual(minTextWidth);
 
     for (const action of metrics.actions) {
         // An icon-only action (the address book) has no text line to count;
@@ -120,7 +121,7 @@ async function expectTrailingActionsFit(input, label, actionNames) {
 
 async function openPaletteRoute(page, name) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', { name: new RegExp(`^${name}\\b`) }).first().click();
@@ -129,13 +130,16 @@ async function openPaletteRoute(page, name) {
 
 async function selectBitcoinMainnet(page) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Give and get network:/ });
-    await expect(trigger).toBeVisible();
-    if (await trigger.getAttribute('aria-label') === 'Give and get network: Bitcoin') return;
-
+    const trigger = main.getByRole('button', { name: /^Network:/ });
+    await revealChainPicker(main, trigger, 'Network');
+    await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     await trigger.click();
-    await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
-    await expect(trigger).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
+    const picker = page.getByRole('dialog', { name: 'Network' });
+    await expect(picker).toBeVisible();
+    await picker
+        .getByRole('button', { name: 'Select Bitcoin' }).click();
+    await expect(picker).toBeHidden();
+    await expect(trigger).toHaveAttribute('aria-label', 'Network: Bitcoin');
 }
 
 async function checkViewports(page, surface, fields) {
@@ -148,6 +152,7 @@ async function checkViewports(page, surface, fields) {
                     field.input,
                     `${surface} ${field.name} at ${viewport.width}x${viewport.height}`,
                     field.actions,
+                    field.minTextWidth?.[viewport.width],
                 );
             }
         });
@@ -182,14 +187,38 @@ test('trailing field actions stay inside their fields without squeezing input te
         tick: 'PEPECASH',
     });
     main = page.getByRole('main');
-    await expect(main.getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+    // The swap amount sits beside its token picker; Max is an icon button on
+    // the available line below it, so check it fits its You give card.
+    const giveCard = main.getByRole('region', { name: 'You give' });
+    const giveMax = giveCard.getByRole('button', { name: 'Max you give amount' });
+    await expect(giveMax).toBeVisible();
     await checkViewports(page, 'Swap', [
         {
             name: 'Give amount',
             input: main.getByRole('textbox', { name: /^Give amount/ }),
-            actions: ['Use max available amount'],
+            actions: [],
+            // Operator ruling 2026-11-17: the swap amount sits beside its token
+            // picker, and 108px of text width is approved at 320px.
+            minTextWidth: { 320: 108 },
         },
     ]);
+    for (const viewport of VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await settle(page);
+        const card = await giveCard.boundingBox();
+        const fit = await giveMax.evaluate((button, cardBox) => {
+            const box = button.getBoundingClientRect();
+            return {
+                height: box.height,
+                clipped: button.scrollWidth > button.clientWidth,
+                inside: box.left >= cardBox.x && box.right <= cardBox.x + cardBox.width
+                    && box.top >= cardBox.y && box.bottom <= cardBox.y + cardBox.height,
+            };
+        }, card);
+        expect(fit.inside, `Swap Max leaves its card at ${viewport.width}x${viewport.height}`).toBe(true);
+        expect(fit.clipped, `Swap Max is clipped at ${viewport.width}x${viewport.height}`).toBe(false);
+        expect(fit.height, `Swap Max is too short to read as a control at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(24);
+    }
 
     await gotoSection(page, 'Receive');
     main = page.getByRole('main');

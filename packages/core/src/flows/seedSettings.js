@@ -8,30 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// seedSettings: populate per-chain entries in Settings.fees and
-// Settings.ads.perChain. Idempotent: existing entries are never
-// overwritten, so a user's customized fee strategy or ADS amount
-// survives a second invocation (e.g., activating an additional chain
-// later, or a fresh wallet created in an already-configured vault).
+// seedSettings: populate per-chain entries in Settings.fees. Idempotent:
+// existing entries are never overwritten, so a user's customized fee
+// strategy survives a second invocation (e.g., activating an additional
+// chain later, or a fresh wallet created in an already-configured vault).
+// Automatic donations are one wallet-wide setting (settings.ads) and need
+// no per-chain entry.
 //
 // Seeding creates the ENTRY (its key marks the chain as configured,
 // see seedChainIds) but copies NO default values into it (§35.10 /
 // §36.6): every preference field starts null = "follow the current
 // release's default", resolved at read time against the chain
-// descriptor via resolveFeeConfig / resolveAdsChainConfig. Only an
-// explicit user override ever writes a concrete value, so a later
-// release can retune descriptor defaults and reach every wallet that
-// never overrode them. ADS lifetime counters are real state and start
-// at zero.
+// descriptor via resolveFeeConfig. Only an explicit user override ever
+// writes a concrete value, so a later release can retune descriptor
+// defaults and reach every wallet that never overrode them.
 
-import {
-    createDefaultAdsChainState,
-    createDefaultSettings,
-} from '../schemas/settings.js';
+import { createDefaultSettings } from '../schemas/settings.js';
+import { serializeSettingsWrites } from './settings.js';
 
 /**
- * Return a new Settings object with fees + ads.perChain entries seeded
- * for every chainId in `activeChainIds` that doesn't already have one.
+ * Return a new Settings object with fees entries seeded for every
+ * chainId in `activeChainIds` that doesn't already have one.
  *
  * @param {import('../schemas/settings.js').Settings} settings
  * @param {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -46,7 +43,6 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
     }
 
     const fees = { ...settings.fees };
-    const adsPerChain = { ...settings.ads.perChain };
 
     for (const chainId of activeChainIds) {
         const descriptor = chainRegistry.get(chainId);
@@ -60,16 +56,9 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
                 rbfByDefault: null,
             };
         }
-        if (!adsPerChain[chainId]) {
-            adsPerChain[chainId] = createDefaultAdsChainState();
-        }
     }
 
-    return {
-        ...settings,
-        fees,
-        ads: { ...settings.ads, perChain: adsPerChain },
-    };
+    return { ...settings, fees };
 }
 
 /**
@@ -89,9 +78,10 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
  * @param {import('../registry/index.js').ChainRegistry} chainRegistry
  * @param {string[]} activeChainIds
  * @param {{ activeNetwork?: 'mainnet' | 'testnet' | 'regtest' }} [opts]
- * @returns {Promise<import('../schemas/settings.js').Settings>}
+ * @param {(result: { before: import('../schemas/settings.js').Settings | null, seeded: import('../schemas/settings.js').Settings }) => void} [onPrepared]
+ * @returns {Promise<{ before: import('../schemas/settings.js').Settings | null, seeded: import('../schemas/settings.js').Settings }>}
  */
-export async function ensureSettings(vault, chainRegistry, activeChainIds, opts = {}) {
+export async function ensureSettingsNow(vault, chainRegistry, activeChainIds, opts = {}, onPrepared) {
     if (!vault) throw new Error('ensureSettings: vault is required');
     const existing = await vault.settings.get();
     let current = existing ?? createDefaultSettings();
@@ -99,6 +89,15 @@ export async function ensureSettings(vault, chainRegistry, activeChainIds, opts 
         current = { ...current, activeNetwork: opts.activeNetwork };
     }
     const seeded = seedSettingsForChains(current, chainRegistry, activeChainIds);
+    if (typeof onPrepared === 'function') onPrepared({ before: existing ?? null, seeded });
     await vault.settings.put(seeded);
-    return seeded;
+    return { before: existing ?? null, seeded };
+}
+
+/** Serialized public settings seeder. */
+export async function ensureSettings(vault, chainRegistry, activeChainIds, opts = {}) {
+    const result = await serializeSettingsWrites(vault, () => ensureSettingsNow(
+        vault, chainRegistry, activeChainIds, opts,
+    ));
+    return result.seeded;
 }

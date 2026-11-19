@@ -65,3 +65,34 @@ describe('token.supplyHistory', () => {
         expect(res.ok).toBe(false);
     });
 });
+
+describe('token.mintedAmountForAddress', () => {
+    it('routes an address mint-history read through the chain SDK', async () => {
+        const source = 'bcrt1qmintsource';
+        const getMints = async () => ({
+            total: 2,
+            data: [
+                { action: 'MINT', status: 'valid', source, tick: 'CAP', amount: '1.25' },
+                { action: 'MINT', status: 'valid', source, tick: 'OTHER', amount: '99' },
+            ],
+        });
+        const h = makeHost({ getMints });
+        const res = await h.call('token.mintedAmountForAddress', {
+            chainId: CHAIN,
+            address: source,
+            tick: 'CAP',
+        });
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(h.calls).toEqual([CHAIN]);
+        expect(res.result).toEqual({ amount: '1.25', count: 1 });
+    });
+
+    it('refuses a request without a source address', async () => {
+        const h = makeHost({ getMints: async () => ({ data: [] }) });
+        const res = await h.call('token.mintedAmountForAddress', {
+            chainId: CHAIN,
+            tick: 'CAP',
+        });
+        expect(res.ok).toBe(false);
+    });
+});

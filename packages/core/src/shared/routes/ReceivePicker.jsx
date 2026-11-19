@@ -10,29 +10,39 @@
 
 import { ListPage } from '@xchain-wallet/core/ui';
 import { TokenPicker } from './TokenPicker.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/shell.js';
 
 function ReceiveListPage(props) {
     return <ListPage {...props} />;
 }
 
 /**
- * Receive picker: landing screen for the Receive quick-action. Thin
- * wrapper over the shared {@link TokenPicker} with `purpose="receive"`,
- * which lists every chain the wallet has an address on (even at zero
- * balance) and runs cross-chain "On the platform" token discovery.
+ * The DEX's Choose Asset page (the `markets-picker` route). Thin wrapper
+ * over the shared {@link TokenPicker} with `purpose="receive"`, which lists
+ * every chain the wallet has an address on (even at zero balance) and runs
+ * cross-chain "On the platform" token discovery, so any asset can scope the
+ * markets list, held or not. Receive has no picker page of its own: its
+ * Token field opens TokenPicker inside Receive.
  *
- * Selecting a row hands {chainId, tick} to the host so the Receive view
- * opens with the chain pre-selected and (when a token row was chosen) the
- * Token field pre-filled so the QR encodes that asset.
+ * Selecting a row hands {chainId, tick} to the host, which scopes the
+ * markets list to that asset.
  *
  * Props are forwarded verbatim; `hideOwnFilter` is accepted for backward
- * compatibility but no longer meaningful; the inline toolbar is now the
- * single filter on every shell.
+ * compatibility but no longer meaningful; the filter on the title line is
+ * the single filter on every shell.
  *
  * @param {import('./TokenPicker.jsx').TokenPicker} props
  */
 export function ReceivePicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
-    return <TokenPicker {...rest} purpose="receive" listPageComponent={ReceiveListPage} />;
+    return (
+        <TokenPicker
+            {...rest}
+            title={rest.title ?? t('shell.markets.selectAsset')}
+            purpose="receive"
+            listPageComponent={ReceiveListPage}
+        />
+    );
 }

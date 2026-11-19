@@ -270,8 +270,6 @@ test.describe('a stored-passphrase wallet survives an MV3 worker eviction (§15.
                 await mainButton(reopened, 'Send').click();
 
                 await expectConfirmModal(reopened, 'a self-send after a worker eviction', 90_000);
-                await expect(reopened.getByTestId('confirm-chain-badge'))
-                    .toHaveText(REGTEST_CHAIN_LABEL);
                 await expect(passphraseField(reopened),
                     'the confirm screen is asking for the passphrase, so signing after a worker '
                     + 'restart still depends on a secret the user was told they would never type '

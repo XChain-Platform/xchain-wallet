@@ -20,6 +20,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openAutomaticDonations,
     openSettings,
     test,
     unlockedShell,
@@ -33,16 +34,14 @@ const SIZES = [
 
 // Routes reached from the navigation, with the sections each one stacks.
 const NAV_ROUTES = ['History', 'Marketplace', 'Contracts', 'Dispensers', 'Contacts', 'Lists', 'Payments due'];
-// Marketplace has no bottom bar or More sheet entry at phone width.
-const PHONE_SKIPS = new Set(['Marketplace']);
 
 // Settings screens whose section headings or card titles are checked.
-const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Automatic donation system', 'Keyboard'];
+const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Keyboard'];
 
 async function enterDemoWallet(page) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
@@ -143,11 +142,11 @@ for (const [width, height] of SIZES) {
         const tokens = await page.evaluate(readTokens);
         expect(tokens.sectionHeaderGap, 'header gap is below the section gap').toBeLessThan(tokens.sectionGap);
 
-        for (const route of NAV_ROUTES.filter((r) => width > 599 || !PHONE_SKIPS.has(r))) {
+        for (const route of NAV_ROUTES) {
             try {
                 await gotoSection(page, route);
             } catch {
-                // Not every route is in the bottom bar's More sheet at phone width.
+                // A route can be gated out of the catalogue for this wallet.
                 continue;
             }
             await page.waitForTimeout(400);
@@ -168,10 +167,21 @@ for (const [width, height] of SIZES) {
             expectScreen(`Settings > ${section}`, screen, tokens, { stackedGap: false });
             // Per-network blocks and shortcut groups title themselves with the
             // card or section role, never a raw size.
-            const role = section === 'Keyboard' ? tokens.sectionTitle : section === 'Automatic donation system' ? tokens.cardTitle : null;
+            const role = section === 'Keyboard' ? tokens.sectionTitle : null;
             for (const chain of role ? screen.bare : []) {
                 expect(chain, `Settings > ${section}: heading "${chain.text}"`).toMatchObject(role);
             }
+        }
+
+        // Automatic Donations is a Network and Fees child page, so exercise it
+        // separately from the Settings landing-page rows above.
+        await gotoSection(page, 'Home');
+        await openAutomaticDonations(page);
+        await page.waitForTimeout(400);
+        const donations = await page.evaluate(readScreen);
+        expectScreen('Settings > Automatic Donations', donations, tokens, { stackedGap: false });
+        for (const chain of donations.bare) {
+            expect(chain, `Settings > Automatic Donations: heading "${chain.text}"`).toMatchObject(tokens.cardTitle);
         }
     });
 }

@@ -42,7 +42,13 @@
 //    same class as a wrong number.
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
-import { EXPLORER_URL, REGTEST_COIN, selectVenueChain, switchToRegtest } from '../../fixtures/regtest.js';
+import {
+    EXPLORER_URL,
+    REGTEST_COIN,
+    selectListFilterOption,
+    selectListNetwork,
+    switchToRegtest,
+} from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -137,7 +143,7 @@ test.describe('BET oracle record against a live explorer', () => {
         });
 
         await test.step('open the market this oracle runs', async () => {
-            await openPaletteCommand(page, 'Betting');
+            await openPaletteCommand(page, 'Prediction markets');
             await expect(page.getByRole('button', { name: 'Create market', exact: true }))
                 .toBeVisible({ timeout: 60_000 });
 
@@ -151,17 +157,21 @@ test.describe('BET oracle record against a live explorer', () => {
             // `BetFeedsList` is a `NetworkField` on a LIST screen rather than a
             // form, which is the row-57 widget class that the earlier sweeps
             // kept missing.
-            await selectVenueChain(page.getByRole('main'), 'Network');
+            await selectListNetwork(page, 'Filter prediction markets');
 
             // The list defaults to markets still taking bets; the fixture is
             // whatever the chain has, which is usually settled by now.
-            await page.getByRole('button', { name: 'All markets', exact: true }).click();
+            await selectListFilterOption(page, 'Filter prediction markets', 'Status', 'All markets');
 
             const main = page.getByRole('main');
-            const row = main.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).first();
+            const row = main.locator(`[data-market-index="${feedIndex}"]`).first();
             await expect(row, `market #${feedIndex} is listed`).toBeVisible({ timeout: 60_000 });
             await row.click();
 
+            // The market's number and its Run by oracle link are facts on the
+            // Details tab; the page opens on Buy.
+            await main.getByRole('tablist', { name: 'Market sections' })
+                .getByRole('tab', { name: 'Details', exact: true }).click();
             await expect(main.getByText(`#${feedIndex}`, { exact: false }).first()).toBeVisible();
         });
 
@@ -174,9 +184,11 @@ test.describe('BET oracle record against a live explorer', () => {
             await oracleButton.click();
 
             // The route title sits outside main, so arrival is asserted on the
-            // record's first row within main.
-            await expect(page.getByRole('main').getByText('Markets opened', { exact: true }))
-                .toBeVisible({ timeout: 30_000 });
+            // record's Actions list, the tab it opens on (G102); the counts
+            // and fees are on Details.
+            await expect(main.getByRole('list', { name: 'Oracle actions' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('tab', { name: 'Details' }).click();
+            await expect(main.getByText('Markets opened', { exact: true })).toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('the numbers on screen match the explorer', async () => {
@@ -236,7 +248,8 @@ test.describe('BET oracle record against a live explorer', () => {
 
         await test.step("the oracle's own markets are listed", async () => {
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Their markets' })).toBeVisible();
+            // The market rows are on the Markets tab, next after Actions (G102).
+            await main.getByRole('tab', { name: 'Markets' }).click();
             // The record page reached this list through getBetFeeds(address,
             // 'source'), a different query from the one that populated the market
             // browser, so this also proves that passthrough works live.

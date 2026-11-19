@@ -65,7 +65,7 @@ async function flushTimers() {
 }
 async function pick(fieldLabel, tick) {
     await flushTimers();
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(fieldLabel, 'i') }));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${fieldLabel}:`, 'i') }));
     await flushTimers();
     const row = Array.from(document.querySelectorAll('button'))
         .find((button) => (button.textContent || '').includes(tick));

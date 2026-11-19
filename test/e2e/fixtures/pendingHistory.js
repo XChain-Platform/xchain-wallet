@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
+    approveConfirm,
     explorerJson,
     minerRpc,
     REGTEST_CHAIN_ID,
@@ -33,6 +34,7 @@ import {
     readReceiveAddress,
 } from './regtest.js';
 import { expect } from './wallet.js';
+import { fieldByLabel, searchTokenPicker } from './fields.js';
 
 /** The venue's native ticker, e.g. RLTC -> LTC. */
 export const NATIVE_COIN = REGTEST_COIN.replace(/^R/, '');
@@ -236,8 +238,8 @@ export async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
 /**
  * Picks an asset in the Send form's picker by its (chainId, tick) pair.
  *
- * The form's asset control is the hero button `Change asset (currently
- * <name>)`, anchored so it cannot also catch an extra recipient's
+ * The form's asset control is the Asset field, `Asset: <tick> on <chain>`,
+ * anchored so it cannot also catch an extra recipient's
  * "Recipient N token: X. Change asset" button. The row is chosen by
  * `data-balance-key`, NOT by accessible name: the row's "Select XCHAIN on
  * Bitcoin" label repeats the display name, which every chain shares for the
@@ -245,7 +247,7 @@ export async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
  */
 export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const trigger = main.getByRole('button', { name: /^Asset: / }).first();
     const empty = main.getByRole('heading', { name: 'Nothing to send yet' });
     await expect(trigger.or(empty).first(), 'Send rendered neither its form nor its empty state')
         .toBeVisible({ timeout: 30_000 });
@@ -254,12 +256,12 @@ export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
             + 'sees no balance on this network yet. Fund the address and reload first.');
     }
     await trigger.click();
-    await page.getByLabel('Search coins or tokens').fill(searchText);
+    await searchTokenPicker(page, searchText);
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the Send picker offered no ${tick} row on ${chainId} for "${searchText}"`)
         .toBeVisible({ timeout: 30_000 });
     await row.getByRole('button', { name: /^Select / }).first().click();
-    await expect(main.getByRole('button', { name: /^Change asset \(currently / }).first(),
+    await expect(main.getByRole('button', { name: /^Asset: / }).first(),
         `picking ${tick} did not return to the Send form`).toBeVisible({ timeout: 15_000 });
 }
 
@@ -316,15 +318,9 @@ export async function waitForShownTxid(scope, { timeout = 180_000, message = 'th
 
 /** Approves the open confirm modal and returns the txid the wallet reports. */
 export async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    // Generous, because Approve stays disabled until the pre-flight report
-    // resolves and a COLD dry-run on this shared venue has been measured at
-    // several seconds. A real blocking verdict fails here too, which is why
-    // the message names both possibilities rather than guessing.
-    await expect(approve, 'Approve never became enabled: either the pre-flight report never '
-        + 'arrived, or the venue really does refuse this action')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // Approve is never disabled (G130); approveConfirm taps until the wallet
+    // takes the tap and names the screen's refusal when it never does.
+    await approveConfirm(page, 'the pending payment');
 
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 180_000 });
@@ -363,7 +359,7 @@ export function confirmedRowFor(page, actionIndex, address) {
  * what these specs are asserting.
  */
 export async function searchForTx(page, txid) {
-    const search = page.getByLabel('Search history');
+    const search = fieldByLabel(page, 'Search history');
     await expect(search, 'History did not render its filter bar').toBeVisible({ timeout: 60_000 });
     await search.fill(txid);
     return search;

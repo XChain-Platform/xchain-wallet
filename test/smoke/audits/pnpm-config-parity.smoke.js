@@ -129,11 +129,25 @@ const npmrc = parseNpmrc(read('.npmrc'));
     assert.equal(configured['ip-address'], '^10.5.1',
         'ip-address is pinned at the first release that fixes the advisory');
 
+    const expectedSecurityOverrides = {
+        minimatch: '^11.0.9',
+        glob: '^14.0.6',
+        'xcode>uuid': '^11.1.1',
+    };
+    for (const [name, version] of Object.entries(expectedSecurityOverrides)) {
+        assert.equal(configured[name], version,
+            `${name} is pinned at the required patched version`);
+    }
+
     // Second witness: what pnpm actually resolved with.
     const live = lock.overrides ?? {};
     assert.deepEqual(Object.keys(live).sort(), Object.keys(configured).sort(),
         'pnpm-lock.yaml resolved with exactly this override set '
         + '(if this fails, the lockfile predates the config change: re-run pnpm install)');
+    for (const [name, version] of Object.entries(expectedSecurityOverrides)) {
+        assert.equal(live[name], version,
+            `pnpm-lock.yaml resolved with the ${name} security override`);
+    }
 
     assert.equal(configured['undici@7'], '^7.29.1',
         'undici 7.x is floored at the first release containing the security fix');

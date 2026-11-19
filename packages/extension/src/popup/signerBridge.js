@@ -28,6 +28,10 @@
 // re-opens the port and re-registers.
 
 import { signers } from '@xchain-wallet/core';
+import {
+    sessionSignerFor,
+    sessionSignerForRecord,
+} from '@xchain-wallet/core/signers/hardwareReconnect.js';
 
 const { bindRendererPortBridge } = signers;
 
@@ -71,6 +75,8 @@ function ensurePort() {
  * `messaging.registerSigner` persists the SignerRecord. We use
  * the record's id as the key so the descriptor built by
  * `resolveSigner` (which reads the same id from the vault) matches.
+ * A Trezor or Ledger is stored inside a session signer, which reports
+ * each sign to the sign page and reopens the device after a lock.
  *
  * @param {string} signerId   SignerRecord id
  * @param {import('@xchain-wallet/core/signers/Signer.js').Signer} signer
@@ -82,9 +88,24 @@ export function registerSigner(signerId, signer) {
     if (!signer || typeof signer.signPsbt !== 'function') {
         throw new Error('signerBridge.registerSigner: signer must implement Signer');
     }
-    liveSigners.set(signerId, signer);
+    liveSigners.set(signerId, sessionSignerFor(liveSigners.get(signerId), signerId, signer));
     const { bridge } = ensurePort();
     bridge.announce([signerId]);
+}
+
+/**
+ * Register a paired Trezor or Ledger from its SignerRecord at unlock, with no
+ * device open yet: the first sign opens it.
+ *
+ * @param {{ id: string, vendor: string, model?: string, deviceIdentifier?: string }} record
+ */
+export function registerHardwareRecord(record) {
+    if (typeof record?.id !== 'string' || record.id.length === 0) {
+        throw new Error('signerBridge.registerHardwareRecord: record id is required');
+    }
+    liveSigners.set(record.id, sessionSignerForRecord(liveSigners.get(record.id), record));
+    const { bridge } = ensurePort();
+    bridge.announce([record.id]);
 }
 
 /**

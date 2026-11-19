@@ -56,6 +56,50 @@ export const MAX_COMPILED_ACTION_BYTES = 8192;
  */
 export const ENVELOPE_MAX_PAYLOAD = 390000;
 
+/** The name a FILE action carries for a picked file the browser gave no name. */
+export const FALLBACK_FILE_NAME = 'file.bin';
+
+/** Multi-part FILE protocol bounds and exact per-piece stored-byte capacities. */
+export const MULTIPART_FILE_MAX_PARTS = 65535;
+export const MULTIPART_FILE_MAX_BYTES = 262_140_000_000;
+export const GATED_MULTIPART_MAX_BYTES = 67_108_864;
+export const MULTIPART_ENVELOPE_PART_CAPACITY = 389_920;
+export const MULTIPART_STANDARD_PART_CAPACITY = 8_114;
+
+export const MULTIPART_FILE_PART_CAPACITY = Object.freeze({
+    envelope: MULTIPART_ENVELOPE_PART_CAPACITY,
+    standard: MULTIPART_STANDARD_PART_CAPACITY,
+});
+
+const MULTIPART_TWO_DIGIT_ACTION_BYTES = 'FILE|2|'.length + 64 + '|'.length + 2;
+
+export function multipartPartCapacity(carrier, indexDigits = 2) {
+    const lane = String(carrier || 'TAPROOT').toUpperCase();
+    const baseCapacity = lane === 'STANDARD' || lane === 'P2SH'
+        ? MULTIPART_STANDARD_PART_CAPACITY
+        : MULTIPART_ENVELOPE_PART_CAPACITY;
+    const actionBytes = MULTIPART_TWO_DIGIT_ACTION_BYTES + indexDigits - 2;
+    const baseCompiledAction = MULTIPART_TWO_DIGIT_ACTION_BYTES
+        + pushPrefixSize(MULTIPART_TWO_DIGIT_ACTION_BYTES);
+    const compiledAction = actionBytes + pushPrefixSize(actionBytes);
+    return baseCapacity - (compiledAction - baseCompiledAction);
+}
+
+/** Activation time keyed by the trailing network segment of a chain id. */
+export const FILE_MULTIPART_ACTIVATION_TIME = Object.freeze({
+    mainnet: null,
+    testnet: 1_794_787_200,
+    regtest: 0,
+});
+
+/** @param {string} chainId */
+export function fileMultipartActivationTime(chainId) {
+    const network = String(chainId ?? '').trim().toLowerCase().split('-').pop();
+    return Object.hasOwn(FILE_MULTIPART_ACTIVATION_TIME, network)
+        ? FILE_MULTIPART_ACTIVATION_TIME[network]
+        : undefined;
+}
+
 /**
  * The compiled-push ceiling for an encoding. Anything that is not the Taproot
  * envelope keeps the legacy 8192: §4 raises the ceiling PER-ENCODING precisely

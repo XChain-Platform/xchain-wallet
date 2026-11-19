@@ -146,6 +146,45 @@ describe('storage/Vault concurrency and consistency', () => {
         expect((await reopened.wallets.get('legacy-wallet')).multisigs[0].id)
             .toBe(first.multisigs[0].id);
     });
+
+    it('putManyGuarded leaves the document untouched when its builder refuses', async () => {
+        const backend = new InMemoryBackend();
+        const vault = new Vault({ backend, masterKey: KEY });
+        await vault.open();
+        const saveSpy = vi.spyOn(backend, 'save');
+
+        await expect(vault.putManyGuarded(() => {
+            throw new Error('stale read');
+        })).rejects.toThrow('stale read');
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(await vault.contacts.count()).toBe(0);
+    });
+
+    it('putManyGuarded builds from queued state and saves all records once', async () => {
+        const backend = new InMemoryBackend();
+        const vault = new Vault({ backend, masterKey: KEY });
+        await vault.open();
+        const first = createContact({
+            name: 'First',
+            entries: [{ chain: 'bitcoin', address: 'first', label: '' }],
+        });
+        const second = createContact({
+            name: 'Second',
+            entries: [{ chain: 'bitcoin', address: 'second', label: '' }],
+        });
+        await vault.contacts.put(first);
+        const saveSpy = vi.spyOn(backend, 'save');
+
+        await vault.putManyGuarded((document) => {
+            expect(document.contacts).toContain(first);
+            return [{ store: vault.contacts, record: second }];
+        });
+
+        expect(saveSpy).toHaveBeenCalledOnce();
+        expect((await vault.contacts.list()).map((record) => record.name).sort())
+            .toEqual(['First', 'Second']);
+    });
 });
 
 describe('storage/Vault rekey (password change)', () => {

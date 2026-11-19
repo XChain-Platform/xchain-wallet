@@ -23,7 +23,10 @@ describe('ShortcutHelp', () => {
 
     it('renders a modal listing the shortcut catalogue by group', () => {
         render(<ShortcutHelp open onClose={() => {}} />);
-        expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveAttribute('aria-modal', 'true');
+        // The header is Title Case (G01).
+        expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toHaveAttribute('aria-modal', 'true');
+        // The rebind note sits in the shared WarningCard, not a loose line.
+        expect(screen.getByText(/Rebind wallet shortcuts/).closest('[data-warning-line]')).toBeTruthy();
         // A representative row from each group.
         expect(screen.getByText('Lock wallet')).toBeTruthy();
         expect(screen.getByText('Go to history')).toBeTruthy();

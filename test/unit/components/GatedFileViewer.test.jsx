@@ -76,7 +76,9 @@ describe('GatedFileViewer render decisions', () => {
         // The attacker's SVG never becomes live DOM (UI chrome has its
         // own decorative inline SVGs, so probe for the payload markup).
         expect(container.querySelector('svg[onload]')).toBeNull();
-        expect(container.querySelector('circle')).toBeNull();
+        // The notice icons (circle i, circled !) draw their own circles, so
+        // match the payload's r="1" circle only.
+        expect(container.querySelector('circle[r="1"]')).toBeNull();
         expect(window.PWNED).toBeUndefined();
         // Blob typed from the SNIFFED mime.
         const blobArg = vi.mocked(URL.createObjectURL).mock.calls.at(-1)[0];
@@ -223,7 +225,8 @@ describe('MarketLifecycleTimeline states', () => {
         render(<MarketLifecycleTimeline {...baseProps} messaging={messaging} />);
 
         expect(await screen.findByText('1,234,567.89 XCH')).toBeTruthy();
-        expect(screen.getByText('block 1,234,567')).toBeTruthy();
-        expect(screen.getByText('#1,234,567')).toBeTruthy();
+        // Block numbers and action indexes are identifiers: raw digits (G123).
+        expect(screen.getByText('block 1234567')).toBeTruthy();
+        expect(screen.getByText('#1234567')).toBeTruthy();
     });
 });

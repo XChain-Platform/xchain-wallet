@@ -74,25 +74,26 @@ assert.match(formBlock, /pasteWarning \?/, 'pasteWarning rendered in form');
 assert.match(formBlock, /lookalikeWarning \?/, 'lookalikeWarning rendered in form');
 assert.match(formBlock, /role="alert"/, 'warnings carry alert role');
 
-// --- review-stage AddressText highlight --------------------------------
+// --- Confirm Standard recipient and warning slot ------------------------
 
 const reviewIdx = sendSrc.indexOf("stage === 'review'");
 assert.notEqual(reviewIdx, -1);
 const reviewBlock = sendSrc.slice(reviewIdx);
 assert.match(
     reviewBlock,
-    /<AddressText address=\{fromAddress\.address\} highlight \/>/,
-    'From row gets checksum highlighting',
+    /address=\{isMultiSend \? null : toAddress\.trim\(\)\}/,
+    'Confirm Standard shows the destination address once',
 );
 assert.match(
     reviewBlock,
-    /d\.label === 'Destination'/,
-    'destination detail rendered through AddressText',
+    /value: fromAddress\.address,[\s\S]*?address: true,[\s\S]*?testId: 'confirm-source'/,
+    'Confirm facts retain the full source address',
 );
 assert.match(
     reviewBlock,
-    /<AddressText address=\{d\.value\} highlight \/>/,
-    'destination renders with highlight',
+    /extraWarnings: \[[\s\S]*?pasteWarning,[\s\S]*?lookalikeWarning,[\s\S]*?\.\.\.unusualSendWarnings/,
+    'paste and lookalike warnings flow into the shared review warning slot',
 );
+assert.match(reviewBlock, /warning=\{reviewWarning\}/, 'Confirm Standard receives the safety warning');
 
 console.log('send-recipient-safety smoke OK');

@@ -9,12 +9,15 @@
 // contact legal@dankest.llc.
 
 import { clearLockoutState } from '../../flows/lockoutTracking.js';
+import { cancelEraseSchedule } from '../../flows/eraseSchedule.js';
 import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
 import { clearPanicModeState } from '../../flows/panicMode.js';
 import { clearBackupReminderState } from '../../flows/backupReminder.js';
 import { clearMigrationSweeps } from '../../flows/migrationSweeps.js';
 import { clearBalanceCache } from './balanceCache.js';
+import { clearOwnedTokensCache, OWNED_TOKENS_CACHE_PREFIX } from './ownedTokensCache.js';
 import { HISTORY_CACHE_PREFIX } from './historyCache.js';
+import { FAUCET_HISTORY_KEY, forgetFaucetHistory } from './faucetHistory.js';
 
 /** Key of the localStorage record that answers "a wallet already exists"; the wipe removes it first. */
 export const VAULT_META_STORAGE_KEY = 'xchain-wallet:vault-meta';
@@ -42,6 +45,8 @@ const WALLET_LOCAL_STORAGE_KEYS = Object.freeze([
     'xchain.dispenserEscrow.seen',
     // The diagnostic console log names the wallet ids it unlocked and locked.
     'xchain.logConsole',
+    // The regtest faucet history names wallet ids and their addresses.
+    FAUCET_HISTORY_KEY,
 ]);
 
 /** Renderer key families scoped to a wallet or one of its accounts. */
@@ -59,6 +64,7 @@ const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
     'xc:balanceCache:',
     'xc:balances:sort:',
     HISTORY_CACHE_PREFIX,
+    OWNED_TOKENS_CACHE_PREFIX,
     'xc:homeFilters:',
 ]);
 
@@ -168,6 +174,15 @@ export async function wipeWalletStorage() {
     sweepStoragePrefix(globalThis.sessionStorage, HISTORY_VIEW_STATE_PREFIX);
     // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
     clearLockoutState();
+    // The erase the schedule waited for has happened (or another escape wiped first).
+    // The vault is already gone, so a cancel the store refuses must not stop
+    // the clears below. Its cancel marker is written first and stops a due
+    // erase on its own; a record left in the native slot clears at the next cancel.
+    try {
+        await cancelEraseSchedule();
+    } catch (err) {
+        console.warn('[xchain] wipe: erase schedule not cleared:', /** @type {any} */ (err)?.name || err);
+    }
     clearPanicModeState();
     clearDuressPassphrase();
     clearBackupReminderState();
@@ -203,10 +218,13 @@ export function subscribeVaultWipe(onWipe) {
 export function clearRemovedWalletStorage(walletId) {
     if (typeof walletId !== 'string' || walletId.length === 0) return;
     clearBalanceCache(walletId);
+    clearOwnedTokensCache(walletId);
     clearBackupReminderState(walletId);
     // A migration list names the legacy wallet and its sweep destination;
     // either one leaving makes the list meaningless.
     clearMigrationSweeps(walletId);
+    // The faucet history shares one key across wallets; drop only this one's entries.
+    forgetFaucetHistory(walletId);
     try {
         const store = globalThis.localStorage;
         if (!store) return;

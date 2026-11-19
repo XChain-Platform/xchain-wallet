@@ -48,7 +48,7 @@ afterEach(() => {
 async function submitAndReadError(text) {
     render(<AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />);
     fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Savings' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
     return screen.findByText(text);
 }
 
@@ -72,6 +72,17 @@ describe('AddAccountForm error copy', () => {
         messaging.createAccount.mockRejectedValue(new Error('An account named "Savings" already exists.'));
 
         expect(await submitAndReadError('An account named "Savings" already exists.')).toBeTruthy();
+    });
+
+    it('shows the legacy single-account explanation from the flow', async () => {
+        const message = 'This older FreeWallet recovery phrase supports one software account. '
+            + 'Upgrade to a standard recovery phrase to add another software account.';
+        messaging.createAccount.mockRejectedValue(Object.assign(new Error(message), {
+            name: 'LegacySingleAccountError',
+        }));
+
+        expect(await submitAndReadError(message)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(FALLBACK);
     });
 
     it('explains a shell without account creation in plain words', async () => {

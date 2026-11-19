@@ -62,7 +62,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-publish-lock.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
     expectConfirmModal,
@@ -81,9 +82,13 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The wallet menu row that opens the oracle price form (the grouped menu's title). */
+const ORACLE_COMMAND = 'My oracle';
 /** The publish and the mint both pay a real coin protocol fee here. */
 const FUNDING = 2;
 /** The token the quote prices. Free-mintable on regtest, which is the point. */
@@ -93,6 +98,12 @@ const FIAT = 'USD';
 const VALUE = '1.50';
 /** A fraction, not a percentage: 1% of a Mode B dispenser's projected proceeds. */
 const USAGE_FEE = '0.01';
+/**
+ * The form's stop for that fee. The form takes the fee as a percent on a
+ * slider of named stops (Free, 0.5%, 1%, 2%, 5%, Custom) in the optional
+ * Usage Fee section, so the 1% stop is what publishes 0.01 on the wire.
+ */
+const USAGE_FEE_STOP = { index: '2', valueText: '1 percent' };
 /** The protocol's fixed maturation delay, in seconds (oracle/price_aggregator/single_ingest.js). */
 const ACTIVATION_DELAY_S = 86_400;
 /** Enough XCHAIN to escrow a dispenser with. */
@@ -202,9 +213,9 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Oracle Operator' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Publish oracle price');
+            await openPaletteCommand(page, ORACLE_COMMAND);
             let main = page.getByRole('main');
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             // D-145: this form mounted no chain picker at all until this
             // session, so on a multi-chain wallet it published on whichever
             // chain the wallet listed first. Without the field this call fails
@@ -219,9 +230,9 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await seedPrices();
 
-            await openPaletteCommand(page, 'Publish oracle price');
+            await openPaletteCommand(page, ORACLE_COMMAND);
             main = page.getByRole('main');
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // An address that has published nothing must say so, and say what
@@ -230,10 +241,15 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'a never-published address does not say its feed list is empty')
                 .toContainText('has not published any prices yet');
 
-            await main.getByLabel(/^Token ticker/).fill(TICK);
-            await main.getByLabel('Currency').selectOption(FIAT);
+            // G122: the Token and Fiat currency fields open picker pages.
+            await pickToken(main, TICK);
+            await pickFiatCurrency(main, FIAT);
             await main.getByLabel(/^Price of one/).fill(VALUE);
-            await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
+            await openFormSection(main, 'Usage Fee');
+            const fee = main.getByRole('slider', { name: 'Usage fee', exact: true });
+            await fee.fill(USAGE_FEE_STOP.index);
+            await expect(fee, `the usage fee slider is not on the ${USAGE_FEE} stop`)
+                .toHaveAttribute('aria-valuetext', USAGE_FEE_STOP.valueText);
             await expect(main, 'the form does not warn that a first price is inert for 24 hours')
                 .toContainText(`First price for ${TICK} in ${FIAT}`);
 
@@ -249,16 +265,19 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(review, 'the review does not state that a first price prices nothing '
                 + 'for 24 hours')
                 .toContainText('will not price anything for 24 hours');
-            await expect(review, 'the review does not say who currently prices from this oracle')
-                .toContainText(`No open dispensers price ${TICK} from this oracle`);
+            // The review is a fact list: the row label names the consumers and
+            // its value says none are open on a first publish.
+            const affected = review.locator('dt', { hasText: /^Affected dispensers$/ })
+                .locator('xpath=following-sibling::dd[1]');
+            await expect(affected, 'the review does not say who currently prices from this oracle')
+                .toHaveText('None open');
 
             // The password box only renders when the signer is locked. An
             // in-session wallet is already unlocked here, so waiting for it
             // times out on a screen that is perfectly ready to sign.
-            const pw = review.getByLabel('Password', { exact: true });
+            const pw = fieldByLabel(review, 'Password');
             if (await pw.count() > 0) await pw.fill(PASSWORD);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             const done = page.getByRole('main');
             await expect(done, 'no transaction id ever appeared after approving the publish')
                 .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -326,8 +345,8 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // is also the operator's real path, and it is the one that has to
             // reload the feed list.
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Publish another' }).click();
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('button', { name: 'Publish Another' }).click();
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
 
             // The list is loaded by an effect keyed on (chain, address), and the
             // only extra refresh is fired the instant the broadcast returns -
@@ -339,7 +358,10 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // text alone also matches the price field's own label, "Price of one
             // XCHAIN in USD", which is present on an empty form - so a text
             // match passes before anything has been published.
+            // The list sits in the closed "Published Prices" section, whose body
+            // stays mounted but hidden, so it is opened on every mount.
             const feed = main.getByRole('button', { name: `${TICK} in ${FIAT}`, exact: true });
+            await openFormSection(main, 'Published Prices');
             const deadline = Date.now() + 240_000;
             for (;;) {
                 // Give the mount's own fetch time to land before judging it. A
@@ -357,10 +379,13 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
                     + 'is also what the fat-finger deviation gate compares a republish against')
                     .toBe(true);
                 await mineIfPending();
-                await page.getByRole('button', { name: /^Back/ }).first().click();
-                await openPaletteCommand(page, 'Publish oracle price');
-                await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+                // The form is a root page with no Back control, and the palette
+                // ignores the route it is already on, so leave through Home.
+                await openPaletteCommand(page, 'Home');
+                await openPaletteCommand(page, ORACLE_COMMAND);
+                await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
+                await openFormSection(main, 'Published Prices');
             }
 
             // "nothing live yet" is the assertion that matters: an operator who
@@ -378,21 +403,22 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
-            await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat (optional)').selectOption(FIAT);
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
+            await pickFiatCurrency(main, FIAT);
             // Mode B: no fiat amount at all. The oracle prices the token; the
             // dispenser only names whose quote to use.
             await main.getByLabel(/^Oracle address/).fill(oracle);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
 
             // Refused, and refused BEFORE the confirm screen: the point of the
             // pre-flight is that the create never gets signed, so it costs

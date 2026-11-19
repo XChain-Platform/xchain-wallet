@@ -104,7 +104,9 @@ function recordingMessaging() {
     return { messaging, calls };
 }
 
-async function mountForm() {
+// The Token field takes no typed text (G122), so the priced ticker arrives as
+// initialTick; oracleFormPickers.test.jsx drives the token picker itself.
+async function mountForm({ tick = 'pepecash' } = {}) {
     const { messaging, calls } = recordingMessaging();
     let utils;
     await domAct(async () => {
@@ -114,7 +116,7 @@ async function mountForm() {
                 { shell: 'web', messaging },
                 // No initialChainId: this is the palette's entry, the one that
                 // has to fall back to a choice the user can see and change.
-                React.createElement(OracleForm, { walletId: 'w', onBack() {} }),
+                React.createElement(OracleForm, { walletId: 'w', onBack() {}, initialTick: tick }),
             ),
         );
         await drainMicrotasks();
@@ -123,27 +125,32 @@ async function mountForm() {
 }
 
 async function pickChain(utils, label) {
+    // The publishing network is the standard From section's Network
+    // field; open the section (closed on load) to reach it.
+    await domAct(async () => {
+        const fromHeader = utils.queryByRole('button', { name: /^From/, expanded: false });
+        if (fromHeader) fireEvent.click(fromHeader);
+        await drainMicrotasks();
+    });
     await domAct(async () => {
         fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('option', { name: new RegExp(`^${label}\\b`) }));
+        fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${label}\\b`) }));
         await drainMicrotasks();
     });
 }
 
 async function publish(utils, { tick, value }) {
-    await domAct(async () => {
-        fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } });
-        await drainMicrotasks();
-    });
+    // The ticker came in at mount; the Token field shows it.
+    expect(utils.getByRole('button', { name: new RegExp(`^Token: ${tick.toUpperCase()} on `) })).toBeTruthy();
     await domAct(async () => {
         fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } });
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -156,6 +163,11 @@ async function publish(utils, { tick, value }) {
 describe('D-145: OracleForm chain picker', () => {
     it('renders a Network field listing every chain the wallet holds addresses on', async () => {
         const { utils } = await mountForm();
+        // The publishing network lives in the standard From section.
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /^From/, expanded: false }));
+            await drainMicrotasks();
+        });
         const field = utils.getByRole('button', { name: /^Network:/ });
         expect(field, 'the oracle form mounts no chain picker at all, so the publishing '
             + 'chain is whichever one the wallet lists first').toBeTruthy();
@@ -165,7 +177,7 @@ describe('D-145: OracleForm chain picker', () => {
             fireEvent.click(field);
             await drainMicrotasks();
         });
-        expect(utils.getByRole('option', { name: /^Litecoin\b/ }),
+        expect(utils.getByRole('button', { name: /^Select Litecoin\b/ }),
             'a chain the wallet holds addresses on is not offered as a publishing chain')
             .toBeTruthy();
     });

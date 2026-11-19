@@ -72,7 +72,7 @@ function routedViews(code) {
 function actionsCatalogue(code) {
     const start = code.indexOf('buildActionEntries({');
     if (start < 0) return null;
-    const end = code.indexOf("onBack={() => setUnlockedView('home')}", start);
+    const end = code.indexOf('onBack={goBack}', start);
     return end < 0 ? null : code.slice(start, end);
 }
 
@@ -136,16 +136,18 @@ describe('P11: the bridge routes exist in every shell', () => {
             });
 
             it('opens the bridge-settings form from the token page, with the token in hand', () => {
-                const mount = code.slice(code.indexOf('<ManageToken'));
+                // The token page's issuer handlers (once ManageToken's props,
+                // now the one asset page's manageActions).
+                const mount = code.slice(code.indexOf('const manageActions = {'));
                 // The opener is taken from a neighbouring issuer-only row
-                // rather than named: it is the one that sets formReturnView,
-                // and formReturnView is what turns tokenDetailRef into the
+                // rather than named: it is the one that sets formSource,
+                // and formSource is what turns tokenDetailRef into the
                 // form's chainId/tick prefill. A bare setUnlockedView would
                 // open the bridge form on no token at all.
-                const neighbour = mount.match(/onAccessLists=\{\(\) => (\w+)\('access-lists'\)\}/);
+                const neighbour = mount.match(/onAccessLists: \(ctx\) => (\w+)\('access-lists', ctx\)/);
                 expect(neighbour, 'no onAccessLists row to take the opener from').toBeTruthy();
                 const wired = mount.match(
-                    new RegExp(`onBridgeSettings=\\{\\(\\) => ${neighbour[1]}\\('([^']+)'\\)\\}`),
+                    new RegExp(`onBridgeSettings: \\(ctx\\) => ${neighbour[1]}\\('([^']+)', ctx\\)`),
                 );
                 expect(wired, 'the token page does not open bridge settings through the prefilling opener').toBeTruthy();
                 expect(routedViews(code).has(wired[1])).toBe(true);
@@ -266,15 +268,18 @@ describe('P19: Manage Token offers the bridge row', () => {
                 }),
             ),
         );
+        // The token page is the one asset page: the description is a Details
+        // row, so the info is proven landed there, then Actions is chosen again.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         await screen.findByText(MARKER);
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        await screen.findByRole('region', { name: 'Rules and automation' });
     }
 
-    // The row sits past the three primaries, so it lives behind More; open it
-    // when there is one, then hand back whichever Bridge control is on screen.
+    // The Bridge row sits in the issuer's "Rules and automation" list on the
+    // Actions tab (always open: an info page has no collapsible sections).
     function bridgeRow() {
-        const more = screen.queryByRole('button', { name: /More/ });
-        if (more) fireEvent.click(more);
-        return screen.queryByRole(more ? 'menuitem' : 'button', { name: /^Bridge$/ });
+        return document.querySelector('[data-action-id="bridge"]');
     }
 
     it('opens the bridge-settings form for the token in hand', async () => {
@@ -292,8 +297,9 @@ describe('P19: Manage Token offers the bridge row', () => {
         const row = bridgeRow();
         // Still on screen: an issuer who froze it needs to see what stops them.
         expect(row, 'the frozen row vanished instead of explaining itself').toBeTruthy();
-        expect(row.disabled).toBe(true);
-        expect(row.getAttribute('title')).toMatch(/frozen/i);
+        expect(row).toHaveAttribute('aria-disabled', 'true');
+        // The reason replaces the row's description line.
+        expect(row.textContent).toMatch(/frozen/i);
         fireEvent.click(row);
         expect(onBridgeSettings).not.toHaveBeenCalled();
     });
@@ -302,21 +308,21 @@ describe('P19: Manage Token offers the bridge row', () => {
         const onBridgeSettings = vi.fn();
         await renderManage({ info: { lockBridge: null }, onBridgeSettings });
         const row = bridgeRow();
-        expect(row.disabled).toBe(false);
+        expect(row).not.toHaveAttribute('aria-disabled');
         fireEvent.click(row);
         expect(onBridgeSettings).toHaveBeenCalledTimes(1);
     });
 
-    it('is gated like the other issuer-only rows: absent for a non-issuer', async () => {
+    it('opens for a non-issuer so the form can perform its own source preflight', async () => {
+        const onBridgeSettings = vi.fn();
         await renderManage({
             addresses: ['bcrt1qsomeoneelse'],
-            onBridgeSettings: vi.fn(),
+            onBridgeSettings,
         });
-        // The owner gate resolves after its own fetch, so wait for the banner
-        // it raises rather than reading the grid the instant info arrives.
-        await waitFor(() => {
-            expect(screen.getByText(/hold the token's issuer address/i)).toBeTruthy();
-        });
-        expect(bridgeRow()).toBeNull();
+        const row = bridgeRow();
+        expect(row).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(row);
+        expect(onBridgeSettings).toHaveBeenCalledWith({ issuer: ISSUER });
+        expect(screen.queryByText(/hold the token's issuer address/i)).toBeNull();
     });
 });

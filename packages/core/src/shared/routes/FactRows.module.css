@@ -1,0 +1,45 @@
+/* Facts as label-left value-right rows in one card, the detail pages' Details
+   look (G14): a dt and its dd share a row, the label muted in sentence case,
+   the value at the trailing edge. Review and done stages use it in place of
+   the stacked uppercase detailsLabel and detailsValue pair. */
+.list {
+    composes: card from '../../ui/Card.module.css';
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    /* Cells stretch to the row's height so both draw their divider on one
+       straight line however tall a value is (a pill, a badge, an icon); the
+       content centres inside each cell with align-content. */
+    align-items: stretch;
+    /* No column gap, so each row's divider runs unbroken across both cells;
+       the label's own end padding keeps the two apart. */
+    gap: 0;
+    min-width: 0;
+    margin: 0;
+}
+
+.label {
+    margin: 0;
+    padding-block: var(--xc-space-2);
+    padding-inline: 0 var(--xc-space-3);
+    align-content: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.value {
+    min-width: 0;
+    margin: 0;
+    padding: var(--xc-space-2) 0;
+    align-content: center;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: end;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A divider between rows, drawn on both cells of every row after the first. */
+.label ~ .label,
+.value ~ .value {
+    border-top: 1px solid var(--xc-border);
+}

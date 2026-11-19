@@ -12,7 +12,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
-    FieldNote,
     Screen,
     PageHeader,
     FormPage,
@@ -24,20 +23,16 @@ import {
     AddressText,
     Icon,
     StatusMessage,
+    Notice,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
 
-// Why-migrate explanation copy reads as a paragraph rather than a
-// caption. Override the shared `.hint` (centred, muted) with a
-// left-justified, full-contrast block so the content is comfortably
-// readable.
-const explainParagraphStyle = {
-    textAlign: 'justify',
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
-    lineHeight: 1.55,
-    margin: '0 0 var(--xc-space-3)',
-};
 import { registry as registryLib, crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
+// Every note on these steps is a warning card line, never a loose paragraph:
+// body size, start-aligned, with the lines that protect funds as red callouts.
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
+import migrateStyles from './MigrateToBip39.module.css';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
@@ -45,6 +40,16 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { NAME_MAX_LENGTH } from '../../util/display_name.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/addressList.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/common.js';
+import '../../i18n/locales/en/createWallet.js';
+import '../../i18n/locales/en/desktopUpdate.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/onboarding.js';
+import '../../i18n/locales/en/migration.js';
 import {
     dismissMigrationSweeps,
     pendingMigrationSweeps,
@@ -56,7 +61,6 @@ import {
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
-const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
 
 /**
  * Migrate-to-BIP39 wizard (§40.13).
@@ -70,8 +74,10 @@ const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
  * the OLD addresses, so post-migration recovery from the new seed
  * alone is impossible).
  *
- * Stage machine: explain → create → backup → verify → submitting
- * → done (with per-chain sweep links).
+ * Stage machine: create → backup → verify → submitting → done (with
+ * per-chain sweep links). Upgrade opens on its first real step: the why of
+ * the upgrade is the warning card at the top of that step, with no intro
+ * page and second button in front of it.
  *
  * The done list is kept per legacy wallet (flows/migrationSweeps.js), so the
  * wizard opens straight on it while any row is unswept: Back or Done from a
@@ -101,9 +107,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         ? readMigrationSweeps(legacyWalletId)
         : pendingMigrationSweeps(legacyWalletId)));
     const [stage, setStage] = useState(
-        /** @type {'explain' | 'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ (resumed ? 'done' : 'explain'),
+        /** @type {'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ (resumed ? 'done' : 'create'),
     );
-    const [name, setName] = useState(DEFAULT_WALLET_NAME);
+    const [name, setName] = useState(() => t('migration.defaultWalletName'));
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -117,6 +123,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     // the encrypted wallet is saved. No sweep path exists before that point.
     const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
     const [wroteItDown, setWroteItDown] = useState(false);
+    const backupErrors = useFormErrors();
+    const backupConfirmationId = 'migrate-bip39-written-confirmation';
+    // Set once the backup step's phrase has been revealed.
+    const [phraseShown, setPhraseShown] = useState(false);
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
@@ -214,7 +224,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 if (list.some((w) => w?.id === resumed.newWalletId)) return;
                 dismissMigrationSweeps(legacyWalletId);
                 setNewWalletId(null);
-                setStage('explain');
+                setStage('create');
             })
             .catch(() => { /* the address load reports its own failure */ });
         return () => { cancelled = true; };
@@ -257,11 +267,17 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         setQuizPositions([]);
         setQuizAnswers({});
         setQuizError(null);
+        backupErrors.reset();
         setStage('backup');
     }
 
     function handleStartVerify() {
-        if (!mnemonic || !wroteItDown) return;
+        if (!backupErrors.validate({
+            [backupConfirmationId]: wroteItDown
+                ? null
+                : 'Confirm that you wrote down the recovery phrase.',
+        })) return;
+        if (!mnemonic) return;
         const positions = pickQuizPositions(mnemonic.trim().split(/\s+/).length);
         setQuizPositions(positions);
         setQuizAnswers(Object.fromEntries(positions.map((position) => [position, ''])));
@@ -297,7 +313,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             if (typeof messaging.addImportedWallet !== 'function') {
                 throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
-            const result = await messaging.addImportedWallet({ password, mnemonic, name: name.trim() || DEFAULT_WALLET_NAME, origin: 'created' });
+            const result = await messaging.addImportedWallet({
+                password,
+                mnemonic,
+                name: name.trim() || t('migration.defaultWalletName'),
+                origin: 'created',
+            });
             const id = result?.walletId || result?.id || result?.wallet?.id;
             // Warn against a blind retry: the save may have stored the wallet even without returning its id
             if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
@@ -325,6 +346,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         setQuizAnswers({});
         setQuizError(null);
         setError(null);
+        backupErrors.reset();
         setStage('create');
     }
 
@@ -343,6 +365,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     const header = (
         <PageHeader
+            nested={stage === 'backup' || stage === 'verify'}
             onBack={stage === 'done'
                 ? handleDone
                 : stage === 'backup'
@@ -351,13 +374,15 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         ? () => setStage('backup')
                         : onBack}
             backDisabled={stage === 'submitting'}
-            title={{
-                explain: 'Upgrade to a BIP39 recovery phrase',
-                create: 'Set up new wallet',
-                backup: 'Write down your recovery phrase',
-                verify: 'Verify your written copy',
-                submitting: 'Creating your new wallet',
-                done: 'New BIP39 wallet ready',
+            // A short Title Case title on every step; the step's own
+            // words go on the subtitle line, like Pair hardware wallet.
+            title={t('migration.title')}
+            subtitle={{
+                create: 'Step 1 of 3: Set up the new wallet',
+                backup: 'Step 2 of 3: Write down the phrase',
+                verify: 'Step 3 of 3: Check your copy',
+                submitting: 'Creating the new wallet',
+                done: 'New wallet ready',
             }[stage]}
         />
     );
@@ -366,34 +391,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             {children}
         </Screen>
     );
-
-    if (stage === 'explain') {
-        return wrap(
-            <ListPage>
-                <p style={explainParagraphStyle}>
-                    Your current wallet uses the legacy 12-word Counterwallet
-                    recovery format. BIP39 is widely supported and gives your
-                    wallet separate addresses for each supported chain.
-                </p>
-                <p style={explainParagraphStyle}>
-                    XChain Platform creates a separate BIP39 wallet and leaves
-                    your legacy wallet unchanged. You will back up and verify
-                    the new recovery phrase before the wallet is saved.
-                </p>
-                <p style={explainParagraphStyle}>
-                    Afterward, you can review each sweep. Sweeps move tokens and
-                    token ownerships, but not BTC, LTC, or DOGE balances. Move
-                    those balances separately and keep enough for network fees.
-                </p>
-                <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack} icon={<Icon.BackIcon />}>Not now</Button>
-                    <Button variant="primary" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
-                        Continue
-                    </Button>
-                </div>
-            </ListPage>,
-        );
-    }
 
     // Each stage keeps its own form element: the Verify button of the backup
     // stage is a plain button, and a form shared with the quiz would turn that
@@ -404,31 +401,44 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         return wrap(
             <FormPage
                 key="migrate-backup"
-                label="Back up new recovery phrase"
-                actions={(
-                    <>
-                        <Button type="button" variant="secondary" onClick={handleBackFromBackup}>
-                            Start over
-                        </Button>
-                        <Button type="button" variant="primary" disabled={!wroteItDown} onClick={handleStartVerify}>
-                            Verify recovery phrase
-                        </Button>
-                    </>
-                )}
+                label={t('migration.backupPageLabel')}
+                errors={backupErrors}
+                // The explanation is a plain card; the keep-it-private line is
+                // its own danger notice beside it, never inside the card (G120).
+                status={[
+                    <WarningCard key="backup-note">
+                        <WarningLine>{t('migration.backupRestore')}</WarningLine>
+                    </WarningCard>,
+                    // The same red line Create wallet shows.
+                    <Notice key="backup-warning" tone="danger" role="note">{RECOVERY_PHRASE_WARNING}</Notice>,
+                ]}
+                // Nothing to confirm until the phrase has been shown.
+                actions={phraseShown ? (
+                    <Button
+                        type="button"
+                        variant="success"
+                        onClick={handleStartVerify}
+                        icon={<Icon.VerifyIcon />}
+                    >
+                        {t('createWallet.verifyRecoveryPhrase')}
+                    </Button>
+                ) : null}
             >
-                <p style={explainParagraphStyle}>
-                    These 12 words are your new recovery phrase. Write them on
-                    paper, store them safely, and keep them private. You can use
-                    the phrase to restore your BIP39 wallet on another device.
-                </p>
-                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
-                <div style={{ margin: 'var(--xc-space-3) 0' }}>
+                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} onRevealedChange={setPhraseShown} /> : null}
+                {/* The form's own 8px gap spaces the checkbox (G80). */}
+                {phraseShown ? (
                     <Checkbox
-                        label="I have written down the new recovery phrase and stored it safely."
+                        id={backupConfirmationId}
+                        label={t('migration.backupConfirmLabel')}
+                        help={t('migration.backupConfirmHelp')}
                         checked={wroteItDown}
-                        onChange={(e) => setWroteItDown(e.target.checked)}
+                        error={backupErrors.errorFor(backupConfirmationId)}
+                        onChange={(e) => {
+                            setWroteItDown(e.target.checked);
+                            backupErrors.clear(backupConfirmationId);
+                        }}
                     />
-                </div>
+                ) : null}
             </FormPage>,
         );
     }
@@ -437,32 +447,26 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         return wrap(
             <FormPage
                 key="migrate-verify"
-                label="Verify new recovery phrase"
+                label={t('migration.verifyPageLabel')}
                 onSubmit={handleSubmitVerify}
-                status={(
-                    <>
-                        {quizError ? <StatusMessage variant="error">{quizError}</StatusMessage> : null}
-                        {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                    </>
-                )}
+                status={[
+                    <WarningCard key="verify-note">
+                        <WarningLine>{t('migration.verifyNote')}</WarningLine>
+                    </WarningCard>,
+                    quizError ? <StatusMessage key="quiz-error" variant="error">{quizError}</StatusMessage> : null,
+                    error ? <StatusMessage key="save-error" variant="error">{error}</StatusMessage> : null,
+                ]}
                 actions={(
-                    <>
-                        <Button type="button" variant="secondary" onClick={() => setStage('backup')}>
-                            Back to phrase
-                        </Button>
-                        <Button type="submit" variant="primary">Create BIP39 wallet</Button>
-                    </>
+                    <Button type="submit" variant="success" icon={<Icon.CheckIcon />}>
+                        {t('onboarding.createNewWallet')}
+                    </Button>
                 )}
             >
-                <p style={explainParagraphStyle}>
-                    Enter the requested words from the recovery phrase you just
-                    wrote down. The new wallet is created only after every word
-                    matches.
-                </p>
                 {quizPositions.map((position) => (
                     <Input
                         key={position}
-                        label={`Word ${position}`}
+                        label={t('migration.wordLabel', { position })}
+                        help={t('migration.wordHelp', { position })}
                         value={quizAnswers[position] || ''}
                         onChange={(event) => {
                             setQuizAnswers((previous) => ({
@@ -484,13 +488,11 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     if (stage === 'submitting') {
         return wrap(
-            <FormPage label="Wallet creation status">
+            <FormPage label={t('createWallet.walletCreationStatus')}>
                 <div role="status" aria-live="polite">
-                    <p style={explainParagraphStyle}>
-                        XChain Platform is encrypting the new BIP39 wallet with
-                        your password. This can take a minute on some devices.
-                        Keep the app open. Your legacy wallet stays unchanged.
-                    </p>
+                    <WarningCard>
+                        <WarningLine>{t('migration.encryptingWallet')}</WarningLine>
+                    </WarningCard>
                 </div>
             </FormPage>,
         );
@@ -499,92 +501,103 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'done') {
         return wrap(
             <ListPage>
-                <p style={explainParagraphStyle}>
-                    Your new recovery phrase is verified and the wallet is saved.
-                    Your legacy wallet is unchanged, and nothing moves until
-                    you review and submit a sweep. Each sweep can move token
-                    balances and token ownerships, and checks that gated-content
-                    unlock keys are stored safely first. Send native coin
-                    balances separately.
-                </p>
+                <WarningCard>
+                    <WarningLine>{t('migration.doneNote')}</WarningLine>
+                </WarningCard>
+                <Notice tone="danger" role="note">{t('migration.sendCoinsSeparately')}</Notice>
                 {addressLoadFailed ? (
                     <StatusMessage
                         variant="error"
                         recovery={{
-                            label: 'Retry',
+                            label: t('desktopUpdate.retry'),
                             onAction: () => setAddressLoadSeq((value) => value + 1),
                         }}
                     >
-                        Could not load all migration addresses.
+                        {t('migration.loadFailed')}
                     </StatusMessage>
                 ) : null}
                 {!addressLoadFailed && !addressesReady ? (
-                    <StatusMessage>Loading migration addresses…</StatusMessage>
+                    <StatusMessage>{t('migration.loading')}</StatusMessage>
                 ) : null}
                 {addressesReady && perChainPairs.length === 0 ? (
-                    <StatusMessage>No legacy addresses are available to sweep.</StatusMessage>
+                    <StatusMessage>{t('migration.noneToSweep')}</StatusMessage>
                 ) : null}
                 {addressesReady && perChainPairs.length > 0 ? (
-                    <dl className={styles.detailsList}>
-                        {perChainPairs.map((row) => {
+                    // One card per legacy address: label-left, value-right
+                    // fact rows (G14), each address whole when it fits (G99).
+                    <div className={migrateStyles.sweepList}>
+                        {perChainPairs.flatMap((row) => {
                             const d = chainRegistry.get(row.chainId);
-                            return (
-                                <div key={row.chainId}>
-                                    <dt className={styles.detailsLabel}>
-                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Network'}
-                                    </dt>
-                                    <dd className={styles.detailsValue}>
-                                        {row.legacy.length > 0 ? row.legacy.map((legacyAddress) => {
-                                            const sweptTxid = sweptTxids.get(`${row.chainId}\n${legacyAddress}`);
-                                            const swept = sweptTxid !== undefined;
-                                            return (
-                                            <div key={legacyAddress}>
-                                                <div>
-                                                    <strong>Legacy address</strong>{' '}
-                                                    <AddressText address={legacyAddress} />
-                                                </div>
-                                                <div>
-                                                    <strong>New address</strong>{' '}
-                                                    {row.next
-                                                        ? <AddressText address={row.next} />
-                                                        : <em>Unavailable</em>}
-                                                </div>
-                                                {swept ? (
-                                                    <div>
-                                                        <strong>Swept</strong>{' '}
-                                                        {sweptTxid ? <code className={styles.txid}>{sweptTxid}</code> : null}
-                                                    </div>
-                                                ) : null}
-                                                {!swept && row.next && onSweepChain && newWalletId ? (
-                                                    <Button
-                                                        variant="secondary"
-                                                        onClick={() => onSweepChain({
-                                                            legacyWalletId,
-                                                            newWalletId,
-                                                            chainId: row.chainId,
-                                                            fromAddress: legacyAddress,
-                                                            toAddress: row.next,
-                                                        })}
-                                                    >
-                                                        Review sweep
-                                                    </Button>
-                                                ) : null}
+                            const network = d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : t('addressList.detail.network');
+                            if (row.legacy.length === 0) {
+                                return [(
+                                    <dl key={row.chainId} className={migrateStyles.sweepCard}>
+                                        <div className={migrateStyles.factRow}>
+                                            <dt className={migrateStyles.factLabel}>{network}</dt>
+                                            <dd className={migrateStyles.factValue}>{t('migration.noLegacyAddress')}</dd>
+                                        </div>
+                                    </dl>
+                                )];
+                            }
+                            return row.legacy.map((legacyAddress) => {
+                                const sweptTxid = sweptTxids.get(`${row.chainId}\n${legacyAddress}`);
+                                const swept = sweptTxid !== undefined;
+                                return (
+                                    <div key={`${row.chainId}:${legacyAddress}`} className={migrateStyles.sweepCard}>
+                                        <dl className={migrateStyles.facts}>
+                                            <div className={migrateStyles.factRow}>
+                                                <dt className={migrateStyles.factLabel}>{t('addressList.detail.network')}</dt>
+                                                <dd className={migrateStyles.factValue}>{network}</dd>
                                             </div>
-                                            );
-                                        }) : (
-                                            <em>No legacy address on this network.</em>
-                                        )}
-                                    </dd>
-                                </div>
-                            );
+                                            <div className={migrateStyles.factRow}>
+                                                <dt className={migrateStyles.factLabel}>{t('migration.legacyAddress')}</dt>
+                                                <dd className={migrateStyles.factValue}><AddressText address={legacyAddress} fit /></dd>
+                                            </div>
+                                            <div className={migrateStyles.factRow}>
+                                                <dt className={migrateStyles.factLabel}>{t('migration.newAddress')}</dt>
+                                                <dd className={migrateStyles.factValue}>
+                                                    {row.next ? <AddressText address={row.next} fit /> : t('balances.unavailable')}
+                                                </dd>
+                                            </div>
+                                            {swept ? (
+                                                <div className={migrateStyles.factRow}>
+                                                    <dt className={migrateStyles.factLabel}>{t('migration.swept')}</dt>
+                                                    <dd className={migrateStyles.factValue}>
+                                                        {sweptTxid ? <code className={styles.txid}>{sweptTxid}</code> : null}
+                                                    </dd>
+                                                </div>
+                                            ) : null}
+                                        </dl>
+                                        {!swept && row.next && onSweepChain && newWalletId ? (
+                                            <Button
+                                                variant="secondary"
+                                                icon={<Icon.SweepIcon />}
+                                                onClick={() => onSweepChain({
+                                                    legacyWalletId,
+                                                    newWalletId,
+                                                    chainId: row.chainId,
+                                                    fromAddress: legacyAddress,
+                                                    toAddress: row.next,
+                                                })}
+                                            >
+                                                {t('migration.reviewSweep')}
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                );
+                            });
                         })}
-                    </dl>
+                    </div>
                 ) : null}
                 <div className={styles.actions}>
                     {addressesReady && unsweptCount > 0 ? (
-                        <Button variant="secondary" onClick={handleDismiss}>Dismiss list</Button>
+                        <Button variant="secondary" onClick={handleDismiss} icon={<Icon.XIcon />}>
+                            {t('migration.dismissList')}
+                        </Button>
                     ) : null}
-                    <Button variant="primary" onClick={handleDone}>Finish</Button>
+                    <Button variant="success" onClick={handleDone} icon={<Icon.CheckIcon />}>
+                        {t('migration.finish')}
+                    </Button>
                 </div>
             </ListPage>,
         );
@@ -593,27 +606,41 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     return wrap(
         <FormPage
             key="migrate-create"
-            label="Set up new BIP39 wallet"
+            label={t('migration.setupWallet')}
             onSubmit={handleCreate}
+            // Why upgrade is this step's one notice (the old intro page and
+            // its Continue button are gone); the error shows in the one status
+            // slot (G23).
+            status={[
+                // What the upgrade does, what the user does, and what stays
+                // behind. Coins are not moved by the token transfer.
+                <Notice key="why-upgrade" tone="info" role="note">
+                    {t('migration.whyUpgrade')}
+                </Notice>,
+                error ? <StatusMessage key="create-error" variant="error">{error}</StatusMessage> : null,
+            ]}
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.KeyIcon />}
                 >
-                    Generate recovery phrase
+                    {t('migration.generatePhrase')}
                 </Button>
             )}
         >
             <Input
-                label="New wallet name"
+                label={t('migration.walletNameLabel')}
+                help={t('migration.walletNameHelp')}
                 value={name}
+                maxLength={NAME_MAX_LENGTH}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"
             />
             <Input
                 type="password"
-                label="Password"
-                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the new wallet on this device.`}
+                label={t('common.password')}
+                help={t('migration.passwordHelp', { min: MIN_PASSWORD_LENGTH })}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -623,7 +650,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             />
             <Input
                 type="password"
-                label="Confirm password"
+                label={t('importWallet.confirmPassword')}
+                help={t('migration.confirmPasswordHelp')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -631,12 +659,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 }}
                 autoComplete="new-password"
             />
-            {error ? <FieldNote variant="error">{error}</FieldNote> : null}
-            <p style={explainParagraphStyle}>
-                This password encrypts only the new wallet on this device. Your
-                legacy wallet password is not needed. Next, you will save
-                and verify a new recovery phrase before the wallet is created.
-            </p>
         </FormPage>,
     );
 }

@@ -20,6 +20,8 @@ import {
     owedRecordKey,
     sealBroadcastQueueStore,
 } from './broadcastQueueStore.js';
+import { toStoredQueueSnapshot } from './broadcast_queue_snapshot.js';
+import { soldNames } from './ownSpends.js';
 
 /**
  * Carry the commit-landed marker of a queued reveal or phase-2 spend onto a queue
@@ -54,6 +56,31 @@ function queuedRevealFields(source) {
 }
 
 /**
+ * The donation verdict a queued entry carries, reduced to its known fields, or
+ * null when it is malformed. The fiat amount and currency are what the booking
+ * takes off the donation queue; an entry from an older build has neither and
+ * only accrues. `mainnet` says whether the send accrues at all (false for a
+ * testnet or regtest send), and `reservationId` names the claim on the queue
+ * these bytes hold, which their broadcast settles and their discard releases.
+ *
+ * @param {unknown} verdict
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null}
+ */
+export function cleanAdsCommit(verdict) {
+    if (!verdict || typeof verdict !== 'object') return null;
+    const v = /** @type {any} */ (verdict);
+    if (typeof v.chainId !== 'string' || typeof v.donationIncluded !== 'boolean') return null;
+    return {
+        chainId: v.chainId,
+        donationIncluded: v.donationIncluded,
+        ...(typeof v.donatedFiat === 'string' && /^\d+(\.\d+)?$/.test(v.donatedFiat) ? { donatedFiat: v.donatedFiat } : {}),
+        ...(typeof v.currency === 'string' && v.currency ? { currency: v.currency } : {}),
+        ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
+        ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
+    };
+}
+
+/**
  * @param {{
  *   store: import('./broadcastQueueStore.js').BroadcastQueueStore,
  *   importedAddressIdsFor: (vault: any, walletId: string) => Promise<Set<string>>,
@@ -63,8 +90,11 @@ function queuedRevealFields(source) {
 export function createBroadcastQueueEngine({ store: queueStore, importedAddressIdsFor, discardQueuedBroadcast }) {
     /** @type {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} */
     const queuedBroadcasts = queueStore.queues;
-    // Wallets removed in this process; an in-flight send dies with the process and ids are random UUIDs, so it never clears.
-    const removedWallets = new Set();
+    // Wallets removed while this store is live. The set sits on the shared
+    // store, not this engine: a host a lock tore down keeps a broadcast on the
+    // network, and its late failure hook must see a removal a later host made.
+    // Ids are random UUIDs, so it never clears short of a seal.
+    const removedWallets = queueStore.removedWallets ?? (queueStore.removedWallets = new Set());
     // Fold a persisted snapshot into the live map instead of replacing it. A
     // retried rehydrate can land after this process already queued entries of
     // its own, and `getQueue` hands the routes the live array they splice, so
@@ -142,13 +172,27 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     function adoptSnapshotVerdict(live, persisted) {
         if (live.signedTxHex !== persisted.signedTxHex) return;
         mergePendingTxIds(live, persisted);
+        if ((!Array.isArray(live.soldNames) || live.soldNames.length === 0)
+            && Array.isArray(persisted.soldNames) && persisted.soldNames.length > 0) {
+            live.soldNames = persisted.soldNames.slice();
+        }
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
-        const verdict = persisted.adsCommit;
-        if (live.adsCommit) return;
-        if (!verdict || typeof verdict !== 'object') return;
-        if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return;
-        live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
+        const verdict = cleanAdsCommit(persisted.adsCommit);
+        if (!verdict) return;
+        if (!live.adsCommit) {
+            live.adsCommit = verdict;
+            return;
+        }
+        if (live.adsCommit.donatedFiat === undefined && verdict.donatedFiat !== undefined
+            && live.adsCommit.chainId === verdict.chainId
+            && live.adsCommit.donationIncluded === verdict.donationIncluded) {
+            live.adsCommit = {
+                ...live.adsCommit,
+                donatedFiat: verdict.donatedFiat,
+                ...(verdict.currency ? { currency: verdict.currency } : {}),
+            };
+        }
     }
     async function ensureQueueLoaded() {
         // A sealed store serves nothing: a host built on it during a wipe must
@@ -264,13 +308,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             // is checked on its own: this save would recreate the wiped key.
             if (queueStore.sealed || queueStore.dormant || !queueStore.loaded) return false;
         }
-        /** @type {Record<string, any[]>} */
-        const snapshot = {};
-        for (const [walletId, entries] of queuedBroadcasts.entries()) {
-            if (entries.length > 0) {
-                snapshot[walletId] = entries.map(({ siblingPendingTxIds: _runtimeLinks, ...entry }) => entry);
-            }
-        }
+        const snapshot = toStoredQueueSnapshot(queuedBroadcasts);
         try {
             await queueStore.storage.save(snapshot);
             return true;
@@ -557,6 +595,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const accountIds = new Set(
             (Array.isArray(accounts) ? accounts : []).map((a) => a?.id).filter(Boolean),
         );
+        // This injected resolver must reject unreadable wallet records. A
+        // narrowed set would let the restore latch a partial inventory.
         const importedIds = await importedAddressIdsFor(vault, walletId);
         const all = await vault.addresses.list();
         /** @type {Set<string>} */
@@ -691,6 +731,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 signedAt: Date.parse(record.createdAt) || Date.now(),
                 txid: record.txid,
                 pendingTxId: record.id,
+                soldNames: soldNames(record.params),
                 ...(resumedClaim ? { resumedClaim: true } : {}),
                 ...commitLandedFields(record),
                 // A two-phase record checkpointed before its commit went out
@@ -871,6 +912,18 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         return async (entry) => (await enqueueSignedBroadcast(walletId, entry)).persisted;
     }
     /**
+     * Whether `pruneWalletFromQueue` has run for this wallet in this process.
+     * A caller that awaits anything between its own checks and a push re-asks
+     * this immediately before the push, so a removal that landed meanwhile is
+     * seen.
+     *
+     * @param {string} walletId
+     * @returns {boolean}
+     */
+    function isWalletRemoved(walletId) {
+        return removedWallets.has(walletId);
+    }
+    /**
      * Add one signed transaction to the live queue and wait for its durable
      * snapshot. Direct broadcasters use the returned entry to report the
      * handoff without duplicating the queue's rehydrate and twin rules.
@@ -881,7 +934,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     async function enqueueSignedBroadcast(walletId, entry) {
         // Refuse a removed wallet: no route lists its queue, so the entry would never be sent or discarded.
-        if (removedWallets.has(walletId)) return { entry: null, persisted: false };
+        if (isWalletRemoved(walletId)) return { entry: null, persisted: false };
         await ensureQueueLoaded();
         // A first list in the gap after the 'queued' stamp may have rebuilt
         // these bytes already; give that entry the verdict instead of a twin.
@@ -930,7 +983,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `revealTxHex` is the signed reveal of a two-phase action whose commit is
      * `signedTxHex`: the broadcast route sends the commit and then the reveal.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], soldNames?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -944,7 +997,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             return sameTx;
         }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const adsCommit = entry.adsCommit;
+        const adsCommit = cleanAdsCommit(entry.adsCommit);
         const stored = {
             id,
             chainId: entry.chainId,
@@ -957,18 +1010,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             ...(typeof entry.pendingTxId === 'string' && entry.pendingTxId
                 ? { pendingTxId: entry.pendingTxId }
                 : {}),
+            ...(Array.isArray(entry.soldNames) && entry.soldNames.length > 0
+                ? { soldNames: entry.soldNames.filter(Boolean).map((name) => String(name).toUpperCase()) }
+                : {}),
             ...(entry.resumedClaim === true ? { resumedClaim: true } : {}),
             ...(typeof entry.rbfReplacesPendingTxId === 'string' && entry.rbfReplacesPendingTxId
                 ? { rbfReplacesPendingTxId: entry.rbfReplacesPendingTxId }
                 : {}),
             ...commitLandedFields(entry),
             ...queuedRevealFields(entry),
-            ...(adsCommit
-                && typeof adsCommit === 'object'
-                && typeof adsCommit.chainId === 'string'
-                && typeof adsCommit.donationIncluded === 'boolean'
-                ? { adsCommit: { chainId: adsCommit.chainId, donationIncluded: adsCommit.donationIncluded } }
-                : {}),
+            ...(adsCommit ? { adsCommit } : {}),
         };
         getQueue(walletId).push(stored);
         // Start a background save for the vault rebuild, which pushes in a loop.
@@ -1094,6 +1145,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
+        isWalletRemoved,
         pushQueueEntry,
         pendingTxIdsOf,
         settleQueuedPendingTx,

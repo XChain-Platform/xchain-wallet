@@ -7,6 +7,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-regtest';
 const CREATOR = 'bcrt1qcreatorcreatorcreatorcreatorcreator00';
@@ -34,6 +35,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    resetWalletModes();
 });
 
 function mount({
@@ -71,11 +73,57 @@ function mount({
     return messaging;
 }
 
+// The information items are link rows at the foot of the Details tab.
+function openDetails() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+}
+
+function openMore(label) {
+    if (label === 'Gated content') {
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        return;
+    }
+    openDetails();
+    fireEvent.click(screen.getByRole('button', { name: label }));
+}
+
 describe('TokenDetail holders', () => {
+    it('keeps four token tabs and leaves supply and holders as Details rows', async () => {
+        const description = 'A token description';
+        mount({
+            tokenInfoLookup: vi.fn().mockResolvedValue({
+                creator: CREATOR,
+                description,
+                websites: ['https://issuer.example/'],
+                images: [{ type: 'large', url: 'https://issuer.example/token.png' }],
+            }),
+        });
+
+        // The page's own tab row; the hero's range buttons are a tab row too.
+        expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab')
+            .map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'Files', 'History']);
+        openDetails();
+        expect(await screen.findByText(description)).toBeTruthy();
+        expect([...document.querySelectorAll('[data-detail-id]')].map((item) => item.textContent)).toEqual([
+            'Supply over time',
+            'Holders',
+        ]);
+        expect(screen.queryByRole('button', { name: /Price alert/ })).toBeNull();
+    });
+
+    it('keeps holder lookup discoverable while supplemental content uses its tabs', async () => {
+        mount();
+        openDetails();
+        await screen.findByRole('button', { name: 'Copy creator address' });
+
+        expect(screen.getByRole('button', { name: 'Holders' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Files' })).toBeTruthy();
+    });
+
     it('renders the explorer amount and copies the complete holder address', async () => {
         mount({ holders: { data: [{ address: HOLDER, amount: '12345.5' }] } });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
 
         const list = await screen.findByRole('list', { name: 'Holder balances' });
         const row = within(list).getByRole('listitem');
@@ -84,39 +132,36 @@ describe('TokenDetail holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
     });
 
-    it('uses the shared row primitive for actions, details, and holders', async () => {
-        const onViewActivity = vi.fn();
+    it('keeps History as its own tab while details and holders share the row primitive', async () => {
         mount({
             holders: { data: [{ address: HOLDER, amount: '7' }] },
-            props: { onViewActivity },
         });
 
-        const activityRow = screen.getByRole('button', { name: 'History' });
-        fireEvent.click(activityRow);
-        expect(onViewActivity).toHaveBeenCalledOnce();
+        const historyTab = screen.getByRole('tab', { name: 'History' });
+        expect(historyTab).toBeTruthy();
+        openDetails();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         const detailList = await screen.findByRole('list', { name: 'Token detail fields' });
         const detailRow = within(detailList).getAllByRole('listitem')[0].firstElementChild;
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         const holderList = await screen.findByRole('list', { name: 'Holder balances' });
         const holderRow = within(holderList).getByRole('listitem').firstElementChild;
 
         const sharedRowClass = detailRow.classList[0];
-        expect(activityRow).toHaveClass(sharedRowClass);
+        expect(historyTab).not.toHaveClass(sharedRowClass);
         expect(holderRow).toHaveClass(sharedRowClass);
     });
 
     it('distinguishes an empty list from a failed holder lookup', async () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText('No holders yet')).toBeTruthy();
 
         cleanup();
         __clearTokenInfoCache();
         mount({ holdersError: new Error('explorer offline') });
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
         expect(screen.queryByText('No holders yet')).toBeNull();
     });
@@ -127,16 +172,16 @@ describe('TokenDetail holders', () => {
             amount: String(index + 1),
         }));
         mount({ holders: { data, total: data.length } });
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
 
         await screen.findByText('Holders (5000)');
         const list = screen.getByRole('list', { name: 'Holder balances' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(100);
-        expect(screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Show More Holders (100 of 5,000 Shown)' })).toBeInTheDocument();
 
         const scroller = document.querySelector('main');
         scroller.scrollTop = 197;
-        const showMore = screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' });
+        const showMore = screen.getByRole('button', { name: 'Show More Holders (100 of 5,000 Shown)' });
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
@@ -147,8 +192,7 @@ describe('TokenDetail holders', () => {
 
     it('copies the complete creator address from Details', async () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-
+        openDetails();
         const copy = await screen.findByRole('button', { name: 'Copy creator address' });
         fireEvent.click(copy);
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(CREATOR));
@@ -164,7 +208,7 @@ describe('TokenDetail holders', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         const table = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(table).getAllByText('-', { exact: true })).toHaveLength(4);
         expect(table.textContent).not.toMatch(/undefined|NaN/);
@@ -176,12 +220,13 @@ describe('TokenDetail holders', () => {
         mount({ tokenInfoLookup: getTokenInfo, holdersLookup: getHoldersForToken });
 
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
-        expect(screen.getByRole('group', { name: 'Quick actions' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        expect(screen.getByRole('list', { name: 'Actions for DETAILPROBE' })).toBeTruthy();
     });
 
-    it('discards holder pagination and tab state when the token changes', async () => {
+    it('discards holder pagination and revealed panel state when the token changes', async () => {
         let resolveOldPage;
         const oldPage = new Promise((resolve) => { resolveOldPage = resolve; });
         const first = Array.from({ length: 25 }, (_, index) => ({
@@ -209,14 +254,13 @@ describe('TokenDetail holders', () => {
             </MessagingProvider>
         );
         const view = render(tree('OLD'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         await screen.findByText('Holders (25 of 50)');
-        fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More Holders' }));
 
         view.rerender(tree('NEW'));
-        expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.queryByRole('list', { name: 'Holder balances' })).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByTitle(freshHolder)).toBeTruthy();
 
         await act(async () => {
@@ -252,12 +296,12 @@ describe('TokenDetail holders', () => {
             </MessagingProvider>
         );
         const view = render(tree(CHAIN, 'OLD'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Gated content');
         fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
         await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledWith(expect.objectContaining({ chainId: CHAIN, gateTicker: 'OLD' })));
 
         view.rerender(tree(secondChain, 'NEW'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Gated content');
         fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
         await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledTimes(2));
         expect(unlockGatedContent).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -268,45 +312,114 @@ describe('TokenDetail holders', () => {
 });
 
 describe('TokenDetail actions', () => {
-    it('renders applicable actions in Send, Receive, Trade order and invokes them', async () => {
+    it('renders Send, Receive and Exchange rows in order and invokes the routes', async () => {
         const onSend = vi.fn();
         const onReceive = vi.fn();
         const onBuy = vi.fn();
         mount({ props: { onSend, onReceive, onBuy } });
 
-        await screen.findByRole('button', { name: 'Send' });
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
-            .getAllByRole('button');
-        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Trade',
-        ]);
+        await screen.findByRole('button', { name: /^Send\b/ });
+        const list = screen.getByRole('list', { name: 'Actions for DETAILPROBE' });
+        expect([...list.querySelectorAll('[data-action-id]')].slice(0, 3).map((row) => row.getAttribute('data-action-id')))
+            .toEqual(['send', 'receive', 'exchange']);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Send\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Receive\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(onSend).toHaveBeenCalledTimes(1);
         expect(onReceive).toHaveBeenCalledTimes(1);
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
 
-    it('hides Send in watch-only mode while retaining non-signing actions', async () => {
-        mount({
-            settings: { walletMode: 'watcher' },
-            props: { onSend: vi.fn(), onReceive: vi.fn(), onBuy: vi.fn() },
-        });
+    it('keeps Send live in watch-only mode (it builds unsigned) and retains the other action rows', async () => {
+        publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' });
+        const onSend = vi.fn();
+        mount({ props: { onSend, onReceive: vi.fn(), onBuy: vi.fn() } });
 
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
-        expect(screen.getByRole('button', { name: 'Receive' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Trade' })).toBeTruthy();
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-disabled'));
+        expect(screen.queryByText(/watch-only and can't sign/)).toBeNull();
+        fireEvent.click(send);
+        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: /^Receive\b/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.getByRole('button', { name: /^Exchange\b/ })).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('reads the mode of the wallet on screen: a watch-only wallet keeps Send but cannot run other signing actions', async () => {
+        publishWalletModes({
+            wallets: [{ id: 'full-wallet', walletMode: 'full' }, { id: 'watch-wallet', walletMode: 'watcher' }],
+            activeWalletId: 'full-wallet',
+        });
+        const onSend = vi.fn();
+        const onCreateDispenser = vi.fn();
+        const onBrowseDispensers = vi.fn();
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({}),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: CREATOR }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        const tree = (walletId) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId={walletId}
+                    chainId={CHAIN}
+                    tick="DETAILPROBE"
+                    kind="token"
+                    quantity="10"
+                    divisibility={0}
+                    onBack={() => {}}
+                    onSend={onSend}
+                    onReceive={vi.fn()}
+                    assetActions={{ onCreateDispenser, onBrowseDispensers }}
+                />
+            </MessagingProvider>
+        );
+        const view = render(tree('full-wallet'));
+
+        const fullSend = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(fullSend).not.toHaveAttribute('aria-disabled'));
+        fireEvent.click(fullSend);
+        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: /^Create dispenser\b/ })).not.toHaveAttribute('aria-disabled');
+
+        act(() => { publishWalletModes({ activeWalletId: 'watch-wallet' }); });
+        view.rerender(tree('watch-wallet'));
+
+        const watchSend = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Create dispenser\b/ })).toHaveAttribute('aria-disabled', 'true'));
+        expect(watchSend).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(watchSend);
+        expect(onSend).toHaveBeenCalledTimes(2);
+        const dispenser = screen.getByRole('button', { name: /^Create dispenser\b/ });
+        expect(dispenser).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(dispenser);
+        expect(onCreateDispenser).not.toHaveBeenCalled();
+        // The locked row says why in place of its description.
+        expect(within(dispenser).getByText('Needs a wallet that can sign; another phone signs for this one.')).toBeTruthy();
+        // Looking up dispensers signs nothing, so it stays open.
+        expect(screen.getByRole('button', { name: /^Browse dispensers\b/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.getByRole('button', { name: /^Receive\b/ })).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('keeps Send enabled when the same wallet turns watch-only', async () => {
+        publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'full' }], activeWalletId: 'wallet' });
+        mount({ props: { onSend: vi.fn() } });
+
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-disabled'));
+        act(() => { publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' }); });
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Send\b/ })).not.toHaveAttribute('aria-disabled'));
+        expect(screen.queryByText(/watch-only and can't sign/)).toBeNull();
     });
 
     it('keeps a zero-balance Send visible and shows why it is disabled', async () => {
         mount({ props: { quantity: '0', onSend: vi.fn() } });
 
-        const send = await screen.findByRole('button', { name: 'Send' });
-        expect(send.disabled).toBe(true);
-        expect(screen.getByText('No balance to send.')).toBeTruthy();
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        expect(send).toHaveAttribute('aria-disabled', 'true');
+        expect(within(send).getByText('No balance to send.')).toBeTruthy();
     });
 });

@@ -41,12 +41,12 @@ describe('fee estimate guard and boundary branches', () => {
         })).toBeNull();
     });
 
-    it('keeps the Dogecoin slow default at its relay floor', () => {
+    it('keeps the Dogecoin slow default at the recommended fallback rate', () => {
         const chainRegistry = {
             get: () => ({ coin: 'dogecoin', feeStrategy: { unit: 'sats-per-kbyte' } }),
         };
         expect(estimateNativeSendFee({ chainId: 'doge', chainRegistry, speed: 'low' }))
-            .toMatchObject({ rateValue: 1, sats: 25_000_000 });
+            .toMatchObject({ rateValue: 0.01, sats: 250_000 });
     });
 
     it.each(['-1', '0.000000001', 'not-a-rate'])('refuses an invalid custom rate %s', (rate) => {

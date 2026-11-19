@@ -73,6 +73,8 @@ export function measureButtons() {
             tag: el.tagName.toLowerCase(),
             role: el.getAttribute('role') || '',
             shared,
+            // Select triggers, pickers and section headers are field controls, not action Buttons.
+            trigger: el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded') || hasModuleClass(el, 'control'),
             variants: VARIANTS.filter((v) => hasModuleClass(el, v)),
             sizes: SIZES.filter((s) => hasModuleClass(el, s)),
             iconOnly: hasModuleClass(el, 'iconOnly'),
@@ -84,6 +86,91 @@ export function measureButtons() {
             fill: `rgb(${fill.slice(0, 3).map(Math.round).join(', ')})`,
             shadow: Boolean(shadow),
             outline,
+        });
+    }
+    return out;
+}
+
+/**
+ * Runs inside the page. The computed edge of every visible button: its own
+ * fill, the nearest painted fill behind it, and its border, shadow and
+ * outline as the browser reports them. It needs no canvas or hit test, so it
+ * also runs under jsdom. Plain function body: no closures over Node values.
+ */
+export function measureButtonEdges() {
+    const painted = (c) => Boolean(c) && c !== 'transparent' && !/^rgba\([^)]*,\s*0\)$/.test(c);
+    const backdrop = (el) => {
+        for (let a = el; a; a = a.parentElement) {
+            const c = getComputedStyle(a).backgroundColor;
+            if (painted(c)) return c;
+        }
+        return 'rgb(255, 255, 255)';
+    };
+    const shared = (el) => [...el.classList].some((c) => c === 'btn' || /^_?btn_/.test(c) || c.endsWith('_btn'));
+    const out = [];
+    for (const el of document.querySelectorAll('button, [role="button"]')) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        const cs = getComputedStyle(el);
+        // jsdom leaves an unset opacity empty, which Number() reads as 0.
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        const label = el.getAttribute('aria-label') || el.innerText || el.textContent || el.getAttribute('title') || '';
+        out.push({
+            name: label.trim().split('\n')[0].slice(0, 40),
+            tag: el.tagName.toLowerCase(),
+            shared: shared(el),
+            bg: cs.backgroundColor,
+            behind: backdrop(el.parentElement || el),
+            border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`,
+            shadow: cs.boxShadow && cs.boxShadow !== 'none' ? cs.boxShadow : '',
+            outline: `${cs.outlineWidth} ${cs.outlineStyle} ${cs.outlineColor}`,
+        });
+    }
+    return out;
+}
+
+/**
+ * Runs inside any wallet shell and records button geometry without canvas or
+ * hit testing. Layout sweeps use this smaller record so browser mobile,
+ * extension and Electron runs all report the buttons they actually rendered.
+ * `kind` separates full-surface navigation, row, slider, help and card targets
+ * from ordinary actions while keeping their native button semantics visible.
+ */
+export function measureButtonSizes() {
+    const classes = (el) => [...el.classList];
+    const hasModuleClass = (el, local) => classes(el).some((name) => (
+        name === local || new RegExp(`^_?${local}_`).test(name) || name.endsWith(`_${local}`)
+    ));
+    const describedTooltip = (el) => {
+        const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        return ids.some((id) => document.getElementById(id)?.getAttribute('role') === 'tooltip');
+    };
+    const kindOf = (el) => {
+        if (el.getAttribute('role') === 'tab' || el.hasAttribute('data-bottom-tab')) return 'tab';
+        if (el.closest('[aria-hidden="true"]') && hasModuleClass(el, 'sliderTick')) return 'slider-tick';
+        if (describedTooltip(el)) return 'help';
+        if (el.closest('nav, [role="navigation"]')) return 'navigation';
+        if (hasModuleClass(el, 'row') || hasModuleClass(el, 'interactive') || hasModuleClass(el, 'drillRow')) return 'row';
+        if (classes(el).some((name) => /card/i.test(name))) return 'card';
+        return 'action';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('button, [role="button"]')) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) continue;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+        const name = (el.getAttribute('aria-label') || el.innerText || el.textContent || el.getAttribute('title') || '')
+            .trim().replace(/\s+/g, ' ').slice(0, 60);
+        out.push({
+            name,
+            tag: el.tagName.toLowerCase(),
+            role: el.getAttribute('role') || '',
+            kind: kindOf(el),
+            shared: hasModuleClass(el, 'btn'),
+            sizes: ['sm', 'md', 'lg'].filter((size) => hasModuleClass(el, size)),
+            width: Math.round(rect.width * 10) / 10,
+            height: Math.round(rect.height * 10) / 10,
         });
     }
     return out;

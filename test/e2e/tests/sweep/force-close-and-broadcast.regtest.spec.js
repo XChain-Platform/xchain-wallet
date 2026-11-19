@@ -87,8 +87,13 @@ import {
     waitForValidAction,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
+    approveConfirm,
+    expectApproveRefused,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fundXchain } from '../../fixtures/gasToken.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /**
@@ -153,8 +158,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -282,9 +286,9 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // from a random seed, so the spec cannot know it in advance.
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            source = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            source = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(source, 'the throwaway destination collides with the wallet\'s own address')
@@ -301,7 +305,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             // The dispenser opens on the Source, so the sweep of that address has a
             // dispenser to force-close.
@@ -309,11 +313,11 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForValidAction(await approveAndGetTxid(page));
             dispenserIndex = String(created.action_index);
@@ -353,18 +357,18 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             //   - The page title ("Sweep address" free-entry, "Sweep to new
             //     wallet" in the MigrateToBip39 lane) is a PageHeader <span>
             //     inside <header>, NOT a heading and NOT inside <main>. Landing
-            //     is therefore asserted on the form's own top warning, which is
-            //     unique to this screen. Asking for a heading here costs the
+            //     is therefore asserted on the form itself, named "Sweep
+            //     address", which is unique to this screen. Asking for a heading here costs the
             //     whole action timeout and reports nothing useful.
             //   - The chain picker is a NetworkField, visible label "Network".
-            //   - The source is a READ-ONLY AddressField labelled "From" whose
+            //   - The source is a READ-ONLY AddressField labelled "From address" (in the From section) whose
             //     trailing icon ("Choose source address") opens the own-address
             //     picker; that picker's rows are labelled "View address <addr>".
-            await expect(main.getByText(/Sweep moves everything selected at once/).first(),
+            await expect(main.getByRole('form', { name: 'Sweep address' }),
                 'the palette did not land on the sweep form').toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
-            const fromField = main.getByRole('textbox', { name: 'From', exact: true });
+            const fromField = await openFromAddress(main);
             await expect(fromField, 'the sweep form defaulted to an address that is not the one '
                 + 'this run funded, so it would sweep the wrong address')
                 .toHaveValue(source, { timeout: 30_000 });
@@ -385,10 +389,10 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // "…" means it never resolved and "preview unavailable" means the
             // category's endpoint failed, so asserting the NUMBER proves the
             // host route reached this venue and saw the objects just created.
-            await expect(main.getByRole('checkbox', { name: /^Token balances \(1\)/ }),
+            await expect(main.getByRole('switch', { name: /^Token balances \(1\)/ }),
                 'the sweep preview does not see the token balance this address holds')
                 .toBeVisible({ timeout: 60_000 });
-            const dispensers = main.getByRole('checkbox', {
+            const dispensers = main.getByRole('switch', {
                 name: /^Open dispensers \(force-close\) \(1\)/,
             });
             await expect(dispensers,
@@ -420,13 +424,13 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             // Screen fact: SWEEP rides the typed-word rail DESTROY uses, and the
             // confirm screen's copy carries the word in quotes ('Type "SWEEP" to
-            // confirm') while the legacy review stage's does not. Approve stays
-            // disabled until it is typed - which is asserted BEFORE typing, or
-            // the gate would be untested.
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve, 'Approve is live before the confirmation word was typed, so the '
-                + 'typed gate on the most destructive action in the wallet does nothing')
-                .toBeDisabled();
+            // confirm') while the legacy review stage's does not. Approve is
+            // never disabled (G130): until the word is typed a tap is refused
+            // with a notice at the top and sends nothing - which is asserted
+            // BEFORE typing, or the gate would be untested.
+            await expectApproveRefused(page, 'credentials',
+                'a SWEEP with no confirmation word typed (the typed gate on the most destructive '
+                + 'action in the wallet does nothing)');
 
             const typed = modal.getByRole('textbox', { name: /^Type .?SWEEP.? to confirm$/ });
             await expect(typed, 'the confirm screen carries no typed-confirmation field')
@@ -437,9 +441,13 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // balance it moves, so the destination receives the free balance
             // less this fee. It is read off the screen the user approved: the
             // fee is a hub setting, and on a coin-fee lane there is no line.
-            await expect(approve, 'Approve never went live after the confirmation word was typed')
-                .toBeEnabled({ timeout: 120_000 });
-            const feeLine = page.getByTestId('confirm-protocol-fee');
+            await expect(page.getByTestId('confirm-checking'),
+                'the confirm screen\'s network check never finished')
+                .toHaveCount(0, { timeout: 120_000 });
+            await expect(page.getByTestId('confirm-blocked'),
+                'the typed SWEEP did not clear the confirm screen\'s refusal')
+                .toHaveCount(0, { timeout: 30_000 });
+            const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();
                 sweepFeeXchain = Number(said.match(new RegExp(`([\\d.]+)\\s*${TICK}\\b`))?.[1]);

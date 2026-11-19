@@ -85,10 +85,10 @@ describe('Onboarding accessibility', () => {
         );
 
         for (const title of [
-            'Your keys, your wallet',
-            'Protect your recovery phrase',
-            'Review before you send',
-            'Built for the XChain Platform',
+            'Your Wallet',
+            'Recovery Phrase',
+            'Review First',
+            'Supported Networks',
         ]) {
             await screen.findByText(title);
             await scan(explainer.container);
@@ -96,8 +96,7 @@ describe('Onboarding accessibility', () => {
             if (next) fireEvent.click(next);
         }
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
-        await screen.findByRole('button', { name: 'Create new wallet' });
+        await screen.findByRole('button', { name: 'Create New Wallet' });
         await scan(explainer.container);
     });
 
@@ -111,20 +110,20 @@ describe('Onboarding accessibility', () => {
             { importMnemonic },
         );
 
-        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await screen.findByRole('heading', { name: 'Create a New Wallet' });
         await scan(view.container);
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         await screen.findByRole('list', { name: 'Recovery phrase' });
         await scan(view.container);
 
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
 
         const answers = await screen.findAllByLabelText(/^Word \d+$/);
         await scan(view.container);
@@ -133,16 +132,16 @@ describe('Onboarding accessibility', () => {
             const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
             fireEvent.change(input, { target: { value: words[position - 1] } });
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
-        await screen.findByRole('heading', { name: 'Creating your wallet' });
+        await screen.findByRole('heading', { name: 'Creating Your Wallet' });
         await scan(view.container);
         await waitFor(() => {
             if (!finishCreate) throw new Error('Wallet creation has not started.');
         });
         finishCreate({ walletId: 'wallet-1' });
 
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
         await scan(view.container);
     });
 
@@ -150,15 +149,15 @@ describe('Onboarding accessibility', () => {
         const mnemonic = draw(
             <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />,
         );
-        await screen.findByRole('heading', { name: 'Import an existing wallet' });
+        await screen.findByRole('heading', { name: 'Import Wallet' });
         await scan(mnemonic.container);
 
-        fireEvent.click(screen.getByRole('switch', { name: /uses a BIP39 passphrase/i }));
-        await screen.findByLabelText('BIP39 passphrase');
+        fireEvent.click(screen.getByRole('switch', { name: /uses an extra passphrase/i }));
+        await screen.findByLabelText('Extra passphrase');
         await scan(mnemonic.container);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
-        await screen.findByRole('heading', { name: 'Restore from encrypted backup' });
+        await screen.findByRole('heading', { name: 'Restore Backup' });
         await scan(mnemonic.container);
         mnemonic.unmount();
 
@@ -170,7 +169,8 @@ describe('Onboarding accessibility', () => {
                 variant="freewallet"
             />,
         );
-        await screen.findByRole('heading', { name: 'Import from FreeWallet' });
+        await screen.findByRole('heading', { name: 'Import Wallet' });
+        await screen.findByRole('button', { name: 'Wallet type: FreeWallet / PartyWallet' });
         await scan(freeWallet.container);
     });
 
@@ -186,7 +186,7 @@ describe('Onboarding accessibility', () => {
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
         await scan(view.container);
     });
 });

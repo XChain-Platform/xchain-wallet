@@ -19,9 +19,7 @@
 // Two guards:
 //   1. Home declares no prop it never reads, so the next dead slot can't
 //      ship silently (the general class, not just `extraActions`).
-//   2. The small variant really can reach the §40 entries by the route
-//      that IS live: pancake menu -> "More actions" -> ActionsMenu, which
-//      renders every entry in the small variant too. That is what makes
+//   2. ActionsMenu renders every §40 entry in the small variant too. That makes
 //      removing the prop the right fix rather than a capability loss.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -32,7 +30,6 @@ import React from 'react';
 // is not a file: URL, so node:fs + fileURLToPath is not an option here).
 import homeSource from '../../../packages/core/src/shared/routes/Home.jsx?raw';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 
 /**
@@ -52,8 +49,8 @@ function homePropBindings(src) {
     return { names, body: src.slice(sig.index + sig[0].length) };
 }
 
-// A messaging mock that never resolves: MenuRoute and ActionsMenu are
-// pure nav surfaces, so nothing here needs host data to render.
+// A messaging mock that never resolves: ActionsMenu is a pure nav surface, so
+// nothing here needs host data to render.
 const messaging = {
     listWallets: vi.fn(() => new Promise(() => {})),
     getSettings: vi.fn(() => new Promise(() => {})),
@@ -85,17 +82,6 @@ describe('Home declares no dead props', () => {
 });
 
 describe('small mode can still reach the §40 action entries', () => {
-    it('offers "More actions" in the pancake menu', async () => {
-        const onMoreActions = vi.fn();
-        mount(
-            React.createElement(MenuRoute, { onBack: () => {}, onMoreActions }),
-            'popup',
-        );
-        const row = screen.getByRole('button', { name: /more actions/i });
-        row.click();
-        expect(onMoreActions).toHaveBeenCalledTimes(1);
-    });
-
     it('renders every ActionsMenu entry in the small variant', () => {
         const entries = [
             { id: 'issue', label: 'Issue token', onSelect: vi.fn() },

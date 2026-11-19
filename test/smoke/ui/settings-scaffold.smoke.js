@@ -141,6 +141,7 @@ async function testAddressDiscovery() {
     let probes = 0;
     const result = await discoverUsedAddresses({
         mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        format: 'bip39',
         chainRegistry,
         sdkRegistry,
         gapLimit: 2,

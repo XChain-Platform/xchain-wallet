@@ -1,0 +1,116 @@
+/* Settings > Connected Sites > Options (ruling 2026-11-14, layout 1): a white
+   status card above labelled groups of inline rows. */
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-settings-row-gap, var(--xc-space-3));
+    min-width: 0;
+}
+
+/* The In effect now card: outlined and white, no blue hero (G16). */
+.status {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.kicker {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.kicker svg {
+    width: var(--xc-icon-xs);
+    height: var(--xc-icon-xs);
+    color: var(--xc-success);
+}
+
+.big {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.muted {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* A waiting site: a plain state line under the summary, a red pause icon
+   and the text. It sits in the card, so it draws no box of its own. */
+.callout {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.callout svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
+    color: var(--xc-danger-fg);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.groupLabel {
+    margin: var(--xc-space-2) var(--xc-space-1) 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* The group card comes from the shared Settings list (a flush card); the
+   dropdown opens past the card edge, so it never clips. */
+.groupList {
+    overflow: visible;
+}
+
+.select {
+    width: max-content;
+    min-width: 6rem;
+    max-width: min(14rem, 100%);
+}
+
+.custom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.origin {
+    overflow-wrap: anywhere;
+    unicode-bidi: isolate;
+}
+
+.red {
+    color: var(--xc-danger-fg);
+    font-weight: 600;
+}

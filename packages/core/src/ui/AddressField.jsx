@@ -8,32 +8,37 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 import { Input } from './Input.jsx';
-import { Button } from './Button.jsx';
+import { FieldIconButton } from './FieldIconButton.jsx';
 import { AddressText } from './AddressText.jsx';
-import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { UsersIcon, TokenListIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
-    addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
+    // The From chooser shows the same list icon the Network and Token
+    // fields carry on their right, so all three pickers look alike.
+    addresses: { Component: TokenListIcon, defaultLabel: 'Choose address' },
+    // Scan QR sits inside the field at its trailing edge (U53), as on
+    // Contacts' Add Address page.
+    scan: { Component: ScanIcon, defaultLabel: 'Scan a QR code' },
 };
 
 /**
- * AddressField: an address input with an optional trailing icon action
- * inside the field. The two canonical icon uses:
+ * AddressField: an address input with an optional icon action inside its
+ * trailing edge. The two canonical icon uses:
  *
  *   - To ("contacts"): outbound destination. The field accepts typed or
  *     pasted addresses; the address-book icon navigates to the user's
  *     saved contacts (ContactsPickerScreen), and picking an entry fills
  *     the field.
  *   - From ("addresses"): the source address a transaction spends from,
- *     always one of the wallet's own. The field is read-only; the QR
+ *     always one of the wallet's own. The field is read-only; the list
  *     icon navigates to the wallet's own address list (the same screen
  *     as change-address) to select one.
  *
- * The component renders the field + icon only; the host owns the picker
+ * The component renders the field and its action only; the host owns the picker
  * screen the icon navigates to and writes the result back via
  * `value` / `onChange` (To) or its own selection state (From).
  *
@@ -42,13 +47,16 @@ const ICONS = {
  *   - icon          'contacts' | 'addresses'
  *   - onIconClick   () => void   navigate to the picker screen
  *   - iconLabel     accessible label override for the icon button
- *   - onPaste       host callback for URI handling; unconsumed plain text
+ *   - iconLockedReason  the address is fixed, so the icon shows but is
+ *                     locked (aria-disabled); this short reason is its title
+ *   - onPaste      host callback for URI handling; unconsumed plain text
  *                     with surrounding whitespace is trimmed before insertion
  *
  * @typedef {object} AddressFieldOwnProps
- * @property {'contacts' | 'addresses'} [icon]
+ * @property {'contacts' | 'addresses' | 'scan'} [icon]
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
+ * @property {string} [iconLockedReason]
  * @property {boolean} [wrapReadOnlyAddress]
  */
 export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
@@ -56,6 +64,7 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
         icon,
         onIconClick,
         iconLabel,
+        iconLockedReason,
         wrapReadOnlyAddress = false,
         size = 'md',
         label,
@@ -64,25 +73,31 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
         value,
         onChange,
         onPaste,
+        onFocus,
+        onBlur,
         error,
         ...rest
     },
     ref,
 ) {
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
-    const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
+    // While the input itself has focus the typed text shows as typed; any
+    // other time (read-only, or an editable field at rest) the address is
+    // drawn by the fit overlay: whole when it fits, cut in the middle only
+    // when it does not (G99). Focus on the field icon keeps the overlay.
+    const [editing, setEditing] = useState(false);
+    const hasAddress = typeof value === 'string' && value.length !== 0;
+    const showReadOnlyAddress = Boolean(rest.readOnly) && hasAddress;
+    const showAddressOverlay = hasAddress && !editing;
 
     const wrapClass = [
         styles.wrap,
         styles[size] || '',
         label ? '' : styles.noLabel,
-        showReadOnlyAddress ? styles.readOnly : '',
+        showAddressOverlay ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
+        IconComponent ? styles.hasFieldAction : '',
     ].filter(Boolean).join(' ');
-
-    const endRoom = IconComponent
-        ? 'calc(var(--address-control-height) + var(--xc-space-2))'
-        : null;
 
     const handlePaste = (event) => {
         onPaste?.(event);
@@ -108,39 +123,38 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                 label={label}
                 size={size}
                 disabled={disabled}
+                fieldAction={IconComponent ? (
+                    <FieldIconButton
+                        icon={<IconComponent />}
+                        label={iconLabel || defaultLabel}
+                        onClick={onIconClick}
+                        disabled={disabled}
+                        lockedReason={iconLockedReason}
+                    />
+                ) : null}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={endRoom ? {
-                    '--address-end-room': endRoom,
-                    ...style,
-                } : style}
-                title={showReadOnlyAddress ? value : undefined}
+                style={style}
+                title={showAddressOverlay ? value : undefined}
                 value={value}
                 onChange={onChange}
                 onPaste={handlePaste}
+                onFocus={(event) => { setEditing(true); onFocus?.(event); }}
+                onBlur={(event) => { setEditing(false); onBlur?.(event); }}
                 pasteGuard
                 error={error}
                 {...rest}
                 dir="ltr"
             />
-            {showReadOnlyAddress ? (
-                <span className={styles.readOnlyValue} aria-hidden="true">
-                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
-                </span>
-            ) : null}
-            {IconComponent ? (
-                <span className={styles.iconButton}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size={size}
-                        icon={<IconComponent />}
-                        onClick={onIconClick}
-                        disabled={disabled}
-                        aria-label={iconLabel || defaultLabel}
-                        title={iconLabel || defaultLabel}
+            {showAddressOverlay ? (
+                <span className={styles.readOnlyValue} aria-hidden="true" data-address-overlay="">
+                    <AddressText
+                        address={value}
+                        truncate={!(showReadOnlyAddress && wrapReadOnlyAddress)}
+                        focusable={false}
+                        fit
                     />
                 </span>
             ) : null}

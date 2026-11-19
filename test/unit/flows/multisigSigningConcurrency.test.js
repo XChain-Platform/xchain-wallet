@@ -64,7 +64,7 @@ async function start(vault) {
         walletId: 'wallet-1',
         chainId: 'bitcoin-regtest',
         msgHash: MSG_HASH,
-        psbtHex: '70736274ff',
+        psbtHex: '',
     });
 }
 
@@ -132,7 +132,13 @@ describe('multisig session concurrent writes', () => {
         // Real finalized bytes and the prevouts their PSBT records: the
         // broadcast verifies every signature before it sends.
         const finalized = signedTxFor({ inputs: [{ type: 'p2wsh-multisig' }] });
-        records.set(session.id, { ...session, status: 'finalized', finalizedTxHex: finalized.txHex, txid: 'd1'.repeat(32) });
+        records.set(session.id, {
+            ...session,
+            psbtHex: '70736274ff',
+            status: 'finalized',
+            finalizedTxHex: finalized.txHex,
+            txid: 'd1'.repeat(32),
+        });
         const broadcastTx = vi.fn(async () => ({ txid: 'd1'.repeat(32) }));
         const sdkRegistry = {
             get: () => ({ encoder: { broadcastTx }, wallet: { decomposePsbt: () => ({ inputs: finalized.prevouts }) } }),

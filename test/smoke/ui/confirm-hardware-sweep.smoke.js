@@ -110,9 +110,28 @@ assert.equal(
 // is why the §5.6 tail (ORDER/DISPENSER ownership sales, cross-chain SWAP,
 // BATCH, LINK, FILE, the fork legs, the attach-content legs) could stay off
 // it without this sweep noticing. Raise it when forms join; a DROP is the
-// regression it exists to catch.
-assert.ok(covered.length >= 29,
-    `expected the sweep to cover 29+ migrated forms, saw ${covered.length}`);
+// regression it exists to catch. It went from 29 to 26 only because four
+// staking forms (StakeForm, StakingActionForm, DelegationActionForm,
+// ContractStakeForm) merged into the one StakingForm, which is pinned below.
+// It went from 26 to 25 only because ListForkForm's body moved into the one
+// ListCreateForm (the List Edit and Fork form), which is pinned below with
+// both of its single-encode lanes.
+assert.ok(covered.length >= 25,
+    `expected the sweep to cover 25+ migrated forms, saw ${covered.length}`);
+assert.ok(covered.includes('StakingForm.jsx'),
+    'the merged StakingForm is on the single-encode lane');
+assert.ok(covered.includes('ListCreateForm.jsx'),
+    'the merged ListCreateForm is on the single-encode lane');
+{
+    // The create body and the Edit and Fork body each declare their own lane;
+    // the file-level gate check above reads only the first, so check both.
+    const listSrc = readFileSync(join(routesDir, 'ListCreateForm.jsx'), 'utf8');
+    const gates = listSrc.match(/const singleEncode = [^;]*;/g) || [];
+    assert.ok(gates.length >= 2, `ListCreateForm keeps the create and fork lanes, saw ${gates.length}`);
+    for (const gate of gates) {
+        assert.ok(!/&& !isHwSource|&& !hw\b/.test(gate), `ListCreateForm lane opts hardware out: ${gate}`);
+    }
+}
 
 // --- 4. every swept form hands the confirm screen its device block ---
 //

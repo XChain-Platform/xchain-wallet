@@ -27,7 +27,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 const { createBackgroundHost } = await import(
     '../../../packages/extension/src/background/createBackgroundHost.js'
 );
-const { createLockedSendOutcomeStore } = await import(
+const { createLockedSendOutcomeStore, finishPatchFor } = await import(
     '../../../packages/extension/src/background/lockedSendOutcomes.js'
 );
 const { flows } = await import('@xchain-wallet/core');
@@ -101,6 +101,37 @@ const RECORD = {
     actionSummary: 'Send 0.0003 BTC to bcrt1qdest',
 };
 
+describe('finishPatchFor', () => {
+    const entry = { kind: 'failed', at: 1, commitLanded: true, commitTxid: 'commit-txid' };
+
+    it('keeps a commit-landed permanent failure broadcast on the commit txid', () => {
+        expect(finishPatchFor(entry, { status: 'broadcasting', txid: 'reveal-txid' })).toEqual({
+            status: 'broadcast',
+            txid: 'commit-txid',
+            broadcastAt: new Date(1).toISOString(),
+        });
+    });
+
+    it('still fails a single-phase permanent failure', () => {
+        expect(finishPatchFor({ kind: 'failed', at: 1 }, { status: 'broadcasting' }))
+            .toEqual({ status: 'failed' });
+    });
+
+    it('does not rewrite a commit-landed record already broadcast or indexed', () => {
+        expect(finishPatchFor(entry, { status: 'broadcast' })).toBeNull();
+        expect(finishPatchFor(entry, { status: 'indexed' })).toBeNull();
+    });
+
+    it('carries the commit mark only for a commit-landed queued failure', () => {
+        expect(finishPatchFor({ ...entry, kind: 'queued', txid: 'reveal-txid' }, { status: 'broadcasting' }))
+            .toMatchObject({
+                status: 'queued', txid: 'reveal-txid', commitLanded: true, commitTxid: 'commit-txid',
+            });
+        expect(finishPatchFor({ kind: 'queued', at: 1, txid: 'single-txid' }, { status: 'broadcasting' }))
+            .toEqual({ status: 'queued', txid: 'single-txid' });
+    });
+});
+
 /** The first host's send: the record reaches its checkpoint, then the lock closes the vault mid-broadcast. */
 async function sendAcrossLock({ settle }) {
     const rows = pendingTable();
@@ -160,6 +191,43 @@ describe('a send that settles after another surface locks the wallet', () => {
         const listed = await call('send.lockedOutcomes.list', { walletId: W });
         expect(listed.result).toEqual([expect.objectContaining({ id: RECORD.id, kind: 'queued' })]);
         expect(rows.get(RECORD.id).status).toBe('queued');
+        expect(rows.get(RECORD.id).commitLanded).toBeUndefined();
+    });
+
+    it('keeps a commit-landed permanent failure broadcast after unlock', async () => {
+        const failure = Object.assign(new Error('reveal refused'), {
+            name: flows.BROADCAST_FAILED_PERMANENT_NAME,
+            txid: 'reveal-txid',
+            pendingTxId: RECORD.id,
+            pendingTxWriteError: 'Vault is closed (masterKey cleared)',
+            commitLanded: true,
+            commitTxid: RECORD.txid,
+        });
+        const { rows, area } = await sendAcrossLock({ settle: () => { throw failure; } });
+        expect((await createLockedSendOutcomeStore({ area }).list())[0]).toMatchObject({
+            kind: 'failed', commitLanded: true, commitTxid: RECORD.txid,
+        });
+        const listed = await makeHost(vaultOver(rows), area)('send.lockedOutcomes.list', { walletId: W });
+
+        expect(listed.result[0]).toMatchObject({ kind: 'failed' });
+        expect(rows.get(RECORD.id)).toMatchObject({ status: 'broadcast', txid: RECORD.txid });
+    });
+
+    it('keeps the commit mark on a transient failure after unlock', async () => {
+        const failure = Object.assign(new Error('connection refused'), {
+            name: flows.BROADCAST_FAILED_TRANSIENT_NAME,
+            txid: 'reveal-txid',
+            pendingTxId: RECORD.id,
+            pendingTxWriteError: 'Vault is closed (masterKey cleared)',
+            commitLanded: true,
+            commitTxid: RECORD.txid,
+        });
+        const { rows, area } = await sendAcrossLock({ settle: () => { throw failure; } });
+        await makeHost(vaultOver(rows), area)('send.lockedOutcomes.list', { walletId: W });
+
+        expect(rows.get(RECORD.id)).toMatchObject({
+            status: 'queued', txid: 'reveal-txid', commitLanded: true, commitTxid: RECORD.txid,
+        });
     });
 
     it('drops the outcome of a wallet removed before the unlock', async () => {

@@ -7,6 +7,16 @@
 /* Opened rows use FormPage for the shared responsive form card. Result and
    confirmation rows use the shared card directly with no tinted variant. */
 
+/* Remove wallet page: the notice card, then the bare confirm field and the
+   full-width main action. Width and centring come from FormPage's form card
+   token (max-width, auto margins), so this class sets neither. */
+.removeDirect {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
 .actions {
     display: flex;
     flex-wrap: wrap;

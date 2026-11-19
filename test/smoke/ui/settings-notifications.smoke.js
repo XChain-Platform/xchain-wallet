@@ -36,10 +36,10 @@ assert.match(
 // Notification API is absent).
 assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
 assert.match(src, /Notification\.requestPermission\(\)/, 'requests notification permission');
-assert.match(src, /Request permission/, 'renders a Request permission control');
+assert.match(src, /(?:t\('settings\.notifications\.requestPermission'\)|Request Permission)/, 'renders a Request Permission control');
 assert.match(
     src,
-    /<PermissionRow permission=\{permission\} setPermission=\{setPermission\} \/>/,
+    /useNotificationPermissionAccess\(permission, setPermission\)[\s\S]*<PermissionRow access=\{access\} \/>/,
     'mounts the permission row above the toggles with shared live state',
 );
 assert.match(
@@ -70,29 +70,34 @@ for (const key of flagKeys) {
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');
-assert.match(settingsSrc, /import \{ NotificationsSection \}/, 'Settings.jsx imports NotificationsSection');
+assert.match(settingsSrc, /import \{ NotificationsSection[,\s}]/, 'Settings.jsx imports NotificationsSection');
 const idx = settingsSrc.indexOf("id: 'notifications'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'panel'/);
 assert.match(block, /Component:\s*NotificationsSection/);
-assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*\}/, 'threads the active walletId into the section');
+assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*,?/, 'threads the active walletId into the section');
+// The price-alert token picker opens as the Settings screen itself (U17), so Settings hands the section its screen setter.
+assert.match(block, /onTokenPickerScreenChange:\s*setTokenPickerScreen/, 'lets the price-alert picker take over the Settings screen');
 
-// §46 price-alert manager: the toggle now has a real CRUD surface under
-// it, hard-gated on the privacy price-data opt-out.
-assert.match(src, /import \{ usePriceAlerts \}/, 'imports the usePriceAlerts hook');
-assert.match(src, /PriceAlertForm/, 'renders the shared PriceAlertForm');
-assert.match(src, /PriceAlertsManager/, 'renders the price-alert manager under the toggle');
-assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy opt-out');
-assert.match(src, /Native coin price data/, 'surfaces the price-data dependency to the user');
-assert.match(src, /Re-arm/, 'offers re-arm on a triggered alert');
+// §46 price alerts (2026-11-14): the Notifications panel keeps only the
+// Price alerts master switch; the alert list, the Price Alert page and the
+// Add and Edit pages are PriceAlertsSection, opened from its own row.
+assert.doesNotMatch(src, /PriceAlertsManager/, 'the notifications panel carries no alert manager');
+const alertsSrc = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'PriceAlertsSection.jsx'), 'utf8');
+assert.match(alertsSrc, /import \{ usePriceAlerts \}/, 'the Price Alerts section imports the usePriceAlerts hook');
+assert.match(alertsSrc, /PriceAlertForm/, 'the section renders the shared PriceAlertForm on the Add and Edit pages');
+assert.match(alertsSrc, /ActionsDetailsToggle/, 'the Price Alert page uses the Actions | Details toggle');
+assert.match(alertsSrc, /(?:t\('settings\.priceAlerts\.rearmAlert'\)|Re-arm alert)/, 'offers re-arm on a fired alert');
+assert.match(settingsSrc, /Component:\s*PriceAlertsSection/, 'Settings registers the Price Alerts page');
+assert.match(settingsSrc, /\['priceAlerts', Icon\.BellIcon/, 'the Price alerts master stays a switch on the Notifications page');
 
 // Quiet-hours (DND) scheduling block.
 assert.match(src, /import \{ QUIET_HOURS_DEFAULT \}/, 'imports the schema quiet-hours default');
 assert.match(src, /function QuietHoursRow/, 'defines a QuietHoursRow component');
 assert.match(src, /<QuietHoursRow settings=\{settings\} update=\{update\} \/>/, 'mounts QuietHoursRow under the flag list');
-assert.match(src, /Quiet hours/, 'labels the quiet-hours toggle');
+assert.match(src, /(?:t\('settings\.notifications\.pauseNotifications'\)|Pause notifications)/, 'labels the quiet-hours toggle');
 assert.match(src, /quietHours:\s*\{\s*\.\.\.qh,\s*enabled\s*\}/, 'writes the enabled flag through a nested quietHours patch');
-assert.match(src, /type="time"/, 'renders start/end time inputs');
+assert.match(src, /role="slider"/, 'renders keyboard-adjustable start/end time sliders');
 const schemaHasQuietHours = /quietHours\??:/.test(schemaSrc) || readFileSync(schemaPath, 'utf8').includes('quietHours');
 assert.ok(schemaHasQuietHours, 'schema documents/defines quietHours');
 
@@ -117,11 +122,22 @@ assert.match(src, /\bSOUND_PALETTE\b/, 'uses SOUND_PALETTE to populate each fami
 assert.match(src, /\bSOUND_NONE\b/, 'uses the SOUND_NONE sentinel for the muted pick');
 assert.match(src, /\bpickedSoundForFamily\b/, 'reads the resolved pick via pickedSoundForFamily');
 
-assert.match(src, /label="Notification sounds"/, 'renders the master "Notification sounds" toggle');
-assert.match(src, /<option value=\{SOUND_NONE\}>No sound<\/option>/, 'each family select offers a "No sound" option');
+assert.match(src, /label=(?:\{t\('settings\.notifications\.playNotificationSounds'\)\}|"Play notification sounds")/, 'renders the master "Play notification sounds" toggle');
+assert.match(
+    src,
+    /\{\s*value:\s*SOUND_NONE,\s*title:\s*(?:t\('settings\.notifications\.noSound'\)|['"]No sound['"]),\s*glyph:\s*soundIconFor\(SOUND_NONE_OPTION\),\s*leading:/,
+    'each family\'s Choose Sound page offers No sound with its muted icon',
+);
+assert.match(src, /export function SoundPickerPage\b/, 'the Choose Sound page is the shared sound picker page');
+assert.match(settingsSrc, /\|\|\s*soundPickerSectionFor\(id,\s*\{/, 'Settings resolves the Choose Sound page ids with navigation context');
 
-assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging to read the active shell');
-assert.match(src, /const canPreview = shell === 'web'/, 'gates the Preview control on the web shell');
+assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging to read platform capabilities');
+assert.match(
+    src,
+    /\{ supportsNotificationSoundPlayback = false \} = messaging \|\| \{\}/,
+    'gates sound preview on the delivered-notification playback capability',
+);
+assert.doesNotMatch(src, /shell === ['"]web['"]/, 'does not infer sound playback from the layout shell');
 assert.match(src, /\bSOUND_PREVIEW_EVENT\b/, 'imports the SOUND_PREVIEW_EVENT contract');
 assert.match(
     src,
@@ -130,8 +146,8 @@ assert.match(
 );
 assert.match(
     src,
-    /aria-label=\{t\('settings\.notifications\.sound', \{ label: family\.label \}\)\}/,
-    'renders a per-family Preview button',
+    /<ListField[^>]*?label=\{t\('settings\.notifications\.sound', \{ label: family\.label \}\)\}/,
+    'renders a per-family sound picker field',
 );
 
 console.log('settings-notifications smoke OK');

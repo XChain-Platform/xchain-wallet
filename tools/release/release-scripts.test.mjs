@@ -1,3 +1,12 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -17,6 +26,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GATE = join(HERE, 'verify-validated-commit.mjs');
 const BUMP = join(HERE, 'bump-version.mjs');
+const EXTENSION_VERSION = join(HERE, '..', '..', 'packages', 'core', 'scripts', 'derive-extension-version.js');
 const SHA = 'a'.repeat(40);
 const REPO = 'XChain-Platform/xchain-wallet';
 
@@ -51,6 +61,9 @@ test('bump-version reconciles every package and both extension manifest versions
     const toolDir = join(root, 'tools', 'release');
     mkdirSync(toolDir, { recursive: true });
     copyFileSync(BUMP, join(toolDir, 'bump-version.mjs'));
+    const scriptsDir = join(root, 'packages', 'core', 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    copyFileSync(EXTENSION_VERSION, join(scriptsDir, 'derive-extension-version.js'));
 
     writeFileSync(join(root, 'package.json'), '{\n    "version": "1.0.0"\n}\n');
     for (const [index, name] of ['core', 'extension', 'future-package'].entries()) {
@@ -359,9 +372,13 @@ test('waiver: an unfetchable jobs list refuses', async () => {
     });
 });
 
-test('the committed gate-waivers.json has exactly the reviewed 0.341.4 entry', () => {
+test('the committed gate-waivers.json has exactly the reviewed 0.341.4 and 0.343.0 entries', () => {
     const list = JSON.parse(readFileSync(join(HERE, 'gate-waivers.json'), 'utf8'));
-    assert.equal(list.length, 1);
+    assert.equal(list.length, 2);
     assert.equal(list[0].version, '0.341.4');
     assert.deepEqual(list[0].jobs, ['e2e-regtest', 'verdict']);
+    // Operator ruling 2026-11-18: the 0.343.0 regtest shard failed only on stale spec copies and venue lag.
+    assert.equal(list[1].version, '0.343.0');
+    assert.deepEqual(list[1].jobs, ['e2e-regtest (rolling shard)', 'verdict']);
+    assert.equal(list[1].ruled_by, 'operator (J-Dog)');
 });

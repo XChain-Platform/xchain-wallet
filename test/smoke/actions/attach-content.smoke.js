@@ -48,26 +48,28 @@ for (const call of [
     assert.ok(src.includes(call), `AttachContentForm calls ${call}`);
 }
 
-// §5.6: every leg signs on the shared confirm lane, so the FILE / LINK /
-// ISSUE dispatches are named to useConfirmSubmit instead of being called by
-// hand from a review stage. The ISSUE leg mattered most: token administration
-// signed against a locally rendered summary, while every other ISSUE surface
-// in the wallet already composed through the tamper-checked confirm page.
+// §5.6: every leg signs on the shared confirm lane, so the FILE and LINK
+// dispatches are named to useConfirmSubmit instead of being called by hand
+// from a review stage. Attach Artwork always uploads then links: the token
+// picture toggle and its token-info FILE and ISSUE legs are gone (operator
+// screen walk 2026-11-15, screen-review/notes.jsonl:838), so no ISSUE leg
+// may come back unconfirmed either.
 assert.ok(/useActionConfirmFlow/.test(src),
     'AttachContentForm is on the shared confirm lane');
 for (const [software, hardware] of [
     ['fileAction', 'fileActionHw'],
     ['linkAction', 'linkActionHw'],
-    ['issueToken', 'issueTokenHw'],
 ]) {
     assert.ok(
         new RegExp(`software: '${software}',\\s*\\n\\s*hardware: '${hardware}'`).test(src),
         `AttachContentForm dispatches ${software}/${hardware} through useConfirmSubmit`,
     );
 }
-// Four legs, four Approve dispatches, each signing the previewed bytes.
-assert.equal((src.match(/prebuiltPsbt,/g) || []).length, 4,
-    'all four AttachContentForm legs submit the previewed PSBT, never a rebuild');
+assert.ok(!/issueToken/.test(src),
+    'Attach Artwork has no ISSUE leg (no token picture toggle)');
+// Two legs, two Approve dispatches, each signing the previewed bytes.
+assert.equal((src.match(/prebuiltPsbt,/g) || []).length, 2,
+    'both AttachContentForm legs submit the previewed PSBT, never a rebuild');
 assert.ok(!/await messaging\.(fileAction|linkAction|issueToken)/.test(src),
     'no AttachContentForm leg still broadcasts straight from its review stage');
 
@@ -137,12 +139,13 @@ for (const [shell, msgPath] of [
 
 // --- ManageToken entry (owner-gated) + App.jsx wiring (3 shells) ---
 
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
 assert.ok(/onAttachContent/.test(manageSrc), 'ManageToken accepts onAttachContent');
-assert.ok(/id:\s*['"]attach-content['"]/.test(manageSrc),
+assert.ok(/id:\s*['"]artwork['"][^\n]*\.\.\.ownerAction\(options\.onAttachContent\)/.test(manageSrc),
     'ManageToken renders the Artwork action');
-assert.ok(/blockIssuerActions \? undefined : onAttachContent/.test(manageSrc),
-    'ManageToken hides Artwork from non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/.test(manageSrc),
+    'ManageToken leaves authorization to the owner form preflight');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -154,8 +157,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports AttachContentForm`);
     assert.ok(app.includes("'attach-content'"),
         `${shell} tracks 'attach-content' sub-route`);
-    assert.ok(/onAttachContent=\{\(\) => openForm\('attach-content'\)\}/.test(app),
-        `${shell} ManageToken wires onAttachContent`);
+    assert.ok(/onAttachContent: \(ctx\) => openOwnerForm\('attach-content', ctx\)/.test(app),
+        `${shell} the asset page wires onAttachContent`);
     assert.ok(/<AttachContentForm\b[\s\S]*?issuerAddress=\{tokenDetailRef\.issuer/.test(app),
         `${shell} App.jsx mounts <AttachContentForm> with the resolved issuer`);
 }

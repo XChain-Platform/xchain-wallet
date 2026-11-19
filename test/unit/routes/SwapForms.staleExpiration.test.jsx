@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../helpers/openFormSections.js';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => (
@@ -60,18 +61,20 @@ describe('swap form expiration at review time', () => {
         );
         await screen.findByRole('button', { name: /Get token:/ });
         fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
+        await openSection('Swap Terms');
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
 
         const now = Date.now();
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localInput(new Date(now + 5 * 60_000)) } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Swap' })).toBeEnabled());
 
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(now + 60 * 60_000);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
         expect(composeForConfirm).not.toHaveBeenCalled();
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/future date and time/i));

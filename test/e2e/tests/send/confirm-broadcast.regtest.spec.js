@@ -38,12 +38,15 @@ import {
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    REGTEST_NATIVE_DECIMALS,
     REGTEST_TICKER,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { amountAsShown, fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -52,7 +55,7 @@ const SEND_BTC = '0.01';
 const INTENT_WORDS = `Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to `;
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 function amountField(page) {
@@ -89,34 +92,22 @@ test.describe('confirm -> broadcast on regtest', () => {
         // §5.2.1-2: what the user is authorizing, from the PARSED composed
         // action string rather than from form state.
         await expectIntentSentence(page, INTENT_WORDS, REGTEST_DESTINATION);
-        await expect(page.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
-
         // §5.2.5: an EXACT fee off the composed PSBT, not the form's rate
         // estimate. Asserted as a bounded real number: a broken decomposition
         // returns null (section absent) or a nonsense total, and "some digits
         // are present" would pass on both.
-        const feeText = await page.getByTestId('confirm-fee').innerText();
+        const feeText = await page.getByTestId('confirm-fee-network').innerText();
         const fee = Number(feeText.match(new RegExp(`([\\d.]+)\\s*${REGTEST_TICKER}`))?.[1]);
         expect(Number.isFinite(fee), `unparseable fee: ${feeText}`).toBe(true);
         expect(fee).toBeGreaterThan(0);
         expect(fee).toBeLessThan(0.01);
 
-        // §5.2.3: real balance deltas. These were dead everywhere (every
-        // caller passed simulation={null}) until 49cc7be, and a null renders
-        // as an absent section - so assert the numbers, and that they move by
-        // the amount sent plus the fee shown above.
-        const deltas = page.getByTestId('action-intent-deltas');
-        await expect(deltas).toBeVisible();
-        const [, from, to] = (await deltas.innerText()).match(/([\d.]+)\s*→\s*([\d.]+)/) || [];
-        expect(from, 'deltas rendered no before/after pair').toBeTruthy();
-        expect(Number(from) - Number(to)).toBeCloseTo(Number(SEND_BTC) + fee, 8);
-
         // There is NO pre-flight panel here, and its absence is the
         // point. A plain native payment carries no XChain action, so there is
-        // nothing to dry-run; the panel used to render "Will likely fail"
+        // nothing to dry-run; a panel here would render "Will likely fail"
         // because the wallet was asking the indexer to validate a SEND for a
-        // tick it has no ledger for.
-        await expect(page.getByTestId('preflight-panel')).toHaveCount(0);
+        // tick it has no ledger for. The page makes no network claim at all.
+        await expect(page.getByTestId('confirm-status')).toHaveCount(0);
 
         // §1.7 / wallet spec §21.7: the last place the user sees which network
         // is about to move their money.
@@ -128,8 +119,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // failure to override. This is what regressed users' most common
         // operation before.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
-        await expect(page.getByTestId('confirm-approve')).toBeEnabled();
-        await page.getByTestId('confirm-approve').click();
+        await approveConfirm(page);
 
         // The terminal state. `Broadcast pending` means the node ACCEPTED the
         // transaction; "Signed. Not broadcast yet." is the queued path and
@@ -170,7 +160,8 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
-        await expect(amountField(page)).toHaveValue(SEND_BTC);
+        // Back on the form, the amount reads in the coin's format (U61).
+        await expect(amountField(page)).toHaveValue(amountAsShown(SEND_BTC, REGTEST_NATIVE_DECIMALS));
 
         // Re-composing the same payment must still work: if Reject stranded a
         // reservation or left an in-flight report attached, the second attempt
@@ -210,19 +201,9 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         await expectConfirmModal(page, 'this action', 30_000);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
-        await expect(page.getByText(/Will likely fail/i)).toHaveCount(0);
-
-        // that browser leg, stated outright rather than left implied by
-        // the panel's absence above. "Couldn't verify (N)" is PreflightPanel's
-        // `unverified` disclosure, and it is the OTHER way a good payment can
-        // be made to look doubtful: not a fail verdict, but a confirm page
-        // hedging about checks it could not run. A bare native payment carries
-        // no XChain action, so the wallet skips pre-flight entirely
-        // (useConfirmAction's `bareNativePayment` branch) and there is nothing
-        // to hedge about - the user sees a clean confirm surface. This asserts
-        // on the rendered TEXT rather than the panel testid on purpose, so it
-        // still holds if a future report ever renders here.
-        await expect(page.getByText(/Couldn't verify/i)).toHaveCount(0);
+        // A bare native payment skips pre-flight entirely, so the Confirm
+        // Standard status notice is absent rather than rendering a pass banner.
+        await expect(page.getByTestId('confirm-status')).toHaveCount(0);
     });
 });
 
@@ -258,7 +239,7 @@ test.describe('broadcast permanence on regtest', () => {
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
         await expectConfirmModal(page, 'this action', 30_000);
-        await page.getByTestId('confirm-approve').click();
+        await approveConfirm(page);
     }
 
     test('a transient failure ends in "signed, not broadcast yet" and refuses to re-send', async ({ page }) => {

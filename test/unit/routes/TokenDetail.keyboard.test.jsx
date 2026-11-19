@@ -111,25 +111,34 @@ describe('TokenDetail keyboard navigation', () => {
             { getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: creator }] }) },
         );
 
-        await screen.findByRole('button', { name: 'Manage' });
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+        // The Actions tab opens first and holds the action list: Send, Receive, Exchange,
+        // then the issuer's own list with Manage token. History is its own tab now.
+        await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Send\b/ })).not.toHaveAttribute('aria-disabled'));
+        await screen.findByRole('button', { name: /^Manage token\b/ });
+        const actions = within(screen.getByRole('list', { name: `Actions for ${TICK}` }))
             .getAllByRole('button');
-        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Trade',
-            'History',
-            'Manage',
+        expect(actions.slice(0, 3).map((button) => button.getAttribute('data-action-id'))).toEqual([
+            'send',
+            'receive',
+            'exchange',
         ]);
-        expect(actions.map((button) => button.tabIndex)).toEqual([0, 0, 0, 0, 0]);
-        expect(actions.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
+        expect(actions.map((button) => button.tabIndex).every((index) => index === 0)).toBe(true);
 
-        const handlers = [onSend, onReceive, onBuy, onViewActivity, onManageToken];
-        actions.forEach((button, index) => {
+        const handlers = [onSend, onReceive, onBuy];
+        actions.slice(0, 3).forEach((button, index) => {
             keyboardActivate(button);
             expect(document.activeElement).toBe(button);
             expect(handlers[index]).toHaveBeenCalledTimes(1);
         });
+
+        const manage = within(screen.getByRole('list', { name: 'You issued this token' }))
+            .getByRole('button', { name: /^Manage token\b/ });
+        keyboardActivate(manage);
+        expect(onManageToken).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(manage);
+
+        fireEvent.click(screen.getByRole('tab', { name: /History/ }));
+        expect(await screen.findByRole('tabpanel', { name: /History/ })).toBeTruthy();
     });
 
     it('moves through chart ranges with arrows and keeps one range in the Tab order', async () => {
@@ -137,15 +146,16 @@ describe('TokenDetail keyboard navigation', () => {
 
         const ranges = await screen.findByRole('tablist', { name: 'Chart range' });
         const tabs = within(ranges).getAllByRole('tab');
-        const selected = within(ranges).getByRole('tab', { name: '30d' });
+        const selected = within(ranges).getByRole('tab', { name: '1W' });
         expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([selected]);
 
         selected.focus();
         fireEvent.keyDown(selected, { key: 'ArrowRight' });
-        const next = within(ranges).getByRole('tab', { name: '90d' });
+        const next = within(ranges).getByRole('tab', { name: '1M' });
         expect(document.activeElement).toBe(next);
         expect(next).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByLabelText('90d price chart')).toBeTruthy();
+        // The chart panel is labelled by the chosen range's tab.
+        expect(screen.getByRole('tabpanel', { name: '1M' })).toBeTruthy();
 
         fireEvent.keyDown(next, { key: 'Home' });
         const first = within(ranges).getByRole('tab', { name: '24h' });
@@ -153,16 +163,15 @@ describe('TokenDetail keyboard navigation', () => {
         expect(first).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('opens the holders list with arrows and reaches every holder control', async () => {
+    it('opens the holders list from More info and reaches every holder control', async () => {
         // A demo wallet reads no holders (it stays offline), so this uses a real one.
         mount({ walletId: 'wallet' });
 
-        const about = await screen.findByRole('tab', { name: 'About' });
-        about.focus();
-        fireEvent.keyDown(about, { key: 'ArrowLeft' });
-        const unlock = screen.getByRole('tab', { name: 'Unlock' });
-        expect(document.activeElement).toBe(unlock);
-        expect(unlock).toHaveAttribute('aria-selected', 'true');
+        // Holders is a row at the foot of the Details tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
+        const holdersEntry = await screen.findByRole('button', { name: 'Holders' });
+        holdersEntry.focus();
+        keyboardActivate(holdersEntry);
 
         const holders = await screen.findByRole('region', { name: 'Holders' });
         const copyButtons = within(holders).getAllByRole('button', { name: /Copy holder address/ });

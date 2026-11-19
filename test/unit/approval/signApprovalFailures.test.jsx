@@ -34,6 +34,17 @@ function mount(kind, payload, id = `${kind}-failure`) {
     );
 }
 
+// Approve never looks disabled (G130): a request that cannot be approved
+// keeps Approve in full colour, and a tap signs nothing and says why at the
+// top of the window.
+function expectApproveHeld() {
+    const approve = screen.getByRole('button', { name: 'Approve' });
+    expect(approve).not.toBeDisabled();
+    fireEvent.click(approve);
+    expect(mocks.resolveApproval).not.toHaveBeenCalled();
+    expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.listWallets.mockResolvedValue([{ id: 'wallet-1', name: 'Wallet 1' }]);
@@ -68,8 +79,29 @@ describe('SignApproval wallet and permission failures', () => {
 
         expect(await screen.findByText('Failed to load wallets.')).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
+    });
+
+    it('hides background host wording when wallet discovery rejects with an Error', async () => {
+        mocks.listWallets.mockRejectedValue(new Error('wallets.list: IndexedDB transaction aborted'));
+        mount('signMessage', {
+            chainId: 'bitcoin-regtest',
+            payload: { message: 'hello' },
+        });
+
+        expect(await screen.findByText('Failed to load wallets.')).toBeTruthy();
+        expect(screen.queryByText(/wallets\.list|IndexedDB/)).toBeNull();
+    });
+
+    it('keeps a plain sentence when wallet discovery rejects with user copy', async () => {
+        mocks.listWallets.mockRejectedValue(new Error('This wallet is locked. Unlock it and try again.'));
+        mount('signMessage', {
+            chainId: 'bitcoin-regtest',
+            payload: { message: 'hello' },
+        });
+
+        expect(await screen.findByText('This wallet is locked. Unlock it and try again.')).toBeTruthy();
     });
 
     it('fails closed when no wallet proves ownership of the requested signer', async () => {
@@ -87,7 +119,7 @@ describe('SignApproval wallet and permission failures', () => {
             'The requested signing account is not available in this wallet.',
         )).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
     });
 
     it('falls back to full mode and recovers after an invalid password refusal', async () => {
@@ -146,13 +178,14 @@ describe('SignApproval preview fallbacks', () => {
             },
         }, 'preview-fallback');
 
-        expect(await screen.findByText(/preview unavailable/i)).toBeTruthy();
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Review this action');
         await waitFor(() => expect(mocks.describeAction).toHaveBeenCalledWith(
             expect.objectContaining({
                 params: expect.objectContaining({ TICK: '^edge-fallback' }),
             }),
         ));
         await waitFor(() => expect(mocks.preflight).toHaveBeenCalled());
+        expect(await screen.findByTestId('confirm-status')).toHaveTextContent('Not checked with the network');
         const password = screen.getByLabelText('Password');
         fireEvent.change(password, { target: { value: 'secret' } });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled());
@@ -171,7 +204,7 @@ describe('SignApproval preview fallbacks', () => {
 
         expect(await screen.findByText(/Missing co-sign request details/)).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
         expect(mocks.parseCoSign).not.toHaveBeenCalled();
     });
 });
@@ -180,11 +213,11 @@ describe('SignApproval PSBT failure branches', () => {
     it('blocks approval when no chain is available for decoding', async () => {
         mount('signPsbt', { payload: { psbtHex: '70736274ff' } });
 
-        expect(await screen.findByTestId('psbt-undecodable')).toHaveTextContent(
-            'This transaction couldn\'t be decoded',
+        expect(await screen.findByTestId('confirm-status')).toHaveTextContent(
+            'No chain specified. Cannot decode this transaction.',
         );
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
         expect(mocks.parsePsbt).not.toHaveBeenCalled();
     });
 
@@ -195,15 +228,15 @@ describe('SignApproval PSBT failure branches', () => {
             payload: { psbtHex: '70736274ff' },
         });
 
-        expect(await screen.findByTestId('psbt-undecodable')).toHaveTextContent(
-            'This transaction couldn\'t be decoded',
+        expect(await screen.findByTestId('confirm-status')).toHaveTextContent(
+            'Failed to decode transaction.',
         );
         expect(mocks.parsePsbt).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             psbtHex: '70736274ff',
         });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
     });
 
     it('continues with decoded intent when address, fee quote, and preflight reads fail', async () => {
@@ -218,13 +251,22 @@ describe('SignApproval PSBT failure branches', () => {
         });
         mocks.requoteNativeFee.mockRejectedValue(new Error('quote unavailable'));
         mocks.preflight.mockRejectedValue(new Error('explorer unavailable'));
+        mocks.describeAction.mockResolvedValue({
+            summary: 'Mint 1 JDOG to bcrt1qrecipient.',
+            details: [
+                { label: 'Amount', value: '1' },
+                { label: 'Token', value: 'JDOG' },
+                { label: 'To', value: 'bcrt1qrecipient' },
+            ],
+            warnings: [],
+        });
         const close = vi.spyOn(window, 'close').mockImplementation(() => {});
         mount('signPsbt', {
             chainId: 'bitcoin-regtest',
             payload: { psbtHex: '70736274ff' },
         }, 'psbt-fallback');
 
-        expect(await screen.findByText('bcrt1qrecipient')).toBeTruthy();
+        await waitFor(() => expect(screen.getByTitle('bcrt1qrecipient')).toBeTruthy());
         await waitFor(() => expect(mocks.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
@@ -252,7 +294,7 @@ describe('SignApproval PSBT failure branches', () => {
         );
         const password = await screen.findByLabelText('Password');
         fireEvent.change(password, { target: { value: 'secret' } });
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expectApproveHeld();
         expect(mocks.parsePsbt).not.toHaveBeenCalled();
     });
 });

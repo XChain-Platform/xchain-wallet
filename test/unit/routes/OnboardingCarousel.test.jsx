@@ -10,8 +10,8 @@
 
 // Behavioural test for Cluster J FOLLOWUP 3 (§25.2): the first-time
 // onboarding explainer carousel. Drives the real component:
-//   - paginated frames advance via Next / Back / dots
-//   - the last frame's "Get started" completes; "Skip" dismisses early
+//   - paginated frames advance via Back, Next, dots and arrow keys
+//   - the last frame's Next completes; Skip dismisses early
 //   - both call onDone (with completed = true / false)
 //   - reduced-motion drops stepping and stacks every frame
 // plus the Onboarding gating: the carousel shows once on the fresh path,
@@ -37,11 +37,20 @@ const buttonCss = readFileSync(
     join(process.cwd(), 'packages/core/src/ui/Button.module.css'),
     'utf8',
 );
+const formPageCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/FormPage.module.css'),
+    'utf8',
+);
+const tokensCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/tokens.css'),
+    'utf8',
+);
 
 const FRAMES = [
     { id: 'a', title: 'Frame A title', body: 'Body A' },
     { id: 'b', title: 'Frame B title', body: 'Body B' },
     { id: 'c', title: 'Frame C title', body: 'Body C' },
+    { id: 'd', title: 'Frame D title', body: 'Body D' },
 ];
 
 /**
@@ -77,7 +86,16 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(carouselCss).toMatch(/\.frame\[hidden\]\s*\{\s*display:\s*none;/);
     });
 
-    it('shows the first frame and steps forward through Next to Get started', () => {
+    it('spans the card content width with 8px edge insets and button gaps', () => {
+        expect(carouselCss).toMatch(/\.column\s*\{[^}]*inline-size:\s*100%;/s);
+        expect(carouselCss).not.toMatch(/\.centeredFull\s*>\s*\.column/);
+        expect(carouselCss).toMatch(/\.nav\s*\{[^}]*gap:\s*var\(--xc-space-2\);/s);
+        expect(formPageCss).toMatch(/@media \(min-width:\s*600px\)[\s\S]*?\.form\s*\{[^}]*padding:\s*var\(--xc-card-pad\);/);
+        expect(tokensCss).toMatch(/--xc-card-pad:\s*var\(--xc-space-2\);/);
+        expect(tokensCss).toMatch(/--xc-space-2:\s*8px;/);
+    });
+
+    it('shows the first frame and finishes from the last frame with Next', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();
         const { container } = render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
@@ -92,22 +110,72 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.getByText('Frame B title')).not.toBeVisible();
         expectSinglePageHeading('Frame A title');
 
-        // Back is disabled on the first frame.
-        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
-
-        // Next -> frame B, then C.
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        // Next advances through every frame.
+        const next = screen.getByRole('button', { name: 'Next' });
+        expect(next.className).toMatch(/success/);
+        expect(next.querySelector('svg')).not.toBeNull();
+        fireEvent.click(next);
         expect(screen.getByText('Frame B title')).toBeInTheDocument();
         expectSinglePageHeading('Frame B title');
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(screen.getByText('Frame C title')).toBeInTheDocument();
         expectSinglePageHeading('Frame C title');
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(screen.getByText('Frame D title')).toBeInTheDocument();
+        expectSinglePageHeading('Frame D title');
 
-        // Last frame: Next is replaced by Get started; there is no Next.
-        expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
-        const getStarted = screen.getByRole('button', { name: 'Get started' });
-        fireEvent.click(getStarted);
+        const finish = screen.getByRole('button', { name: 'Next' });
+        expect(finish.className).toMatch(/success/);
+        expect(finish.querySelector('svg')).not.toBeNull();
+        fireEvent.click(finish);
         expect(onDone).toHaveBeenCalledTimes(1);
+        expect(onDone).toHaveBeenCalledWith(true);
+    });
+
+    it('keeps the required button order, labels, variants and icon positions', () => {
+        stubMatchMedia(false);
+        const onDone = vi.fn();
+        const { container } = render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
+        const nav = container.querySelector('[data-testid="onboarding-carousel"] [class*="nav"]');
+        expect(nav).not.toBeNull();
+        const firstButtons = within(nav).getAllByRole('button', { hidden: true });
+        expect(firstButtons.map((button) => button.textContent)).toEqual(['Back', 'Skip', 'Next']);
+        expect(firstButtons.map((button) => /secondary|success|primary/.exec(button.className)?.[0]))
+            .toEqual(['success', 'primary', 'success']);
+        const firstBack = firstButtons[0];
+        const firstNext = screen.getByRole('button', { name: 'Next' });
+        expect(firstBack).toHaveAttribute('aria-hidden', 'true');
+        expect(firstBack).toHaveAttribute('tabindex', '-1');
+        expect(firstBack.className).toMatch(/hiddenBack/);
+        expect(carouselCss).toMatch(/\.hiddenBack\s*\{[^}]*visibility:\s*hidden;/s);
+        expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+        fireEvent.click(firstBack);
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+        expect(firstBack).toHaveClass(/edgePinnedIcon/);
+        expect(firstNext).toHaveClass(/edgePinnedIcon/);
+        expect(firstBack.children[0]).toContainElement(firstBack.querySelector('svg'));
+        expect(firstBack.children[1]).toHaveTextContent('Back');
+        expect(firstBack.children[2]).toBeEmptyDOMElement();
+        expect(firstNext.children[0]).toBeEmptyDOMElement();
+        expect(firstNext.children[1]).toHaveTextContent('Next');
+        expect(firstNext.children[2]).toContainElement(firstNext.querySelector('svg'));
+        expect(buttonCss).toMatch(/\.edgePinnedIcon\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*var\(--xc-icon-size\) minmax\(0, 1fr\) var\(--xc-icon-size\);[^}]*gap:\s*0;/s);
+
+        fireEvent.click(firstNext);
+        expect(within(nav).getAllByRole('button').map((button) => button.textContent))
+            .toEqual(['Back', 'Skip', 'Next']);
+        expect(screen.getByRole('button', { name: 'Back' })).not.toHaveAttribute('aria-hidden');
+        expect(screen.getByRole('button', { name: 'Back' })).not.toHaveAttribute('tabindex');
+
+        fireEvent.click(screen.getAllByRole('tab')[3]);
+        const finalButtons = within(nav).getAllByRole('button');
+        expect(finalButtons.map((button) => button.textContent)).toEqual(['Back', 'Skip', 'Next']);
+        expect(finalButtons.map((button) => /secondary|success|primary/.exec(button.className)?.[0]))
+            .toEqual(['success', 'primary', 'success']);
+        fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+        expect(onDone).toHaveBeenCalledWith(false);
+        onDone.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(onDone).toHaveBeenCalledWith(true);
     });
 
@@ -115,20 +183,40 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         stubMatchMedia(false);
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.getByText('Frame B title')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame C title');
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(screen.getByText('Frame A title')).toBeInTheDocument();
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+        expect(screen.getByText('Back').closest('button')).toHaveAttribute('aria-hidden', 'true');
     });
 
-    it('a dot jumps directly to that frame', () => {
+    it('steps back to the previous frame through the dots and ArrowLeft', () => {
+        stubMatchMedia(false);
+        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
+        fireEvent.click(screen.getAllByRole('tab')[0]);
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+
+        const next = screen.getByRole('button', { name: 'Next' });
+        fireEvent.click(next);
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Next' }), { key: 'ArrowLeft' });
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+    });
+
+    it('uses four same-shaped dots and marks the active one by color only', () => {
         stubMatchMedia(false);
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
         const dots = screen.getAllByRole('tab');
-        expect(dots).toHaveLength(3);
+        expect(dots).toHaveLength(4);
         fireEvent.click(dots[2]);
         expect(screen.getByText('Frame C title')).toBeInTheDocument();
-        // The third dot reflects selection.
         expect(screen.getAllByRole('tab')[2]).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Step 3 of 4: Frame C title' })).toBeInTheDocument();
+        expect(carouselCss).toMatch(/\.dot::before,\s*\.dotActive::before\s*\{[^}]*width:\s*var\(--xc-space-2\);[^}]*height:\s*var\(--xc-space-2\);[^}]*border-radius:\s*var\(--xc-radius-pill\);[^}]*background:\s*var\(--xc-border-strong\);/s);
+        expect(carouselCss).toMatch(/\.dotActive::before\s*\{\s*background:\s*var\(--xc-accent-primary\);\s*\}/);
     });
 
     it('implements keyboard tab navigation and connects each tab to its panel', () => {
@@ -149,10 +237,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
 
         fireEvent.keyDown(second, { key: 'End' });
-        expect(screen.getAllByRole('tab')[2]).toHaveFocus();
-        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame C title');
+        expect(screen.getAllByRole('tab')[3]).toHaveFocus();
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame D title');
 
-        fireEvent.keyDown(screen.getAllByRole('tab')[2], { key: 'ArrowRight' });
+        fireEvent.keyDown(screen.getAllByRole('tab')[3], { key: 'ArrowRight' });
         expect(screen.getAllByRole('tab')[0]).toHaveFocus();
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
     });
@@ -175,8 +263,8 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         const onDone = vi.fn();
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
         const skip = screen.getByRole('button', { name: 'Skip' });
-        expect(skip.className).toMatch(/skipBtn/);
-        expect(skip.className).not.toMatch(/ghost/);
+        expect(skip.className).toMatch(/primary/);
+        expect(skip.className).not.toMatch(/success|secondary|ghost|link/);
         fireEvent.click(skip);
         expect(onDone).toHaveBeenCalledTimes(1);
         expect(onDone).toHaveBeenCalledWith(false);
@@ -198,10 +286,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
             act(() => { vi.advanceTimersByTime(2000); });
             expect(screen.getByText('Frame B title')).toBeInTheDocument();
             // User takes control -> auto-advance retires; further ticks are inert.
-            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-            expect(screen.getByText('Frame A title')).toBeInTheDocument();
+            fireEvent.click(screen.getAllByRole('tab')[0]);
+            expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
             act(() => { vi.advanceTimersByTime(10000); });
-            expect(screen.getByText('Frame A title')).toBeInTheDocument();
+            expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
         } finally {
             vi.useRealTimers();
         }
@@ -226,18 +314,22 @@ describe('OnboardingCarousel: reduced motion', () => {
             expect(screen.getByText('Frame A title')).toBeInTheDocument();
             expect(screen.getByText('Frame B title')).toBeInTheDocument();
             expect(screen.getByText('Frame C title')).toBeInTheDocument();
+            expect(screen.getByText('Frame D title')).toBeInTheDocument();
             expect(container.querySelectorAll('h1')).toHaveLength(1);
             expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Frame A title');
-            expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+            expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
 
             // No stepping affordances or timer, but dismissal remains available.
             expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
             expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
             expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Skip' }).className).toMatch(/primary/);
             expect(intervalSpy).not.toHaveBeenCalled();
 
-            fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
+            const getStarted = screen.getByRole('button', { name: 'Get Started' });
+            expect(getStarted.className).toMatch(/success/);
+            expect(getStarted.querySelector('svg')).not.toBeNull();
+            fireEvent.click(getStarted);
             expect(onDone).toHaveBeenCalledWith(true);
 
             const root = screen.getByTestId('onboarding-carousel');
@@ -269,6 +361,34 @@ describe('Onboarding: explainer gating', () => {
         globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
     }
 
+    it('keeps only the intro carousel free of app and page headers', () => {
+        stubMatchMedia(false);
+
+        const license = mountOnboarding();
+        const licenseBanner = screen.getAllByRole('banner')
+            .find((banner) => within(banner).queryByRole('region', { name: 'App header' }));
+        expect(licenseBanner).toBeDefined();
+        expect(within(licenseBanner).getByRole('region', { name: 'App header' }))
+            .toBeInTheDocument();
+        expect(within(licenseBanner).getByRole('heading', { name: 'License Agreement' }))
+            .toBeInTheDocument();
+
+        license.unmount();
+        acceptLicense();
+        const carousel = mountOnboarding();
+
+        expect(screen.getByRole('group', { name: 'Onboarding steps' })).toBeInTheDocument();
+        expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+        expect(carousel.container.querySelector('header')).toBeNull();
+
+        carousel.unmount();
+        const addWallet = mountOnboarding({ onBack() {} });
+        const addWalletBanner = screen.getByRole('banner');
+        expect(within(addWalletBanner).getByRole('heading', { name: 'Add Wallet' }))
+            .toBeInTheDocument();
+        expect(addWallet.container.querySelector('header')).not.toBeNull();
+    });
+
     it('uses calm, platform-first copy for the license and first explainer step', () => {
         stubMatchMedia(false);
         const license = mountOnboarding();
@@ -281,7 +401,7 @@ describe('Onboarding: explainer gating', () => {
         acceptLicense();
         mountOnboarding();
 
-        expect(screen.getByRole('heading', { name: 'Your keys, your wallet' }))
+        expect(screen.getByRole('heading', { name: 'Your Wallet' }))
             .toBeInTheDocument();
         expect(screen.getByText(/XChain Platform gives you a self-custodial wallet/))
             .toBeInTheDocument();
@@ -294,13 +414,13 @@ describe('Onboarding: explainer gating', () => {
         mountOnboarding();
         // Carousel is up (first explainer frame + Skip), welcome buttons hidden.
         expect(screen.getByTestId('onboarding-carousel')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Create new wallet/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Create New Wallet/ })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
         // Now the welcome screen with the create/import fork.
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('introduces the XChain Platform before naming current chain support', () => {
@@ -311,7 +431,7 @@ describe('Onboarding: explainer gating', () => {
         const tabs = screen.getAllByRole('tab');
         fireEvent.click(tabs[tabs.length - 1]);
 
-        expect(screen.getByRole('heading', { name: 'Built for the XChain Platform' }))
+        expect(screen.getByRole('heading', { name: 'Supported Networks' }))
             .toBeInTheDocument();
         expect(screen.getByText(/XChain Platform on Bitcoin, Litecoin, and Dogecoin/))
             .toBeInTheDocument();
@@ -328,23 +448,23 @@ describe('Onboarding: explainer gating', () => {
 
         mountOnboarding();
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import Wallet' })).toBeInTheDocument();
     });
 
-    it('keeps the fresh welcome hierarchy and full-width primary and secondary actions', () => {
+    it('keeps the fresh welcome hierarchy and full-width success and primary actions', () => {
         stubMatchMedia(false);
         acceptLicense();
         globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
         mountOnboarding();
 
-        expect(screen.queryByRole('heading', { name: 'Wallet setup' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Wallet Setup' })).not.toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(branding.PRODUCT_NAME);
 
-        const create = screen.getByRole('button', { name: 'Create new wallet' });
-        const importWallet = screen.getByRole('button', { name: 'Import wallet' });
-        expect(create.className).toMatch(/primary/);
-        expect(importWallet.className).toMatch(/secondary/);
+        const create = screen.getByRole('button', { name: 'Create New Wallet' });
+        const importWallet = screen.getByRole('button', { name: 'Import Wallet' });
+        expect(create.className).toMatch(/success/);
+        expect(importWallet.className).toMatch(/primary/);
         expect(create.className).toMatch(/block/);
         expect(importWallet.className).toMatch(/block/);
         expect(create.className).toMatch(/md/);
@@ -356,7 +476,7 @@ describe('Onboarding: explainer gating', () => {
         acceptLicense();
         mountOnboarding({ onBack() {} });
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('skips the carousel once the seen-flag is set', () => {
@@ -365,7 +485,7 @@ describe('Onboarding: explainer gating', () => {
         globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
         mountOnboarding();
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Create New Wallet/ })).toBeInTheDocument();
     });
 
     it('supports returning from create and then entering import', () => {
@@ -392,13 +512,13 @@ describe('Onboarding: explainer gating', () => {
         }
 
         render(<FlowHarness />);
-        fireEvent.click(screen.getByRole('button', { name: 'Create new wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back from create' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import Wallet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back from import' }));
 
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import Wallet' })).toBeInTheDocument();
     });
 });
 
@@ -458,7 +578,7 @@ describe('Onboarding: license gate', () => {
             mountLicenseGate();
             await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled());
             fireEvent.click(screen.getByRole('checkbox'));
-            expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeEnabled();
+            expect(screen.getByRole('button', { name: 'Accept and Continue' })).toBeEnabled();
         });
     });
 
@@ -489,18 +609,26 @@ describe('Onboarding: license gate', () => {
         await withElementDimensions({ scrollHeight: 600, clientHeight: 200 }, async () => {
             mountLicenseGate();
             const checkbox = screen.getByRole('checkbox');
-            const accept = screen.getByRole('button', { name: 'Accept and continue' });
+            const accept = screen.getByRole('button', { name: 'Accept and Continue' });
             expect(checkbox).toBeDisabled();
-            expect(accept).toBeDisabled();
+            expect(accept).toBeEnabled();
             expect(accept).toHaveAccessibleDescription('Review all license terms to continue.');
-            expect(buttonCss).toMatch(/\.btn:disabled:not\(\.link\)\s*\{[^}]*background:\s*var\(--xc-control-disabled-bg\)[^}]*border-color:\s*var\(--xc-control-disabled-border\)[^}]*color:\s*var\(--xc-control-disabled-text\)/s);
+            expect(buttonCss).not.toMatch(/\.btn:disabled[^{]*\{/);
+            fireEvent.click(accept);
+            expect(localStorage.getItem('xc:licenseAcceptedAt')).toBeNull();
+            expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+            expect(screen.getAllByText('Review all license terms to continue.').length).toBeGreaterThan(0);
 
             const terms = screen.getByLabelText('License terms');
             terms.scrollTop = 400;
             fireEvent.scroll(terms);
             expect(checkbox).toBeEnabled();
-            expect(accept).toBeDisabled();
+            expect(checkbox).not.toHaveAttribute('aria-invalid', 'true');
+            expect(accept).toBeEnabled();
             expect(accept).toHaveAccessibleDescription('Check "I have read and agree to these terms" to continue.');
+            fireEvent.click(accept);
+            expect(localStorage.getItem('xc:licenseAcceptedAt')).toBeNull();
+            expect(screen.getAllByText('Check "I have read and agree to these terms" to continue.').length).toBeGreaterThan(0);
 
             fireEvent.click(checkbox);
             expect(accept).toBeEnabled();
@@ -523,7 +651,7 @@ describe('Onboarding: demo entry', () => {
                 <Onboarding onCreate={() => {}} onImport={() => {}} onDemoEntered={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
@@ -548,7 +676,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
         await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
 
         expect(importMnemonic).toHaveBeenCalledTimes(1);
@@ -591,7 +719,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('This device already has a wallet. Unlock it to continue.');
         fireEvent.click(within(alert).getByRole('button', { name: 'Unlock' }));
@@ -612,7 +740,7 @@ describe('Onboarding: demo entry', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('Storage is full.');
         expect(within(alert).queryByRole('button', { name: 'Unlock' })).toBeNull();

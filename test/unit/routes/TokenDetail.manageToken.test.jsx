@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TokenDetail gates its direct Manage action on the same all-addresses
-// ownership check ManageToken itself uses, never on the active address alone.
+// TokenDetail lets any wallet open Manage. The selected form owns the
+// authoritative submit-time ownership refusal.
 
-import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -26,6 +26,8 @@ afterEach(() => {
     __clearTokenInfoCache();
     localStorage.removeItem('xc:activeAccount:w1');
 });
+
+beforeEach(() => localStorage.setItem('xc:assetBalanceUnit', 'asset'));
 
 // jsdom has no ResizeObserver; TokenDetail's balance hero uses one to
 // auto-shrink the amount text. Same stub as test/unit/routes-render.test.jsx.
@@ -85,9 +87,10 @@ describe('TokenDetail "Manage token" action', () => {
     it('keeps the balance label and amount ahead of the hero actions in DOM reading order', () => {
         renderDetail({ creator: OTHER });
 
-        const hero = screen.getByRole('region', { name: 'S18PROBE balance' });
-        const label = within(hero).getByText('Total balance');
-        const amountUnit = within(hero).getByText('S18PROBE');
+        // The card's caption is the asset; the amount follows it, then the round buttons.
+        const hero = screen.getByRole('region', { name: /S18PROBE$/ });
+        const label = within(hero).getByText('S18PROBE', { selector: '[class*="cardCaptionText"]' });
+        const amountUnit = within(hero).getByText('S18PROBE', { selector: 'span[class*="amountCode"]' });
         const action = within(hero).getByRole('button', { name: 'Hide balance' });
 
         expect(label.compareDocumentPosition(amountUnit) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -99,31 +102,40 @@ describe('TokenDetail "Manage token" action', () => {
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
 
-        const manage = await screen.findByRole('button', { name: 'Manage' });
-        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+        // The Actions tab opens first: the basics lead the main list, and the
+        // issuer's Manage token row sits in its own list below.
+        const manage = await screen.findByRole('button', { name: /^Manage token\b/ });
+        const actions = within(screen.getByRole('list', { name: 'Actions for S18PROBE' }))
             .getAllByRole('button');
-        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Trade',
-            'Manage',
+        expect(actions.slice(0, 3).map((button) => button.getAttribute('data-action-id'))).toEqual([
+            'send',
+            'receive',
+            'exchange',
         ]);
+        expect(actions.some((button) => button.getAttribute('data-action-id') === 'manage')).toBe(false);
+        expect(within(screen.getByRole('list', { name: 'You issued this token' })).getByRole('button', { name: /^Manage token\b/ }))
+            .toBe(manage);
         fireEvent.click(manage);
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
 
-    it('does not render for a wallet that only holds (never issued) the tick', async () => {
-        const { messaging } = renderDetail({ creator: OTHER });
+    it('renders and navigates for a wallet that only holds the tick', async () => {
+        const { messaging, onManageToken } = renderDetail({ creator: OTHER });
 
-        await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+        expect(screen.getByRole('list', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        const manage = screen.getByRole('button', { name: /^Manage token\b/ });
+        expect(manage).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(manage);
+        expect(onManageToken).toHaveBeenCalledTimes(1);
+        expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
     });
 
     it('does not render Manage for a native coin', () => {
         renderDetail({ creator: MINE, kind: 'native' });
 
-        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+        expect(screen.getByRole('list', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Manage token\b/ })).toBeNull();
     });
 
     it('refetches a balance when restored route state omits quantity', async () => {
@@ -141,7 +153,7 @@ describe('TokenDetail "Manage token" action', () => {
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledWith('w1', 'account-2'));
         await waitFor(() => expect(
-            within(screen.getByRole('region', { name: 'S18PROBE balance' })).getByText('2.50000000'),
+            within(screen.getByRole('region', { name: /S18PROBE$/ })).getByText('2.50000000'),
         ).toBeInTheDocument());
     });
 });

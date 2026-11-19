@@ -11,7 +11,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import {
     clearDemoWalletId,
@@ -24,16 +24,20 @@ const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
 
 function mountHome(onHistory) {
+    const address = 'bc1qsamplehomeactivity0000000000000000000000';
     const messaging = {
         listWallets: vi.fn().mockResolvedValue([WALLET]),
         listAccounts: vi.fn().mockResolvedValue([ACCOUNT]),
         getWalletBalances: vi.fn().mockResolvedValue({}),
-        getAddressesByChain: vi.fn().mockResolvedValue({}),
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            'bitcoin-mainnet': [{ id: 'address-a', address }],
+        }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({}),
+        getAddressHistory: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     };
 
-    return render(
+    const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Home
                 activeWalletId={WALLET.id}
@@ -42,6 +46,7 @@ function mountHome(onHistory) {
             />
         </MessagingProvider>,
     );
+    return { ...view, messaging };
 }
 
 afterEach(() => {
@@ -50,31 +55,29 @@ afterEach(() => {
 });
 
 describe('Home Activity tab', () => {
-    it('points the Activity tab of a real wallet at History', async () => {
+    // Home no longer has an Activity tab: History holds the same list, so
+    // Home shows only the Balances, NFTs and DeFi tabs.
+    it('has no Activity tab for a real wallet with no history', async () => {
         const onHistory = vi.fn();
         mountHome(onHistory);
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-
-        expect(screen.getByText('Your activity is in History')).toBeTruthy();
-        expect(screen.queryByText('Recent activity')).toBeNull();
-
-        const openHistory = screen.getByRole('button', { name: 'Open History' });
-        expect(openHistory.disabled).toBe(false);
-        fireEvent.click(openHistory);
-        expect(onHistory).toHaveBeenCalledTimes(1);
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Balances', 'NFTs', 'DeFi']);
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
+        expect(onHistory).not.toHaveBeenCalled();
     });
 
-    it('keeps demo wallets on their synthesized activity list', async () => {
+    it('has no Activity tab for a demo wallet and reads no history for Home', async () => {
         const onHistory = vi.fn();
         markDemoWallet(WALLET.id);
-        mountHome(onHistory);
+        const { messaging } = mountHome(onHistory);
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-
-        expect(screen.getByText('No activity yet')).toBeTruthy();
-        expect(screen.queryByText('Your activity is in History')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Open History' })).toBeNull();
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Recent activity' })).toBeNull();
+        expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         expect(onHistory).not.toHaveBeenCalled();
     });
 });

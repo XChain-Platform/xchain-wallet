@@ -52,8 +52,8 @@ assert.doesNotThrow(() => new URL(verifyDoc[1]),
 
 assert.match(
     aboutSrc,
-    /rel="noreferrer noopener"/,
-    'DocLink opens hosted docs in a new context without leaking the opener',
+    /rel:\s*'noreferrer noopener'/,
+    'docLinkProps opens hosted docs in a new context without leaking the opener',
 );
 
 assert.match(
@@ -63,7 +63,7 @@ assert.match(
 );
 assert.match(
     aboutSrc,
-    /<Row label="Verify a release">[\s\S]+?<DocLink path=\{VERIFY_RELEASE_DOC\} label="Verification recipe"/,
+    /title=(?:\{t\('settings\.about\.verifyARelease'\)\}|"Verify a release")[\s\S]+?docLinkProps\(VERIFY_RELEASE_DOC\)/,
     'AboutSection renders a "Verify a release" row pointing at the doc',
 );
 

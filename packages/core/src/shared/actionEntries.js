@@ -41,11 +41,15 @@
 // nothing. That is the whole contract: no shell-name branching, and no
 // second place where the menu's contents are decided.
 
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/actionsMenu.js';
+
 /**
  * @typedef {Object} ActionEntryDef
  * @property {string} id            Stable entry id, also the ActionsMenu key.
  * @property {string} handler       Name of the handler prop that arms it.
- * @property {string} label         Button label.
+ * @property {string} [label]       Button label.
+ * @property {string} [labelKey]    Translation key used in place of label.
  * @property {string} description   One-line explanation under the label.
  */
 
@@ -59,7 +63,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'issue',
         handler: 'onIssue',
         label: 'Issue token',
-        description: 'Create a new token with full control over all settings.',
+        description: 'Choose a template for a new token, including full custom settings.',
     },
     {
         id: 'mint',
@@ -100,7 +104,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'broadcast',
         handler: 'onBroadcast',
-        label: 'Broadcast',
+        label: 'Announce',
         description: 'Publish text, oracle value, or feed reference on-chain.',
     },
     {
@@ -118,7 +122,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'dispensers-list',
         handler: 'onMyDispensers',
-        label: 'My dispensers',
+        labelKey: 'actionsMenu.myDispensers',
         description: 'Manage dispensers you have opened: view and cancel.',
     },
     {
@@ -182,12 +186,6 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Connect two existing actions on different chains so History shows them as linked.',
     },
     {
-        id: 'parallel',
-        handler: 'onParallel',
-        label: 'Parallel cross-chain actions',
-        description: 'Compose multiple independent actions across any chains and sign them sequentially. Not all-or-nothing: if one side fails, the sides that already went through are not undone.',
-    },
-    {
         id: 'batch',
         handler: 'onBatch',
         label: 'Batch',
@@ -205,17 +203,9 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         label: 'Cross-chain order',
         description: 'Place a limit order that gives a token on one chain and gets a token on another. It waits on the network\'s order book and fills automatically, possibly in parts.',
     },
-    {
-        id: 'cross-chain-templates',
-        handler: 'onCrossChainTemplates',
-        label: 'Cross-chain templates',
-        description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
-    },
     // The two XBRIDGE surfaces (ISSUE v7 settings, and the move itself).
-    // They shipped as entries appended by each shell after this list, which
-    // is the same triplication this module exists to end: three copies of a
-    // description are three chances to drift. Seated beside the other
-    // cross-chain rows, where a user already looks for "another chain".
+    // Defined once here, not per shell, so the description cannot drift between
+    // copies; seated beside the other cross-chain rows, where users look.
     {
         id: 'bridge-move',
         handler: 'onBridgeMove',
@@ -237,7 +227,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'multisig-sign',
         handler: 'onMultisigSign',
-        label: 'Multisig signing',
+        label: 'Multisig sessions',
         description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
     },
     {
@@ -249,8 +239,8 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'bet-markets',
         handler: 'onBetting',
-        label: 'Betting',
-        description: 'Browse betting markets and place a bet, track your bets, or run a market of your own as its oracle.',
+        label: 'Prediction markets',
+        description: 'Browse prediction markets, buy and track positions, or run a market of your own as its oracle.',
     },
     {
         id: 'cosigner-accounts',
@@ -283,12 +273,6 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Paste an unsigned transaction (hex / base64) and sign it with one of your keys.',
     },
     {
-        id: 'advanced',
-        handler: 'onAdvanced',
-        label: 'Advanced action',
-        description: 'Power-user form for submitting any supported on-chain action type.',
-    },
-    {
         id: 'lock-address',
         handler: 'onLockAddress',
         label: 'Lock this address',
@@ -297,7 +281,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'pair-signer',
         handler: 'onPairSigner',
-        label: 'Pair hardware signer',
+        label: 'Pair hardware wallet',
         description: 'Add a Trezor or Ledger to this wallet.',
     },
 ]);
@@ -327,8 +311,8 @@ export const ACTION_GROUPS = Object.freeze([
         id: 'workflows',
         label: 'Publishing and multi-chain',
         entryIds: Object.freeze([
-            'publish-file', 'link', 'parallel', 'batch', 'cross-chain-swap',
-            'cross-chain-order', 'cross-chain-templates', 'bridge-move',
+            'publish-file', 'link', 'batch', 'cross-chain-swap',
+            'cross-chain-order', 'bridge-move',
             'bridge-settings',
         ]),
     },
@@ -345,7 +329,7 @@ export const ACTION_GROUPS = Object.freeze([
         label: 'Wallet tools',
         entryIds: Object.freeze([
             'contacts', 'sign-message', 'verify-signature', 'sign-psbt',
-            'advanced', 'lock-address', 'pair-signer',
+            'lock-address', 'pair-signer',
         ]),
     },
 ]);
@@ -386,7 +370,7 @@ export function buildActionEntries(handlers = {}, capabilities = {}) {
         .filter(({ def }) => def)
         .map(({ def, group }) => ({
             id: def.id,
-            label: def.label,
+            label: def.labelKey ? t(def.labelKey) : def.label,
             description: def.id === 'pair-signer' && !pairsTrezor
                 ? PAIR_SIGNER_LEDGER_ONLY
                 : def.description,

@@ -63,8 +63,13 @@ describe('<Switch>', () => {
         expect(css).toMatch(/--xc-switch-track-width:\s*var\(--xc-control-h-md\)/);
         expect(css).toMatch(/--xc-switch-track-height:\s*calc\(var\(--xc-control-h-sm\)/);
         expect(css).toMatch(/\.input:focus-visible \+ \.track\s*{[^}]*var\(--xc-control-focus-ring\)/s);
-        expect(css).toMatch(/\.input:disabled \+ \.track\s*{[^}]*var\(--xc-control-disabled-border\)/s);
-        expect(css).toMatch(/\.input:checked \+ \.track\s*{[^}]*var\(--xc-control-selected\)/s);
+        // G130: a switch that cannot change keeps its look; no disabled tokens.
+        expect(css).not.toMatch(/\.input:disabled[^{]*\+ \.track[^{]*{[^}]*(?:control-disabled|disabled-saturation)/s);
+        // On is the main-action green with a white thumb, never the blue selection colour.
+        expect(css).toMatch(/\.input:checked \+ \.track\s*{[^}]*background:\s*var\(--xc-switch-on\)/s);
+        expect(css).toMatch(/\.input:checked \+ \.track \.thumb\s*{[^}]*var\(--xc-switch-on-thumb\)/s);
+        expect(css).not.toMatch(/\.input:checked \+ \.track[^{]*{[^}]*(?:control-selected|accent-primary)/s);
+        expect(css).not.toMatch(/:checked\s*\+\s*\.track\s*{[^}]*accent-primary-hover/s);
         expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     });
 

@@ -51,6 +51,8 @@ import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import { encodeWif } from '../../../../packages/core/src/crypto/wif.js';
 import { encodeXcwChunks } from '../../../../packages/core/src/uri/psbtQr.js';
+import { nativeDecimalsFor } from '../../../../packages/core/src/registry/coinTicker.js';
+import { amountAsShown, fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
@@ -58,6 +60,8 @@ const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183
 /** BIP173 test vector: a valid mainnet P2WPKH address, owned by nobody. */
 const PAY_TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const PAY_AMOUNT = '0.125';
+/** PAY_AMOUNT as Send's Amount field shows it in BTC's format (U61). */
+const PAY_AMOUNT_SHOWN = amountAsShown(PAY_AMOUNT, nativeDecimalsFor('bitcoin'));
 const PAY_LABEL = 'Coffee money';
 const PAYMENT_QR = `bitcoin:${PAY_TO}?amount=${PAY_AMOUNT}&label=${encodeURIComponent(PAY_LABEL)}`;
 
@@ -97,6 +101,23 @@ async function openScan(page) {
 }
 
 /**
+ * The route's own classification notice.
+ *
+ * THE CLASSIFICATION ERROR IS NOT THE ONLY NOTICE ON THIS SCREEN. In a browser
+ * with no camera the QrScanner renders its own "can't scan" note inside its
+ * subtree, and a bare page-wide lookup picks whichever comes first in the DOM.
+ * That once read as a classification result and made a chunk refusal look like
+ * the wrong message entirely. The route's message sits in the form's status
+ * slot (`data-form-status`, the first item of the form), so it is read there
+ * and the scanner's note, which sits among the fields, stays out of it.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+function scanStatus(page) {
+    return page.getByTestId('scan-route').locator('[data-form-status] [role="alert"]');
+}
+
+/**
  * Pastes `text` into the scan route's fallback box and classifies it.
  * Returns 'routed' when the route claimed it, or the error text otherwise.
  */
@@ -110,14 +131,7 @@ async function classifyPaste(page, text) {
     // and psbt alike - and the transient "Scanned, routing…" text is never
     // observable, because the parent switches views in the same state update.
     const routed = page.getByTestId('scan-route');
-    // THE CLASSIFICATION ERROR IS NOT THE ONLY ALERT ON THIS SCREEN. In a browser
-    // with no camera the QrScanner renders its own "Not supported" alert inside
-    // its subtree, and a bare getByRole('alert') picks whichever comes first in
-    // the DOM - which is the scanner's. That read as a classification result and
-    // made a chunk refusal look like the wrong message entirely. The status row
-    // this route sets renders as a sibling placed before the form, so scope to
-    // the form's preceding sibling and the scanner's own alert stays out of it.
-    const failed = page.getByTestId('scan-route').locator('xpath=preceding-sibling::*//*[@role="alert"]');
+    const failed = scanStatus(page);
     let outcome = null;
     await expect.poll(async () => {
         if (await routed.count() === 0) outcome = 'routed';
@@ -182,7 +196,7 @@ test.describe('scan and classify (§24.3)', () => {
             await openScan(page);
 
             // The camera claims the frame on its own; the spec touches nothing.
-            const to = page.getByLabel('To', { exact: true });
+            const to = fieldByLabel(page, 'To');
             await expect(to, 'the scanned payment QR never reached the Send screen')
                 .toBeVisible({ timeout: 60_000 });
 
@@ -190,14 +204,14 @@ test.describe('scan and classify (§24.3)', () => {
                 'Send was opened with a DIFFERENT destination than the QR carried, which is the '
                 + 'one way this surface loses a user their coins')
                 .toBe(PAY_TO);
-            expect(await page.getByLabel(AMOUNT_LABEL).first().inputValue(),
+            await expect(page.getByLabel(AMOUNT_LABEL).first(),
                 'the amount from the payment QR did not reach the Amount field, so the user pays '
                 + 'a number nobody asked for')
-                .toBe(PAY_AMOUNT);
+                .toHaveValue(PAY_AMOUNT_SHOWN);
 
             // BIP21 `label` becomes the memo. Present only when the form
             // renders one, so this is conditional rather than assumed.
-            const memo = page.getByLabel('Memo', { exact: true });
+            const memo = fieldByLabel(page, 'Memo');
             if (await memo.count() > 0) {
                 expect(await memo.first().inputValue(),
                     'the payment QR carried a label and the memo field did not receive it')
@@ -214,7 +228,7 @@ test.describe('scan and classify (§24.3)', () => {
         try {
             await openScan(page);
 
-            await expect(page.getByTestId('scan-route').locator('xpath=preceding-sibling::*//*[@role="alert"]'),
+            await expect(scanStatus(page),
                 'a recovery phrase was scanned and the screen said nothing about it')
                 .toContainText(/This is a recovery phrase/i, { timeout: 60_000 });
 
@@ -226,7 +240,7 @@ test.describe('scan and classify (§24.3)', () => {
                 'a scanned recovery phrase navigated the wallet somewhere. The route exists so a '
                 + 'casual scan of secret material cannot write to the vault or move money')
                 .toBeVisible();
-            await expect(page.getByLabel('To', { exact: true }),
+            await expect(fieldByLabel(page, 'To'),
                 'a scanned recovery phrase opened the Send screen').toHaveCount(0);
         } finally {
             await close();
@@ -272,7 +286,7 @@ test.describe('scan and classify (§24.3)', () => {
                 'the garbage blob was refused without saying so').toBe(true);
             await expect(page.getByTestId('scan-route'),
                 'the refused blob navigated the wallet away from Scan').toBeVisible();
-            await expect(page.getByLabel('To', { exact: true }),
+            await expect(fieldByLabel(page, 'To'),
                 'the refused blob opened the Send screen').toHaveCount(0);
         });
     });
@@ -292,15 +306,15 @@ test.describe('scan and classify (§24.3)', () => {
             // renders the form, so the To field is not there the instant the
             // scan route unmounts. Wait for it as the receive step waits for its
             // screen, then read the filled values.
-            await expect(page.getByLabel('To', { exact: true }),
+            await expect(fieldByLabel(page, 'To'),
                 'the send intent did not open the Send screen')
                 .toBeVisible({ timeout: 30_000 });
-            expect(await page.getByLabel('To', { exact: true }).inputValue(),
+            expect(await fieldByLabel(page, 'To').inputValue(),
                 'the send intent opened Send with a different destination than the URI named')
                 .toBe(PAY_TO);
-            expect(await page.getByLabel(AMOUNT_LABEL).first().inputValue(),
+            await expect(page.getByLabel(AMOUNT_LABEL).first(),
                 'the send intent carried an amount and Send did not receive it')
-                .toBe(PAY_AMOUNT);
+                .toHaveValue(PAY_AMOUNT_SHOWN);
         });
 
         await test.step('a receive intent reaches Receive, not Send', async () => {
@@ -312,10 +326,10 @@ test.describe('scan and classify (§24.3)', () => {
                 'an xchain: receive intent was not routed').toBe('routed');
             // Anchored on a Receive-only control rather than the title: PageHeader
             // renders its title as a <span>, so there is no heading role to match.
-            await expect(page.getByRole('button', { name: 'Copy QR code', exact: true }),
+            await expect(page.getByRole('button', { name: /^Copy (QR code|payment link)/ }),
                 'a receive intent did not open the Receive screen')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(page.getByLabel('To', { exact: true }),
+            await expect(fieldByLabel(page, 'To'),
                 'a RECEIVE intent opened the SEND form, which is a spend surface pointed at an '
                 + 'address the user did not choose')
                 .toHaveCount(0);
@@ -351,7 +365,7 @@ test.describe('scan and classify (§24.3)', () => {
             await openScan(page);
             expect(await classifyPaste(page, PSBT_HEX), 'a PSBT hex was not routed').toBe('routed');
 
-            const box = page.getByLabel('Unsigned transaction code');
+            const box = fieldByLabel(page, 'Unsigned transaction code');
             await expect(box, 'a scanned PSBT did not open the Sign panel')
                 .toBeVisible({ timeout: 30_000 });
             // Compared as a boolean so a failure cannot dump a transaction into the

@@ -101,6 +101,7 @@ import {
     unlockButton, unlockedShell, unlockWallet,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { restoreBackupFile } from '../../fixtures/backupRestore.js';
 // Imported for its CONSTANTS, not to rebuild the envelope: the checked-in file
 // is the fixture, and reading its secrets from the one place that wrote them
 // means the two can never drift.
@@ -121,14 +122,12 @@ const UNKNOWN_RECIPIENT = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 /**
  * Opens a fresh compose screen.
  *
- * SCREEN FACT: the Messaging inbox offers compose once: "New conversation"
- * in its actions row when it lists conversations, or the empty state's "New
- * message" when it has none (a fresh wallet).
+ * SCREEN FACT: the Messaging title bar carries one "New message" plus (G95).
  */
 async function gotoNewConversation(page) {
     await gotoSection(page, 'Messaging');
-    const compose = page.getByRole('main').getByRole('button', { name: /^(New conversation|New message)$/ });
-    await expect(compose, 'no "New conversation" entry point on the Messaging screen')
+    const compose = page.getByRole('banner').getByRole('button', { name: 'New message', exact: true });
+    await expect(compose, 'no "New message" entry point on the Messaging screen')
         .toBeVisible({ timeout: 30_000 });
     await compose.click();
 
@@ -157,7 +156,7 @@ function keyRequestBlock(scope) {
 }
 
 function requestButton(scope) {
-    return scope.getByRole('button', { name: /Request encrypted session/i });
+    return scope.getByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' });
 }
 
 /** Every alert currently on screen, joined, so nothing can hide in a sibling. */
@@ -207,9 +206,10 @@ async function reachHandshakeButton(page) {
  * passphrase and has never stored it. That is the legacy state, and restoring
  * this file is the only route a browser has to it.
  *
- * The three passwords are three different secrets. Two come from the envelope
- * (the file's own, and the one the exporting device used); the third is this
- * device's, chosen here, and it is the one every later unlock takes.
+ * The envelope carries two different secrets: the file's own, and the one the
+ * exporting device used. The tab asks for the file's first and the wallet's
+ * once the file has opened, and the restored wallet keeps the wallet's
+ * password on this device, so that is the one every later unlock takes.
  */
 async function restorePreSpecWallet(page) {
     const envelope = await readFile(ENVELOPE_PATH, 'utf8');
@@ -218,13 +218,12 @@ async function restorePreSpecWallet(page) {
     await page.getByRole('button', { name: 'Import wallet' }).click();
     await page.getByRole('tab', { name: 'Encrypted backup' }).click();
 
-    await page.getByPlaceholder('{"version":1').fill(envelope);
-    await page.getByLabel('Backup password', { exact: true })
-        .fill(PRE_SPEC_BACKUP_PASSWORD);
-    await page.getByLabel('Password of the wallet in this backup', { exact: true })
-        .fill(PRE_SPEC_WALLET_PASSWORD);
-    await page.getByLabel('Password for this device', { exact: true }).fill(PASSWORD);
-    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await restoreBackupFile(page, {
+        content: envelope,
+        name: 'pre-spec.xchain-wallet',
+        backupPassword: PRE_SPEC_BACKUP_PASSWORD,
+        walletPassword: PRE_SPEC_WALLET_PASSWORD,
+    });
     // A restore ends on the donation notice; the shell waits behind Continue.
     await acknowledgeImportNotice(page);
 
@@ -252,7 +251,7 @@ async function unlockDecliningCapture(page, password) {
         'the unlock let a wallet through that holds a passphrase it has never stored, so '
         + 'either the capture step is gone or this wallet is not in the legacy state at all')
         .toBeVisible({ timeout: kdfStepTimeout() });
-    const notNow = page.getByRole('button', { name: 'Not now', exact: true });
+    const notNow = page.getByRole('button', { name: 'Not Now', exact: true });
     await expect(notNow, 'the capture step offers no way to postpone, so a user who does not '
         + 'have their passphrase to hand cannot reach the wallet at all')
         .toBeVisible({ timeout: 30_000 });
@@ -273,7 +272,8 @@ test.describe('a failed message key-request says why', () => {
         await restorePreSpecWallet(page);
         // And the wallet's own offer to fix itself is declined, which is what
         // leaves it listed, unlocked and unpooled - the state under test.
-        await unlockDecliningCapture(page, PASSWORD);
+        // The restored wallet keeps its own password on this device.
+        await unlockDecliningCapture(page, PRE_SPEC_WALLET_PASSWORD);
 
         const main = await reachHandshakeButton(page);
 

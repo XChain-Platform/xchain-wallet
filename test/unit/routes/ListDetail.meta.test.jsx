@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
 
@@ -38,50 +38,42 @@ afterEach(() => {
 });
 
 describe('ListDetail metadata', () => {
-    it('shows name and description in order directly after the list index', async () => {
-        const { container } = renderList({
+    // The identity card carries the name in bold, then the type line and the
+    // description muted (G16); the Details card has no Name or Description row.
+    it('shows the name, the type line and the description on the identity card', async () => {
+        renderList({
             name: 'Treasury recipients',
             description: 'Approved payout addresses',
         });
 
-        await screen.findByText('Treasury recipients');
+        const card = within(await screen.findByRole('region', { name: 'List identity' }));
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
-        const details = container.querySelector('dl');
-        const rows = Array.from(details.children).map((element) => element.textContent);
-        const listIndexPosition = rows.indexOf('List index');
-
-        expect(rows.slice(listIndexPosition, listIndexPosition + 8)).toEqual([
-            'List index',
-            '#77',
-            'Name',
-            'Treasury recipients',
-            'Description',
-            'Approved payout addresses',
-            'Type',
-            'Address list',
-        ]);
+        expect(card.getByRole('heading', { name: 'Treasury recipients' })).toBeTruthy();
+        expect(card.getByText('Address list · #77')).toBeTruthy();
+        expect(card.getByText('Approved payout addresses')).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const details = within(screen.getByRole('list', { name: 'List details' }));
+        expect(details.queryByText('Name')).toBeNull();
+        expect(details.queryByText('Description')).toBeNull();
     });
 
-    it('shows a name without adding a description row', async () => {
-        const { container } = renderList({ name: 'Treasury recipients' });
+    it('shows a name without a description line', async () => {
+        renderList({ name: 'Treasury recipients' });
 
-        await screen.findByText('Treasury recipients');
-        const details = within(container.querySelector('dl'));
-        expect(details.getByText('Name')).toBeTruthy();
-        expect(details.queryByText('Description')).toBeNull();
+        const card = await screen.findByRole('region', { name: 'List identity' });
+        expect(card.querySelectorAll('p')).toHaveLength(1);
     });
 
     it.each([
         ['missing', {}],
         ['empty', { name: '' }],
         ['non-string', { name: 42 }],
-    ])('omits both metadata rows for a %s name', async (_case, detail) => {
-        const { container } = renderList(detail);
+    ])('names a list with a %s name by its type', async (_case, detail) => {
+        renderList(detail);
 
-        await screen.findByText('#77');
-        const details = within(container.querySelector('dl'));
-        expect(details.queryByText('Name')).toBeNull();
-        expect(details.queryByText('Description')).toBeNull();
+        const card = within(await screen.findByRole('region', { name: 'List identity' }));
+        expect(card.getByRole('heading', { name: 'Address list' })).toBeTruthy();
+        expect(card.getByText('#77')).toBeTruthy();
     });
 
     it('neutralizes a right-to-left override in the rendered name', async () => {

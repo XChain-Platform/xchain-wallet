@@ -24,7 +24,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
+// The stake-form route: the one Staking form on validator staking.
+import { NetworkStakeRoute as StakeForm } from '../../helpers/stakingFormRoutes.jsx';
 
 // One HD external address on Bitcoin mainnet so preferredSourceId picks
 // it as the funding SOURCE and the detection effect has a fromAddress.
@@ -98,11 +99,38 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         // Existing stake found -> Top up hint + mode radio auto-checked.
         expect(await screen.findByText(/Existing stake found/)).toBeInTheDocument();
         expect(
-            screen.getByRole('radio', { name: /Top up an existing stake/ }),
-        ).toBeChecked();
-        expect(
-            screen.getByRole('radio', { name: /New stake/ }),
-        ).not.toBeChecked();
+            screen.getByRole('button', { name: 'Mode: Top up an existing stake' }),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Mode: New stake' })).toBeNull();
+        expect(document.querySelector('[data-field-tag]')).toHaveTextContent(/^Detected$/);
+    });
+
+    it('puts the Mode dropdown first in the Staking fields, replacing the old Stake Mode section', async () => {
+        mountForm(vi.fn().mockResolvedValue([]));
+
+        const mode = await screen.findByRole('button', { name: 'Mode: New stake' });
+        const amount = await screen.findByLabelText(/^Amount/);
+        // Mode precedes the Amount field in document order.
+        expect(mode.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // The main section is titled by the action, as a noun.
+        expect(screen.getByRole('button', { name: 'Staking' })).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.queryByText('Position')).toBeNull();
+        expect(screen.queryByText('Stake Mode')).toBeNull();
+        expect(screen.queryByRole('radio')).toBeNull();
+        // Nothing is detected before a key is entered.
+        expect(document.querySelector('[data-field-tag]')).toBeNull();
+        expect(screen.getByRole('button', { name: 'About Mode' })).toBeInTheDocument();
+    });
+
+    it('lets the user override the detected mode and keeps the Detected tag', async () => {
+        mountForm(vi.fn().mockResolvedValue([
+            { signing_pubkey: PUBKEY, status: 'valid', amount: '100' },
+        ]));
+        await enterPubkey();
+        fireEvent.click(await screen.findByRole('button', { name: 'Mode: Top up an existing stake' }));
+        fireEvent.click(screen.getByRole('option', { name: 'New stake' }));
+        expect(screen.getByRole('button', { name: 'Mode: New stake' })).toBeInTheDocument();
+        expect(document.querySelector('[data-field-tag]')).toHaveTextContent(/^Detected$/);
     });
 
     it('auto-selects New stake when no stake matches the entered pubkey', async () => {
@@ -116,12 +144,8 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         await enterPubkey();
 
         expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
-        expect(
-            screen.getByRole('radio', { name: /New stake/ }),
-        ).toBeChecked();
-        expect(
-            screen.getByRole('radio', { name: /Top up an existing stake/ }),
-        ).not.toBeChecked();
+        expect(screen.getByRole('button', { name: 'Mode: New stake' })).toBeInTheDocument();
+        expect(document.querySelector('[data-field-tag]')).toHaveTextContent(/^Detected$/);
     });
 
     it('ignores a matching stake whose deactivation block has passed', async () => {
@@ -139,7 +163,7 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         await enterPubkey();
 
         expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
-        expect(screen.getByRole('radio', { name: /New stake/ })).toBeChecked();
+        expect(screen.getByRole('button', { name: 'Mode: New stake' })).toBeInTheDocument();
     });
 
     it('surfaces a manual-choice hint (and does not throw) when the indexer query rejects', async () => {
@@ -196,6 +220,11 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
     });
 });
 
+// Network lives in the standard's From section, closed on load.
+async function openFromSection() {
+    fireEvent.click(await screen.findByRole('button', { name: /^From/, expanded: false }));
+}
+
 describe('StakeForm network picker', () => {
     it('does not render the selected network kind', async () => {
         const chainId = 'bitcoin-regtest';
@@ -205,6 +234,7 @@ describe('StakeForm network picker', () => {
             }),
         }, chainId);
 
+        await openFromSection();
         await screen.findByRole('button', { name: 'Network: Bitcoin' });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
@@ -212,8 +242,9 @@ describe('StakeForm network picker', () => {
     it('offers only Bitcoin chains even when the wallet holds Litecoin and Dogecoin addresses', async () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         mountForm(vi.fn().mockResolvedValue([]), { getAddressesByChain: vi.fn().mockResolvedValue(held) });
+        await openFromSection();
         fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
-        const offered = screen.getAllByRole('option').map((o) => o.textContent);
+        const offered = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
         expect(offered.some((t) => /Bitcoin/.test(t))).toBe(true);
         expect(offered.some((t) => /Litecoin|Dogecoin/.test(t))).toBe(false);
     });

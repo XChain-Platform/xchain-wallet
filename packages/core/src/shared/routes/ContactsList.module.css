@@ -40,8 +40,10 @@
     border-top: none;
 }
 
-.row:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .row:focus-visible {
@@ -93,56 +95,135 @@
     line-height: 1;
 }
 
-/* Plus button on the Addresses tab line, right-justified. Matches the
-   sub-header icon buttons but sized to sit on the tab row. */
-.addAddressBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    margin-bottom: var(--xc-space-1);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addAddressBtn:hover {
-    background: var(--xc-bg-muted);
-}
-
-.addAddressBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.tabPanel {
-    padding: var(--xc-space-3) 0;
-}
-
-/* Quick-action row in the contact detail view, mirroring the Home screen's
-   quick actions: a 4-up grid of icon-over-label buttons. */
-/* Relative anchor so the address-picker dropdown can position under the row. */
-.actionsWrap {
-    position: relative;
-    margin-top: var(--xc-space-2);
-}
-
-/* One row of tiles at every width down to a 360 px phone: five tiles fit
-   at 56 px, and a narrower screen wraps them evenly instead of leaving the
-   fifth alone under a fixed four-column grid. */
-.quickActions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+/* A View Contact tab panel's blocks (the address cards and the add row; the
+   facts card and the notes), 8px apart (G80). */
+.panelStack {
+    display: flex;
+    flex-direction: column;
     gap: var(--xc-space-2);
 }
 
-/* Address-picker dropdown: appears below the action row when a multi-address
+/* Addresses tab: one card per address (operator ruling G124, layout 5). */
+.addressCards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.addressCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    /* The action row runs to the card's edges and its corners. */
+    overflow: hidden;
+}
+
+/* Line 1: the coin's icon and name, the label if any, the ticker at the end. */
+.addressCardHead {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.addressCardName {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+    white-space: nowrap;
+}
+
+.addressCardLabel {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.addressCardTicker {
+    margin-inline-start: auto;
+    flex: 0 0 auto;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+/* A labelled block inside a card: the label line, then its value. */
+.addressCardRow {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--xc-space-1) / 2);
+    min-width: 0;
+}
+
+/* The whole address, wrapping onto a second line rather than cut. */
+.addressCardAddress {
+    display: block;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    white-space: normal;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* Copy, Send and Remove share the card's bottom row equally, divided by
+   hairlines, flush with the card's edges. */
+.addressCardActions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--xc-border);
+    margin: 0 calc(-1 * var(--xc-card-pad)) calc(-1 * var(--xc-card-pad));
+}
+
+.addressCardActions .addressCardAction {
+    /* The full 44px control height, as the mockup draws the row. */
+    --xc-button-height: var(--xc-control-h-lg, 44px);
+    /* The ghost Button's slate hover fill is for white text; this row keeps
+       the accent text, so hover is the muted surface. */
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: transparent;
+    min-height: var(--xc-control-h-lg, 44px);
+    width: 100%;
+    border: 0;
+    border-inline-start: 1px solid var(--xc-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--xc-accent-text);
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+}
+
+.addressCardActions .addressCardAction:first-child {
+    border-inline-start: 0;
+}
+
+.addressCardActions .addressCardAction:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.notesText {
+    margin: 0;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+/* The contact detail view's Actions panel: the action list (G101), and a
+   relative anchor so the address-picker dropdown can position under it. */
+.actionsWrap {
+    position: relative;
+}
+
+/* Address-picker dropdown: appears below the action list when a multi-address
    contact's Send/Message needs the user to choose which address to use. */
 .addrMenu {
     position: absolute;
@@ -184,8 +265,10 @@
     font: inherit;
 }
 
-.addrMenuItem:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .addrMenuItem:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .addrMenuItem:focus-visible {
@@ -193,75 +276,16 @@
     outline-offset: -2px;
 }
 
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: 72px;
-    text-align: center;
-}
-
-/* Icon above label, as on the View address tiles: side by side, the label
-   had too little room and broke mid-word ("Messa ge"). */
-.quickAction > span {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.quickActionIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
 /* Cards in the contact detail view: one for name + notes, one per address. */
 .infoCard {
     composes: card from '../../ui/Card.module.css';
 }
 
-.addressCard {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
-.addressCard:last-child {
-    margin-bottom: 0;
+/* A muted bold label line over its value (Address, Notes). */
+.factLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    color: var(--xc-text-muted);
 }
 
 /* Show the full address; only ellipsis when it would overflow the card.
@@ -279,92 +303,3 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
 }
-
-/* Red-outline X button to delete a single address, pinned to the right of
-   its card and nudged toward the edge. */
-.addressDeleteBtn {
-    appearance: none;
-    margin-inline-start: auto;
-    margin-inline-end: calc(-1 * var(--xc-space-1));
-    flex: 0 0 auto;
-    /* 22x22 was two pixels under the WCAG 2.2 AA 2.5.8 pointer-target
-       floor, and this button deletes an address, so it is the last one that
-       should be hard to hit. */
-    width: var(--xc-tap-min);
-    height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-danger-fg);
-    cursor: pointer;
-}
-
-.addressDeleteBtn:hover {
-    background: color-mix(in srgb, var(--xc-danger) 10%, transparent);
-}
-
-.addressDeleteBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-/* Add-address modal: centered card over a dimmed full-screen backdrop. */
-.modalOverlay {
-    position: fixed;
-    box-sizing: border-box;
-    inset: 0;
-    z-index: var(--xc-z-modal);
-    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
-}
-
-.modalCard {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 420px;
-    /* Overlay-relative bound first; the safe-area-aware viewport cap below wins. */
-    max-height: 100%;
-    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-modal);
-    /* The shared dialog geometry (OverlaySurface): space-4 padding, a
-       centred title and equal-width footer buttons. */
-    padding: var(--xc-space-4);
-}
-
-.modalTitle {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    line-height: 1.25;
-    color: var(--xc-text);
-    text-align: center;
-    margin-bottom: var(--xc-space-3);
-}
-
-.modalActions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
-}
-
-.modalActions > * {
-    flex: 1 1 0;
-    min-width: 0;
-}
-

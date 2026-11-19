@@ -64,6 +64,7 @@ const work = mkdtempSync(join(tmpdir(), 'xc1513-cws-'));
 // xchain.io/security is never the one that made the signature.
 const K1_PRIMARY = 'A'.repeat(40);
 const K1_SUBKEY = 'B'.repeat(40);
+const K1_KEY_ID = K1_SUBKEY.slice(-16);
 const OTHER_KEY = 'C'.repeat(40);
 
 /** A manifest and a zip that agree, so the only variable is the signature. */
@@ -108,10 +109,25 @@ try {
             + `2026-01-01 0 4 0 22 8 00 ${OTHER_KEY}\n`, 0],
         // The genuine K1 shape: the SUBKEY signs, the PRIMARY is published.
         ['a genuine signature named by the published primary', 'ok',
-            `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
+            `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
         // And the same signature named by the subkey that made it.
         ['a genuine signature named by the signing subkey', 'ok',
+            `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
+        ['a signature made by the revoked pinned key', 'key-invalid',
+            `[GNUPG:] REVKEYSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
+        ['a signature made by the expired pinned key', 'key-invalid',
+            `[GNUPG:] EXPKEYSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
+        ['a VALIDSIG without a matching GOODSIG', 'bad',
             `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0],
+        ['two signatures in one detached signature file', 'bad',
+            `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`
+            + `[GNUPG:] GOODSIG ${OTHER_KEY.slice(-16)} Other key\n`
+            + `[GNUPG:] VALIDSIG ${OTHER_KEY} 2026-01-01 0 4 0 22 8 00 ${OTHER_KEY}\n`, 0],
         // Human text and a zero exit with NO status line. A tool that read
         // either would call this verified.
         ['`Good signature from` with no VALIDSIG', 'bad',
@@ -147,7 +163,8 @@ try {
         const spy = (cmd, args, opts) => {
             seen = { cmd, args, opts };
             return { status: 0, stderr: '',
-                stdout: `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n` };
+                stdout: `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+                    + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n` };
         };
         const manifestPath = join(work, 'RELEASE_HASHES.txt');
         attributeSignature({ manifestPath, manifestText: MANIFEST_BYTES,
@@ -170,7 +187,8 @@ try {
         attributeSignature({
             manifestPath: join(work, 'RELEASE_HASHES.txt'), fingerprint: K1_PRIMARY,
             runImpl: gpgSaying(
-                `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
+                `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+                + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
         }) === 'bad');
 
     // --- 2. The gate acts on the verdict --------------------------------
@@ -195,6 +213,10 @@ try {
         ['a signature from the wrong key',
             `[GNUPG:] VALIDSIG ${OTHER_KEY} 2026-01-01 0 4 0 22 8 00 ${OTHER_KEY}\n`, 0,
             /GOOD and it is from the WRONG KEY/],
+        ['a signature from the revoked pinned key',
+            `[GNUPG:] REVKEYSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`, 0,
+            /revoked or expired/],
         ['gpg missing entirely', '', 0, /gpg is not on PATH/],
     ]) {
         const runImpl = label === 'gpg missing entirely'
@@ -218,7 +240,8 @@ try {
     // The genuine signature is accepted, or the refusals above are a wall.
     {
         const out = await provenance(gpgSaying(
-            `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`));
+            `[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+            + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`));
         check('checkProvenance accepts the genuine signature', out.signed === true, out.signature);
         check('and attributes it to the pinned fingerprint rather than saying only that it was good',
             out.signature.includes(K1_PRIMARY), out.signature);
@@ -238,7 +261,8 @@ try {
         try {
             await checkProvenance({
                 zipPath: gated.zip, manifestPath: gated.manifest, tag: 'v9.9.9', allowUnsigned: false,
-                runImpl: gpgSaying(`[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
+                runImpl: gpgSaying(`[GNUPG:] GOODSIG ${K1_KEY_ID} Release key\n`
+                    + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
             });
         } catch (err) {
             refused = err;

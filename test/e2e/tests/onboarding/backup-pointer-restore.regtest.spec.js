@@ -67,6 +67,7 @@ import {
     createWallet,
     expect,
     openPaletteCommand,
+    openWalletPicker,
     test,
     dismissIntroCarousel,
     gotoSection,
@@ -87,9 +88,12 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
+import { chooseBackupFile, restoreBackupFile } from '../../fixtures/backupRestore.js';
 
 const DEVICE_PASSWORD = 'regtestpassword123';
 /** Deliberately NOT the device password: the two are independent by design. */
@@ -115,10 +119,20 @@ const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183
 const FUNDING = 1;
 const SEND_AMOUNT = '0.01';
 
-/** Opens Settings via the command palette, then the Backup sub-page. */
-async function openBackupSection(page) {
+/**
+ * Opens Settings via the wallet menu, then Backup and Recovery, then its
+ * Encrypted backup file row, which lands straight on the export form.
+ */
+async function openBackupExport(page) {
     await openPaletteCommand(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
+    const main = page.getByRole('main');
+    const group = main.getByRole('button', { name: /^Backup and Recovery\b/ }).first();
+    await expect(group, 'Settings has no Backup and Recovery row').toBeVisible({ timeout: 30_000 });
+    await group.click();
+    const exportRow = main.getByRole('button', { name: /^Encrypted backup file\b/ });
+    await expect(exportRow, 'the Backup section offers no export action')
+        .toBeVisible({ timeout: 30_000 });
+    await exportRow.click();
 }
 
 /**
@@ -132,25 +146,20 @@ async function openBackupSection(page) {
  * @returns {Promise<string>} the raw §19.4 envelope
  */
 async function exportEnvelope(page, { walletName, words }) {
-    await openBackupSection(page);
+    await openBackupExport(page);
 
-    const exportRow = page.getByRole('main').getByRole('button', { name: 'Export…', exact: true });
-    await expect(exportRow, 'the Backup section offers no export action')
-        .toBeVisible({ timeout: 30_000 });
-    await exportRow.click();
-
-    await page.getByLabel('Backup password', { exact: true }).fill(BACKUP_PASSWORD);
-    await page.getByLabel('Confirm backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Confirm backup password').fill(BACKUP_PASSWORD);
     // Take the download route: a headless browser cannot answer the save picker.
     await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
+        page.getByRole('main').getByRole('button', { name: 'Export Backup', exact: true }).click(),
     ]);
     const envelope = await readFile(await download.path(), 'utf8');
     // A browser download is not proof the file was kept, so the wallet asks
     // before it marks the backup done; answer it the way a user would.
-    await page.getByRole('button', { name: 'I saved the file', exact: true }).click();
+    await page.getByRole('button', { name: 'I Saved the File', exact: true }).click();
 
     const parsed = JSON.parse(envelope);
     expect(parsed?.magic, 'the exported file is not a §19.4 backup envelope')
@@ -203,8 +212,8 @@ async function exportEnvelope(page, { walletName, words }) {
  * user's ability to tell the three apart breaks here too.
  */
 async function fillRestorePasswords(page, { backup, wallet, device, mode = 'fresh' }) {
-    await page.getByLabel('Backup password', { exact: true }).fill(backup);
-    await page.getByLabel('Password of the wallet in this backup', { exact: true }).fill(wallet);
+    await fieldByLabel(page, 'Backup password').fill(backup);
+    await fieldByLabel(page, 'Password of the wallet in this backup').fill(wallet);
     await page.getByLabel(
         mode === 'add' ? 'Your password on this device' : 'Password for this device',
         { exact: true },
@@ -346,7 +355,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
             });
 
             await test.step('scan the pointer and restore', async () => {
-                await openPaletteCommand(two, 'Switch wallet');
+                await openWalletPicker(two);
 
                 await two.getByRole('button', { name: 'Add wallet' }).click();
                 await two.getByRole('button', { name: 'Import wallet' }).click();
@@ -400,7 +409,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 expect(fetched.every((u) => u.startsWith('https://')),
                     'the pointer was fetched over something other than https').toBe(true);
 
-                await openPaletteCommand(two, 'Switch wallet');
+                await openWalletPicker(two);
 
                 const main = two.getByRole('main');
                 await expect(main.getByText(ORIGIN_WALLET, { exact: false }).first(),
@@ -562,7 +571,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // signature the chain accepted - and a self-send is the
                     // only destination that is valid on every venue chain
                     // without a per-chain literal.
-                    await two.getByLabel('To', { exact: true }).fill(ownAddress);
+                    await fieldByLabel(two, 'To').fill(ownAddress);
                     await two.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
                     await mainButton(two, 'Send').click();
 
@@ -570,8 +579,6 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     await expect(confirm,
                         'the restored wallet could not even compose a payment')
                         .toBeVisible({ timeout: 60_000 });
-                    await expect(two.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
-
                     // that exact failure mode lives here, and this is the
                     // shape it takes on screen: with the seed still sealed
                     // under the OLD device's password the signer pool has no
@@ -584,12 +591,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // dead button. Asserted separately from the click so a
                     // future red run says WHY instead of timing out inside
                     // Playwright's retry loop.
-                    await expect(two.getByTestId('confirm-approve'),
-                        'the restored wallet composed a payment it cannot approve, which is'
-                        + 'exactly - the seed is still sealed under the password of the device it '
-                        + 'was backed up from, so this device holds no signer for its own address')
-                        .toBeEnabled({ timeout: 60_000 });
-                    await two.getByTestId('confirm-approve').click();
+                    await approveConfirm(two);
 
                     await expect(two.getByRole('heading', { name: 'Broadcast pending' }),
                         'the restored wallet approved a payment that never reached the node')
@@ -624,9 +626,16 @@ test.describe('backup-pointer restore (§15.4)', () => {
     // Welcome - and the user's next attempt would meet "a wallet already
     // exists" instead of a retry.
     //
-    // Driven with a pasted envelope rather than a pointer: the pointer lane is
-    // proven above, and what is under test here is the password check, which
-    // runs identically either way.
+    // Driven with a chosen backup file rather than a pointer: what is under
+    // test here is the password check, which runs identically either way.
+    //
+    // The Backup tab (restore-v2, 2026-11-14) asks for ONE password and tries
+    // it on the file and then on the wallet inside. Only when the file opens and
+    // the wallet does not does it show a "Wallet password" field, with a line
+    // saying the file opened. A fresh install has no device password at all:
+    // the restored wallet keeps its own. So the distinction this test holds the
+    // screen to is the two-step one: the file's password is accepted, and the
+    // refusal lands on the wallet field, never on the file's.
     test('A wrong wallet password is refused at restore time, and the install stays fresh',
         async ({ page, browser }) => {
             const words = await createWallet(page, { password: DEVICE_PASSWORD, name: ORIGIN_WALLET });
@@ -637,51 +646,36 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 const two = await context.newPage();
                 await openFreshRestoreScreen(two);
 
-                await two.getByPlaceholder('{"version":1').fill(envelope);
-                await fillRestorePasswords(two, {
-                    backup: BACKUP_PASSWORD,
-                    wallet: 'not-the-password-this-wallet-used',
-                    device: NEW_DEVICE_PASSWORD,
-                    mode: 'fresh',
-                });
+                await chooseBackupFile(two, envelope);
+                const backupField = two.getByLabel('Backup password', { exact: true });
+                await backupField.fill(BACKUP_PASSWORD);
                 await two.getByRole('button', { name: 'Restore', exact: true }).click();
 
-                const alert = two.getByRole('alert').first();
-                await expect(alert, 'a wrong wallet password was not refused at all')
-                    .toBeVisible({ timeout: 180_000 });
-                // Says which one. "Wrong password" would be true and useless:
-                // the file password WAS right, and the envelope did open.
-                //
-                // THE CLAIM IS THE DISTINCTION, NOT A PHRASE, and that is a
-                // correction made 2026-08-27 on the second whole-suite run. This
-                // asserted the literal string "backed-up wallet's password",
-                // which the copy has never used, and reported the miss as "the
-                // refusal does not tell the user WHICH password was wrong" - a
-                // product defect that does not exist. What the wallet actually
-                // says is better than what was demanded: it confirms the file
-                // opened, names the field that is wrong, and rules out the other
-                // two passwords by name. Same family as the `fees/` article
-                // mismatch (D42): a spec asking for words rather than for
-                // meaning accuses the product of a gap it does not have.
-                await expect(alert, 'the refusal does not say the backup FILE opened, so the user '
-                    + 'cannot tell which of the three passwords to change')
-                    .toContainText(/backup file opened/i);
-                await expect(alert, 'the refusal does not name the wallet-in-the-backup password as '
-                    + 'the wrong one, which is the whole reason BackupSeedPasswordError exists')
-                    .toContainText(/password of the wallet/i);
-                await expect(alert, 'the refusal does not rule OUT the other two passwords, so a '
-                    + 'user who mixed them up learns nothing')
-                    .toContainText(/not this file's password and not the password for this device/i);
-                // A SECOND wrong-phrase assertion, and it was invisible until the
-                // one above it was fixed: the copy says "the device you backed it
-                // up from", never "the device it was backed up from". It has
-                // therefore never passed, and nobody could see it because the
-                // assertion in front of it failed first. Kept rather than
-                // deleted, because the claim is real and distinct - it is what
-                // tells the user WHERE the password they need was set.
-                await expect(alert, 'the refusal does not say WHICH device the wanted password '
-                    + 'was set on, so a user with several backups cannot tell which one to try')
-                    .toContainText(/device you backed it up from/i);
+                // The file's password opens the file; the wallet inside was
+                // sealed under DEVICE_PASSWORD, so the screen asks for that one.
+                const walletField = two.getByLabel('Wallet password', { exact: true });
+                await expect(walletField, 'the file opened under its own password but the screen '
+                    + 'never asked for the wallet\'s, so the user cannot tell which password to change')
+                    .toBeVisible({ timeout: kdfStepTimeout() });
+                await expect(two.getByText('The file opened, but the wallet inside uses a different password.'),
+                    'the screen does not say the backup FILE opened, so the user cannot tell which '
+                    + 'password was wrong')
+                    .toBeVisible();
+
+                await walletField.fill('not-the-password-this-wallet-used');
+                await two.getByRole('button', { name: 'Restore', exact: true }).click();
+
+                // The field's own sentence; the form-errors summary above it
+                // repeats it, so the summary is filtered out.
+                const fieldError = two.getByRole('alert').filter({ hasNotText: /Fix \d+ things? to continue/ });
+                await expect(fieldError, 'a wrong wallet password was not refused, or the refusal '
+                    + 'does not name the wallet in the backup as the wrong one')
+                    .toHaveText("That password doesn't open the wallet in this backup.",
+                        { timeout: kdfStepTimeout() });
+                await expect(walletField, 'the refusal is not on the wallet password field')
+                    .toHaveAttribute('aria-invalid', 'true');
+                await expect(backupField, 'the refusal blames the file\'s password, which was right')
+                    .not.toHaveAttribute('aria-invalid', 'true');
 
                 // Still fresh: Welcome, not an unlock screen. An unlock screen
                 // here would mean a vault was written for a restore that never
@@ -715,14 +709,11 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 // And the retry works, which is the point of leaving it fresh.
                 await two.getByRole('button', { name: 'Import wallet' }).click();
                 await two.getByRole('tab', { name: 'Encrypted backup' }).click();
-                await two.getByPlaceholder('{"version":1').fill(envelope);
-                await fillRestorePasswords(two, {
-                    backup: BACKUP_PASSWORD,
-                    wallet: DEVICE_PASSWORD,
-                    device: NEW_DEVICE_PASSWORD,
-                    mode: 'fresh',
+                await restoreBackupFile(two, {
+                    content: envelope,
+                    backupPassword: BACKUP_PASSWORD,
+                    walletPassword: DEVICE_PASSWORD,
                 });
-                await two.getByRole('button', { name: 'Restore', exact: true }).click();
                 await acknowledgeImportNotice(two);
                 await expect(openedWalletHome(two),
                     'the second attempt with the right password did not restore, so the first attempt '

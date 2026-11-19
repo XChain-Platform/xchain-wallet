@@ -28,7 +28,6 @@ const NS = 'xc:lastView:';
 
 const INTERRUPTED_VIEW_KIND = Object.freeze({
     send: 'send',
-    'resume-confirm': 'send',
     swap: 'swap',
     'cross-chain-swap': 'swap',
 });
@@ -47,9 +46,7 @@ export const RESUMABLE_VIEWS = Object.freeze([
     'markets',
     'staking-dashboard',
     'contracts-list',
-    'cross-chain-templates',
     'lists',
-    'shared-lists',
     'dispensers-list',
     'dispenser-explorer',
     'token-detail',

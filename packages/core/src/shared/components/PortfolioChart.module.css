@@ -4,8 +4,9 @@
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    /* The halo overlap has no spacing-token equivalent. */
-    margin-top: -6px;
+    /* No overlap: the chart card sits the same 8px below the balance card as
+       every other Home block. */
+    margin-top: 0;
     min-width: 0;
     overflow: hidden;
 }
@@ -14,6 +15,9 @@
     font-size: var(--xc-text-sm);
     font-weight: 700;
     line-height: 1.2;
+    /* The row keeps its one line when there is no change to print (no
+       history yet, hidden balances), so the card height holds. */
+    min-block-size: calc(1.2 * var(--xc-text-sm));
     overflow-wrap: anywhere;
 }
 
@@ -21,31 +25,75 @@
 .changeNegative { color: var(--xc-danger-fg); }
 .changeNeutral  { color: var(--xc-text-muted); }
 
+/* One slot holds the chart, the loading line, the failure line and the
+   no-history line at the Sparkline height, so the card keeps one height
+   whatever the price history says. */
+.slot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* The slot matches the 40px Sparkline height and has no token equivalent. */
+    min-block-size: 40px;
+}
+
+.slot > .slotMessage {
+    margin-block: 0;
+}
+
 .chart {
     padding: 0;
+    /* The chart matches the 40px Sparkline height and has no token equivalent. */
+    block-size: 40px;
 }
 
 .placeholder {
-    padding: var(--xc-space-2) 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The line matches the 40px Sparkline height and has no token equivalent. */
+    min-block-size: 40px;
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
 
+.missingNotice {
+    min-block-size: calc(1.2 * var(--xc-text-xs));
+    margin-block-start: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+}
+
+/* A minimal toggle centred along the bottom of the chart: the row hugs its
+   options and sits centred in the Home card's column and in the token detail
+   chart slot alike, on one line. */
 .ranges {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
+    flex-wrap: nowrap;
+    gap: 0;
     justify-content: center;
+    align-self: center;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
     padding-top: 0;
+}
+
+/* Eight exclusive 44px-wide targets need 352px, which the compact chart
+   cannot provide. Home gives every option an equal share of the whole row;
+   the label inside each slot keeps the painted pill at its compact size. */
+.rangesSpread {
+    width: 100%;
 }
 
 .range {
     position: relative;
     appearance: none;
     background: transparent;
-    /* A visible boundary so an unselected range is recognisably a button. */
-    border: 1px solid var(--xc-control-border);
+    /* The options carry no outline; only the selected one is filled. */
+    border: 0;
     padding-block: 0;
     padding-inline: var(--xc-control-pad-x-sm);
     display: inline-flex;
@@ -53,12 +101,31 @@
     justify-content: center;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
-    height: var(--xc-control-h-sm);
-    font-size: var(--xc-control-font-sm);
+    /* A compact 28px chip on every shell: the small control tokens grow to
+       36px and 1rem on touch, so the chip takes fixed spacing tokens and the
+       ::before layer below supplies the 44px touch target. */
+    height: calc(var(--xc-space-6) + var(--xc-space-1));
+    font-size: var(--xc-text-xs);
     font-weight: 600;
-    text-transform: uppercase;
     color: var(--xc-text-muted);
     cursor: pointer;
+    border-radius: var(--xc-control-radius);
+    transition: color var(--xc-transition), background var(--xc-transition);
+}
+
+.rangeSlot {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 0;
+    background: transparent;
+}
+
+.rangeLabel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding-inline: var(--xc-control-pad-x-sm);
     border-radius: var(--xc-control-radius);
     transition: color var(--xc-transition), background var(--xc-transition);
 }
@@ -80,6 +147,11 @@
         width: max(100%, var(--xc-control-hit-min));
         height: max(calc(100% + var(--xc-space-2)), var(--xc-control-hit-min));
     }
+
+    .rangeSlot::before {
+        inset-inline-start: 0;
+        max-width: 100%;
+    }
 }
 
 .range:focus-visible {
@@ -89,11 +161,148 @@
 }
 
 .rangeActive {
-    background: var(--xc-accent-primary);
-    border-color: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
+}
+
+.rangeSlot.rangeActive {
+    background: transparent;
+}
+
+/* The selected fill is painted behind the label by a pseudo-element, so the
+   painted chip stays part of the tab control rather than a filled box of its
+   own inside the chart card. */
+.rangeSlot .rangeLabel {
+    position: relative;
+    isolation: isolate;
+}
+
+.rangeSlot.rangeActive .rangeLabel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--xc-toggle-selected-bg);
 }
 
 .rangeActive:hover {
-    color: var(--xc-on-accent);
+    color: var(--xc-toggle-selected-text);
+}
+
+/* The chart drawn behind the balance card. The plot fills the whole
+   card; only the range buttons take room, along the card's foot. */
+.wrap.behind {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0 var(--xc-card-pad) var(--xc-space-1);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: visible;
+}
+
+.behind > [role='tabpanel'] {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.behind .change,
+.behind .missingNotice {
+    display: none;
+}
+
+.behind .slot,
+.behind .chart {
+    block-size: 100%;
+    min-block-size: 0;
+}
+
+.behind .slot > .slotMessage,
+.behind .placeholder {
+    display: none;
+}
+
+.behind .ranges,
+.behind .foot {
+    position: relative;
+    z-index: 2;
+}
+
+/* The range row and the note that some tokens sit out of the line. The note
+   hangs above the row and takes no room, so the card keeps its height
+   whether it shows or not. */
+.foot {
+    position: relative;
+}
+
+.tokenNote {
+    margin-block-end: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+}
+
+.behind .tokenNote {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 100%;
+    margin: 0 0 var(--xc-space-1);
+    color: var(--xc-hero-text);
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.behind .range {
+    color: var(--xc-hero-chip-text);
+}
+
+.behind .range:hover {
+    color: var(--xc-hero-chip-text);
+}
+
+.behind .rangeSlot.rangeActive {
+    color: var(--xc-hero-chip-selected-text);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel::after {
+    background: var(--xc-hero-chip-selected-bg);
+}
+
+.behind .range:focus-visible {
+    outline-color: var(--xc-hero-text);
+}
+
+/* Every range is a solid pill over the chart. */
+.behind .rangeSlot .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+    border: 1px solid var(--xc-hero-border);
+    background: var(--xc-hero-chip-bg);
+}
+
+.behind .rangeSlot .rangeLabel::after {
+    display: none;
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel,
+.behind .rangeSlot.rangeActive:hover .rangeLabel {
+    border-color: var(--xc-hero-chip-selected-bg);
+    background: var(--xc-hero-chip-selected-bg);
+}
+
+/* Privacy mode (balance hidden) shows no trend: the chart and its ranges
+   vanish but keep their room so the card does not change height. */
+.behindHidden > [role='tabpanel'],
+.behindHidden .ranges {
+    visibility: hidden;
 }

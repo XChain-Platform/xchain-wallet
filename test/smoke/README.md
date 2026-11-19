@@ -41,7 +41,7 @@ test/smoke/
 ├── dispensers/            dispenser-form / dispensers-list / dispenser-explorer
 ├── contracts/             VM contract list / detail / deploy / execute / funds
 ├── staking/               stake-form / staking-action / staking-dashboard /
-│                          delegation / operator-dashboard
+│                          delegation / stake-detail
 ├── markets/               markets-list / market-view / orderbook / open-orders /
 │                          recent-trades / trade-history / place-order
 └── addresses/             address-list / receive-view / history

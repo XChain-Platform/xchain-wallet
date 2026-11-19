@@ -172,6 +172,22 @@ describe('composeActionForConfirm', () => {
         expect(composed.simulation).toBeTruthy();
     });
 
+    it('passes the source address to the simulator', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }, { value: 1000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'SEND',
+            params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: 'chg' },
+        }));
+        h.sdk.getBalances = vi.fn(async () => ([{ tick: 'JDOG', quantity: '1000000000', divisibility: 8 }]));
+        h.sdk.getAddress = vi.fn(async () => ({ balance: '100000000' }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.simulation.deltas.find((d) => d.tick === 'JDOG')).toBeUndefined();
+        expect(composed.simulation.notes).toContain('Sent to the same address; only the fee leaves.');
+    });
+
     // §1.1 / §5.2.2. The decisive case: the caller's params and the composed
     // action string DISAGREE. That is the mirror-drift hazard - a form
     // that hand-builds wire params can produce a self-consistent PSBT for the
@@ -402,25 +418,44 @@ describe('composeActionForConfirm', () => {
             expect(h.sdk.quoteNativeFee).toHaveBeenCalledTimes(1);
         });
 
-        it('stays null on a zero fee, a refused quote, or no quote endpoint', async () => {
-            // Zero is the failure in the other direction: an action that
-            // charges nothing must not be told it charges something.
-            expect((await composeActionForConfirm(ARGS(
-                quoting({ supported: true, valid: true, xchainFee: '0.00000000' }),
-            ))).xchainFee).toBe(null);
+        it('marks an ISSUE update with a valid zero quote as known free', async () => {
+            const h = quoting({ supported: true, valid: true, xchainFee: '0.00000000' });
+            const actionData = {
+                action: 'ISSUE',
+                params: { TICK: 'EXISTING', DESCRIPTION: 'Updated description' },
+            };
+            h.sdk.actions.createAction.mockReturnValue({
+                actionString: 'ISSUE|1|EXISTING|Updated description',
+                action: 'ISSUE',
+                version: 1,
+            });
+            h.sdk.decoder.decodeActionStringFromPsbt.mockReturnValue({
+                ok: true,
+                actionString: 'ISSUE|1|EXISTING|Updated description',
+            });
+            const composed = await composeActionForConfirm({ ...ARGS(h), actionData });
+            expect(composed.xchainFee).toBe(null);
+            expect(composed.protocolFeeKnownFree).toBe(true);
+            expect(h.sdk.quoteNativeFee).toHaveBeenCalledWith(
+                actionData,
+                expect.objectContaining({ source: 'chg' }),
+            );
+        });
+
+        it('does not mark a refused or missing quote as known free', async () => {
             expect((await composeActionForConfirm(ARGS(
                 quoting({ supported: true, valid: false, xchainFee: '1.00000000' }),
-            ))).xchainFee).toBe(null);
+            ))).protocolFeeKnownFree).toBe(false);
             expect((await composeActionForConfirm(ARGS(
                 quoting({ supported: false }),
-            ))).xchainFee).toBe(null);
+            ))).protocolFeeKnownFree).toBe(false);
             // An SDK too old to quote, and a venue that throws: a line the
             // wallet cannot draw must never be a compose that fails.
             const old = makeHarness({ inputs: [{ value: 5000 }] });
-            expect((await composeActionForConfirm(ARGS(old))).xchainFee).toBe(null);
+            expect((await composeActionForConfirm(ARGS(old))).protocolFeeKnownFree).toBe(false);
             const dead = quoting(null);
             dead.sdk.quoteNativeFee = vi.fn(async () => { throw new Error('explorer down'); });
-            expect((await composeActionForConfirm(ARGS(dead))).xchainFee).toBe(null);
+            expect((await composeActionForConfirm(ARGS(dead))).protocolFeeKnownFree).toBe(false);
         });
 
         it('still prices a static (unvalidated) quote, where valid is null', async () => {
@@ -651,7 +686,6 @@ describe('composeActionForConfirm host envelope shape', () => {
     const DROPPED = [
         'encoderOpts',          // ADS-folded build opts; host-side only
         'carrierScripts',       // consumed by the host tamper check
-        'releaseEncoderInputs', // function cannot cross the host messaging envelope
     ];
 
     function composedActionKeys() {

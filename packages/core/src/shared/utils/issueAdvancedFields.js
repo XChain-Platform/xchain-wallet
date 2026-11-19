@@ -57,51 +57,62 @@ import { tickerReferenceError } from './tickerGrammar.js';
  * so a hint that shouts the wire name stacks two vocabularies on one
  * control ("Max supply" over "Freezes MAX_SUPPLY"). Keep the hint in the
  * label's words; a unit guard pins it. MINT is the one protocol COMMAND
- * name the wallet shows users (the Mint feature), so its hint may say it;
- * token pausing is "Pause token" on screen, so that lock says "Pausing".
+ * name the wallet shows users (the Mint feature), so its hint may say it,
+ * and the owner's MINT_SUPPLY route is named the same way;
+ * token pausing is "Pause token" on screen, so that lock says "Pause".
+ *
+ * The Issue form's lock rows read their label and text from here by
+ * `field`, so every lock screen shows one wording.
  */
 export const LOCK_FLAGS = [
     {
         key: 'max_supply',
         field: 'LOCK_MAX_SUPPLY',
         label: 'Max supply',
-        hint: 'Freezes the maximum supply. The cap can never be raised again.',
+        hint: 'No one can raise the supply cap',
+        help: 'Turn this on to fix the maximum supply for good. It cannot be undone.',
     },
     {
         key: 'max_mint',
         field: 'LOCK_MAX_MINT',
         label: 'Max mint per transaction',
-        hint: 'Freezes the per-transaction mint cap. It can never change again.',
+        hint: 'That limit never changes',
+        help: 'Turn this on to freeze the per-transaction mint limit for good. It cannot be undone.',
     },
     {
         key: 'mint',
         field: 'LOCK_MINT',
         label: 'Minting',
-        hint: 'Permanently disables the MINT command. No one will ever be able to mint this token again.',
+        hint: 'Blocks the public MINT',
+        help: 'Turn this on to shut off public minting for good. It cannot be undone.',
     },
     {
         key: 'mint_supply',
         field: 'LOCK_MINT_SUPPLY',
-        label: 'Mint supply now',
-        hint: 'Permanently disables minting supply through a token update. The owner can never mint additional supply that way again.',
+        label: 'Mint supply',
+        hint: "Blocks the owner's MINT_SUPPLY through ISSUE",
+        help: 'Turn this on to stop the owner from ever setting a mint supply. It cannot be undone.',
     },
     {
         key: 'description',
         field: 'LOCK_DESCRIPTION',
         label: 'Description',
-        hint: 'Freezes the token description. The token metadata can never be edited again.',
+        hint: 'Description can never change',
+        help: 'Turn this on to keep the token description as it is for good. It cannot be undone.',
     },
     {
         key: 'sleep',
         field: 'LOCK_SLEEP',
-        label: 'Pausing',
-        hint: 'Permanently removes the ability to pause or resume this token.',
+        label: 'Pause',
+        hint: 'The token can never be paused',
+        help: 'Turn this on so the token can never be paused. It cannot be undone.',
     },
     {
         key: 'callback',
         field: 'LOCK_CALLBACK',
         label: 'Callback',
-        hint: 'Freezes the callback configuration (block, token, and amount). It can never change again.',
+        hint: 'No one can ever run a callback on this token again, and its block, token and amount never change',
+        help: 'Turn this on to disable the callback feature for good. It cannot be undone.',
     },
 ];
 
@@ -232,7 +243,7 @@ export function validateAdvancedIssueFields(advanced, ctx = {}) {
         // unlocked, letting the owner recall every holder's balance
         // the moment supply moves.
         if (currentHeight != null && Number(block) <= currentHeight) {
-            return `Callback block must be in the future. The chain is at block ${currentHeight.toLocaleString('en-US')}; a callback set at or below that is live the moment the token is created.`;
+            return `Callback block must be in the future. The chain is at block ${String(currentHeight)}; a callback set at or below that is live the moment the token is created.`;
         }
     }
 

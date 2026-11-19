@@ -124,7 +124,8 @@ assert.match(amountJs, /size = 'md'/, 'AmountField defaults size to md');
 assert.match(amountJs, /<Input\s+ref=\{inputRef\}\s+size=\{size\}/s, 'AmountField forwards size to Input');
 assert.doesNotMatch(amountCss, /\.bigField/, 'AmountField leaves big-field rules to Input');
 assert.doesNotMatch(amountJs, /fontSize: 'var\(--xc-text-lg\)'/, 'AmountField leaves big-field styles to Input');
-assert.match(amountJs, /<Button\s+variant="primary"\s+size=\{size\}/s, 'Max shares the amount Input size');
+assert.match(amountJs, /fieldAction=\{\(\s*<FieldIconButton\s+icon=\{<Icon\.MaxIcon \/>\}/s,
+    'Max is the amount Input\'s own in-field icon, sized with the field');
 assert.match(amountCss, /\.amountFieldWrap\s*\{[^}]*flex-wrap:\s*wrap[^}]*gap:\s*var\(--xc-space-2\)/s,
     'Amount controls align in a wrapping row with a space-scale gap');
 assert.doesNotMatch(amountJs, /bottom:\s*size\s*===/, 'Max does not use size-specific offsets');

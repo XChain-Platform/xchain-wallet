@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useLayoutEffect, useState } from 'react';
 import { userEvent } from '../../helpers/userEvent.js';
 import { readFileSync } from 'node:fs';
@@ -21,6 +21,10 @@ const LONG_NAME = 'A token name long enough to wrap cleanly on a narrow wallet s
 const balanceListCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/BalanceList.module.css',
+), 'utf8');
+const tokenPickerCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/TokenPicker.module.css',
 ), 'utf8');
 const tokenPickerSource = readFileSync(join(
     process.cwd(),
@@ -76,30 +80,48 @@ function mount({ purpose = 'send', messaging = makeMessaging(), ...props } = {})
     );
 }
 
+// Search, the network and the coin-or-token choice sit behind the filter
+// button on the title line.
+function openFilter() {
+    const trigger = screen.getByRole('button', { name: 'Filter coins and tokens' });
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+}
+
+function openSearch() {
+    openFilter();
+    return screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+}
+
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
 });
 
 describe('TokenPicker asset visibility and filtering', () => {
+    it('puts the search and network filter in the shared list filter menu instead of its own toolbar', () => {
+        // The shared menu owns the search box and network picker, so their
+        // size matches every other list filter and the picker keeps no copy.
+        expect(tokenPickerSource).toMatch(
+            /<ListFilterMenu[\s\S]*?query=\{tokenQuery\}[\s\S]*?networkFilter=\{networkFilter\}[\s\S]*?onNetworkFilterChange=\{setNetworkFilter\}/,
+        );
+        expect(tokenPickerCss).not.toMatch(/\.networkFilter\b/);
+        expect(tokenPickerCss).not.toMatch(/\.search\s*\{/);
+    });
+
     it('keeps exactly one asset-kind tab in the keyboard tab order', async () => {
         mount();
         await screen.findByText(LONG_NAME);
-        const all = screen.getByRole('tab', { name: 'All' });
-        const tokens = screen.getByRole('tab', { name: 'Tokens' });
+        expect(screen.queryByRole('tab')).toBeNull();
+        openFilter();
+        // IconSelect names itself by its aria-label and the current choice.
+        const kind = screen.getByRole('button', { name: 'Asset kind: Coins and tokens' });
 
-        expect(all).toHaveAttribute('aria-selected', 'true');
-        expect(all).toHaveAttribute('tabindex', '0');
-        expect(tokens).toHaveAttribute('aria-selected', 'false');
-        expect(tokens).toHaveAttribute('tabindex', '-1');
+        fireEvent.click(kind);
+        expect(screen.getByRole('option', { name: /Coins and tokens/ })).toHaveAttribute('aria-selected', 'true');
+        fireEvent.click(screen.getByRole('option', { name: /^Tokens/ }));
 
-        all.focus();
-        fireEvent.keyDown(all, { key: 'ArrowLeft' });
-        expect(tokens).toHaveFocus();
-        expect(all).toHaveAttribute('aria-selected', 'false');
-        expect(all).toHaveAttribute('tabindex', '-1');
-        expect(tokens).toHaveAttribute('aria-selected', 'true');
-        expect(tokens).toHaveAttribute('tabindex', '0');
+        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
     });
 
     it('shows persisted pins first and exposes an accessible persistent toggle', async () => {
@@ -114,8 +136,7 @@ describe('TokenPicker asset visibility and filtering', () => {
         });
         mount({ messaging });
 
-        const pinnedButton = await screen.findByRole('button', { name: 'Unpin LTC' });
-        expect(pinnedButton).toHaveAttribute('aria-pressed', 'true');
+        await screen.findByText(LONG_NAME);
         expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
             .toEqual([
                 'litecoin-mainnet:LTC',
@@ -123,15 +144,9 @@ describe('TokenPicker asset visibility and filtering', () => {
                 'bitcoin-mainnet:WRP123',
             ]);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Pin WRP123' }));
-        expect(await screen.findByRole('button', { name: 'Unpin WRP123' }))
-            .toHaveAttribute('aria-pressed', 'true');
-        expect(messaging.updateSettings).toHaveBeenCalledWith({
-            pinnedTokens: ['litecoin-mainnet:LTC', 'bitcoin-mainnet:WRP123'],
-            pinnedTokensByWallet: {
-                'wallet-1': ['litecoin-mainnet:LTC', 'bitcoin-mainnet:WRP123'],
-            },
-        });
+        // The picker is a plain list to pick from: pinning stays on Home.
+        expect(screen.queryByRole('button', { name: /^(Un)?[Pp]in / })).toBeNull();
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
     });
 
     it('hides known zero balances for Send but keeps them available for Receive', async () => {
@@ -151,7 +166,7 @@ describe('TokenPicker asset visibility and filtering', () => {
 
     it('searches ticker, name, and chain-scoped asset id case-insensitively', async () => {
         mount();
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const search = openSearch();
         await screen.findByText(LONG_NAME);
 
         fireEvent.change(search, { target: { value: 'WrP123' } });
@@ -169,9 +184,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(screen.getByText('No balances match "missing asset".'))
             .toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear token search' }));
+        // The filter panel has no clear button; emptying the box restores the rows.
+        fireEvent.change(search, { target: { value: '' } });
         expect(search).toHaveValue('');
-        expect(screen.queryByRole('button', { name: 'Clear token search' })).toBeNull();
         expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
     });
 
@@ -196,6 +211,7 @@ describe('TokenPicker asset visibility and filtering', () => {
             messaging: makeMessaging({
                 getSettings: vi.fn().mockResolvedValue({
                     privacy: { hideSmallBalances: true },
+                    // An old coin-unit choice reads as the fiat default.
                     smallBalanceThreshold: 'dust',
                 }),
             }),
@@ -204,16 +220,19 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
         expect(screen.queryByText('Zero Bitcoin token')).toBeNull();
         expect(screen.queryByText('Zero Litecoin token')).toBeNull();
-        const toggle = await screen.findByRole('button', { name: 'Show 4 small balances' });
+        // The picker's rows carry no price, so only the zero balances fold
+        // (operator ruling 2026-11-14: no price is never small by value).
+        const toggle = await screen.findByRole('button', { name: 'Show 3 small balances' });
         fireEvent.click(toggle);
         expect(screen.getByText('Zero Bitcoin token')).toBeInTheDocument();
         expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
     });
 
-    it('keeps long names on one line and ellipsizes them', () => {
+    it('wraps long names instead of clipping them', () => {
         const nameRule = balanceListCss.match(/\.name\s*\{([^}]*)\}/)?.[1] || '';
-        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
-        expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        expect(nameRule).toMatch(/white-space:\s*normal/);
+        expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(nameRule).not.toMatch(/text-overflow|overflow:\s*hidden/);
         expect(nameRule).toMatch(/min-width:\s*0/);
     });
 
@@ -224,13 +243,16 @@ describe('TokenPicker asset visibility and filtering', () => {
         mount({ purpose: 'receive', messaging: makeMessaging({ searchTokens }) });
         await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
 
-        fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        openFilter();
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
+        // The network filter opens the full-screen network list.
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Network' }))
+            .getByRole('button', { name: 'Select Litecoin' }));
 
         expect(screen.getByRole('button', { name: /^Select Litecoin\b/ })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Search coins or tokens' }), {
+        fireEvent.change(openSearch(), {
             target: { value: 'PEPE' },
         });
         await waitFor(() => expect(searchTokens).toHaveBeenCalledOnce());
@@ -241,11 +263,11 @@ describe('TokenPicker asset visibility and filtering', () => {
 
     it('resets filters from an empty result', async () => {
         mount();
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const search = openSearch();
         await screen.findByText(LONG_NAME);
         fireEvent.change(search, { target: { value: 'missing asset' } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset Filters' }));
         expect(search).toHaveValue('');
         expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
     });
@@ -263,18 +285,20 @@ describe('TokenPicker asset visibility and filtering', () => {
         });
 
         expect(await screen.findByText('balance service unavailable')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
 
-        fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Search coins or tokens' }), {
+        openFilter();
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Network' }))
+            .getByRole('button', { name: 'Select Litecoin' }));
+        fireEvent.change(openSearch(), {
             target: { value: 'PEPE' },
         });
         expect(await screen.findByText('Could not search all platform tokens. Try again.'))
             .toBeInTheDocument();
         expect(screen.queryByText('No matching balances')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
             .toBeInTheDocument();
         expect(searchTokens).toHaveBeenCalledTimes(2);
@@ -282,21 +306,19 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
-    // The asset-kind tabs are the kit Tabs, so the tab stop is declared once
-    // in Tabs.jsx and the route renders no tab buttons of its own.
-    it('declares one tab stop for each asset-kind tab', () => {
-        const tabsSource = readFileSync(join(process.cwd(), 'packages/core/src/ui/Tabs.jsx'), 'utf8');
-        expect(tokenPickerSource).toMatch(/<Tabs\b/);
+    // The asset-kind choice is the kit IconSelect in the title-line filter,
+    // so the route renders no tab strip or tab buttons of its own.
+    it('chooses the asset kind with the kit select, not hand-made tabs', () => {
+        expect(tokenPickerSource).toMatch(/<IconSelect\b/);
+        expect(tokenPickerSource).not.toMatch(/<Tabs\b/);
         expect(tokenPickerSource).not.toMatch(/role="tab"/);
-        const kindTab = tabsSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
-        expect(kindTab.match(/\btabIndex=/g)).toHaveLength(1);
     });
 
     it('applies the current search before Enter chooses a chain', async () => {
         const onSelect = vi.fn();
         mount({ onSelect });
         await screen.findByText(LONG_NAME);
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const search = openSearch();
 
         fireEvent.change(search, { target: { value: 'Litecoin' } });
         fireEvent.keyDown(search, { key: 'Enter' });
@@ -310,7 +332,7 @@ describe('TokenPicker keyboard and return behavior', () => {
     it('announces loaded results and moves from search to either end with arrow keys', async () => {
         mount();
         await screen.findByText(LONG_NAME);
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const search = openSearch();
         const rows = screen.getAllByRole('button', { name: /^Select / });
 
         expect(search).toHaveAttribute('aria-controls', 'xc-token-picker-results');
@@ -382,7 +404,7 @@ describe('TokenPicker keyboard and return behavior', () => {
         const onBack = vi.fn();
         mount({ onSelect, onBack, backLabel: 'Back to send' });
         const row = await screen.findByRole('button', { name: new RegExp('^Select ' + LONG_NAME) });
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const search = openSearch();
 
         fireEvent.change(search, { target: { value: 'wrp123' } });
         await waitFor(() => {

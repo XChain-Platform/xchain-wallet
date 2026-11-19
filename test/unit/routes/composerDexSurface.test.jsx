@@ -23,6 +23,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
+import { selectOption, selectOptionDetails, selectOptionValues } from '../../helpers/selectOption.js';
 import {
     AUTHORABLE_ACTIONS,
     DEX_ACTIONS,
@@ -67,9 +68,9 @@ function mount(element, listActions, extra) {
 }
 
 async function pickerValues() {
-    await screen.findByRole('option', { name: /SEND/ });
     const select = await screen.findByRole('combobox', { name: 'Action' });
-    return within(select).getAllByRole('option').map((option) => option.value).filter(Boolean);
+    await waitFor(() => expect(selectOptionValues(select)).toContain('SEND'));
+    return selectOptionValues(select).filter(Boolean);
 }
 
 const sdkList = () => vi.fn(async () => [...SDK_LIST]);
@@ -132,13 +133,13 @@ describe('AdvancedActionsForm raw BATCH', () => {
 
     async function submitBatch(props, host) {
         mount(<AdvancedActionsForm walletId="w" onBack={() => {}} {...props} />, vi.fn(async () => ['BATCH', 'SEND']), host);
-        await screen.findByRole('option', { name: /BATCH/ });
         const select = await screen.findByRole('combobox', { name: 'Action' });
-        fireEvent.change(select, { target: { value: 'BATCH' } });
+        await waitFor(() => expect(selectOptionValues(select)).toContain('BATCH'));
+        selectOption(select, 'BATCH');
         const command = await screen.findByLabelText('COMMAND');
         fireEvent.change(command, { target: { value: 'SEND|0|XCP|1|bc1qdest;ORDER|0|XCP|1|BTC|1' } });
         await waitFor(() => expect(host.validateAction).toHaveBeenCalled());
-        const button = await screen.findByRole('button', { name: 'Sign action' });
+        const button = await screen.findByRole('button', { name: 'Sign Action' });
         await waitFor(() => expect(button.disabled).toBe(false));
         fireEvent.click(button);
     }
@@ -163,7 +164,12 @@ describe('AdvancedActionsForm picker', () => {
         mount(<AdvancedActionsForm walletId="w" onBack={() => {}} />, sdkList());
         const values = await pickerValues();
         expect(values).toEqual(expect.arrayContaining(['ORDER', 'SWAP', 'SEND']));
-        expect(document.querySelector('option[value="ORDER"]').textContent).toContain(DEDICATED);
+        const order = selectOptionDetails(screen.getByRole('combobox', { name: 'Action' }))
+            .find((option) => option.value === 'ORDER');
+        // Labelled by its name and code; the "(dedicated form available)"
+        // suffix is gone by operator ruling 2026-11-14.
+        expect(order.label).toBe('Order (ORDER)');
+        expect(order.label).not.toContain(DEDICATED);
     });
 
     it('offers neither ORDER nor SWAP when the DEX surface is compiled out', async () => {

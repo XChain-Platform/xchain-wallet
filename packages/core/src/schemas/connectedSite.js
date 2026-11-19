@@ -25,6 +25,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { isSiteIconDataUrl, sanitizeSiteIcon } from './siteIcon.js';
 import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
@@ -50,7 +51,15 @@ export const CURRENT_VERSION = 1;
  * @property {string} id
  * @property {string} origin
  * @property {string} appName
- * @property {string} appIcon
+ * @property {string} appIcon           the dApp's raw declared ConnectOpts.appIcon string
+ *                                       (may be a URL). Kept for compatibility; never render it.
+ * @property {string | null} icon        v1-tolerant: the site's own icon as a small PNG data URL
+ *                                       (schemas/siteIcon.js isSiteIconDataUrl), captured by the
+ *                                       content script inside the requesting page at connect
+ *                                       time, or null. The only icon field any view renders.
+ * @property {string | null} iconCapturedAt  ISO time `icon` was captured; null when icon is null.
+ *                                       Records written before site icons read back with both
+ *                                       fields null (migrateConnectedSite).
  * @property {string} connectedAt
  * @property {string} lastUsedAt
  * @property {SitePermissions} permissions
@@ -67,18 +76,22 @@ export const CURRENT_VERSION = 1;
  * @param {string} input.origin
  * @param {string} input.appName
  * @param {string} [input.appIcon]
+ * @param {unknown} [input.icon]   the captured PNG data URL; anything invalid stores null
  * @param {SitePermissions} input.permissions
  * @param {boolean} [input.autoApproved]
  * @returns {ConnectedSite}
  */
 export function createConnectedSite(input) {
     const now = new Date().toISOString();
+    const icon = sanitizeSiteIcon(input.icon);
     return {
         schemaVersion: CURRENT_VERSION,
         id: randomUUID(),
         origin: input.origin,
         appName: input.appName,
         appIcon: input.appIcon ?? '',
+        icon,
+        iconCapturedAt: icon ? now : null,
         connectedAt: now,
         lastUsedAt: now,
         permissions: input.permissions,
@@ -116,6 +129,12 @@ export function validateConnectedSite(record) {
     check(errors, 'origin', isNonEmptyString(r.origin), 'must be a non-empty string');
     check(errors, 'appName', isNonEmptyString(r.appName), 'must be a non-empty string');
     check(errors, 'appIcon', isString(r.appIcon), 'must be a string');
+    if (r.icon !== undefined && r.icon !== null) {
+        check(errors, 'icon', isSiteIconDataUrl(r.icon), 'must be a PNG data URL within the site icon caps, or null');
+    }
+    if (r.iconCapturedAt !== undefined && r.iconCapturedAt !== null) {
+        check(errors, 'iconCapturedAt', isIsoTimestamp(r.iconCapturedAt), 'must be an ISO timestamp or null');
+    }
     check(errors, 'connectedAt', isIsoTimestamp(r.connectedAt), 'must be an ISO timestamp');
     check(errors, 'lastUsedAt', isIsoTimestamp(r.lastUsedAt), 'must be an ISO timestamp');
     check(errors, 'permissions', isPermissions(r.permissions), 'malformed');

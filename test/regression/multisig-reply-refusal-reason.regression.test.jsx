@@ -70,7 +70,9 @@ function session(overrides = {}) {
 }
 
 function replyChunks(active, pubkey) {
+    // A cosigner fingerprints the request sessionRef, which names the session chain.
     const fingerprint = fingerprintSessionRef({
+        chainId: active.chainId,
         scheme: active.scheme,
         threshold: active.threshold,
         cosignerPubkeys: active.cosignerPubkeys,
@@ -92,11 +94,11 @@ async function importReply(active, pubkey) {
     const list = await screen.findByRole('list', { name: 'Multisig sessions' });
     fireEvent.click(within(list).getByRole('button'));
     await screen.findByLabelText('Multisig signing progress');
-    fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
     fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
         target: { value: replyChunks(active, pubkey) },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
 }
 
 beforeEach(() => {
@@ -125,8 +127,8 @@ describe('regression/multisig-reply-refusal-reason', () => {
 
         expect(await screen.findByText(/signed by a key that is not one of this multisig's cosigners/i)).toBeTruthy();
         expect(messaging.contributeMultisigSignature).not.toHaveBeenCalled();
-        expect(screen.queryByText('Failed to apply contribution.')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByText('Could not add that cosigner reply. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
     it('[REGRESSION P2] names a second reply from a cosigner who already signed', async () => {
@@ -136,7 +138,7 @@ describe('regression/multisig-reply-refusal-reason', () => {
 
         expect(await screen.findByText(/reply is already applied to this step/i)).toBeTruthy();
         expect(messaging.contributeMultisigSignature).not.toHaveBeenCalled();
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
     it('[REGRESSION P2] still applies a reply from a pending cosigner', async () => {
@@ -150,5 +152,15 @@ describe('regression/multisig-reply-refusal-reason', () => {
             pubkey: PK_B,
             signatureHex: DER,
         }));
+    });
+
+    it('shows a plain fallback and retry when the host gives only developer text', async () => {
+        await importReply(session({
+            signatures: [{ pubkey: PK_A, sig: DER, contributedAt: NOW }],
+        }), PK_B);
+
+        expect(await screen.findByText('Could not add that cosigner reply. Try again.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy();
+        expect(screen.queryByText(/multisigSigning/)).toBeNull();
     });
 });

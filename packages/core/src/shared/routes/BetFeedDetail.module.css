@@ -1,0 +1,352 @@
+/* Bet market detail: styles this screen owns. The shared form styles stay in
+   IssueTokenForm.module.css. */
+
+/* The outcome picker's question reads as a field label, with its help tip. */
+.groupLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+/* The blue card is laid out like Home's balance card, with the icon tabs under it
+   and the Bet tab's ticket below. */
+
+/* No reserved band under the figures: the card is as tall as its text and range chips,
+   and the chart fills it from behind. */
+.heroStack {
+    min-height: 0;
+}
+
+.hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-card-pad);
+    color: var(--xc-on-accent);
+    min-width: 0;
+}
+
+.statusChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    max-width: 100%;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.question {
+    margin: 0;
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--xc-on-accent);
+    overflow-wrap: anywhere;
+}
+
+.bigRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--xc-space-2);
+    row-gap: 2px;
+    min-width: 0;
+}
+
+.bigPct {
+    font-family: var(--xc-font-sans);
+    font-variant-numeric: tabular-nums;
+    /* Home's 32px headline. */
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: var(--xc-on-accent);
+}
+
+.bigMessage {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+}
+
+.bigLabel {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px var(--xc-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+}
+
+.legendSwatch {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.legendText {
+    overflow-wrap: anywhere;
+}
+
+.legendPct {
+    font-variant-numeric: tabular-nums;
+}
+
+/* The pool line sits at the card's foot, just above the range chips. */
+.heroStats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--xc-space-3);
+    margin: auto 0 0;
+    padding-top: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* Details: one fact per row, the label at the start and the value at the end. */
+.facts {
+    composes: flush from '../../ui/Card.module.css';
+    margin: 0;
+}
+
+.factRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px var(--xc-space-3);
+    min-height: 40px;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-card-pad);
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+}
+
+.factRow:first-child {
+    border-top: 0;
+}
+
+.factLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.factValue {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+.factLink.factLink {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: end;
+}
+
+.factAddress {
+    overflow-wrap: anywhere;
+}
+
+/* The outcome swatch drawn in the outcome dropdown's options. */
+.outcomeSwatch {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+}
+
+.portions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.portion.portion {
+    min-width: 0;
+    border-radius: 999px;
+    border: 1px solid var(--xc-border-strong);
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-border-strong);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+}
+
+.portionActive.portionActive {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-text);
+}
+
+.payout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-3);
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-bg-muted);
+}
+
+.payout p {
+    margin: 0;
+}
+
+.payoutList {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.payoutRow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0 var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.payoutRow dd {
+    margin: 0;
+    color: var(--xc-text);
+    font-weight: 600;
+    text-align: end;
+}
+
+.payoutRow .payoutValue {
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    color: var(--xc-success);
+}
+
+.positionPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.positionTitle {
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+}
+
+.positionList {
+    composes: flush from '../../ui/Card.module.css';
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.positionRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+.positionRow:first-child {
+    border-top: 0;
+}
+
+.positionValues {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px var(--xc-space-3);
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.positionAmount,
+.positionOutcome {
+    color: var(--xc-text);
+    overflow-wrap: break-word;
+}
+
+.positionAmount {
+    font-size: var(--xc-text-md);
+}
+
+.positionEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-3);
+}
+
+.positionQuiet {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+/* The held line under Bet and the "You bet" lines on Result. */
+/* The Bet tab: the outcome list, the line under it, the status slot and
+   what this wallet holds, 8px apart. */
+.betPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.heldLine {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.heldIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+}

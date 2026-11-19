@@ -13,7 +13,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import { ThisWalletSection } from '../../../packages/core/src/shared/components/settings/ThisWalletSection.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 function mount(activeWallet, { onOpenWalletPicker } = {}) {
@@ -23,11 +23,9 @@ function mount(activeWallet, { onOpenWalletPicker } = {}) {
     };
     const view = render(
         <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
-            <Settings
-                onBack={() => {}}
+            <ThisWalletSection
                 activeWallet={activeWallet}
                 onOpenWalletPicker={onOpenWalletPicker}
-                initialSubpageId="this-wallet"
             />
         </MessagingContext.Provider>,
     );
@@ -62,7 +60,7 @@ describe('ThisWalletSection recovery-phrase upgrade row', () => {
         );
         expect(screen.getByText('Upgrade recovery phrase')).toBeTruthy();
         expect(view.container.textContent).not.toMatch(/Counterwallet-legacy/);
-        fireEvent.click(screen.getByRole('button', { name: 'Open wallets…' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open Wallets…' }));
         expect(onOpenWalletPicker).toHaveBeenCalledOnce();
     });
 });

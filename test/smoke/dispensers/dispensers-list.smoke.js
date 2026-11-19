@@ -106,7 +106,7 @@ assert.ok(
     'DispensersList surfaces the no-addresses case',
 );
 assert.ok(
-    /title="No dispensers yet"/.test(listSrc),
+    /No dispensers yet/.test(listSrc),
     'DispensersList surfaces the empty per-chain case',
 );
 assert.ok(
@@ -268,7 +268,7 @@ for (const [shell, appPath] of [
     assert.ok(app.includes("'dispensers-list'"), `${shell} tracks the dispensers-list sub-route`);
     assert.ok(app.includes("'dispenser-detail'"), `${shell} tracks the dispenser-detail sub-route`);
     assert.ok(
-        surfacesEntry(app, 'dispensers-list', 'My dispensers'),
+        surfacesEntry(app, 'dispensers-list'),
         `${shell} registers the My dispensers entry`,
     );
     // Accept both the bare-arrow form and a block body that records a
@@ -278,13 +278,15 @@ for (const [shell, appPath] of [
         /onMyDispensers:\s*\(\)\s*=>\s*(?:setUnlockedView\('dispensers-list'\)|\{[^}]*setUnlockedView\('dispensers-list'\)[^}]*\})/.test(app),
         `${shell} wires onMyDispensers to the list sub-route`,
     );
+    // Back from the detail page and from a form launched off the list pops
+    // the shell's history, so no origin or return target is recorded.
     assert.ok(
-        /setDispenserRef\(\{\s*chainId,\s*actionIndex,\s*origin:/.test(app),
-        `${shell} threads chainId + actionIndex + origin through setDispenserRef`,
+        /setDispenserRef\(\{\s*chainId,\s*actionIndex\s*\}\)/.test(app),
+        `${shell} threads chainId + actionIndex through setDispenserRef`,
     );
     assert.ok(
-        /onCreateDispenser=\{\(\) => \{[\s\S]{0,160}?setFormReturnView\('dispensers-list'\);[\s\S]{0,160}?setUnlockedView\('dispenser'\);/.test(app),
-        `${shell} returns a dispenser launched from the list back to the list`,
+        /onCreateDispenser=\{\(\) => setUnlockedView\('dispenser'\)\}/.test(app),
+        `${shell} opens a dispenser form from the list on top of it, so Back returns to the list`,
     );
 }
 

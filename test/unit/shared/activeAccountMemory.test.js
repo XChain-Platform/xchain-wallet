@@ -16,17 +16,13 @@ import {
     writeActiveAccount,
     clearActiveAccount,
 } from '../../../packages/core/src/shared/utils/activeAccountMemory.js';
-import {
-    filterConfirmSessionsForAccount,
-    reconcileActiveAccount,
-} from '../../../packages/core/src/shared/utils/activeAccountScope.js';
+import { reconcileActiveAccount } from '../../../packages/core/src/shared/utils/activeAccountScope.js';
 
 const shells = [
     'packages/web/src/App.jsx',
     'packages/desktop/renderer/App.jsx',
     'packages/extension/src/popup/App.jsx',
 ];
-const homeSource = readFileSync('packages/core/src/shared/routes/Home.jsx', 'utf8');
 const sendSource = readFileSync('packages/core/src/shared/routes/Send.jsx', 'utf8');
 
 describe('activeAccountMemory', () => {
@@ -85,32 +81,8 @@ describe('activeAccountMemory', () => {
         expect(readActiveAccount('wallet-1')).toBe(null);
     });
 
-    it('filters tagged pending confirmations to the active wallet and account', () => {
-        const current = { id: 'current', request: { walletId: 'wallet-1', accountId: 'acct-1' } };
-        const otherAccount = { id: 'other-account', request: { walletId: 'wallet-1', accountId: 'acct-2' } };
-        const otherWallet = { id: 'other-wallet', request: { walletId: 'wallet-2', accountId: 'acct-1' } };
-
-        expect(filterConfirmSessionsForAccount(
-            [current, otherAccount, otherWallet],
-            'wallet-1',
-            'acct-1',
-        )).toEqual([current]);
-    });
-
-    it('keeps legacy untagged confirmations within the active wallet', () => {
-        const legacy = { id: 'legacy', dispatch: { base: { walletId: 'wallet-1' } } };
-        const otherWallet = { id: 'other-wallet', dispatch: { base: { walletId: 'wallet-2' } } };
-
-        expect(filterConfirmSessionsForAccount(
-            [legacy, otherWallet],
-            'wallet-1',
-            'acct-1',
-        )).toEqual([legacy]);
-    });
-
-    it('tags new sends and filters the Home resume cards by account', () => {
+    it('tags new sends with the active account', () => {
         expect(sendSource).toContain('...(accountId ? { accountId } : {})');
-        expect(homeSource).toContain('filterConfirmSessionsForAccount(');
     });
 });
 

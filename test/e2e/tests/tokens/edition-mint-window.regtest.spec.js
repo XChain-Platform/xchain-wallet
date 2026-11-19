@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/edition-mint-window.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     explorerJson,
@@ -71,7 +71,11 @@ import {
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
     REGTEST_CHAIN_ID,
+    openFromAddress,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The ISSUE pays a real coin fee; the MINTs pay only miner fees. */
@@ -244,9 +248,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -286,7 +288,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
     // The modal closes only once the address is stored; listing before then
     // can read the list as it was.
     await expect(page.getByTestId('add-address-generate'),
@@ -301,9 +304,12 @@ async function generateVenueAddress(page) {
 /** Opens the Mint form's token picker and selects `tick`. */
 async function pickToken(page, tick) {
     await page.getByRole('button', { name: /^Token:/ }).click();
-    await expect(page.getByLabel('Search coins or tokens'),
-        'the Select token screen never opened').toBeVisible({ timeout: 30_000 });
-    await page.getByLabel('Search coins or tokens').fill(tick);
+    // The search box sits behind the picker's Filter button.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    await expect(filter, 'the Select token screen never opened').toBeVisible({ timeout: 30_000 });
+    const search = page.getByLabel('Search coins or tokens', { exact: true });
+    if (!(await search.isVisible().catch(() => false))) await filter.click();
+    await search.fill(tick);
     const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
     await expect(row,
         `the token picker cannot reach ${tick}. It runs the platform-wide discovery for exactly `
@@ -340,14 +346,14 @@ async function composeMint(page, amount, tick = TICK, signAs = null) {
         await expect(row, `the source picker does not offer ${signAs}`)
             .toBeVisible({ timeout: 30_000 });
         await row.click();
-        await expect(page.getByLabel('From', { exact: true })).toHaveValue(signAs, { timeout: 30_000 });
+        await expect(await openFromAddress(page)).toHaveValue(signAs, { timeout: 30_000 });
     }
 
     // The AmountField's balance line, whatever it currently says: it carries the
     // headroom, the per-address cap and the window notice at different moments,
     // and a regex that only knew the first of those reported the fix as absent.
     const footer = await main
-        .getByText(/available to mint|No supply cap|opens at block|closed at block/).first()
+        .getByText(/available to mint|reached its per-address cap|No supply cap|opens at block|closed at block/).first()
         .innerText().catch(() => '');
 
     await main.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
@@ -367,9 +373,14 @@ async function onboardAndCreateEdition(page, {
 
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
-    await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    const source = await probe.getByLabel('From', { exact: true }).inputValue();
+    await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    const source = await fieldByLabel(probe, 'From address').inputValue();
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -390,22 +401,28 @@ async function onboardAndCreateEdition(page, {
 
     await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Limited edition/ }).click();
+    await pickIssuePreset(main, /^Limited edition/);
+    // The network sits in the From section, closed until opened.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-    await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Token name (ticker)').fill(tick);
-    await main.getByLabel('Edition size').fill(String(EDITION));
-    await main.getByLabel('Copies per mint').fill(String(PER_TX));
-    await main.getByLabel('Image URL').fill(IMAGE_URL);
-    await main.getByLabel('Limit per address (optional)').fill(String(PER_ADDRESS));
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(String(EDITION));
+    // The per-transaction and per-address caps and the window blocks sit in
+    // the Public minting section.
+    await openIssueSection(main, 'Public minting');
+    await fieldByLabel(main, 'Max per transaction').fill(String(PER_TX));
+    await fieldByLabel(main, 'Max per address').fill(String(PER_ADDRESS));
     if (startBlock !== null) {
-        await main.getByLabel('Minting opens at block (optional)').fill(String(startBlock));
+        await fieldByLabel(main, 'Start block').fill(String(startBlock));
     }
     if (stopBlock !== null) {
-        await main.getByLabel('Minting closes at block (optional)').fill(String(stopBlock));
+        await fieldByLabel(main, 'Stop block').fill(String(stopBlock));
     }
+    // The artwork URL sits in the Description section.
+    await openIssueSection(main, 'Description');
+    await fieldByLabel(main, 'Image URL').fill(IMAGE_URL);
     await submitTokenWizard(page);
 
     await expectConfirmScreen(page);
@@ -517,8 +534,17 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             for (const expected of [PER_TX, PER_TX * 2]) {
                 await composeMint(page, PER_TX);
                 await expectConfirmScreen(page);
-                await expect(page.getByTestId('preflight-panel'))
-                    .not.toHaveAttribute('data-verdict', 'fail');
+                // An edition mint's per-address headroom is checked only when it
+                // settles, which the confirm screen states as the calm settleChecks
+                // notice. A red partial means some other check went unverified.
+                const status = page.getByTestId('confirm-status');
+                await expect(status,
+                    'a capped edition mint inside its window drew a check state other than pass or settleChecks')
+                    .toHaveAttribute('data-state', /^(pass|settleChecks)$/);
+                if ((await status.getAttribute('data-state')) === 'settleChecks') {
+                    await expect(status).toHaveAttribute('data-tone', 'info');
+                    await expect(status).toContainText('Checked When It Settles');
+                }
 
                 const action = await waitForIndexedAction(await approveAndGetTxid(page));
                 expect(String(action.status),
@@ -529,44 +555,51 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             }
         });
 
-        await test.step('PAST the address cap: refused again, and the footer still offers a full transaction', async () => {
+        await test.step('PAST the address cap: refused again, and the footer names the cap', async () => {
             const quote = await feeQuote(PER_TX, source);
             expect(String(quote.status)).toMatch(/MINT_ADDRESS_MAX/i);
 
             const footer = await composeMint(page, PER_TX);
 
-            // The second missing dimension. This address has minted its whole
-            // MINT_ADDRESS_MAX and can never mint another unit of this token;
-            // the footer is sized off min(MAX_MINT, MAX_SUPPLY - supply), and
-            // 80 of the 100 edition remains, so it advertises a full ten.
-            // The per-address cap cannot become a remaining figure - it is
-            // cumulative over this address's whole MINT history and nothing the
-            // wallet reads carries that total - so it is STATED beside the
-            // headroom rather than subtracted from it. A form that silently
-            // offered ten again, with this address permanently unable to mint
-            // one, is what this replaces.
+            // This address has minted its whole MINT_ADDRESS_MAX. With its mint
+            // history read, the footer says the cap is reached and the form
+            // refuses; without it, the cap is stated beside the supply headroom
+            // and the network refuses. Either way nothing is sent.
             expect(footer, 'the amount field says nothing about the per-address cap')
-                .toMatch(new RegExp(`${PER_TX} ${TICK} available to mint, ${PER_ADDRESS} per address in total`));
+                .toMatch(new RegExp('This address has reached its per-address cap'
+                    + `|${PER_TX} ${TICK} available to mint, ${PER_ADDRESS} per address in total`));
 
-            if (REGTEST_COIN === 'RBTC') {
+            // Which side answers depends on whether the history read landed
+            // before the tap, so the branch follows the screen, not the footer.
+            const capAlert = page.getByRole('alert').filter({ hasText: /reached its per-address cap/ }).first();
+            const networkAlert = page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }).first();
+            await expect(capAlert.or(page.getByTestId('confirm-modal')).or(networkAlert).first(),
+                'a mint past the address cap drew neither a form refusal nor a confirm screen')
+                .toBeVisible({ timeout: 60_000 });
+            if (await capAlert.isVisible()) {
+                await page.waitForTimeout(1_000);
+                expect(await page.getByTestId('confirm-modal').count(),
+                    'a mint past the address cap reached the confirm screen')
+                    .toBe(0);
+            } else if (REGTEST_COIN === 'RBTC') {
                 // Bitcoin defaults to the XCHAIN fee lane, where no native-fee
                 // quote runs on the form, so the network's verdict arrives as
                 // the confirm screen's pre-send check. That check must name the
                 // cap and hold Approve until the signer explicitly overrides it.
                 await expectConfirmScreen(page);
-                const panel = page.getByTestId('preflight-panel');
-                await expect(panel).toHaveAttribute('data-verdict', 'fail', { timeout: 90_000 });
-                await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-                await expect(panel,
+                const warning = page.getByTestId('confirm-status');
+                await expect(warning).toHaveAttribute('data-state', 'fail', { timeout: 90_000 });
+                await expect(warning,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toContainText(/would be refused because .*MINT_ADDRESS_MAX/i);
-                await expect(page.getByTestId('confirm-approve'),
-                    'a mint past the address cap can be approved without overriding the refusal')
-                    .toBeDisabled();
+                // Approve keeps its colour (G130): a tap without overriding
+                // the refusal is answered at the top and sends nothing.
+                await expectApproveRefused(page, ['signAnyway', 'fails'],
+                    'a mint past the address cap, with the refusal not overridden');
                 await page.getByTestId('confirm-reject').click();
                 await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });
             } else {
-                await expect(page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }),
+                await expect(networkAlert,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toBeVisible({ timeout: 90_000 });
                 expect(await page.getByTestId('confirm-modal').count(),

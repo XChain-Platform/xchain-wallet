@@ -19,11 +19,13 @@
 // receive address a second time.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
-import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
 
 export class NoMatchingAccountError extends Error {
@@ -95,7 +97,8 @@ async function probeIndexFunding({
  * @property {string} chainId
  * @property {string} [accountId]               preferred: pick the Account by id
  * @property {number} [accountIndex]            fallback: pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
- * @property {string} [addressType]             defaults to descriptor.defaultAddressType
+ * @property {string} [addressType]             defaults by wallet format via
+ *                                              defaultAddressTypeForWallet (p2pkh for counterwallet-legacy)
  * @property {number} [derivationIndex]         advanced: derive this external index instead of the lowest unheld index
  * @property {string} [label]                   defaults to "<TICKER> Address #N+1" (e.g. "BTC Address #2")
  */
@@ -141,6 +144,8 @@ async function deriveReceiveAddress({
         throw new Error('receiveAddress: walletId is required');
     }
     if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet derives only through its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'a new address without it connected');
         throw new Error('receiveAddress: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('receiveAddress: chainRegistry is required');
@@ -210,8 +215,10 @@ async function deriveReceiveAddress({
     // type, so its types share one index space and the addressType filter
     // below must not apply: partitioning by type there would re-issue the
     // key already held at that index under another encoding.
-    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
+    const sharedIndexSpace = await indexSpaceSharedForAccount(vault, walletId, {
+        account, addresses: allAddresses, signerKind: providedSigner?.kind,
+    });
     const held = new Set();
     let highest = -1;
     for (const a of allAddresses) {
@@ -253,10 +260,10 @@ async function deriveReceiveAddress({
         });
     const ownsSigner = !providedSigner;
     const signerKind = signer.kind;
-    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
     const isHardware = signerKind === 'trezor' || signerKind === 'ledger';
     try {
+        const addressSource = addressSourceForSignerKind(signerKind);
         let targetIndex = derivationIndex;
         let derived;
         if (targetIndex === undefined) {

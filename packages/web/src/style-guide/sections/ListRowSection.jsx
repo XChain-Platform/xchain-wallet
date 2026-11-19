@@ -17,7 +17,7 @@ export function ListRowSection() {
             <Guidance
                 what={<>A row with <code>leading</code>, <code>title</code>, <code>subtitle</code>, <code>trailing</code>, and <code>chevron</code> slots. An <code>href</code> creates a link, an <code>onClick</code> handler creates a button, and neither creates a display-only div.</>}
                 when={<>History, address, asset, staking, dispenser, and settings lists where each item follows the same reading order.</>}
-                whenNot={<>Forms, multi-action cards, or table data that needs column headers.</>}
+                whenNot={<>Forms, multi-action cards, or table data that needs column headers. A Settings row whose setting is one switch, one short choice or one action changes it in place (SettingsInlineRow: the switch, themed dropdown or button sits where the chevron would, with no chevron); only a setting with several related fields is a chevron row that opens a page.</>}
                 sizing={<>Full width with minimum height <code>--xc-control-h-lg</code>. The containing Screen or ListPage owns <code>--xc-page-gutter</code>; the row adds only internal spacing.</>}
                 variants={<>Native button, native link, and non-interactive div.</>}
                 doRule={<>Use an <code>href</code> for navigation and <code>onClick</code> for an in-place action so keyboard behavior comes from the native element.</>}

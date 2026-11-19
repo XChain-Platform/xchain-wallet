@@ -64,6 +64,12 @@ export function defaultDexAssetForNetwork(network) {
     return { chainId: `bitcoin-${activeNetwork}`, tick: 'BTC', kind: 'native' };
 }
 
+/** The first dispenser market shown on a network until the user picks one. */
+export function defaultDispenserAssetForNetwork(network) {
+    const { chainId } = defaultDexAssetForNetwork(network);
+    return { chainId, tick: 'PEPECASH', displayName: 'PEPECASH', kind: 'token' };
+}
+
 /**
  * The chain whose shared-list directory the Shared lists screen reads: the
  * network of the list the user last opened there, otherwise the selected
@@ -90,6 +96,13 @@ export function syncDexAssetToNetwork(asset, network, registry = defaultRegistry
     const activeNetwork = getActiveNetwork({ activeNetwork: network });
     if (asset?.chainId && registry?.get(asset.chainId)?.networkKind === activeNetwork) return asset;
     return defaultDexAssetForNetwork(activeNetwork);
+}
+
+/** Keep a dispenser market on its network, otherwise use its default token. */
+export function syncDispenserAssetToNetwork(asset, network, registry = defaultRegistry()) {
+    const activeNetwork = getActiveNetwork({ activeNetwork: network });
+    if (asset?.chainId && registry?.get(asset.chainId)?.networkKind === activeNetwork) return asset;
+    return defaultDispenserAssetForNetwork(activeNetwork);
 }
 
 /**

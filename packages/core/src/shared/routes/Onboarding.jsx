@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Checkbox, FormPage, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormPage, Icon, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { BootHeader } from '../components/BootHeader.jsx';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 // Direct module imports, not the core barrel: this screen is first paint on a
 // device with no wallet, and the barrel would pull every flow into startup.
@@ -22,6 +23,8 @@ import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { titleCase } from '../utils/titleCase.js';
+import { getHardwareFactories, workingHardwareVendors } from '../../signers/hardwareReconnect.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import { t } from '../../i18n/index.js';
@@ -34,6 +37,30 @@ const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
 // not a legal gate: it is never version-bumped.
 const EXPLAINER_SEEN_KEY = 'xc:onboardingExplainerSeenAt';
 
+// The hardware wallet mark on the Connect Hardware Wallet button: a device
+// with a screen and its cable, drawn on the kit's icon grid.
+function HardwareWalletGlyph() {
+    return (
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+            data-icon="hardware-wallet"
+        >
+            <rect x="6" y="2" width="12" height="16" rx="3" />
+            <rect x="9" y="5.5" width="6" height="5" rx="1" />
+            <path d="M12 18v4" />
+        </svg>
+    );
+}
+
 // First-time explainer frames (§25.2). Deliberately short: four plain-
 // language screens covering the mental model a crypto newcomer needs
 // before the create/import fork. Copy avoids jargon ("gas", "network")
@@ -42,25 +69,25 @@ const EXPLAINER_FRAMES = [
     {
         id: 'self-custody',
         icon: <Icon.LockIcon />,
-        title: 'Your keys, your wallet',
+        title: 'Your Wallet',
         body: 'XChain Platform gives you a self-custodial wallet. Your assets stay on their blockchains, and your keys authorize each transaction. XChain Platform cannot access or freeze your funds.',
     },
     {
         id: 'recovery-phrase',
         icon: <Icon.KeyIcon />,
-        title: 'Protect your recovery phrase',
+        title: 'Recovery Phrase',
         body: 'Creating a wallet gives you a recovery phrase. Store it offline and never share it. You can use it to restore your wallet on a new device.',
     },
     {
         id: 'transactions',
         icon: <Icon.SendIcon />,
-        title: 'Review before you send',
+        title: 'Review First',
         body: 'A confirmed blockchain transaction cannot be reversed. Check the network, address, and amount before you approve a send.',
     },
     {
         id: 'multi-chain',
         icon: <Icon.TokenIcon />,
-        title: 'Built for the XChain Platform',
+        title: 'Supported Networks',
         body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the networks supported today. Each network has its own addresses here, kept separate so you always know where you are acting.',
     },
 ];
@@ -82,7 +109,7 @@ function markExplainerSeen() {
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
     {
-        text: `${branding.PRODUCT_NAME} is provided as-is, without warranties. Keep access to your recovery phrase, any BIP39 passphrase, and hardware wallet. Confirm transaction details because confirmed blockchain transactions cannot be reversed.`,
+        text: `${branding.PRODUCT_NAME} is provided as-is, without warranties. Keep access to your recovery phrase, any extra passphrase, and hardware wallet. Confirm transaction details because confirmed blockchain transactions cannot be reversed.`,
         critical: true,
     },
     {
@@ -121,9 +148,8 @@ function markAccepted() {
 
 /**
  * Welcome screen: entry point for users with no wallet yet.
- * Dispatches to `CreateWallet`, `ImportWallet`, or (§40.13) the
- * FreeWallet-branded `ImportWallet` variant via the parent App's
- * onboarding sub-route state.
+ * Dispatches to `CreateWallet` or `ImportWallet`. Legacy wallet formats are
+ * selected inside Import Wallet rather than taking a separate welcome entry.
  *
  * §25.2 / G058: also exposes a "Try in demo mode" button that creates a
  * throwaway BIP39 wallet with a random password (cached in session) and
@@ -132,17 +158,18 @@ function markAccepted() {
  * @param {object} props
  * @param {() => void} [props.onCreate]
  * @param {() => void} [props.onImport]
- * @param {() => void} [props.onImportFromFreeWallet]
- * @param {() => void} [props.onPairPartner] §20.5: enters the watcher/signer pairing lane (shared recovery phrase across two devices)
+ * @param {() => void} [props.onConnectHardware] opens the Connect Hardware Wallet flow; the button shows only while this shell has a vendor factory that can reach a device
+ * @param {Record<string, Function | null | undefined>} [props.hardwareFactories] the shell's pair factories by vendor (null where a vendor cannot work); defaults to the ones the reconnect layer holds
  * @param {() => void} [props.onDemoEntered]          fires after the demo wallet persists; caller refreshes App state into the unlocked tree
  * @param {() => void} [props.onWalletFound]          re-reads App state when this tab finds a wallet another tab created, which opens the lock screen; without it the page reloads
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  * @param {'fresh' | 'add'} [props.mode]              'fresh' = no wallet on the device; 'add' = adds to an already-open vault. Defaults to 'fresh'.
  */
-export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onWalletFound, onBack, mode = 'fresh' }) {
+export function Onboarding({ onCreate, onImport, onConnectHardware, hardwareFactories, onDemoEntered, onWalletFound, onBack, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const hardwareReady = workingHardwareVendors(hardwareFactories || getHardwareFactories()).length > 0;
     // Welcome on a fresh install is the bottom of the app, so Android Back
     // leaves it the way Home does. The add-wallet lane has its own Back.
     useNativeExitRoot(!onBack, true);
@@ -171,6 +198,8 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const [termsFit, setTermsFit] = useState(false);
     const scrolledToEnd = scrolledByUser || termsFit;
     const [licenseAck, setLicenseAck] = useState(false);
+    const licenseErrors = useFormErrors();
+    const licenseAckId = 'onboarding-license-ack';
     // §25.2 / FOLLOWUP 3: the first-time explainer carousel shows once,
     // only on the fresh-install path (never the unlocked-vault Add-Wallet
     // lane, where `onBack` is supplied and the user is plainly a returner).
@@ -182,6 +211,10 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         : !licenseAck
             ? 'Check "I have read and agree to these terms" to continue.'
             : null;
+
+    useEffect(() => {
+        if (scrolledToEnd) licenseErrors.clear(licenseAckId);
+    }, [scrolledToEnd, licenseErrors.clear]);
 
     useEffect(() => {
         const el = licenseScrollRef.current;
@@ -235,6 +268,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     }
 
     function handleAcceptLicense() {
+        if (!licenseErrors.validate({ [licenseAckId]: licenseDisabledReason })) return;
         markAccepted();
         setLicenseAcceptedAt(new Date().toISOString());
         setLicenseAcceptedVersion(LICENSE_VERSION);
@@ -403,9 +437,12 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <PageHeader
             onBack={onBack}
             backLabel={t('onboarding.backToWallets')}
-            title={t('walletPicker.add')}
+            title={titleCase(t('walletPicker.add'))}
         />
     ) : null;
+    // The first-run pages have no shell around them, so each gets the logo
+    // header and a page header; the Add-Wallet shortcut keeps the shell's own.
+    const firstRunFrame = (title) => (onBack ? null : <BootHeader title={title} />);
 
     // First-launch + version-bump gate. The Add-Wallet shortcut (when
     // `onBack` is supplied) skips the gate ONLY when the user has
@@ -413,11 +450,14 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     // re-acceptance through every entry path.
     if (!licenseSatisfied) {
         return (
-            <Screen variant={variant} header={null}>
+            <Screen variant={variant} header={firstRunFrame(t('onboarding.licenseAgreement'))}>
                 <FormPage
                     label={t('onboarding.licenseAgreement')}
                     fill
                     fullWidth
+                    className={styles.licenseForm}
+                    errors={licenseErrors}
+                    headingAs={onBack ? 'h1' : 'h2'}
                     title={t('onboarding.licenseAgreement')}
                     visual={(
                         <img
@@ -426,27 +466,6 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             className={`${isFull ? styles.logoFull : styles.logoPopup} ${styles.licenseLogo}`}
                         />
                     )}
-                    actions={(
-                        <div className={styles.licenseActions}>
-                            {licenseDisabledReason ? (
-                                <span id="license-accept-disabled-reason" className="sr-only">
-                                    {licenseDisabledReason}
-                                </span>
-                            ) : null}
-                            <Button
-                                variant="primary"
-                                onClick={handleAcceptLicense}
-                                disabled={Boolean(licenseDisabledReason)}
-                                aria-describedby={licenseDisabledReason
-                                    ? 'license-accept-disabled-reason'
-                                    : undefined}
-                                icon={<Icon.CheckIcon />}
-                            >
-                                {t('onboarding.acceptAndContinue')}
-                            </Button>
-                        </div>
-                    )}
-                    stackedActions
                 >
                     <div className={styles.licenseGate}>
                         <div
@@ -465,15 +484,40 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 </p>
                             ))}
                         </div>
-                        <Checkbox
-                            className={styles.licenseAck}
-                            label={scrolledToEnd
-                                ? t('onboarding.iHaveReadAndAgree')
-                                : t('onboarding.scrollToTheEndTo')}
-                            checked={licenseAck}
-                            disabled={!scrolledToEnd}
-                            onChange={(e) => setLicenseAck(e.target.checked)}
-                        />
+                        <div className={styles.licenseControls}>
+                            <Checkbox
+                                id={licenseAckId}
+                                className={styles.licenseAck}
+                                label={scrolledToEnd
+                                    ? t('onboarding.iHaveReadAndAgree')
+                                    : t('onboarding.scrollToTheEndTo')}
+                                help={t('onboarding.licenseAckHelp')}
+                                checked={licenseAck}
+                                disabled={!scrolledToEnd}
+                                error={licenseErrors.errorFor(licenseAckId)}
+                                onChange={(e) => {
+                                    setLicenseAck(e.target.checked);
+                                    licenseErrors.clear(licenseAckId);
+                                }}
+                            />
+                            <div className={styles.licenseActions}>
+                                {licenseDisabledReason ? (
+                                    <span id="license-accept-disabled-reason" className="sr-only">
+                                        {licenseDisabledReason}
+                                    </span>
+                                ) : null}
+                                <Button
+                                    variant="success"
+                                    onClick={handleAcceptLicense}
+                                    aria-describedby={licenseDisabledReason
+                                        ? 'license-accept-disabled-reason'
+                                        : undefined}
+                                    icon={<Icon.CheckIcon />}
+                                >
+                                    {t('onboarding.acceptAndContinue')}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </FormPage>
             </Screen>
@@ -482,11 +526,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
 
     if (mustGraduate) {
         return (
-            <Screen variant={variant} header={header}>
+            <Screen variant={variant} header={header ?? firstRunFrame(t('onboarding.leaveTheDemo'))}>
                 <FormPage
                     label={t('onboarding.leaveTheDemo')}
                     title={t('onboarding.leaveTheDemoFirst')}
-                    headingAs={header ? 'h2' : 'h1'}
+                    headingAs="h2"
                     visual={(
                         <img
                             src={branding.logoUrl()}
@@ -500,7 +544,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     actions={(
                         <>
                             <Button
-                                variant="primary"
+                                variant="success"
                                 block
                                 onClick={() => handleGraduate('create', onCreate)}
                                 loading={gradBusy === 'create'}
@@ -510,7 +554,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 {t('onboarding.clearDemoCreateNewWallet')}
                             </Button>
                             <Button
-                                variant="secondary"
+                                variant="primary"
                                 block
                                 onClick={() => handleGraduate('import', onImport)}
                                 loading={gradBusy === 'import'}
@@ -519,20 +563,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             >
                                 {t('onboarding.clearDemoImportWallet')}
                             </Button>
-                            <Button
-                                variant="ghost"
-                                block
-                                onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
-                                loading={gradBusy === 'import-freewallet'}
-                                disabled={!!gradBusy || !onImportFromFreeWallet}
-                                icon={<Icon.MigrateIcon />}
-                            >
-                                {t('onboarding.clearDemoImportFromFreewallet')}
-                            </Button>
                             {onBack ? (
                                 <Button
                                     variant="ghost"
                                     block
+                                    icon={<Icon.BackIcon />}
                                     onClick={onBack}
                                     disabled={!!gradBusy}
                                 >
@@ -566,34 +601,44 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const showExplainer = !onBack && !explainerSeenAt;
     if (showExplainer) {
         return (
-            <Screen variant={variant} header={null}>
-                <OnboardingCarousel
-                    frames={EXPLAINER_FRAMES}
-                    variant={variant}
-                    onDone={handleExplainerDone}
-                />
+            <Screen variant={variant} header={null} bodyClassName={styles.wideCentre}>
+                <FormPage
+                    as="div"
+                    label={t('onboarding.carousel.steps')}
+                    className={styles.carouselForm}
+                >
+                    <OnboardingCarousel
+                        frames={EXPLAINER_FRAMES}
+                        variant={variant}
+                        onDone={handleExplainerDone}
+                    />
+                </FormPage>
             </Screen>
         );
     }
 
     return (
-        <Screen variant={variant} header={header}>
+        // The first-run page has no app header and no page header: the logo,
+        // tagline and buttons are one group centred in the page. The hidden
+        // product title preserves the page heading for assistive technology.
+        <Screen
+            variant={variant}
+            header={header}
+            bodyClassName={header ? undefined : styles.wideCentre}
+        >
             <FormPage
                 label={t('onboarding.walletSetup')}
-                // Inside the app the page header already names the screen and the
-                // app header carries the logo, so the brand block only shows on the
-                // first-run screen that has neither.
+                className={header ? undefined : styles.welcomeForm}
                 visual={header ? undefined : (
                     <div className={styles.welcomeHeader} data-onboarding-welcome-header="">
                         <img
                             src={branding.logoUrl()}
-                            alt={branding.PRODUCT_NAME}
-                            className={isFull ? styles.logoFull : styles.logoPopup}
+                            alt=""
+                            className={styles.welcomeLogo}
+                            data-onboarding-welcome-logo=""
                         />
-                        <div className={styles.welcomeCopy}>
-                            <h1 className={styles.welcomeTitle}>{branding.PRODUCT_NAME}</h1>
-                            <p className={styles.welcomeTagline}>{branding.TAGLINE}</p>
-                        </div>
+                        <h1 className="sr-only">{branding.PRODUCT_NAME}</h1>
+                        <p className={styles.welcomeTagline}>{t('onboarding.welcomeTagline')}</p>
                     </div>
                 )}
                 status={demoError ? (
@@ -611,7 +656,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 actions={(
                     <>
                         <Button
-                            variant="primary"
+                            variant="success"
                             block
                             onClick={onCreate}
                             disabled={!onCreate}
@@ -620,7 +665,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             {t('onboarding.createNewWallet')}
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             block
                             onClick={onImport}
                             disabled={!onImport}
@@ -628,44 +673,36 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         >
                             {t('importWallet.title')}
                         </Button>
-                        <Button
-                            variant="ghost"
-                            block
-                            onClick={onImportFromFreeWallet}
-                            disabled={!onImportFromFreeWallet}
-                            icon={<Icon.MigrateIcon />}
-                        >
-                            {t('onboarding.fromFreewallet')}
-                        </Button>
                         {/*
-                          §20.5: the fourth lane. Create / Import both make a
-                          standalone `full` wallet; this one makes HALF of an
-                          air-gapped pair, so it needs its own entry point rather than
-                          a post-hoc mode flip in Settings that nothing verifies.
+                          The third equal choice. The two-phone pairing that
+                          used to sit here lives in Settings, Advanced.
                         */}
-                        {onPairPartner ? (
+                        {hardwareReady && onConnectHardware ? (
                             <Button
-                                variant="ghost"
+                                variant="primary"
+                                className={styles.hardwareButton}
                                 block
-                                onClick={onPairPartner}
-                                icon={<Icon.LinkIcon />}
+                                onClick={onConnectHardware}
+                                icon={<HardwareWalletGlyph />}
                             >
-                                {t('onboarding.pairAWatcherOrSigner')}
+                                {t('onboarding.connectHardwareWallet')}
                             </Button>
                         ) : null}
                         {onDemoEntered ? (
                             <Button
-                                variant="ghost"
+                                variant="danger"
                                 block
                                 onClick={handleEnterDemo}
                                 loading={demoBusy}
                                 disabled={demoBusy}
+                                icon={<Icon.PlayIcon />}
                             >
                                 {demoBusy ? t('onboarding.settingUpDemo') : t('onboarding.tryInDemoMode')}
                             </Button>
                         ) : null}
                     </>
                 )}
+                choiceActions
                 stackedActions
             />
         </Screen>

@@ -15,7 +15,7 @@ import React from 'react';
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => React.createElement(
         'button',
-        { type: 'button', onClick: () => onSelect({ tick: title.includes('give') ? 'AAA' : 'BBB' }) },
+        { type: 'button', onClick: () => onSelect({ tick: title.toLowerCase().includes('give') ? 'AAA' : 'BBB' }) },
         title,
     ),
 }));
@@ -42,7 +42,12 @@ async function mount(Form) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({}),
+        // The give token is held in full. The form reads this balance after a
+        // 400 ms debounce, and a slow run lands it before the submit click: an
+        // empty answer then reads as 0 and refuses the give amount.
+        getWalletBalances: () => Promise.resolve({
+            [DOGE]: [{ address: DOGE_ADDRESS.address, balances: { tokens: [{ tick: 'AAA', quantity: '100', divisibility: 0 }] } }],
+        }),
         composeForConfirm,
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [] }),
     };
@@ -72,20 +77,34 @@ const change = async (utils, label, value) => {
 };
 
 async function fillOrder(utils) {
-    await change(utils, 'Give token', 'AAA');
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Give token:/ }));
+        await drain();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /Select Give Token/ }));
+        await drain();
+    });
     await change(utils, /^Give amount/, '1');
-    await change(utils, 'Get token', 'BBB');
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Get token:/ }));
+        await drain();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /Select Get Token/ }));
+        await drain();
+    });
     await change(utils, /^Get amount/, '1');
 }
 
 async function fillSwap(utils) {
-    for (const name of [/Give token/, /Get token/]) {
+    for (const name of [/^Give token:/, /^Get token:/]) {
         await domAct(async () => {
             fireEvent.click(utils.getAllByRole('button', { name }).find((b) => b.getAttribute('aria-label') || true));
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /Select (give|get) token/ }));
+            fireEvent.click(utils.getByRole('button', { name: /Select (Give|Get) Token/ }));
             await drain();
         });
     }
@@ -94,15 +113,15 @@ async function fillSwap(utils) {
 }
 
 const MEMOS = [
-    ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+    ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
     // The shared action-text refusal answers first, before the memo's own check.
     ['a bidirectional override', 'pay ‮txt.exe', /Memo cannot contain text-direction control characters/],
     ['a tab', 'a\tb', /Memo cannot contain control characters/],
 ];
 
 describe.each([
-    ['CrossChainOrderForm', CrossChainOrderForm, fillOrder, 'Place order'],
-    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Review'],
+    ['CrossChainOrderForm', CrossChainOrderForm, fillOrder, 'Place Order'],
+    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Create Cross-Chain Swap'],
 ])('%s memo', (_name, Form, fill, submitName) => {
     it.each(MEMOS)('refuses a memo %s before composing', async (_label, memo, message) => {
         const { utils, composeForConfirm } = await mount(Form);

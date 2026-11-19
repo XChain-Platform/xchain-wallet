@@ -13,6 +13,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.jsx'), 'utf8');
+const paletteHostSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/CommandPaletteHost.jsx'),
+    'utf8',
+);
 const nativeVaultSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/storage/nativeVault.js'),
     'utf8',
@@ -34,6 +38,22 @@ const styleGuideMainSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/style-guide/main.jsx'),
     'utf8',
 );
+const lockedSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/routes/Locked.jsx'),
+    'utf8',
+);
+const autoLockPolicySource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/hooks/useAutoLockPolicy.js'),
+    'utf8',
+);
+const effectiveNetworkSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/flows/effectiveNetwork.js'),
+    'utf8',
+);
+const clipboardSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/clipboard.js'),
+    'utf8',
+);
 
 const deferredRoutes = [
     'Home',
@@ -45,7 +65,8 @@ const deferredRoutes = [
     'AirdropForm',
     'TokenAdminForm',
     'AddressList',
-    'ManageToken',
+    // ManageToken is gone from the shell: the manage-token route draws the
+    // lazy TokenDetail (G12), asserted below.
     'PsbtSignForm',
     'MessagingInbox',
     'AddAccountForm',
@@ -54,12 +75,12 @@ const deferredRoutes = [
     'WalletDetails',
     'RenameWalletForm',
     'RenameAccountForm',
-    'MenuRoute',
     'AlertsRoute',
     'ScanRoute',
     'ContractsList',
     'ContractDetail',
-    'ContractStakeForm',
+    // The one Staking form (contract and validator staking routes).
+    'StakingForm',
     'DeployContractForm',
     'ExecuteContractForm',
     'ContractFundsForm',
@@ -75,6 +96,17 @@ describe('web startup imports', () => {
         );
     });
 
+    it('does not load MenuRoute', () => {
+        expect(appSource).not.toContain('MenuRoute');
+    });
+
+    it('draws the token page through the lazy TokenDetail and never imports ManageToken', () => {
+        expect(appSource).toContain(
+            "const TokenDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenDetail.jsx'), 'TokenDetail');",
+        );
+        expect(appSource).not.toContain('shared/routes/ManageToken.jsx');
+    });
+
     it.each(['CreateWallet', 'ImportWallet', 'PairPartnerWallet'])(
         'defers the secondary onboarding screen %s',
         (routeName) => {
@@ -87,12 +119,30 @@ describe('web startup imports', () => {
         },
     );
 
-    it('keeps the first onboarding and lock screens synchronous', () => {
-        for (const routeName of ['Onboarding', 'Locked']) {
-            expect(appSource).toContain(
-                `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
-            );
-            expect(appSource).not.toContain(`const ${routeName} = lazyRoute(`);
+    it('defers onboarding while keeping the returning-user lock screen synchronous', () => {
+        expect(appSource).toContain(
+            "const Onboarding = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Onboarding.jsx'), 'Onboarding');",
+        );
+        expect(appSource).toMatch(
+            /<Suspense fallback=\{<Loading \/>\}>[\s\S]*?<Onboarding\b/,
+        );
+        expect(appSource).toContain(
+            "import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';",
+        );
+        expect(appSource).not.toContain('const Locked = lazyRoute(');
+    });
+
+    it('defers Forgot Password without adding a loading flash to the lock screen', () => {
+        expect(lockedSource).toContain("() => import('./ForgotPassword.jsx')");
+        expect(lockedSource).not.toContain("import { ForgotPassword } from './ForgotPassword.jsx';");
+        expect(lockedSource).toContain('useIdlePreload(DemoExitConfirm, ForgotPassword);');
+        expect(lockedSource).toContain('openWhenLoaded(ForgotPassword, () => setForgotOpen(true))');
+    });
+
+    it('keeps the persisted-settings validator out of first-paint helpers', () => {
+        for (const source of [autoLockPolicySource, effectiveNetworkSource, clipboardSource]) {
+            expect(source).toContain('schemas/settingsStartup.js');
+            expect(source).not.toMatch(/schemas\/settings\.js/);
         }
     });
 
@@ -183,6 +233,39 @@ describe('web startup imports', () => {
         expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
     });
 
+    it('wires the wallet menu through the deferred command palette host', () => {
+        expect(paletteHostSource).toContain('menu={menu}');
+        expect(appSource).toContain('onMenuToggle={palette.togglePalette}');
+        expect(appSource).toContain('menuOpen={palette.open}');
+        expect(appSource).toContain('hasDexSurface: DEX_SURFACE_ENABLED');
+        expect(appSource).toContain('currentView: unlockedView');
+        expect(appSource).toContain('onSelect: handleMenuSelect');
+        expect(appSource).toContain('onOpenSettings: handleOpenSettings');
+        expect(appSource).toContain('onLock: handleNavLock');
+    });
+
+    it('keeps web navigation state consistent across menu, sidebar and tab selections', () => {
+        expect(appSource).toContain('networkFilter: globalNetworkFilter');
+        expect(appSource).not.toContain('shouldResetNetworkFilter');
+        expect(appSource).not.toContain('resetNetworkFilterWallets');
+
+        expect(appSource.match(/onSelect=\{handleMenuSelect\}/g)).toHaveLength(2);
+        expect(appSource).toContain("if (view === unlockedView && !nav.canGoBack) {");
+        expect(appSource).toContain('if (main) main.scrollTop = 0;');
+        // Every menu, sidebar and tab row opens its page as a root (G06): the
+        // history starts over on it, so it shows no Back.
+        expect(appSource).not.toContain('TAB_BAR_DESTINATIONS.includes');
+        expect(appSource).toMatch(/opens its page as a root[\s\S]{0,120}?palette\.navigate\(view\);/);
+        expect(appSource).not.toContain('ROUTE_NAV_SECTIONS');
+
+        expect(appSource).toContain('setSendPrefill(null);');
+        expect(appSource).toContain('setReceivePrefill(null);');
+        expect(appSource).toContain("setHistoryInitialQuery('');");
+        expect(appSource).toContain('setHistoryInitialFocus(null);');
+        expect(appSource).not.toMatch(/ReturnView|BackTo\b|ReturnTo\b/);
+        expect(appSource).toMatch(/<AlertsRoute[\s\S]*?onBack=\{goBack\}/);
+    });
+
     it('loads the action catalogue together with the Actions menu', () => {
         // Every action's label and description is copy only that menu shows.
         expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/actionEntries\.js'/);
@@ -202,15 +285,6 @@ describe('web startup imports', () => {
             'utf8',
         );
         expect(registryIndexSource).not.toMatch(/from '\.\/remote\.js'/);
-    });
-
-    it('loads the header chain filter with the settings popover', () => {
-        const headerSettingsSource = readFileSync(
-            resolve(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.jsx'),
-            'utf8',
-        );
-        expect(headerSettingsSource).toContain("const loadNetworkFilter = () => import('./NetworkFilter.jsx');");
-        expect(headerSettingsSource).not.toMatch(/from '\.\/NetworkFilter\.jsx'/);
     });
 
     it('loads the demo fixtures only when a demo wallet is entered', () => {

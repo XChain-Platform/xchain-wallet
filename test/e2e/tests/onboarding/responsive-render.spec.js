@@ -9,6 +9,7 @@ import {
     readRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { measureInPage } from '../../layout/sweep.js';
 
 const PASSWORD = 'responsive-onboarding-1234';
@@ -43,7 +44,14 @@ async function expectReachableLayout(page, label, action) {
             if (!text) continue;
             const style = getComputedStyle(node);
             if (style.display === 'none' || style.visibility === 'hidden') continue;
+            // Screen-reader-only text (the import tabs' full lane names) is
+            // clipped to 1px by design and never painted.
+            if (node.closest('.sr-only')) continue;
             if (node.scrollWidth <= node.clientWidth + 1) continue;
+            // A closed dropdown's option subtitle may end in an ellipsis (operator
+            // ruling 2026-11-17); its title, labels and buttons may not.
+            if (style.textOverflow === 'ellipsis' && /(^|\s)_sub_/.test(String(node.className))
+                && node.closest('button[aria-haspopup="listbox"]')) continue;
             if (style.overflowX !== 'hidden' && style.overflowX !== 'clip') continue;
             result.push({ text: text.slice(0, 80), hiddenBy: style.overflowX });
         }
@@ -94,7 +102,7 @@ for (const viewport of VIEWPORTS) {
         await expectReachableLayout(
             page,
             `${viewport.name} demo`,
-            page.getByRole('button', { name: 'Try in demo mode' }),
+            page.getByRole('button', { name: 'Try Demo' }),
         );
 
         await page.getByRole('button', { name: 'Create new wallet' }).click();
@@ -104,7 +112,8 @@ for (const viewport of VIEWPORTS) {
             page.getByRole('button', { name: 'Next' }),
         );
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
         await page.getByRole('button', { name: 'Next' }).click();
 
         // readRecoveryPhrase asserts the stage opens concealed, then reveals it.
@@ -116,7 +125,7 @@ for (const viewport of VIEWPORTS) {
         );
         await expectReadablePhraseGrid(page, `${viewport.name} phrase`);
         expect(words).toHaveLength(12);
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         await expectReachableLayout(
@@ -139,8 +148,10 @@ for (const viewport of VIEWPORTS) {
             page.getByRole('button', { name: 'Restore', exact: true }),
         );
 
+        // FreeWallet import is a Wallet type on the Import Wallet page.
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'From FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
+        await pickOption(page.getByRole('button', { name: /^Wallet type:/ }), { label: /FreeWallet/ });
         await expectReachableLayout(
             page,
             `${viewport.name} FreeWallet import`,

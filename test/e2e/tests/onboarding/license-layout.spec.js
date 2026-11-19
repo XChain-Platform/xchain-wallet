@@ -10,20 +10,25 @@
 
 // The licence page as the operator's rulings set it, at a phone, a short
 // landscape phone and a desktop window:
-//   U08  Accept and continue sits at the bottom of the screen and the terms
-//        take all the height left, with no page scroll;
-//   U09  on desktop the terms span the full width of the content lane;
-//   U10  on desktop the terms sit in an outlined card drawn with the card
-//        tokens, and their text still reaches the card's inner edges.
+//   U48  at every width, phones included, the terms card wraps its text and
+//        the checkbox and Accept and continue sit directly under it, never
+//        pinned to the bottom of the screen, with no page scroll; below 834px
+//        the terms span the content lane;
+//   U32  from 834px the terms card takes two-thirds of the content lane,
+//        centred, and the checkbox and Accept and continue sit directly
+//        under it;
+//   U33  the terms sit in an outlined card drawn with the card tokens, with
+//        inner padding, so the text never touches the card's edge.
 
 import { expect, test } from '../../fixtures/wallet.js';
 
 test.use({ acceptLicense: false });
 
 const VIEWPORTS = [
-    { width: 360, height: 640, desktop: false },
-    { width: 844, height: 390, desktop: false },
-    { width: 1280, height: 800, desktop: true },
+    // twoThirds: the layout is 834px or wider, so U32 applies.
+    { width: 360, height: 640, twoThirds: false },
+    { width: 844, height: 390, twoThirds: true },
+    { width: 1280, height: 800, twoThirds: true },
 ];
 
 async function measure(page) {
@@ -34,6 +39,7 @@ async function measure(page) {
         };
         const terms = document.querySelector('[aria-label="License terms"]');
         const ack = document.querySelector('input[type="checkbox"]').closest('label');
+        const controls = ack.parentElement;
         const accept = [...document.querySelectorAll('button')].find((b) => /accept and continue/i.test(b.innerText));
         const main = document.getElementById('xc-main');
         const mcs = getComputedStyle(main);
@@ -56,9 +62,11 @@ async function measure(page) {
             pageScrollY: se.scrollHeight - se.clientHeight,
             pageScrollX: se.scrollWidth - se.clientWidth,
             terms: box(terms),
+            controls: box(controls),
             ack: box(ack),
             accept: box(accept),
             gateGap: parseFloat(getComputedStyle(terms.parentElement).rowGap) || 0,
+            formGap: parseFloat(getComputedStyle(terms.closest('form')).rowGap) || 0,
             lane,
             border: `${tcs.borderTopWidth} ${tcs.borderTopStyle} ${tcs.borderTopColor}`,
             radius: tcs.borderTopLeftRadius,
@@ -80,24 +88,35 @@ for (const viewport of VIEWPORTS) {
         await page.evaluate(() => document.fonts.ready);
         const m = await measure(page);
 
-        // U08: nothing scrolls the page, Accept sits at the bottom, and the
-        // terms run down to the acknowledgement with no slack between.
+        // Nothing scrolls the page, Accept stays on screen, and the controls
+        // sit directly under the terms card.
         expect(m.pageScrollY, 'the licence page scrolls').toBeLessThanOrEqual(1);
         expect(m.pageScrollX, 'the licence page scrolls sideways').toBeLessThanOrEqual(1);
         expect(m.accept.bottom).toBeLessThanOrEqual(m.vh + 1);
-        expect(m.vh - m.accept.bottom, 'Accept and continue sits at the bottom').toBeLessThanOrEqual(24);
-        expect(Math.abs(m.ack.top - m.terms.bottom - m.gateGap), 'the terms take the height left').toBeLessThanOrEqual(1);
+        expect(Math.abs(m.controls.top - m.terms.bottom - m.gateGap), 'the controls sit directly under the terms').toBeLessThanOrEqual(1);
         expect(m.terms.height).toBeGreaterThanOrEqual(96);
 
-        if (!viewport.desktop) return;
-        // U09: the terms span the content lane.
-        expect(Math.abs(m.terms.left - m.lane.left), 'terms left edge on the content lane').toBeLessThanOrEqual(1);
-        expect(Math.abs(m.lane.right - m.terms.right), 'terms right edge on the content lane').toBeLessThanOrEqual(1);
-        // U10: an outlined card in the card tokens, text out to its padding.
+        // U33: an outlined card in the card tokens with inner padding.
         expect(m.border).toBe(m.token.border);
         expect(m.radius).toBe(m.token.radius);
-        expect(m.padLeft).toBeLessThanOrEqual(m.token.pad);
-        expect(m.padRight).toBeLessThanOrEqual(m.token.pad);
-        expect(m.innerWidth - m.paragraphWidth, 'terms text reaches the card edges').toBeLessThanOrEqual(1);
+        expect(m.padLeft, 'the terms card has inline-start padding').toBeGreaterThan(0);
+        expect(m.padRight, 'the terms card has inline-end padding').toBeGreaterThan(0);
+
+        if (!viewport.twoThirds) {
+            expect(m.accept.top, 'Accept sits below the checkbox').toBeGreaterThan(m.ack.bottom);
+            expect(m.accept.top - m.ack.bottom, 'Accept sits directly under the checkbox').toBeLessThanOrEqual(m.formGap + 1);
+            // Below 834px the terms span the content lane.
+            expect(Math.abs(m.terms.left - m.lane.left), 'terms left edge on the content lane').toBeLessThanOrEqual(1);
+            expect(Math.abs(m.lane.right - m.terms.right), 'terms right edge on the content lane').toBeLessThanOrEqual(1);
+            return;
+        }
+        // U32: two-thirds of the content lane, centred on it.
+        const laneWidth = m.lane.right - m.lane.left;
+        expect(Math.abs(m.terms.width - (laneWidth * 2) / 3), 'terms card takes two-thirds of the lane').toBeLessThanOrEqual(1);
+        expect(Math.abs((m.terms.left - m.lane.left) - (m.lane.right - m.terms.right)), 'terms card centred on the lane').toBeLessThanOrEqual(1);
+        expect(m.ack.top, 'checkbox overlaps Accept vertically').toBeLessThan(m.accept.bottom);
+        expect(m.accept.top, 'Accept overlaps checkbox vertically').toBeLessThan(m.ack.bottom);
+        expect(Math.abs(m.ack.left - m.terms.left), 'checkbox starts on the card edge').toBeLessThanOrEqual(1);
+        expect(Math.abs(m.accept.right - m.terms.right), 'Accept ends on the card edge').toBeLessThanOrEqual(1);
     });
 }

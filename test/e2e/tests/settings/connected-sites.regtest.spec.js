@@ -73,8 +73,9 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/settings/connected-sites.regtest.spec.js
 
-import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
+import { backToSettingsList, createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
 import { unlockAfterReload } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -85,64 +86,61 @@ const PASSWORD = 'regtestpassword123';
 const ORIGIN = 'https://evil-e2e.example';
 const WILDCARD = '*.wild-e2e.example';
 
-// A boundary-aware "does this text mention that origin" check: a plain
-// substring search would also match the origin appearing inside a longer,
-// different host (e.g. "https://evil-e2e.example.attacker.test"), which
-// would let the audit-entry assertion pass against the wrong origin.
-function escapeRegExp(s) {
-    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-function textMentionsOrigin(text, origin) {
-    return new RegExp(`(^|[^\\w.-])${escapeRegExp(origin)}($|[^\\w.-])`).test(text);
-}
+// This page shows no block history, so the blocklist assertions read no
+// audit log.
 
-/** Opens Settings and walks into the Connected Sites sub-page. */
+/**
+ * Opens Settings and walks into the Connected Sites page: Settings, Privacy
+ * and Sites, Connected sites (the grouped Settings list since 2026-11-13).
+ */
 async function openConnectedSites(page) {
     await openSettings(page);
+    // Back out of a page left open by an earlier step: the Settings tab keeps
+    // its sub-page, and Back pops one level at a time.
+    await backToSettingsList(page);
     // Scoped to `main` and asserted visible BEFORE the click: the primary
     // navigation carries same-named destinations, and a Playwright click has no
     // default action timeout, so a miss hangs out the whole test budget rather
     // than failing.
+    const group = page.getByRole('main').getByRole('button', { name: /^Privacy and Sites\b/ }).first();
+    await expect(group, 'Settings has no Privacy and Sites row').toBeVisible({ timeout: 30_000 });
+    await group.click();
     const row = page.getByRole('main').getByRole('button', { name: /^Connected sites\b/ }).first();
     await expect(row, 'Settings has no Connected Sites row').toBeVisible({ timeout: 30_000 });
     await row.click();
-    await expect(page.getByLabel('Origin or wildcard to block'),
+    await expect(page.getByRole('radio', { name: 'Allowed' }),
         'the Connected Sites sub-page did not open').toBeVisible({ timeout: 30_000 });
 }
 
+/** Switches the Allowed | Blocked | Options toggle to Blocked. */
+async function showBlocked(page) {
+    const toggle = page.getByRole('radio', { name: 'Blocked' });
+    await expect(toggle, 'the Connected Sites page has no Blocked view').toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+}
+
 /**
- * A row in the "Blocked origins" list.
- *
- * Matched by TEXT and then narrowed by the Unblock button it contains, and both
- * halves are load-bearing. The rows are `role="listitem"`, which is not a
- * name-from-content role, so they carry no accessible name at all
- * (`getByRole('listitem', { name })` matches nothing here). And the audit log
- * below renders the same origin string inside listitems of its own, so text
- * alone matches two different panels; only the blocked-origins row owns an
- * Unblock button.
+ * A row in the Blocked list card. Rows are buttons that drill into the entry
+ * detail, so they are matched by their text.
  */
 function blockedRow(page, entry) {
-    return page.getByRole('main').getByRole('listitem')
-        .filter({ hasText: entry })
-        .filter({ has: page.getByRole('button', { name: 'Unblock', exact: true }) });
-}
-
-/** The audit-log rows: the listitems in `main` that are NOT blocked-origin rows. */
-function auditRows(page) {
-    return page.getByRole('main').getByRole('listitem')
-        .filter({ hasNot: page.getByRole('button', { name: 'Unblock', exact: true }) });
+    return page.getByRole('main').getByRole('button').filter({ hasText: entry });
 }
 
 /**
- * Blocks `entry` through the panel's own manual-block form, answering the
- * confirmation the panel asks before it disconnects and blocks a site.
+ * Blocks `entry` through the plus's Block Site form, answering the
+ * confirmation the panel asks before it blocks a site. The page then lands
+ * on the Blocked view.
  */
 async function blockEntry(page, entry) {
-    const field = page.getByLabel('Origin or wildcard to block');
-    await expect(field, 'the Connected Sites panel offers no way to block an origin')
+    const plus = page.getByRole('button', { name: 'Block a site', exact: true });
+    await expect(plus, 'the Connected Sites header offers no way to block an origin')
         .toBeVisible({ timeout: 30_000 });
+    await plus.click();
+    const field = fieldByLabel(page, 'Origin or wildcard to block');
+    await expect(field, 'the plus did not open the Block Site form').toBeVisible({ timeout: 30_000 });
     await field.fill(entry);
-    const submit = page.getByRole('main').getByRole('button', { name: 'Block', exact: true });
+    const submit = page.getByRole('main').getByRole('button', { name: 'Block Site', exact: true });
     await expect(submit, 'the manual-block form has no Block button').toBeVisible({ timeout: 30_000 });
     await submit.click();
     const ask = page.getByRole('dialog', { name: `Block ${entry}?` });
@@ -182,10 +180,7 @@ test.describe('Settings: connected sites', () => {
                 // The blocklist half of the panel is present and reachable -
                 // it is gated on three messaging routes existing at once
                 // (`blocklistWired`), so its absence would be silent.
-                await expect(main.getByText('Blocked sites', { exact: true }),
-                    'the panel has no Blocked sites section, so this shell is missing at least one '
-                    + 'of the three blocklist routes it is gated on')
-                    .toBeVisible({ timeout: 30_000 });
+                await showBlocked(page);
                 await expect(main.getByText('No blocked sites', { exact: true }),
                     'the blocklist did not report its empty state')
                     .toBeVisible({ timeout: 30_000 });
@@ -196,10 +191,14 @@ test.describe('Settings: connected sites', () => {
                 await expect(blockedRow(page, ORIGIN),
                     'blocking an origin did not put it on the blocked list')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByLabel('Origin or wildcard to block'),
+                await page.getByRole('button', { name: 'Block a site', exact: true }).click();
+                await expect(fieldByLabel(page, 'Origin or wildcard to block'),
                     'the manual-block field kept its text after a successful block, so a second '
                     + 'submit would re-block the same origin')
                     .toHaveValue('');
+                // Escape closes the drill-in and returns to the list.
+                await page.keyboard.press('Escape');
+                await showBlocked(page);
 
                 await blockEntry(page, WILDCARD);
                 await expect(blockedRow(page, WILDCARD),
@@ -211,13 +210,14 @@ test.describe('Settings: connected sites', () => {
                     .toHaveCount(0);
             });
 
-            await test.step('they SURVIVE a reload, and the audit log agrees they were written', async () => {
+            await test.step('they SURVIVE a reload', async () => {
                 // A reload, not a re-render: before it, a passing read could be
                 // served by the component's own state; after it, the only thing
                 // that can put these rows back is a vault the write reached.
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
                 await openConnectedSites(page);
+                await showBlocked(page);
 
                 await expect(blockedRow(page, ORIGIN),
                     'a blocked origin did not survive a reload, so the block was never persisted and '
@@ -226,35 +226,14 @@ test.describe('Settings: connected sites', () => {
                 await expect(blockedRow(page, WILDCARD),
                     'a blocked wildcard pattern did not survive a reload')
                     .toBeVisible({ timeout: 30_000 });
-
-                // The second reader. This record is written only by
-                // `addBlockedOrigin`, and it is fetched by a different host
-                // route than the list above - so a row that appeared without
-                // the flow running cannot produce it. Newest first, per the
-                // panel's `.reverse()` (its caption says otherwise; see header).
-                const newest = auditRows(page).first();
-                await expect(newest, 'the blocklist audit log recorded nothing at all, so the rows on '
-                    + 'screen did not come from the blocklist flow')
-                    .toBeVisible({ timeout: 30_000 });
-                const newestText = (await newest.innerText()).trim();
-                expect(newestText.includes(WILDCARD),
-                    'the newest audit entry is not the wildcard that was blocked last')
-                    .toBe(true);
-                // `\bblocked\b` does not match "unblocked" - the b is preceded by a
-                // word character there - so this really does separate the two.
-                expect(/\bblocked\b/.test(newestText),
-                    'the audit log recorded the wildcard block as something other than a block')
-                    .toBe(true);
-
-                await expect(auditRows(page).filter({ hasText: ORIGIN }),
-                    'the exact origin was blocked but the audit log has no entry for it')
-                    .toHaveCount(1);
+                // Block history is no longer shown, so the audit log reads are gone.
             });
 
             await test.step('Unblock withdraws ONE entry, and the withdrawal is the one that persists',
                 async () => {
-                    await blockedRow(page, ORIGIN)
-                        .getByRole('button', { name: 'Unblock', exact: true }).click();
+                    // The row drills into the entry detail, which holds Unblock.
+                    await blockedRow(page, ORIGIN).click();
+                    await page.getByRole('main').getByRole('button', { name: 'Unblock', exact: true }).click();
 
                     await expect(blockedRow(page, ORIGIN),
                         'Unblock left the origin on the blocked list')
@@ -272,6 +251,7 @@ test.describe('Settings: connected sites', () => {
                     await page.reload();
                     await unlockAfterReload(page, PASSWORD);
                     await openConnectedSites(page);
+                    await showBlocked(page);
 
                     await expect(blockedRow(page, ORIGIN),
                         'the unblocked origin came back after a reload, so Unblock removed the ROW and '
@@ -281,16 +261,7 @@ test.describe('Settings: connected sites', () => {
                     await expect(blockedRow(page, WILDCARD),
                         'the entry that was NOT unblocked is gone after a reload')
                         .toBeVisible({ timeout: 30_000 });
-
-                    const newest = auditRows(page).first();
-                    const newestText = (await newest.innerText()).trim();
-                    expect(textMentionsOrigin(newestText, ORIGIN),
-                        'the newest audit entry is not the origin that was just unblocked')
-                        .toBe(true);
-                    expect(/\bunblocked\b/.test(newestText),
-                        'the withdrawal was not recorded as an unblock in the audit log, so the record '
-                        + 'of who was let back in - the one thing that log exists for - is wrong')
-                        .toBe(true);
+                    // Block history is no longer shown, so the audit log reads are gone.
                 });
         });
 });

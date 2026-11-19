@@ -23,7 +23,12 @@
 // host-side via the SDK, previews it, and signs the BATCH through the
 // generic advancedAction path (action='BATCH', params={ COMMAND }), so
 // software, hardware, and watcher signers all work exactly as they do for
-// any other action.
+// any other action. The Actions section lists the transactions as flat,
+// collapsible rows (operator layout 1, "Nested sections"): each one is a
+// BATCH on its own network from its own From address, its actions fold open
+// in place to their editors, and several are signed one after another as
+// separate transactions. There is no page-level From section; each
+// transaction carries its own.
 //
 // FILE is excluded from the picker: a FILE sub-action needs the tx's single
 // rawData payload, which the dedicated file / gated publishers own (the two
@@ -36,10 +41,12 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
-// A native select cannot middle-truncate, and a full address ran under the
-// chevron at phone width, so options carry the wallet's usual first6...last6 form.
-import { truncateAddress } from '../../ui/AddressText.jsx';
+// Each transaction's Network and From is one row that opens the own-address picker.
+import { AddressText, Button, ChainBadge, FieldNote, FormPage, Icon, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+import { useSettings } from '../hooks/useSettings.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -48,6 +55,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { actionOptionIcon, actionSelectOptions } from '../utils/actionOptionIcon.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     estimateNativeSendFee,
@@ -65,6 +73,27 @@ import {
     AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild, isActionOfferedOnChain,
 } from '../../registry/actions.js';
 import { compareDecimalStrings, sumDecimalStrings } from '../utils/amountFormat.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenListIcon } from '../../ui/icons/index.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/batch.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
+// The compose stage sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection as StandardSection,
+    joinSummary,
+    summaryLineWithAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import batchStyles from './BatchComposerForm.module.css';
+// Review facts as label-left value-right rows, never stacked uppercase labels.
+import facts from './FactRows.module.css';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -95,6 +124,76 @@ function pickDefaultAddressId(addrs, activeEntry) {
 
 function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
+}
+
+// One entry per transaction, each with its own network and From address.
+// The first transaction's network and From are the page's: the Speed and
+// Fees section and the Advanced section follow them.
+let nextTxId = 0;
+const newTxId = () => `btx-${++nextTxId}`;
+
+function blankTx(extra = {}) {
+    return { id: newTxId(), chainId: null, fromAddressId: null, rows: [blankRow()], ...extra };
+}
+
+/**
+ * A transaction's estimated network fee at the picked speed, over the word
+ * "fee": fiat when the coin has a price ("~$1.12"), the coin amount when not
+ * (testnets, no price data).
+ */
+function TxFeeFigure({ chainId, estimate, ticker, settings }) {
+    // The form reads settings once and hands them to every row, so the reads
+    // never grow with the transaction count; prices come from the shared
+    // price cache.
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinAmount = estimate?.coinAmount;
+    const fiat = useFeeFiat({
+        chainId,
+        chainCoin: descriptor?.coin,
+        nativeTicker: protocolCoinTickerFor(descriptor),
+        settings,
+        active: Boolean(coinAmount),
+    });
+    if (!coinAmount) return null;
+    const text = fiat.formatNativeFee(coinAmount) || `~${coinAmount} ${ticker}`.trim();
+    return (
+        <span className={batchStyles.txFee} data-batch-tx-fee="">
+            <span className={batchStyles.txFeeAmount}>{text}</span>
+            <span className={batchStyles.txFeeLabel}>{t('batch.feeWord')}</span>
+        </span>
+    );
+}
+
+/**
+ * Draws nothing. The form has no page-level From section, so this stands in
+ * FormFrame's `from` slot only to hand the first transaction's network and
+ * From address to the Advanced section (coin control, change address), which
+ * reads them from that slot's props.
+ */
+function BatchSourceFrame() {
+    return null;
+}
+
+/**
+ * One queued action as a sentence: "Send 250 MYGAME" over "to bc1q...9cb2".
+ * @param {{action: string}} row
+ * @param {Record<string, unknown> | undefined} params
+ */
+function rowSentence(row, params) {
+    if (!row.action) return { title: t('batch.chooseAction'), subtitle: '' };
+    const p = params || {};
+    const amount = p.AMOUNT ?? p.QUANTITY;
+    const title = [actionDisplayLabel(row.action), amount, p.TICK]
+        .filter((part) => part !== undefined && part !== null && String(part).trim() !== '')
+        .map(String)
+        .join(' ');
+    const destination = p.DESTINATION ?? p.ADDRESS;
+    const subtitle = typeof destination === 'string' && destination.trim()
+        ? summaryLineWithAddress(t, 'send.summary.toAddress', 'address', destination.trim())
+        : (p.SUPPLY !== undefined && p.SUPPLY !== null && String(p.SUPPLY).trim()
+            ? t('batch.rowSupply', { supply: String(p.SUPPLY) })
+            : '');
+    return { title, subtitle };
 }
 
 /**
@@ -178,23 +277,49 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
+    // Read once for every transaction row's fee figure.
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    // getActiveAddresses()[chainId]; `{}` when the host has none.
-    const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, any>} */ ({}),
-    );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
-    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [rows, setRows] = useState(/** @type {Array<{id:string,action:string,paramsJson:string}>} */ ([blankRow()]));
+    // One entry per transaction, each holding its own network and From. The
+    // first one's are the page's (chainId / fromAddressId below), so removing
+    // transaction 1 hands the page to the one that moves up.
+    const [txs, setTxs] = useState(() => [blankTx()]);
+    const chainId = txs[0]?.chainId ?? null;
+    const fromAddressId = txs[0]?.fromAddressId ?? null;
+    // The own-address picker for a transaction ({ txId }) or for the one
+    // "Add transaction" is about to create ({ txId: null }), with the
+    // network the picker currently shows.
+    const [cardPicker, setCardPicker] = useState(/** @type {{ txId: string | null, chainId: string | null } | null} */ (null));
+    // The picker's network as of the latest switch: a pick can follow a
+    // network switch in the same event, before the state update lands.
+    const cardPickerChainRef = useRef(/** @type {string | null} */ (null));
+    // Actions and transactions the user folded closed. Everything opens by
+    // default, so a new transaction or action opens expanded.
+    const [closedRows, setClosedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const [closedTxs, setClosedTxs] = useState(/** @type {Record<string, boolean>} */ ({}));
+    // Which transaction the confirm page is signing, and the per-transaction
+    // results once signing ends.
+    const [signingIndex, setSigningIndex] = useState(0);
+    const signingRef = useRef(false);
+    // The standard sections' open state, held above the early returns so it
+    // survives the From picker and the review stage. Each Review attempt
+    // bumps the counter so a section, transaction or action holding an error
+    // reopens.
+    const formSections = useFormSections({ actions: true, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     const [stage, setStage] = useState(/** @type {'compose'|'review'|'submitting'|'done'} */ ('compose'));
-    const [composed, setComposed] = useState(/** @type {{command:string,subStrings:string[]}|null} */ (null));
+    const composeFormErrors = useFormErrors();
+    const signFormErrors = useFormErrors();
+    // One composed BATCH per transaction card, in card order.
+    const [composed, setComposed] = useState(/** @type {Array<{txId:string,chainId:string,from:any,command:string,subStrings:string[],sendTotals:any[]}>|null} */ (null));
+    const [draftCommand, setDraftCommand] = useState(/** @type {{key:string,command:string}|null} */ (null));
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
@@ -202,12 +327,14 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // with no action picked yet only says so after one of those.
     const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
+    // The transaction a pre-review refusal (a balance check) names, so it opens.
+    const [preReviewTxId, setPreReviewTxId] = useState(/** @type {string | null} */ (null));
     const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitErrorDetails, setSubmitErrorDetails] = useState('');
-    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [results, setResults] = useState(/** @type {any[]} */ ([]));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // HwSignBlock reports `{ status, detail, refresh }`, so the raw setter
     // stored the object and every `hwStatus === 'available'` gate stayed
@@ -228,7 +355,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         ]).then(([byChain, actions, active]) => {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
-            setActiveByChain(active || {});
             const raw = (Array.isArray(actions) && actions.length > 0) ? actions : FALLBACK_ACTIONS;
             setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())
                 && isActionOfferedInBuild(a, { hasDexSurface })));
@@ -239,8 +365,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 setLoadError('No addresses on any network yet. Use Receive to generate one before composing a batch.');
                 return;
             }
-            setChainId(chains[0]);
-            setFromAddressId(pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]));
+            // Transaction 1 opens on the first network with an address, from
+            // that network's default From.
+            const defaultFrom = pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]);
+            setTxs((list) => list.map((tx, i) => (i === 0
+                ? { ...tx, chainId: chains[0], fromAddressId: defaultFrom }
+                : tx)));
         }).catch((err) => {
             if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
         });
@@ -287,52 +417,143 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Resolve each row's params; the first parse error blocks compose.
-    const parsedRows = useMemo(() => rows.map((r) => ({ row: r, ...parseRowParams(r.paramsJson) })), [rows]);
+    // Each transaction with its resolved From record and parsed rows, signed
+    // on its own network and From.
+    const txList = useMemo(() => txs.map((tx) => {
+        const from = tx.chainId && tx.fromAddressId && addressesByChain
+            ? (addressesByChain[tx.chainId] || []).find((a) => a.id === tx.fromAddressId) || null
+            : null;
+        return {
+            ...tx,
+            from,
+            parsed: tx.rows.map((r) => ({ row: r, ...parseRowParams(r.paramsJson) })),
+        };
+    }), [txs, addressesByChain]);
+    const multiTx = txList.length > 1;
+    const allRows = useMemo(() => txList.flatMap((tx) => tx.rows), [txList]);
 
-    const rowErrors = useMemo(() => parsedRows.map((pr, i) => {
-        if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
-        if (pr.error) return `Step ${i + 1}: ${pr.error}`;
-        // A chain switch keeps queued rows, so every row is checked against
-        // the chain that will receive the batch.
-        if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected network.`;
+    // Every row's error, keyed by row id. Steps are numbered inside their card.
+    const rowErrors = useMemo(() => {
+        const out = {};
+        for (const tx of txList) {
+            tx.parsed.forEach((pr, i) => {
+                let error = null;
+                if (!pr.row.action) error = `Step ${i + 1}: pick an action.`;
+                else if (pr.error) error = `Step ${i + 1}: ${pr.error}`;
+                // A chain switch keeps queued rows, so every row is checked
+                // against the chain its own transaction goes to.
+                else if (!isActionOfferedOnChain(chainRegistry, tx.chainId, pr.row.action)) {
+                    error = `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected network.`;
+                } else if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
+                    error = `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
+                } else if (rowValidationErrors[pr.row.id]) {
+                    error = `Step ${i + 1}: ${rowValidationErrors[pr.row.id]}`;
+                }
+                out[pr.row.id] = error;
+            });
         }
-        if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
+        return out;
+    }, [txList, hasDexSurface, rowValidationErrors]);
+
+    // With several cards, a page-level message names its transaction.
+    const inTx = (index, message) => (multiTx && message ? `${t('batch.transactionNumber', { number: index + 1 })}: ${message}` : message);
+
+    // The first batch-wide refusal and the transaction it belongs to, so that
+    // transaction can open itself.
+    const constraintFault = useMemo(() => {
+        if (Object.values(rowErrors).some(Boolean)) return null;
+        for (let i = 0; i < txList.length; i += 1) {
+            // Params stay attached because ISSUE constraints distinguish a
+            // parent ticker from its child tickers.
+            const subActions = txList[i].parsed.map((pr) => ({ action: pr.row.action, params: pr.params }));
+            const constraintErrors = flowsLib.validateBatchConstraints(subActions);
+            if (constraintErrors.length > 0) return { message: inTx(i, constraintErrors[0]), txId: txList[i].id };
         }
-        if (rowValidationErrors[pr.row.id]) return `Step ${i + 1}: ${rowValidationErrors[pr.row.id]}`;
+        // Two transactions may share a network from different From
+        // addresses; one network and one From would be one transaction.
+        const seen = new Map();
+        for (let i = 0; i < txList.length; i += 1) {
+            if (!txList[i].from) return { message: t('batch.pickFrom', { number: i + 1 }), txId: txList[i].id };
+            const key = `${txList[i].chainId}|${txList[i].fromAddressId}`;
+            if (seen.has(key)) {
+                return { message: t('batch.duplicate', { number: i + 1, first: seen.get(key) + 1 }), txId: txList[i].id };
+            }
+            seen.set(key, i);
+        }
         return null;
-    }), [parsedRows, hasDexSurface, chainId, rowValidationErrors]);
-
-    const constraintError = useMemo(() => {
-        if (rowErrors.some(Boolean)) return null;
-        // Params stay attached because ISSUE constraints distinguish a parent
-        // ticker from its child tickers.
-        const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
-        const constraintErrors = flowsLib.validateBatchConstraints(subActions);
-        return constraintErrors.length > 0 ? constraintErrors[0] : null;
-    }, [parsedRows, rowErrors]);
+    }, [txList, rowErrors, multiTx]);
+    const constraintError = constraintFault?.message ?? null;
 
     const composeError = useMemo(() => {
-        for (let i = 0; i < parsedRows.length; i += 1) {
-            if (rowErrors[i]) return rowErrors[i];
+        for (let i = 0; i < txList.length; i += 1) {
+            for (const pr of txList[i].parsed) {
+                if (rowErrors[pr.row.id]) return inTx(i, rowErrors[pr.row.id]);
+            }
         }
         return constraintError;
-    }, [parsedRows, rowErrors, constraintError]);
+    }, [txList, rowErrors, constraintError, multiTx]);
 
     // The error shown beside each row: an unpicked action waits until the row
     // is touched or Review is pressed; every other row error shows at once.
-    const shownRowErrors = rows.map((row, i) => (
-        rowErrors[i] && (row.action || touchedRows[row.id]) ? rowErrors[i] : null
-    ));
+    const shownRowError = (row) => (
+        rowErrors[row.id] && (row.action || touchedRows[row.id]) ? rowErrors[row.id] : null
+    );
+    const anyShownRowError = allRows.some((row) => Boolean(shownRowError(row)));
 
-    const draftKey = JSON.stringify({ chainId, fromAddressId, rows });
+    // A transaction or action holding an error opens itself: when the error
+    // first shows (a Review press, a refusal from the async checks) and again
+    // on every Review press, so a folded one never hides why Review is off.
+    const errorRowIds = allRows.filter((row) => shownRowError(row)).map((row) => row.id);
+    const errorTxIds = txList
+        .filter((tx) => tx.rows.some((row) => shownRowError(row))
+            || tx.id === constraintFault?.txId
+            || (preReviewError && tx.id === preReviewTxId))
+        .map((tx) => tx.id);
+    const revealKey = `${reviewAttempt}|${errorRowIds.join(',')}|${errorTxIds.join(',')}`;
+    useEffect(() => {
+        const reopen = (ids) => (closed) => (ids.some((id) => closed[id])
+            ? Object.fromEntries(Object.entries(closed).filter(([id]) => !ids.includes(id)))
+            : closed);
+        if (errorRowIds.length > 0) setClosedRows(reopen(errorRowIds));
+        if (errorTxIds.length > 0) setClosedTxs(reopen(errorTxIds));
+        // Only a new error set or a new Review press reopens; the id arrays
+        // are rebuilt every render and are read through the key.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [revealKey]);
+
+    const draftKey = JSON.stringify({ chainId, fromAddressId, txs });
     const draftKeyRef = useRef(draftKey);
     draftKeyRef.current = draftKey;
 
+    // BATCH quotes need the canonical COMMAND. Build the first card's from
+    // every locally valid draft so the compose-stage Fees card follows it.
+    const firstTx = txList[0];
+    useEffect(() => {
+        let cancelled = false;
+        let timer = null;
+        setDraftCommand(null);
+        if (stage !== 'compose' || composeError || !chainId || !fromAddress?.address) {
+            return () => { cancelled = true; };
+        }
+        const subActions = firstTx.parsed.map((pr) => ({ action: pr.row.action, params: pr.params }));
+        timer = setTimeout(() => {
+            Promise.resolve(messaging.buildBatchCommand({ chainId, subActions }))
+                .then((res) => {
+                    if (!cancelled && typeof res?.command === 'string' && res.command) {
+                        setDraftCommand({ key: draftKey, command: res.command });
+                    }
+                })
+                .catch(() => {});
+        }, 250);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [chainId, composeError, draftKey, fromAddress?.address, messaging, firstTx, stage]);
+
     const clearPreReviewErrors = (rowId = null) => {
         setPreReviewError(null);
+        setPreReviewTxId(null);
         if (rowId) {
             setRowValidationErrors((errors) => {
                 if (!errors[rowId]) return errors;
@@ -342,33 +563,97 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             });
         }
     };
-    const updateRow = (i, patch) => {
-        clearPreReviewErrors(rows[i]?.id);
-        const id = rows[i]?.id;
-        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
-        setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    const updateTx = (txId, update) => setTxs((list) => list.map((tx) => (tx.id === txId ? update(tx) : tx)));
+    const updateRow = (txId, rowId, patch) => {
+        clearPreReviewErrors(rowId);
+        setTouchedRows((t) => (t[rowId] ? t : { ...t, [rowId]: true }));
+        updateTx(txId, (tx) => ({ ...tx, rows: tx.rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)) }));
     };
-    const addRow = () => {
+    const addRow = (txId) => {
         clearPreReviewErrors();
-        setRows((rs) => (rs.length >= flowsLib.BATCH_MAX_COMMANDS ? rs : [...rs, blankRow()]));
+        updateTx(txId, (tx) => (tx.rows.length >= flowsLib.BATCH_MAX_COMMANDS
+            ? tx
+            : { ...tx, rows: [...tx.rows, blankRow()] }));
     };
-    const removeRow = (i) => {
-        clearPreReviewErrors(rows[i]?.id);
-        setRows((rs) => rs.filter((_, idx) => idx !== i));
+    // Removing a transaction's last action removes the transaction while
+    // another one remains; the page always keeps one transaction with one
+    // action (Remove action is not offered there).
+    const removeRow = (txId, rowId) => {
+        clearPreReviewErrors(rowId);
+        setTxs((list) => list.flatMap((tx) => {
+            if (tx.id !== txId) return [tx];
+            const rest = tx.rows.filter((r) => r.id !== rowId);
+            if (rest.length > 0) return [{ ...tx, rows: rest }];
+            return list.length > 1 ? [] : [tx];
+        }));
+    };
+    // Removing the only transaction leaves a blank one on the same network
+    // and From; removing transaction 1 hands the page's network and From to
+    // the one that moves up.
+    const removeTx = (txId) => {
+        clearPreReviewErrors();
+        setRowValidationErrors({});
+        setTxs((list) => (list.length > 1
+            ? list.filter((tx) => tx.id !== txId)
+            : list.map((tx) => blankTx({ chainId: tx.chainId, fromAddressId: tx.fromAddressId }))));
+    };
+    const toggleRow = (rowId) => setClosedRows((closed) => ({ ...closed, [rowId]: !closed[rowId] }));
+    const toggleTx = (txId) => setClosedTxs((closed) => ({ ...closed, [txId]: !closed[txId] }));
+    // Add transaction proposes the first network no transaction uses yet, and
+    // the picker can stay on any network: a second From on one network is a
+    // second transaction.
+    const openNewCardPicker = () => {
+        const used = new Set(txList.map((tx) => tx.chainId));
+        openCardPicker(null, chainsWithAddresses.find((cid) => !used.has(cid)) || chainId);
+    };
+    const openCardPicker = (txId, pickerChainId) => {
+        cardPickerChainRef.current = pickerChainId;
+        setCardPicker({ txId, chainId: pickerChainId });
+    };
+    const switchCardPickerChain = (cid) => {
+        cardPickerChainRef.current = cid;
+        setCardPicker((p) => (p ? { ...p, chainId: cid } : p));
+    };
+    const pickCardSource = (address) => {
+        const target = cardPicker ? { ...cardPicker, chainId: cardPickerChainRef.current } : null;
+        setCardPicker(null);
+        if (!target?.chainId) return;
+        clearPreReviewErrors();
+        setRowValidationErrors({});
+        if (target.txId) {
+            updateTx(target.txId, (tx) => ({ ...tx, chainId: target.chainId, fromAddressId: address.id }));
+        } else {
+            setTxs((list) => [...list, blankTx({ chainId: target.chainId, fromAddressId: address.id })]);
+        }
     };
 
-    const sendTotals = useMemo(() => sendTotalsFor(parsedRows), [parsedRows]);
+    const txSendTotals = useMemo(() => txList.map((tx) => sendTotalsFor(tx.parsed)), [txList]);
+
+    const composeProblems = () => {
+        const problems = {};
+        for (const tx of txList) {
+            for (const pr of tx.parsed) {
+                const message = rowErrors[pr.row.id];
+                if (!message) continue;
+                const field = !pr.row.action || /not available/.test(message) ? 'action' : 'params';
+                problems[`batch-${field}-${pr.row.id}`] = message;
+            }
+        }
+        if (constraintFault) problems[`batch-from-${constraintFault.txId}`] = constraintFault.message;
+        return problems;
+    };
 
     async function goReview() {
-        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
-        if (composeError) return;
+        setReviewAttempt((n) => n + 1);
+        setTouchedRows(Object.fromEntries(allRows.map((row) => [row.id, true])));
+        if (!composeFormErrors.validate(composeProblems())) return;
         const validatedDraftKey = draftKey;
         setValidatingRows(true);
         setPreReviewError(null);
-        const validations = await Promise.all(parsedRows.map(async (pr) => {
+        const validations = await Promise.all(txList.flatMap((tx) => tx.parsed.map(async (pr) => {
             try {
                 const result = await messaging.validateAction({
-                    chainId,
+                    chainId: tx.chainId,
                     action: pr.row.action,
                     params: pr.params,
                 });
@@ -376,7 +661,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             } catch {
                 return [pr.row.id, null, true];
             }
-        }));
+        })));
         if (draftKeyRef.current !== validatedDraftKey) {
             setValidatingRows(false);
             return;
@@ -385,17 +670,27 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         setRowValidationErrors(validationErrors);
         if (validations.some(([, , unavailable]) => unavailable)) {
             setPreReviewError('Couldn\'t validate every action. Check your connection and try again.');
+            composeFormErrors.fail('Couldn\'t validate every action. Check your connection and try again.', 'form:validation');
             setValidatingRows(false);
             return;
         }
         if (Object.keys(validationErrors).length > 0) {
+            const problems = {};
+            txList.forEach((tx, txIndex) => tx.parsed.forEach((pr, rowIndex) => {
+                const message = validationErrors[pr.row.id];
+                if (message) problems[`batch-params-${pr.row.id}`] = inTx(txIndex, `Step ${rowIndex + 1}: ${message}`);
+            }));
+            composeFormErrors.validate(problems);
             setValidatingRows(false);
             return;
         }
 
-        if (sendTotals.length > 0) {
+        // Each card's sends are checked against its own From address.
+        for (let i = 0; i < txList.length; i += 1) {
+            const totals = txSendTotals[i];
+            if (totals.length === 0) continue;
             try {
-                const fresh = await messaging.getAddressBalances(chainId, fromAddress.address);
+                const fresh = await messaging.getAddressBalances(txList[i].chainId, txList[i].from.address);
                 if (draftKeyRef.current !== validatedDraftKey) {
                     setValidatingRows(false);
                     return;
@@ -405,20 +700,28 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     throw new Error('balances unavailable');
                 }
                 const balances = decoderLib.balancesFromSdk(fresh) || [];
-                for (const total of sendTotals) {
+                for (const total of totals) {
                     const balance = balances.find(
                         (entry) => String(entry.tick || '').trim().toUpperCase() === total.tick,
                     );
                     if (compareDecimalStrings(total.amount, String(balance?.amount ?? '0')) === 1) {
-                        setPreReviewError(
+                        setPreReviewTxId(txList[i].id);
+                        setPreReviewError(inTx(
+                            i,
                             `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
-                        );
+                        ));
+                        composeFormErrors.fail(inTx(
+                            i,
+                            `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
+                        ), 'form:balance');
                         setValidatingRows(false);
                         return;
                     }
                 }
             } catch {
-                setPreReviewError('Couldn\'t refresh this address\'s balances. Check your connection and try again.');
+                setPreReviewTxId(txList[i].id);
+                setPreReviewError(inTx(i, 'Couldn\'t refresh this address\'s balances. Check your connection and try again.'));
+                composeFormErrors.fail(inTx(i, 'Couldn\'t refresh this address\'s balances. Check your connection and try again.'), 'form:balance');
                 setValidatingRows(false);
                 return;
             }
@@ -429,10 +732,24 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         setStage('review');
         setComposed(null);
         try {
-            const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
-            const res = await messaging.buildBatchCommand({ chainId, subActions });
-            if (typeof res?.command !== 'string' || !res.command) throw new Error('batch.buildCommand: empty command');
-            setComposed({ command: res.command, subStrings: res.command.split(';') });
+            const built = [];
+            for (let i = 0; i < txList.length; i += 1) {
+                const tx = txList[i];
+                const subActions = tx.parsed.map((pr) => ({ action: pr.row.action, params: pr.params }));
+                const res = i === 0 && draftCommand?.key === validatedDraftKey
+                    ? { command: draftCommand.command }
+                    : await messaging.buildBatchCommand({ chainId: tx.chainId, subActions });
+                if (typeof res?.command !== 'string' || !res.command) throw new Error('batch.buildCommand: empty command');
+                built.push({
+                    txId: tx.id,
+                    chainId: tx.chainId,
+                    from: tx.from,
+                    command: res.command,
+                    subStrings: res.command.split(';'),
+                    sendTotals: txSendTotals[i],
+                });
+            }
+            setComposed(built);
         } catch (err) {
             // Show a sentence, never the composer's own error text; that text moves to the collapsed details.
             const shown = submitFailureMessage(err, {
@@ -453,6 +770,18 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // the other caller of this same host method, is already on it.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
+    // The Fees card quotes the first transaction, the one on the page's network.
+    const quoteCommand = composed?.[0]?.command || (draftCommand?.key === draftKey ? draftCommand.command : null);
+    const quoteActionData = useMemo(() => (quoteCommand ? {
+        action: 'BATCH',
+        params: { VERSION: '0', COMMAND: quoteCommand },
+    } : null), [quoteCommand]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     const submitConfirmed = useConfirmSubmit({
@@ -464,92 +793,134 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         hardware: 'advancedActionHw',
     });
 
-    async function openConfirmScreen(from, params) {
-        setSubmitError(null);
-        setSubmitErrorDetails('');
-        try {
-            const res = await actionConfirm.run({
-                chainId,
-                from,
-                actionData: { action: 'BATCH', params },
-                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId, chainId, from, action: 'BATCH', params,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
-            });
-            setResult(res);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            if (isUserRejection(err)) return;
-            // Keep the generic fallback independent of caught provider text so
-            // the shared message filters remain the only display boundary.
-            setSubmitError(submitFailureMessage(err, {
-                chainId, coinTicker, fallback: 'Batch failed.',
-            }));
-            setStage('review');
+    // The fee rate for one transaction. The page's network takes the picked
+    // speed or custom rate; another network takes the same speed, and Normal
+    // when the pick is a custom rate, since that rate is in this network's unit.
+    function feePerKbFor(txChainId) {
+        if (txChainId === chainId) return feePerKb;
+        const mode = feePick.mode === 'custom' ? 'normal' : feePick.mode;
+        const tiers = estimateNativeSendFeeTiers({ chainId: txChainId, chainRegistry });
+        const estimate = tiers ? tiers[mode] : estimateNativeSendFee({ chainId: txChainId, chainRegistry, speed: mode });
+        return estimate && estimate.unit && Number.isFinite(estimate.rateValue) && estimate.rateValue > 0
+            ? displayRateToSettingsCustom(estimate.unit, estimate.rateValue)
+            : null;
+    }
+    function feeEstimateFor(txChainId) {
+        if (txChainId === chainId) return feeEstimate;
+        const mode = feePick.mode === 'custom' ? 'normal' : feePick.mode;
+        const tiers = estimateNativeSendFeeTiers({ chainId: txChainId, chainRegistry });
+        return tiers ? tiers[mode] : estimateNativeSendFee({ chainId: txChainId, chainRegistry, speed: mode });
+    }
+    const tickerFor = (txChainId) => {
+        const d = txChainId ? chainRegistry.get(txChainId) : null;
+        return d ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[d.coin] || '') : '';
+    };
+    const fromPayload = (record) => ({
+        address: record.address,
+        publicKey: record.publicKey,
+        derivationPath: record.derivationPath,
+        addressId: record.id,
+        source: record.source,
+        signerId: record.signerId,
+    });
+
+    // Sign the transactions one after another on the confirm page. A reject
+    // or a failure stops the run; the ones already sent stay sent and the
+    // done page says how many went through.
+    async function signAll() {
+        const sent = [];
+        for (let k = 0; k < composed.length; k += 1) {
+            const c = composed[k];
+            const from = fromPayload(c.from);
+            const params = { VERSION: '0', COMMAND: c.command };
+            const txFeePerKb = feePerKbFor(c.chainId);
+            const txHw = isHwSource(c.from);
+            setSigningIndex(k);
+            try {
+                const res = await actionConfirm.run({
+                    chainId: c.chainId,
+                    from,
+                    actionData: { action: 'BATCH', params },
+                    ...(txFeePerKb != null ? { encoderOpts: { feePerKb: txFeePerKb } } : {}),
+                    onApprove: (prebuiltPsbt) => {
+                        const base = {
+                            walletId, chainId: c.chainId, from, action: 'BATCH', params,
+                            ...(txFeePerKb != null ? { feePerKb: txFeePerKb } : {}),
+                            prebuiltPsbt,
+                        };
+                        return k === 0
+                            ? submitConfirmed(base)
+                            : (txHw
+                                ? messaging.advancedActionHw({ ...base, signerId: c.from.signerId })
+                                : messaging.advancedAction({ ...base, password: passwordValueRef.current }));
+                    },
+                });
+                sent.push(res);
+            } catch (err) {
+                if (!isUserRejection(err)) {
+                    // Keep the generic fallback independent of caught provider text so
+                    // the shared message filters remain the only display boundary.
+                    setSubmitError(submitFailureMessage(err, {
+                        chainId: c.chainId, coinTicker: tickerFor(c.chainId), fallback: 'Batch failed.',
+                    }));
+                }
+                if (sent.length > 0) {
+                    setResults(sent);
+                    setPassword('');
+                    setStage('done');
+                }
+                return;
+            }
         }
+        setResults(sent);
+        setPassword('');
+        setStage('done');
     }
 
     async function handleSign(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setBuildError(feeStop.formError); return; }
-        if (stage === 'submitting' || !composed) return;
+        // A second submit while a run is in flight is ignored, not composed twice.
+        if (signingRef.current || stage === 'submitting' || !composed) return;
         const hw = hwSource;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
-        setStage('submitting');
+        if (!signFormErrors.validate({
+            'batch-sign-password': !isWatcherMode && !hw && !signerReady && password.length === 0
+                ? 'Enter your password to sign this batch.' : null,
+        })) return;
         setSubmitError(null);
         setSubmitErrorDetails('');
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        const params = { VERSION: '0', COMMAND: composed.command };
-        if (singleEncode) { setStage('review'); openConfirmScreen(from, params); return; }
+        signingRef.current = true;
+        if (singleEncode) {
+            try { await signAll(); } finally { signingRef.current = false; }
+            return;
+        }
+        setStage('submitting');
+        const built = [];
         try {
-            let res;
-            if (isWatcherMode) {
-                res = await messaging.buildActionPsbtRequest({
-                    chainId,
-                    from,
+            for (const c of composed) {
+                const params = { VERSION: '0', COMMAND: c.command };
+                const txFeePerKb = feePerKbFor(c.chainId);
+                built.push(await messaging.buildActionPsbtRequest({
+                    chainId: c.chainId,
+                    from: fromPayload(c.from),
                     actionData: { action: 'BATCH', params },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                });
-            } else if (hw) {
-                res = await messaging.advancedActionHw({
-                    walletId, chainId, from, action: 'BATCH', params,
-                    signerId: fromAddress.signerId,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                });
-            } else {
-                res = await messaging.advancedAction({
-                    walletId, chainId, from, action: 'BATCH', params, password,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                });
+                    ...(txFeePerKb != null ? { encoderOpts: { feePerKb: txFeePerKb } } : {}),
+                }));
             }
-            setResult(res);
+            setResults(built);
             setPassword('');
             setStage('done');
         } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            const shown = bad ? 'Incorrect password.' : submitFailureMessage(err, {
+            const shown = submitFailureMessage(err, {
                 chainId, coinTicker, fallback: 'Batch failed.',
             });
             setSubmitError(shown);
-            setSubmitErrorDetails(bad ? '' : technicalDetails(err, shown));
+            setSubmitErrorDetails(technicalDetails(err, shown));
             setStage('review');
-            if (!isWatcherMode && !isHwSource(fromAddress)) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
+        } finally {
+            signingRef.current = false;
         }
     }
 
@@ -561,36 +932,111 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     };
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' || stage === 'submitting' ? returnToCompose : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'compose' ? 'Batch' : 'Review batch'}
+            title={stage === 'compose' ? 'Compose Batch' : 'Review Batch'}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
+    // No pay-in-native switch: xchain-indexer refuses native-fee quotes for
+    // BATCH (its fee is the sum of state-dependent sub-action fees), so the
+    // wallet cannot size that output.
+    const feeSection = (
+        <FeeSection
+            {...formSections.bind('fee')}
+            chainId={chainId}
+            coinTicker={coinTicker}
+            tiers={feeTiers}
+            value={feePick}
+            onChange={setFeePick}
+            customEstimate={feeCustomEstimate}
+            fees={{ quote: protocolFeeQuote, pending: protocolFeePending, nativeSwitch: false }}
+        />
+    );
+    // The review stage reads the fees back with their Total, like every
+    // confirm screen; the speed and any custom fee are picked only in the
+    // compose form's Speed and Fees section (G113: no stage draws its own
+    // fee picker), which Back returns to.
+    const feeSummary = (
+        <FeesCard
+            chainId={chainId}
+            coinTicker={coinTicker}
+            tiers={feeTiers}
+            value={feePick}
+            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            quote={protocolFeeQuote}
+            pending={protocolFeePending}
+            nativeSwitch={false}
+        />
+    );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    // The load error, the loading line and every done-stage panel lay out
+    // through ListPage inside the Screen, the same template rhythm the
+    // review and compose stages get from FormPage.
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
+    }
+    if (!addressesByChain || !chainId) return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+
+    // A transaction's network and From, picked together on one screen; Back
+    // leaves the transaction as it was.
+    if (cardPicker) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From Address"
+                walletId={walletId}
+                chainId={cardPicker.chainId}
+                onChainChange={switchCardPickerChain}
+                onPick={pickCardSource}
+                onBack={() => setCardPicker(null)}
+            />
+        );
+    }
 
     // Confirm page, rendered in place of the review stage; the queued rows
-    // stay intact behind it, so Reject lands back on the step list.
+    // stay intact behind it, so Reject lands back on the step list. It shows
+    // the transaction being signed now.
     if (actionConfirm.open) {
+        const signing = composed?.[signingIndex] || { chainId, from: fromAddress };
+        const signingTicker = tickerFor(signing.chainId);
+        const signingFee = feeEstimateFor(signing.chainId);
+        // One batch transaction is signed at a time; with several queued, the
+        // hero says which one this is.
+        const batchCount = Array.isArray(composed) ? composed.length : 0;
+        const batchSummary = {
+            verb: t('components.confirmSummary.verbBatch'),
+            ...(batchCount > 1
+                ? { target: t('components.confirmSummary.batchTarget', { index: String(signingIndex + 1), total: String(batchCount) }) }
+                : {}),
+            direction: 'none',
+            chainId: signing.chainId,
+            address: signing.from?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={batchSummary}
                 screenVariant={variant}
-                feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                feeEstimate={signingFee}
+                feeText={signingFee?.coinAmount
+                    ? `Network fee: ${signingFee.coinAmount} ${signingTicker}`.trim()
                     : undefined}
-                coinTicker={coinTicker}
+                coinTicker={signingTicker}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
-                hwSource={hwSource ? fromAddress : null}
+                hwSource={isHwSource(signing.from) ? signing.from : null}
                 hwStatus={hwStatus}
                 onHwStatusChange={onHwStatusChange}
-                chainId={chainId}
+                chainId={signing.chainId}
                 getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
             />
@@ -598,37 +1044,81 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     }
 
     if (stage === 'done') {
-        const txid = result?.txid || result?.broadcast?.txid;
-        if (result?.psbtHex && !txid) {
-            return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => { setResult(null); setComposed(null); setStage('compose'); }}
-                    onDone={onBack}
-                />,
+        const startOver = () => { setResults([]); setComposed(null); setStage('compose'); };
+        const totalTxs = composed?.length || results.length;
+        // A run that stopped part way says so first; the ones sent stay sent.
+        const partial = results.length < totalTxs ? (
+            <StatusMessage variant="error">
+                {t('batch.partialSent', { sent: results.length })}
+                {submitError ? ` ${submitError}` : ''}
+            </StatusMessage>
+        ) : null;
+        const resultBlock = (result, i) => {
+            const txid = result?.txid || result?.broadcast?.txid;
+            const rowCount = composed?.[i]?.subStrings.length ?? allRows.length;
+            if (result?.psbtHex && !txid) {
+                return (
+                    <ResultScreen
+                        key={i}
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={startOver}
+                        onDone={onBack}
+                    />
+                );
+            }
+            // A queued result is SIGNED and not broadcast: the confirm lane
+            // resolves a transient broadcast failure that way, and "Batch
+            // broadcast" would report N sub-actions as sent when none are.
+            if (result?.queued) {
+                return <ResultScreen key={i} state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />;
+            }
+            return (
+                <section key={i}>
+                    {results.length > 1 ? (
+                        <h3 className={styles.successLabel}>{t('batch.transactionNumber', { number: i + 1 })}</h3>
+                    ) : null}
+                    <p className={styles.hint}>All {rowCount} action{rowCount === 1 ? '' : 's'} were sent in one transaction. Each one confirms or fails on its own.</p>
+                    {txid ? (
+                        <>
+                            <p className={styles.successLabel}>Transaction ID</p>
+                            <code className={styles.txid}>{txid}</code>
+                        </>
+                    ) : null}
+                </section>
             );
+        };
+        if (results.length === 1 && !partial) {
+            const only = results[0];
+            const onlyTxid = only?.txid || only?.broadcast?.txid;
+            if (only?.psbtHex && !onlyTxid) {
+                return wrap(
+                    <ListPage>
+                        <ResultScreen state="unsigned" result={only} onBuildAnother={startOver} onDone={onBack} />
+                    </ListPage>,
+                );
+            }
+            if (only?.queued) {
+                return wrap(
+                    <ListPage>
+                        <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={only?.unsaved} />
+                    </ListPage>,
+                );
+            }
         }
-        // A queued result is SIGNED and not broadcast: the confirm lane
-        // resolves a transient broadcast failure that way, and "Batch
-        // broadcast" would report N sub-actions as sent when none are.
-        if (result?.queued) {
-            return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />,
-            );
-        }
+        // Watcher runs end with unsigned transactions only; nothing was sent.
+        const allUnsigned = results.every((r) => r?.psbtHex && !(r?.txid || r?.broadcast?.txid));
         return wrap(
-            <>
-                <h2 className={styles.successTitle}>Batch broadcast</h2>
-                <p className={styles.hint}>All {rows.length} action{rows.length === 1 ? '' : 's'} were sent in one transaction. Each one confirms or fails on its own.</p>
-                {txid ? (
-                    <>
-                        <p className={styles.successLabel}>Transaction ID</p>
-                        <code className={styles.txid}>{txid}</code>
-                    </>
-                ) : null}
-                <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
-            </>,
+            <ListPage>
+                {partial}
+                {allUnsigned ? null : (
+                    <h2 className={styles.successTitle}>
+                        {results.length > 1 ? t('batch.allSent', { count: results.length }) : <>Batch broadcast</>}
+                    </h2>
+                )}
+                {results.map(resultBlock)}
+                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
+            </ListPage>,
         );
     }
 
@@ -639,6 +1129,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 demoGuard={demoGuard}
                 label="Review batch"
                 onSubmit={handleSign}
+                errors={signFormErrors}
                 status={buildError || (submitError && (hw || isWatcherMode)) ? (
                     <>
                         {buildError ? (
@@ -668,61 +1159,77 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.SignIcon />}
                             loading={stage === 'submitting'}
-                            disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
+                            disabled={!composed || (!isWatcherMode && hw && hwStatus !== 'available')}
                         >
-                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
+                            {isWatcherMode ? 'Create Batch' : 'Sign Batch'}
                         </Button>
                     </>
                 )}
             >
-                <p className={styles.summary} style={{ textAlign: 'left' }}>
-                    All {rows.length} action{rows.length === 1 ? '' : 's'} are bundled into one transaction and sent
-                    together, but each still confirms on its own: if one runs out of what it needs (for example fee
-                    coverage), it fails alone and the others still land. This is different from the parallel
-                    composer, where each action is its own transaction from the start.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
-                </dl>
+                <WarningCard data-batch-review-note="">
+                    <WarningLine>
+                        Each transaction bundles its actions and sends them
+                        together, but each action still confirms on its own: if one runs out of what it needs (for example fee
+                        coverage), it fails alone and the others still land. This is different from the parallel
+                        composer, where each action is its own transaction from the start.
+                    </WarningLine>
+                </WarningCard>
+                {multiTx ? (
+                    <StatusMessage variant="warning">{t('batch.notAtomic', { count: txList.length })}</StatusMessage>
+                ) : null}
 
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
-                {composed ? (
-                    <>
-                        <p className={styles.successLabel}>Batch steps ({composed.subStrings.length})</p>
-                        <ol style={{ paddingLeft: '1rem', margin: 'var(--xc-space-2) 0' }}>
-                            {composed.subStrings.map((s, i) => (
-                                <li key={i} style={{ margin: 'var(--xc-space-1) 0' }}>
-                                    <code style={{ fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{s}</code>
-                                </li>
-                            ))}
-                        </ol>
-                    </>
+                {(composed || []).map((c, txIndex) => {
+                    const txFee = feeEstimateFor(c.chainId);
+                    const txDescriptor = chainRegistry.get(c.chainId);
+                    return (
+                        <section key={c.txId} className={batchStyles.reviewTx} aria-label={t('batch.transactionNumber', { number: txIndex + 1 })}>
+                            {composed.length > 1 ? (
+                                <h3 className={batchStyles.reviewTxTitle}>
+                                    {t('batch.transactionNumber', { number: txIndex + 1 })}
+                                    {txDescriptor ? <ChainBadge descriptor={txDescriptor} size="sm" showName={false} /> : null}
+                                </h3>
+                            ) : null}
+                            <dl className={facts.list}>
+                                <dt className={facts.label}>From</dt>
+                                <dd className={facts.value}><AddressText address={c.from?.address} fit /></dd>
+                            </dl>
+                            <p className={styles.successLabel}>Batch steps ({c.subStrings.length})</p>
+                            <ol style={{ paddingLeft: '1rem', margin: 'var(--xc-space-2) 0' }}>
+                                {c.subStrings.map((s, i) => (
+                                    <li key={i} style={{ margin: 'var(--xc-space-1) 0' }}>
+                                        <code style={{ fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{s}</code>
+                                    </li>
+                                ))}
+                            </ol>
+                            {c.sendTotals.length > 0 ? (
+                                <>
+                                    <p className={styles.successLabel}>Send totals</p>
+                                    <ul>
+                                        {c.sendTotals.map((total) => (
+                                            <li key={total.tick}>{total.amount} {total.tick}</li>
+                                        ))}
+                                    </ul>
+                                </>
+                            ) : null}
+                            {/* The first transaction's fee sits in the Fees card below. */}
+                            {txIndex > 0 && txFee?.coinAmount ? (
+                                <p className={styles.hint}>
+                                    {t('batch.networkFeeFor', { amount: txFee.coinAmount, ticker: tickerFor(c.chainId) })}
+                                </p>
+                            ) : null}
+                        </section>
+                    );
+                })}
+
+                {isWatcherMode ? (
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : null}
 
-                {sendTotals.length > 0 ? (
-                    <>
-                        <p className={styles.successLabel}>Send totals</p>
-                        <ul>
-                            {sendTotals.map((total) => (
-                                <li key={total.tick}>{total.amount} {total.tick}</li>
-                            ))}
-                        </ul>
-                    </>
-                ) : null}
-
-                {feeTiers ? (
-                    <FeeSelector
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
+                {feeSummary}
 
                 {!isWatcherMode ? (
                     <SignCredentials
@@ -730,7 +1237,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
+                        passwordFieldId="batch-sign-password"
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            signFormErrors.clear('batch-sign-password');
+                            if (submitError) setSubmitError(null);
+                        }}
                         onStatusChange={onHwStatusChange}
                         passwordRef={passwordRef}
                         submitError={submitError}
@@ -743,101 +1255,243 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     }
 
     // stage === 'compose'
+    // The Actions summary names each queued action ("Send, Broadcast").
+    const actionsSummary = joinSummary(...allRows.map((row) => (row.action ? actionDisplayLabel(row.action) : null)))
+        || `${allRows.length} action${allRows.length === 1 ? '' : 's'}`;
+    const actionsHaveError = anyShownRowError || Boolean(constraintError);
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Batch composer"
-            sectioned
-            status={preReviewError || constraintError ? (
+            onSubmit={(event) => { event.preventDefault(); goReview(); }}
+            errors={composeFormErrors}
+            status={!composeFormErrors.hasErrors && (preReviewError || constraintError) ? (
                 <StatusMessage variant="error">{preReviewError || constraintError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
-                    Review
-                </Button>
+            action={(
+                // Names how many transactions the review will hold; it leads
+                // to the review stage, then one confirm screen per transaction.
+                <FormAction icon={<TokenListIcon />} loading={validatingRows}>
+                    {t('batch.review', { count: txList.length })}
+                </FormAction>
             )}
+            /* Layout 1: Actions (the transactions, each with its own Network
+               and From row), then Advanced and Speed and Fees. No From
+               section: BatchSourceFrame only hands transaction 1's network
+               and From to the Advanced section. */
+            from={<BatchSourceFrame chainId={chainId} address={fromAddress?.address || null} />}
+            fee={feeSection}
         >
-            <details>
-                <summary>Batch limits</summary>
-                <p className={styles.hint}>
-                    Queue up to 250 actions from one address. A batch can issue one new token plus its sub-tokens,
-                    mint different tokens once each, and deploy one contract. It cannot contain another batch.
-                    Use the dedicated publisher for FILE-gated content.
-                </p>
-            </details>
-            <FormSection title="Batch settings">
-                <ChainPicker
-                    label="Network"
-                    value={chainId || ''}
-                    onChange={(cid) => {
-                        clearPreReviewErrors();
-                        setRowValidationErrors({});
-                        setChainId(cid);
-                        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
-                    }}
-                    chainIds={chainsWithAddresses}
-                    chainRegistry={chainRegistry}
-                    hideNetworkKind
-                />
-                <Select
-                    label="From address"
-                    value={fromAddressId || ''}
-                    onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
-                >
-                    {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
-                    ))}
-                </Select>
-            </FormSection>
-
-            {rows.map((row, i) => (
-                <FormSection key={row.id} title={`Step ${i + 1}`} headingLevel="h3">
-                    <Select
-                        label="Action"
-                        value={row.action || ''}
-                        onChange={(e) => updateRow(i, { action: e.target.value })}
-                    >
-                        <option value="">Select action</option>
-                        {/* One SDK list serves every chain; drop what the picked chain refuses at every version. */}
-                        {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, chainId, a)).map((a) => (
-                            <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                        ))}
-                    </Select>
-                    <Textarea
-                        label="Params (JSON object)"
-                        rows={4}
-                        value={row.paramsJson}
-                        onChange={(e) => updateRow(i, { paramsJson: e.target.value })}
-                        placeholder='{"VERSION":"0", ...}'
-                        spellCheck={false}
-                    />
-                    {shownRowErrors[i] ? (
-                        <FieldNote variant="error">
-                            {shownRowErrors[i]}
-                        </FieldNote>
-                    ) : null}
-                    <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
-                        <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>
-                            Remove
-                        </Button>
-                    </div>
-                </FormSection>
-            ))}
-            <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={addRow}
-                    disabled={rows.length >= flowsLib.BATCH_MAX_COMMANDS}
-                >
-                    + Add action
-                </Button>
-            </div>
-            {rows.length >= flowsLib.BATCH_MAX_COMMANDS ? (
-                <p className={styles.hint}>
-                    {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
-                </p>
-            ) : null}
-        </FormPage>,
+            <StandardSection
+                id="actions"
+                title="Actions"
+                icon={TokenListIcon}
+                className={batchStyles.actionsSection}
+                {...formSections.bind('actions')}
+                revealKey={actionsHaveError ? reviewAttempt + 1 : 0}
+                summary={actionsSummary}
+            >
+            {/* Layout 1, "Nested sections": the transactions are flat rows
+                with dividers (no card inside a card). A transaction folds open
+                to its Network and From row, its actions, Add action and
+                Remove transaction; an action folds open in place to its
+                editor and Remove action. Add and Remove are plain rows with
+                bare icons, never red and never buttons inside a row. No Batch
+                limits text; the cap shows only once a transaction reaches it. */}
+            <ol className={batchStyles.txList} aria-label={t('batch.transactionsLabel')}>
+                {txList.map((tx, txIndex) => {
+                    const number = txIndex + 1;
+                    const descriptor = tx.chainId ? chainRegistry.get(tx.chainId) : null;
+                    // The coin network's own name for this transaction's From
+                    // summary (G20, G61), with no mainnet, testnet or regtest
+                    // text; a reviewed exception in networkKindRendering.audit.
+                    const networkName = descriptor?.displayName || '';
+                    const full = tx.rows.length >= flowsLib.BATCH_MAX_COMMANDS;
+                    // A transaction holding a shown row error stays open: Review
+                    // is off until it is fixed, so folding it must not hide why.
+                    const txOpen = !closedTxs[tx.id] || tx.rows.some((row) => Boolean(shownRowError(row)));
+                    // One transaction with one action has nothing to remove.
+                    const canRemove = txList.length > 1 || tx.rows.length > 1;
+                    // The summary line's icons: each picked action once, the
+                    // list icon while none is picked.
+                    const pickedActions = [...new Set(tx.rows.map((row) => row.action).filter(Boolean))].slice(0, 5);
+                    return (
+                        <li key={tx.id} className={batchStyles.tx} data-batch-tx={number}>
+                            <ListRow
+                                className={[batchStyles.txHeader, txOpen ? batchStyles.txHeaderOpen : null].filter(Boolean).join(' ')}
+                                aria-expanded={txOpen}
+                                onClick={() => toggleTx(tx.id)}
+                                leading={descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
+                                title={t('batch.transactionNumber', { number })}
+                                subtitle={(
+                                    <>
+                                        <span className={batchStyles.txLine}>
+                                            {networkName ? <span>{networkName}</span> : null}
+                                            {networkName ? <span aria-hidden="true">·</span> : null}
+                                            <span className={batchStyles.txIcons} aria-hidden="true">
+                                                {pickedActions.length > 0
+                                                    ? pickedActions.map((action) => <span key={action}>{actionOptionIcon(action)}</span>)
+                                                    : <Icon.ListIcon />}
+                                            </span>
+                                            <span>{t('batch.actionCount', { count: tx.rows.length })}</span>
+                                        </span>
+                                        {/* Closed, the summary names its From address, in
+                                            full when it fits (G99); open, the From row does. */}
+                                        {txOpen ? null : (
+                                            <span className={batchStyles.address}>
+                                                <AddressText address={tx.from?.address || ''} fit />
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                                trailing={(
+                                    <TxFeeFigure
+                                        chainId={tx.chainId}
+                                        estimate={feeEstimateFor(tx.chainId)}
+                                        ticker={tickerFor(tx.chainId)}
+                                        settings={settings}
+                                    />
+                                )}
+                                chevron
+                            />
+                            {txOpen ? (
+                                <div className={batchStyles.txBody}>
+                                    {/* The transaction's Network and From, picked together
+                                        on the own-address picker. */}
+                                    <ListRow
+                                        id={`batch-from-${tx.id}`}
+                                        className={batchStyles.fromRow}
+                                        aria-label={t('batch.changeSource', { number })}
+                                        onClick={() => openCardPicker(tx.id, tx.chainId)}
+                                        leading={descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
+                                        title={t('batch.fromOn', { network: networkName })}
+                                        subtitle={(
+                                            <span className={batchStyles.address}>
+                                                <AddressText address={tx.from?.address || ''} fit />
+                                            </span>
+                                        )}
+                                        chevron
+                                    />
+                                    {composeFormErrors.errorFor(`batch-from-${tx.id}`) ? (
+                                        <FieldNote variant="error">{composeFormErrors.errorFor(`batch-from-${tx.id}`)}</FieldNote>
+                                    ) : null}
+                                    <ul className={batchStyles.actionList} aria-label={t('batch.actionsOf', { number })}>
+                                        {tx.parsed.map((pr, i) => {
+                                            const row = pr.row;
+                                            const sentence = rowSentence(row, pr.params);
+                                            const open = !closedRows[row.id];
+                                            const rowError = shownRowError(row);
+                                            return (
+                                                <li key={row.id}>
+                                                    <section
+                                                        className={[batchStyles.action, open ? batchStyles.actionOpen : null].filter(Boolean).join(' ')}
+                                                        aria-label={`Action ${i + 1}`}
+                                                    >
+                                                        <ListRow
+                                                            className={batchStyles.actionRow}
+                                                            aria-expanded={open}
+                                                            tooltip={t('batch.editRow', { number: i + 1 })}
+                                                            onClick={() => toggleRow(row.id)}
+                                                            leading={(
+                                                                <span className={batchStyles.bareIcon} aria-hidden="true">
+                                                                    {row.action ? actionOptionIcon(row.action) : <Icon.ListIcon />}
+                                                                </span>
+                                                            )}
+                                                            title={sentence.title}
+                                                            subtitle={sentence.subtitle || null}
+                                                            chevron
+                                                        />
+                                                        {open ? (
+                                                            <div className={batchStyles.editor}>
+                                                                <Select
+                                                                    id={`batch-action-${row.id}`}
+                                                                    label="Action"
+                                                                    help="One sub-action included in this single BATCH transaction."
+                                                                    value={row.action || ''}
+                                                                    onChange={(e) => updateRow(tx.id, row.id, { action: e.target.value })}
+                                                                >
+                                                                    {/* One SDK list serves every chain; drop what this transaction's chain refuses at every version. */}
+                                                                    {actionSelectOptions(actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, tx.chainId, a)), 'Select action')}
+                                                                </Select>
+                                                                <Textarea
+                                                                    id={`batch-params-${row.id}`}
+                                                                    label="Params (JSON object)"
+                                                                    help="This action's fields, entered as a JSON object."
+                                                                    rows={4}
+                                                                    value={row.paramsJson}
+                                                                    onChange={(e) => updateRow(tx.id, row.id, { paramsJson: e.target.value })}
+                                                                    placeholder='{"VERSION":"0", ...}'
+                                                                    spellCheck={false}
+                                                                />
+                                                                {rowError
+                                                                    && !composeFormErrors.errorFor(`batch-action-${row.id}`)
+                                                                    && !composeFormErrors.errorFor(`batch-params-${row.id}`)
+                                                                    ? <FieldNote variant="error">{rowError}</FieldNote> : null}
+                                                            </div>
+                                                        ) : null}
+                                                        {!open && rowError ? (
+                                                            <div className={batchStyles.editor}>
+                                                                <FieldNote variant="error">{rowError}</FieldNote>
+                                                            </div>
+                                                        ) : null}
+                                                        {open && canRemove ? (
+                                                            <ListRow
+                                                                className={batchStyles.controlRow}
+                                                                onClick={() => removeRow(tx.id, row.id)}
+                                                                leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.TrashIcon /></span>}
+                                                                title={t('batch.removeAction')}
+                                                                subtitle={t('batch.removeActionDesc')}
+                                                            />
+                                                        ) : null}
+                                                    </section>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                    <ListRow
+                                        className={[batchStyles.controlRow, batchStyles.addRow].join(' ')}
+                                        onClick={() => addRow(tx.id)}
+                                        disabled={full}
+                                        leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.PlusIcon /></span>}
+                                        title={<span className={batchStyles.addTitle}>{t('batch.addAction')}</span>}
+                                        subtitle={t('batch.addActionDesc')}
+                                    />
+                                    {full ? (
+                                        <div className={batchStyles.editor}>
+                                            <WarningCard data-batch-cap-note="">
+                                                <WarningLine>
+                                                    {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
+                                                </WarningLine>
+                                            </WarningCard>
+                                        </div>
+                                    ) : null}
+                                    {canRemove ? (
+                                        <ListRow
+                                            className={batchStyles.controlRow}
+                                            onClick={() => removeTx(tx.id)}
+                                            leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.TrashIcon /></span>}
+                                            title={t('batch.removeTransaction')}
+                                            subtitle={t('batch.removeTransactionDesc', {
+                                                number,
+                                                actions: t('batch.actionCount', { count: tx.rows.length }),
+                                            })}
+                                        />
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </li>
+                    );
+                })}
+            </ol>
+            {/* A new transaction opens expanded with one action. */}
+            <ListRow
+                className={[batchStyles.controlRow, batchStyles.addRow, batchStyles.addTxRow].join(' ')}
+                onClick={openNewCardPicker}
+                leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.PlusIcon /></span>}
+                title={<span className={batchStyles.addTitle}>{t('batch.addTransaction')}</span>}
+                subtitle={t('batch.addTransactionDesc')}
+            />
+            </StandardSection>
+        </FormFrame>,
     );
 }

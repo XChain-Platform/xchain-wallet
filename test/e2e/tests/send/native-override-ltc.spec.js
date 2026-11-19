@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A network-invalid action on Litecoin gets the same "Sign anyway"
-// override Bitcoin gets: the pre-flight verdict is the network's opinion, not
-// a local proof, so the user keeps the final say on every chain.
+// An amount over the available balance on Litecoin is blocked on the form
+// itself, as on Bitcoin: no Confirm opens and there is no Sign anyway override.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, revealChainPicker, test } from '../../fixtures/wallet.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 
@@ -21,7 +21,7 @@ const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 // that as an error that says nothing about this flow.
 const PRICE_FEED = /api\.coingecko\.com/;
 
-test('an unaffordable Litecoin token send offers Sign anyway behind the same warning', async ({ page }) => {
+test('an unaffordable Litecoin token send is blocked on the form with no Sign anyway', async ({ page }) => {
     const consoleErrors = [];
     page.on('console', (msg) => {
         if (msg.type() !== 'error') return;
@@ -32,8 +32,15 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
 
     await createWallet(page);
     await gotoSection(page, 'Send');
-    await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('LITEGEM');
+    // The From section picks the chain the send is made on; LITEGEM is a Litecoin token.
+    const network = page.getByRole('main').getByRole('button', { name: /^Network:/ });
+    await revealChainPicker(page.getByRole('main'), network, 'Network');
+    await network.click();
+    await page.getByRole('dialog', { name: 'Network' }).getByRole('button', { name: 'Select Litecoin' }).click();
+    await page.getByRole('button', { name: /^Asset: LTC on Litecoin/ }).click();
+    await searchTokenPicker(page, 'LITEGEM');
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
     await page.getByRole('button', { name: /^Select Lite Gem/ }).first().click();
     const main = page.getByRole('main');
     await expect(main.getByRole('textbox', { name: /^Amount \(LITEGEM\)/ })).toBeVisible();
@@ -42,11 +49,10 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
     await page.getByRole('textbox', { name: /^Amount/ }).fill('999999');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
 
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible();
-    await expect(confirm.getByText('Sign anyway')).toBeVisible();
-    await expect(page.getByTestId('confirm-approve')).toBeDisabled();
-    await confirm.getByTestId('ack-BALANCE_INSUFFICIENT').check();
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled();
+    // Operator ruling 2026-11-17: the form blocks an amount over the balance,
+    // so no Confirm opens and there is no Sign anyway override.
+    await expect(main.getByText('Amount exceeds the available balance', { exact: false }).first()).toBeVisible();
+    await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    await expect(page.getByText('Sign anyway')).toHaveCount(0);
     expect(consoleErrors).toEqual([]);
 });

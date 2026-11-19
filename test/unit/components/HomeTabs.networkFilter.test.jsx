@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
@@ -27,7 +27,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     priceTokenRows: (rows) => rows,
 }));
 
-import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { HomeTabs, ActivityEntryRow } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 
 const descriptors = new Map([
     ['custom-alpha', {
@@ -52,6 +52,46 @@ const balance = (tick) => [{
 afterEach(() => cleanup());
 
 describe('HomeTabs network filtering', () => {
+    it('opens one menu with sort, token search, and network controls', () => {
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{ 'custom-alpha': balance('BTC') }}
+                walletId="wallet"
+                networkFilter="all"
+                coinFamilies={['bitcoin', 'litecoin']}
+                onNetworkFilterChange={vi.fn()}
+                tokenQuery=""
+                onTokenQueryChange={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+        const button = screen.getByRole('button', { name: 'Filter and sort' });
+        expect(screen.getAllByRole('button', { name: 'Filter and sort' })).toHaveLength(1);
+        fireEvent.click(button);
+
+        const sort = screen.getByRole('button', { name: /^Sort/ });
+        expect(sort).toHaveAttribute('aria-haspopup', 'listbox');
+        fireEvent.click(sort);
+        expect(screen.getByRole('option', { name: 'Sort by name' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('option', { name: 'Sort by value' })).toBeInTheDocument();
+        fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
+        // Balances lists coins and tokens, so its search names both, and the
+        // menu carries the Balances Type field beside Sort.
+        expect(screen.getByRole('searchbox', { name: 'Search coins, tokens and NFTs by name' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Type/ })).toHaveAttribute('aria-haspopup', 'listbox');
+        expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Filter and sort' })).toBeNull();
+        expect(button).toHaveFocus();
+
+        fireEvent.click(button);
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByRole('dialog', { name: 'Filter and sort' })).toBeNull();
+    });
+
     it('uses registry coin metadata instead of parsing the chain id', () => {
         render(
             <HomeTabs
@@ -94,5 +134,47 @@ describe('HomeTabs network filtering', () => {
         expect(dispensers).not.toMatch(/ChainBadge/);
         expect(staking).toMatch(/function StakeRow[\s\S]*?className=\{local\.chainOverlay\}/);
         expect(staking).not.toMatch(/ChainBadge/);
+    });
+
+    it('shows a block for confirmed activity and only the time for pending activity', async () => {
+        const address = 'bc1qwallet';
+        const entry = (key, blockIndex) => ({
+            key,
+            chainId: 'custom-alpha',
+            address,
+            actionIndex: key,
+            action: 'SEND',
+            blockIndex,
+            timestamp: 1_800_000_000,
+            txHash: `tx-${key}`,
+            source: address,
+            raw: { amount: '1', tick: 'BTC', destination: 'bc1qpeer' },
+            link: null,
+        });
+        // Home has no Activity tab now (History holds that list), so the row
+        // that tab used is rendered on its own.
+        const { container } = render(
+            <div>
+                {[entry('confirmed', 123456), entry('pending', 0)].map((e) => (
+                    <ActivityEntryRow
+                        key={e.key}
+                        entry={e}
+                        walletAddresses={new Set([address])}
+                        assetLookup={new Map()}
+                        chainTip={null}
+                        onSelectEntry={() => {}}
+                        allowRemoteImages={false}
+                    />
+                ))}
+            </div>,
+        );
+
+        const rows = [...container.querySelectorAll('[data-activity-row]')];
+        const confirmed = rows.find((row) => row.textContent.includes('Confirmed'));
+        const pending = rows.find((row) => row.textContent.includes('Pending'));
+        expect(confirmed).toHaveTextContent('Block 123456');
+        expect(confirmed).not.toHaveTextContent('123,456');
+        expect(pending).not.toHaveTextContent(/Block/);
+        expect(pending.querySelector('time')).not.toBeNull();
     });
 });

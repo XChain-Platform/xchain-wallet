@@ -3,77 +3,98 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// The Add Price Alert and Edit Price Alert form (Form Standard, 2026-11-14):
+// the Asset field, the "Rises above / Falls below" themed dropdown, the Target
+// price with the live price under it, the fires-once line and the green button.
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { readFileSync } from 'node:fs';
-import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
-import inputStyles from '../../../packages/core/src/ui/Input.module.css';
-
-const receiveCss = readFileSync(
-    'packages/core/src/shared/routes/Receive.module.css',
-    'utf8',
-);
+import { PriceAlertForm, formatCurrentPrice } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
+import { selectOption, selectOptionLabels } from '../../helpers/selectOption.js';
 
 afterEach(() => cleanup());
 
+const target = () => screen.getByRole('textbox', { name: 'Target price' });
+const direction = () => screen.getByRole('button', { name: /^When the price/ });
+const save = (name = 'Add Alert') => screen.getByRole('button', { name });
+
 describe('PriceAlertForm', () => {
-    it('uses the shared medium control size across the alert row', () => {
-        render(<PriceAlertForm onCreate={vi.fn()} />);
+    it('puts the fires-once notice first, then fields and the green full-width button', () => {
+        render(<PriceAlertForm walletId="wallet-1" onCreate={vi.fn()} />);
 
-        const coin = screen.getByRole('combobox', { name: 'Coin' });
-        const direction = screen.getByRole('combobox', { name: 'Direction' });
-        const target = screen.getByRole('textbox', { name: 'Target price' });
-        const action = screen.getByRole('button', { name: 'Add alert' });
-        expect(coin.parentElement.parentElement).toHaveClass(inputStyles.md);
-        expect(direction.parentElement.parentElement).toHaveClass(inputStyles.md);
-        expect(target.parentElement.parentElement).toHaveClass(inputStyles.md);
-        expect(action).toHaveClass(buttonStyles.md);
+        const notice = screen.getByText('Fires once when the price gets there. Re-arm it to watch again.');
+        const asset = screen.getByRole('button', { name: 'Asset: Select an asset' });
+        expect(asset).toBeEnabled();
+        expect(direction()).toBeTruthy();
+        expect(target()).toBeTruthy();
+        const button = save();
+        const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(follows(notice, asset)).toBe(true);
+        expect(document.querySelector('[data-form-section-title]')).toBeNull();
+        expect(button.className).toMatch(/success/);
+        expect(button.className).toMatch(/block/);
+        expect(button.querySelector('svg')).toBeTruthy();
+        expect(button).toBeEnabled();
     });
 
-    it('centres md actions beside the md target field', () => {
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} onCancel={vi.fn()} />);
-        const targetField = screen.getByRole('textbox', { name: 'Target price' })
-            .parentElement.parentElement;
-        const row = targetField.parentElement;
-
-        expect(targetField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(row.style.alignItems).toBe('center');
-        expect(screen.getByRole('button', { name: 'Add alert' }).className).toMatch(/(?:^|\s)_?md_/);
-        expect(screen.getByRole('button', { name: 'Cancel' }).className).toMatch(/(?:^|\s)_?md_/);
+    it('offers Rises above and Falls below as a themed dropdown with an icon on each', () => {
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
+        expect(selectOptionLabels(direction())).toEqual(['Rises above', 'Falls below']);
+        selectOption(direction(), 'below');
+        expect(direction()).toHaveAccessibleName('When the price: Falls below');
     });
 
-    it('bottom-aligns the Receive label action with its field and removes field-wrapper spacing', () => {
-        const labelEditor = receiveCss.match(/\.labelEditor\s*\{([^}]+)\}/)?.[1] || '';
-        const labelEditorChildren = receiveCss.match(/\.labelEditor\s*>\s*\*\s*\{([^}]+)\}/)?.[1] || '';
-
-        expect(labelEditor).toMatch(/align-items:\s*end/);
-        expect(labelEditorChildren).toMatch(/margin-bottom:\s*0/);
+    it('puts the Asset field, the direction, the price and the button in that order', () => {
+        render(<PriceAlertForm walletId="wallet-1" initialChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
+        const asset = screen.getByRole('button', { name: /^Asset:/ });
+        const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(follows(asset, direction())).toBe(true);
+        expect(follows(direction(), target())).toBe(true);
+        expect(follows(target(), save())).toBe(true);
     });
 
-    it('explains why an empty target keeps the primary action disabled', () => {
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
-        const action = screen.getByRole('button', { name: 'Add alert' });
-        const target = screen.getByRole('textbox', { name: 'Target price' });
+    it('shows the current price under the target with how far it has to go', () => {
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" currentPrice={68000} onCreate={vi.fn()} />);
+        expect(screen.getByText('Now $68,000')).toBeTruthy();
 
-        expect(action).toBeDisabled();
-        expect(action.getAttribute('aria-describedby')).toBe(target.getAttribute('aria-describedby'));
-        const reason = document.getElementById(target.getAttribute('aria-describedby'));
-        expect(reason).toHaveClass('sr-only');
-        expect(screen.queryByRole('status')).toBeNull();
-        expect(reason).toHaveTextContent('Enter a target price to continue.');
+        fireEvent.change(target(), { target: { value: '70000' } });
+        expect(screen.getByText('Now $68,000, so 2.9% to go')).toBeTruthy();
+        expect(target().getAttribute('aria-describedby')).toBe(
+            document.querySelector('[data-price-now]').id,
+        );
+    });
+
+    it('groups prices without rounding away their stored precision', () => {
+        expect(formatCurrentPrice(123456.12345678, 'usd')).toBe('$123,456.12345678');
+        expect(formatCurrentPrice(0.00000001, 'eur')).toBe('0.00000001 EUR');
+    });
+
+    it('asks for an asset on submit and creates nothing', () => {
+        const onCreate = vi.fn();
+        render(<PriceAlertForm onCreate={onCreate} />);
+        expect(screen.getByText('Pick an asset to see its price now')).toBeTruthy();
+        expect(save()).toBeEnabled();
+        fireEvent.click(save());
+        expect(screen.getByLabelText('Form errors')).toHaveTextContent('Select an asset');
+        expect(onCreate).not.toHaveBeenCalled();
+    });
+
+    it('notes a target the price has already met', () => {
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" currentPrice={68000} onCreate={vi.fn()} />);
+        fireEvent.change(target(), { target: { value: '65000' } });
+        expect(screen.getByText('BTC is already above $65,000. This alert will fire on the next check.')).toBeTruthy();
+        expect(save()).toBeEnabled();
     });
 
     it('normalizes grouped decimal input and submits the numeric target', async () => {
         const onCreate = vi.fn().mockResolvedValue(undefined);
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        const input = screen.getByRole('textbox', { name: 'Target price' });
-        fireEvent.change(input, { target: { value: '12,345.67' } });
-        expect(input.value).toBe('12345.67');
+        fireEvent.change(target(), { target: { value: '12,345.67' } });
+        expect(target().value).toBe('12345.67');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.click(save());
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
             direction: 'above',
@@ -85,92 +106,71 @@ describe('PriceAlertForm', () => {
     it('does not clear target input edited while a save is pending', async () => {
         let resolveSave;
         const onCreate = vi.fn(() => new Promise((resolve) => { resolveSave = resolve; }));
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
-        const input = screen.getByRole('textbox', { name: 'Target price' });
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        fireEvent.change(input, { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
-        fireEvent.change(input, { target: { value: '20' } });
+        fireEvent.change(target(), { target: { value: '10' } });
+        fireEvent.click(save());
+        fireEvent.change(target(), { target: { value: '20' } });
         await act(async () => resolveSave());
 
-        expect(input.value).toBe('20');
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
+        expect(target().value).toBe('20');
+        expect(save()).toBeEnabled();
     });
 
     it('does not show a stale save failure after the input changes', async () => {
         let rejectSave;
         const onCreate = vi.fn(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
-        const input = screen.getByRole('textbox', { name: 'Target price' });
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        fireEvent.change(input, { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
-        fireEvent.change(input, { target: { value: '20' } });
+        fireEvent.change(target(), { target: { value: '10' } });
+        fireEvent.click(save());
+        fireEvent.change(target(), { target: { value: '20' } });
         await act(async () => rejectSave(new Error('Save failed')));
 
-        expect(input.value).toBe('20');
+        expect(target().value).toBe('20');
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
-    });
-
-    it('uses style-guide controls and exposes save failures as an alert', async () => {
-        render(<PriceAlertForm
-            lockedChainId="bitcoin-mainnet"
-            onCreate={vi.fn().mockRejectedValue(new Error('Save failed'))}
-        />);
-        const button = screen.getByRole('button', { name: 'Add alert' });
-        expect(button.className).toMatch(/primary/);
-        expect(screen.getByRole('textbox', { name: 'Target price' }).className).toMatch(/input/);
-
-        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
-        fireEvent.click(button);
-        expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+        expect(save()).toBeEnabled();
     });
 
     it('replaces backend details with actionable save wording', async () => {
         render(<PriceAlertForm
-            lockedChainId="bitcoin-mainnet"
+            initialChainId="bitcoin-mainnet"
             onCreate={vi.fn().mockRejectedValue(new Error('saveAlert: vault is required'))}
         />);
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.change(target(), { target: { value: '10' } });
+        fireEvent.click(save());
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the alert. Try again.');
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save the alert. Try again.");
         expect(screen.queryByText(/vault is required/)).toBeNull();
     });
 
-    it('explains an invalid zero target and does not submit it', () => {
+    it('explains an invalid zero target on submit and does not create it', () => {
         const onCreate = vi.fn();
-        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '0' } });
+        fireEvent.change(target(), { target: { value: '0' } });
 
-        const alert = screen.getByRole('alert');
-        expect(alert).toHaveTextContent('Enter a price greater than zero.');
-        // The bad price is the price field's own error, read with the field.
-        const target = screen.getByRole('textbox', { name: 'Target price' });
-        expect(target.getAttribute('aria-describedby')).toContain(alert.id);
-        expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
+        expect(save()).toBeEnabled();
+        fireEvent.click(save());
+        expect(screen.getByLabelText('Form errors')).toHaveTextContent('Enter a price greater than zero.');
+        expect(target()).toHaveAttribute('aria-invalid', 'true');
         expect(onCreate).not.toHaveBeenCalled();
     });
 
-    it('prefills an existing alert and submits edited values', async () => {
+    it('prefills an edited alert, names the button Save Alert and submits the edit', async () => {
         const onCreate = vi.fn().mockResolvedValue(undefined);
         render(<PriceAlertForm
             initialAlert={{ chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 65000 }}
             fiatCurrency="eur"
             onCreate={onCreate}
-            onCancel={vi.fn()}
         />);
 
-        expect(screen.getByRole('combobox', { name: 'Coin' }).value).toBe('bitcoin-mainnet');
-        expect(screen.getByRole('combobox', { name: 'Direction' }).value).toBe('below');
-        expect(screen.getByRole('textbox', { name: 'Target price' }).value).toBe('65000');
+        expect(direction()).toHaveAccessibleName('When the price: Falls below');
+        expect(target().value).toBe('65000');
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '64000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.change(target(), { target: { value: '64000' } });
+        fireEvent.click(save('Save Alert'));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
@@ -180,14 +180,44 @@ describe('PriceAlertForm', () => {
         }));
     });
 
-    it('keeps an unavailable coin visible while editing an existing alert', () => {
+    it('submits a priced token ticker and shows its current market price', async () => {
+        const onCreate = vi.fn().mockResolvedValue(undefined);
         render(<PriceAlertForm
-            initialAlert={{ chainId: 'retired-mainnet', direction: 'above', targetFiat: 10 }}
-            onCreate={vi.fn()}
+            initialChainId="bitcoin-mainnet"
+            initialTick="XCHAIN"
+            currentPrice={1.2}
+            onCreate={onCreate}
         />);
 
-        const coin = screen.getByLabelText('Coin');
-        expect(coin.value).toBe('retired-mainnet');
-        expect(screen.getByRole('option', { name: 'Retired (unavailable)' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Asset: XCHAIN/ })).toBeTruthy();
+        expect(screen.getByText('Now $1.2')).toBeTruthy();
+        fireEvent.change(target(), { target: { value: '2' } });
+        fireEvent.click(save());
+
+        await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
+            chainId: 'bitcoin-mainnet',
+            tick: 'XCHAIN',
+            direction: 'above',
+            targetFiat: 2,
+            fiatCurrency: 'usd',
+        }));
+    });
+
+    it('explains why an unpriced token cannot have an alert', () => {
+        const onCreate = vi.fn();
+        render(<PriceAlertForm initialChainId="bitcoin-mainnet" initialTick="NOPRICE" onCreate={onCreate} />);
+
+        fireEvent.change(target(), { target: { value: '1' } });
+        fireEvent.click(save());
+        const error = screen.getByLabelText('Form errors');
+        expect(error).toHaveTextContent('NOPRICE has no market price yet. A price alert needs one.');
+        expect(screen.getByRole('button', { name: /^Asset: NOPRICE/ })).toHaveAttribute('aria-invalid', 'true');
+        expect(save()).toBeEnabled();
+        expect(onCreate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the Asset field off until a wallet can list its assets', () => {
+        render(<PriceAlertForm onCreate={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Asset: Select an asset' })).toBeDisabled();
     });
 });

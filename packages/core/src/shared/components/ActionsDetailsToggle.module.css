@@ -1,0 +1,18 @@
+/* The Actions | Details toggle and its one panel, 8px apart (G41, G81). */
+.toggle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.panel > [data-variant] {
+    margin: 0;
+}

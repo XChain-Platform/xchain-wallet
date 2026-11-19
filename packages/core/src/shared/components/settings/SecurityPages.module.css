@@ -1,0 +1,60 @@
+/* Settings > Security pages (Enable Biometric Unlock, Panic Mode) and the
+   test-send row's Custom field. */
+
+.intro,
+.body {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.heading {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+}
+
+/* Panic Mode is a form page in the shared Settings form frame (G126): the
+   notice, then the full-width button, one form gap apart. The notice's own
+   block margin is zeroed so it starts one header-to-content gap under the
+   header, as every Settings form page does. */
+.panicForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
+.panicForm > * {
+    margin-block: 0;
+}
+
+/* The page's buttons stack full width, the main action first. */
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* The row's dropdown, as every Settings row dropdown is sized. */
+.select {
+    width: max-content;
+    min-width: 6rem;
+    max-width: min(14rem, 100%);
+}
+
+/* The Custom amount field, opened in place under its row. */
+.custom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}

@@ -20,7 +20,8 @@
 // and the Approve dispatch, on a fresh form, on the first submit.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent, cleanup } from '@testing-library/react';
+import { render, act as domAct, fireEvent, cleanup, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -73,10 +74,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-function recordingMessaging() {
+function recordingMessaging({ generationError, addressLoadError } = {}) {
     const calls = [];
     const target = {
-        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [SOURCE, REUSABLE] }),
+        getAddressesByChain: () => addressLoadError
+            ? Promise.reject(addressLoadError)
+            : Promise.resolve({ [CHAIN]: [SOURCE, REUSABLE] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: SOURCE.id, address: SOURCE.address } }),
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
@@ -84,6 +87,7 @@ function recordingMessaging() {
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         generateDispenserAddress: (args) => {
             calls.push({ method: 'generateDispenserAddress', args });
+            if (generationError) return Promise.reject(generationError);
             return Promise.resolve({ ...DERIVED });
         },
         composeForConfirm: (args) => {
@@ -112,15 +116,25 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 const setValue = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
+
+// G122: the Fiat currency field opens its picker page and a row picks the
+// code; two steps, so the page renders between the tap and the pick.
+const openFiatPicker = (utils) => fireEvent.click(utils.getByRole('button', { name: /^Fiat currency:/ }));
+const pickFiat = (code) => (utils) => fireEvent.click(
+    within(utils.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: new RegExp(code) }),
+);
 
 /**
  * Mount a locked-token DispenserForm, run the optional picker steps, fill
  * the amounts, press Create, then Approve on the confirm page.
  */
-async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
-    const { messaging, calls } = recordingMessaging();
+async function driveCreate({ steps = [], pricingSteps = [], generationError, walletId = 'w' } = {}) {
+    const { messaging, calls } = recordingMessaging({ generationError });
     let utils;
     await domAct(async () => {
         utils = render(
@@ -128,7 +142,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
                 MessagingProvider,
                 { shell: 'web', messaging },
                 React.createElement(DispenserForm, {
-                    walletId: 'w', initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
+                    walletId, initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
                 }),
             ),
         );
@@ -148,12 +162,13 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         // eslint-disable-next-line no-await-in-loop
         await domAct(async () => { step(utils); await drainMicrotasks(); });
     }
-    const create = utils.getByRole('button', { name: 'Create' });
+    const create = utils.getByRole('button', { name: 'Create Dispenser' });
     expect(create.disabled).toBe(false);
     await domAct(async () => {
         fireEvent.click(create);
         await drainMicrotasks();
     });
+    if (generationError) return { calls, utils };
     await domAct(async () => {
         const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
@@ -164,6 +179,28 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
     return { calls, utils };
 }
 
+async function renderForm({ generationError, addressLoadError, walletId = 'w' } = {}) {
+    const { messaging, calls } = recordingMessaging({ generationError, addressLoadError });
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(DispenserForm, {
+                    walletId, initialChainId: CHAIN, initialTick: 'JDOG', onBack() {},
+                }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    return { calls, utils };
+}
+
+// The dispenser address and the fiat and oracle pricing live in the closed Dispenser Terms section.
+const openTerms = (utils) => {
+    fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+};
 const openDispenserAddressPicker = (utils) => {
     fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
 };
@@ -180,6 +217,51 @@ function composeAndSubmitParams(calls) {
 }
 
 describe('DispenserForm GET_ADDRESS by address mode', () => {
+    it('filters a function-prefixed address derivation error', async () => {
+        const raw = 'dispenserAddress: either `signer` or `password` is required';
+        const { utils } = await driveCreate({ generationError: new Error(raw), walletId: 'w-prefixed-error' });
+
+        expect(utils.getByText('Could not derive a dispenser address.')).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
+    it('keeps address derivation copy written for the user', async () => {
+        const copy = 'Unlock this wallet to create a dispenser address.';
+        const { utils } = await driveCreate({ generationError: new Error(copy), walletId: 'w-user-copy-error' });
+
+        expect(utils.getByText(copy)).toBeTruthy();
+    });
+
+    it('does not expose a function-prefixed error when the address picker returns', async () => {
+        const raw = 'dispenserAddress: either `signer` or `password` is required';
+        const { calls, utils } = await renderForm({ generationError: new Error(raw), walletId: 'w-picker-error' });
+
+        await domAct(async () => {
+            openTerms(utils);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            openDispenserAddressPicker(utils);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /New dispenser address/ }));
+            await drainMicrotasks();
+        });
+
+        expect(calls.some((call) => call.method === 'generateDispenserAddress')).toBe(true);
+        expect(utils.getByRole('form', { name: 'Create dispenser' })).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
+    it('filters a function-prefixed address load error', async () => {
+        const raw = 'addresses.byChain: account "a1" does not belong to wallet "w1"';
+        const { utils } = await renderForm({ addressLoadError: new Error(raw), walletId: 'w-load-error' });
+
+        expect(utils.getByText('Failed to load addresses.')).toBeTruthy();
+        expect(utils.queryByText(raw)).toBeNull();
+    });
+
     it('mode new: the FIRST submit composes and signs with the freshly derived address', async () => {
         const { calls } = await driveCreate();
 
@@ -196,7 +278,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode existing: a reused dispenser address rides as GET_ADDRESS, and nothing is derived', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(REUSABLE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(REUSABLE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -206,7 +288,7 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
 
     it('mode current: picking the source itself omits GET_ADDRESS so the protocol defaults to SOURCE', async () => {
         const { calls } = await driveCreate({
-            steps: [openDispenserAddressPicker, pickAddress(SOURCE.address)],
+            steps: [openTerms, openDispenserAddressPicker, pickAddress(SOURCE.address)],
         });
         expect(calls.some((c) => c.method === 'generateDispenserAddress')).toBe(false);
         const { composed, submitted } = composeAndSubmitParams(calls);
@@ -220,12 +302,17 @@ describe('DispenserForm Mode B pricing', () => {
         let triggerWasHidden = false;
         const { calls } = await driveCreate({
             pricingSteps: [
-                (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
+                openTerms,
+                openFiatPicker,
+                pickFiat('USD'),
                 (utils) => {
-                    setValue(utils, 'Priced in fiat (optional)', 'USD');
                     setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
-                (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
+                // Quick keeps the Get card but holds the native price: empty and disabled.
+                (utils) => {
+                    const trigger = utils.queryByLabelText(/^Trigger price/);
+                    triggerWasHidden = trigger === null || (trigger.disabled && trigger.value === '');
+                },
             ],
         });
         const { composed, submitted } = composeAndSubmitParams(calls);

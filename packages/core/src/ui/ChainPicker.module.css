@@ -3,6 +3,9 @@
     --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    /* G112: the network icon and the caret sit in square slots (tokens.css). */
+    --chain-picker-icon-inset: var(--xc-field-icon-inset-md);
+    --chain-picker-glyph-inset: var(--xc-field-glyph-inset-md);
     position: relative;
     width: 100%;
     display: flex;
@@ -18,6 +21,8 @@
     --chain-picker-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     --chain-picker-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
     --chain-picker-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+    --chain-picker-icon-inset: var(--xc-field-icon-inset-sm);
+    --chain-picker-glyph-inset: var(--xc-field-glyph-inset-sm);
 }
 
 .md {
@@ -25,6 +30,8 @@
     --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    --chain-picker-icon-inset: var(--xc-field-icon-inset-md);
+    --chain-picker-glyph-inset: var(--xc-field-glyph-inset-md);
 }
 
 .lg {
@@ -32,6 +39,8 @@
     --chain-picker-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
     --chain-picker-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
     --chain-picker-font-size: var(--xc-control-font-lg, var(--xc-control-font));
+    --chain-picker-icon-inset: var(--xc-field-icon-inset-lg);
+    --chain-picker-glyph-inset: var(--xc-field-glyph-inset-lg);
 }
 
 .label {
@@ -40,9 +49,35 @@
     color: var(--xc-text-muted);
 }
 
+/* A label with a help tip: the tip sits beside the label text. No margin
+   here, since .wrap already spaces the label row from the control. */
+.labelRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-label-help-gap);
+    min-width: 0;
+}
+
+.labelRow > .label {
+    min-width: 0;
+}
+
+.labelHelp {
+    flex: none;
+    /* The row gap spaces the tip; drop the tip's own start margin, as Input does. */
+    margin-inline-start: 0;
+}
+
 /* The trigger follows the shared text-control dimensions while keeping the
    fuller ticker and network-kind detail in the dropdown rows. */
 .trigger {
+    /* ChainPicker.jsx adds Button's btn class beside this one. */
+    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-border: var(--xc-accent-primary);
+    font-weight: 400;
+    justify-content: flex-start;
+    line-height: normal;
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
@@ -51,12 +86,13 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    gap: var(--xc-field-icon-gap);
     min-height: 36px;
     min-height: var(--chain-picker-control-height);
     height: var(--chain-picker-control-height);
     padding: var(--xc-space-2) var(--xc-space-3);
-    padding: 0 var(--chain-picker-padding-x);
+    padding-block: 0;
+    padding-inline: var(--chain-picker-padding-x) calc(var(--chain-picker-glyph-inset) - var(--xc-field-border));
     font-family: var(--xc-font-sans);
     font-size: var(--chain-picker-font-size);
     background: var(--xc-surface);
@@ -69,6 +105,12 @@
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
+/* G112: with its network icon showing, the icon sits as far from the start
+   edge as from the top and bottom; the name follows one icon gap after it. */
+.wrap .trigger.leadIcon {
+    padding-inline-start: calc(var(--chain-picker-icon-inset) - var(--xc-field-border));
+}
+
 .trigger:hover:not(:disabled) {
     border-color: var(--xc-accent-primary);
 }
@@ -79,7 +121,24 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+/* A field with a problem (the form error standard): a red border only, as
+   Input and Select mark theirs. The form's error notice can mark the trigger
+   with aria-invalid by id alone, and that reads the same. */
+.trigger.invalid,
+.trigger[aria-invalid='true'] {
+    border-color: var(--xc-danger);
+}
+
+.trigger.invalid:focus-visible,
+.trigger[aria-invalid='true']:focus-visible {
+    box-shadow: 0 0 0 3px var(--xc-danger-bg);
+}
+
+/* The picker keeps its own dimmed surface rather than the shared disabled fill. */
 .trigger:disabled {
+    background: var(--xc-surface);
+    border-color: var(--xc-border-strong);
+    color: var(--xc-text);
     opacity: 0.55;
     cursor: not-allowed;
 }
@@ -98,6 +157,20 @@
     height: 100%;
     display: block;
     border-radius: 50%;
+}
+
+/* The network's first letter when none of its icon files loads. */
+.triggerIconLetter {
+    width: 100%;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
 }
 
 .triggerText {
@@ -147,125 +220,7 @@
     font-size: var(--xc-text-xs);
 }
 
-/* Popover */
-
-.popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    inset-inline-start: 0;
-    inset-inline-end: 0;
-    z-index: var(--xc-z-dropdown);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: 12px;
-    box-shadow: var(--xc-shadow-md);
-    max-height: 320px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.searchWrap {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-bottom: 1px solid var(--xc-border);
-    flex: 0 0 auto;
-}
-
-.search {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    padding: 4px 0;
-    outline: none;
-}
-
-.list {
-    list-style: none;
-    margin: 0;
-    padding: 4px 0;
-    overflow-y: auto;
-    flex: 1 1 auto;
-}
-
-.item {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--xc-text);
-    text-align: start;
-}
-
-.item:hover {
-    background: var(--xc-bg-muted);
-}
-
-.item:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.itemActive {
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-}
-
-.itemIcon {
-    --xc-icon-size: var(--xc-icon-md);
-    flex: 0 0 auto;
-    width: var(--xc-icon-size);
-    height: var(--xc-icon-size);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
-    overflow: hidden;
-}
-
-.itemIcon img {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-.itemBody {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    line-height: 1.15;
-}
-
-.itemLabel {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.itemSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-family: var(--xc-font-mono);
-    letter-spacing: 0.04em;
-}
-
-.empty {
-    padding: var(--xc-space-3);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-align: center;
-}
+/* The list is the full-screen NetworkPicker; this sheet draws only the field. */
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */

@@ -76,7 +76,7 @@ async function reviewLinkAmount(amount) {
             <Send walletId="w1" onBack={vi.fn()} prefill={{ address: DEST, amount, tick: 'BTC', chainId: 'bitcoin-mainnet' }} />
         </MessagingProvider>,
     );
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCES['bitcoin-mainnet']));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCES['bitcoin-mainnet']));
     await screen.findByText(/BTC available/);
     fireEvent.click(screen.getAllByRole('button', { name: 'Send' }).at(-1));
     // Wrapped: the stub proxy answers every property, then included.

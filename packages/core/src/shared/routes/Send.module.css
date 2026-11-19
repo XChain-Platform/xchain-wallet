@@ -33,117 +33,6 @@
     gap: var(--xc-space-2);
 }
 
-.summary {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-    color: var(--xc-text);
-    margin: 0 0 var(--xc-space-3);
-    line-height: 1.4;
-}
-
-/* §21.3 collapsible Details disclosure: closed by default. The
-   detailsList grid moves inside; this wrapper holds the toggle. */
-.details {
-    margin: 0 0 var(--xc-space-4);
-}
-
-.detailsToggle {
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--xc-text-muted);
-    list-style: revert;
-    padding: var(--xc-space-1) 0;
-    /* slice 2: the "Advanced" disclosure measured 21px tall. It is
-       full-width already, so only the block axis needs the tap floor. */
-    display: list-item;
-    min-height: var(--xc-tap-min);
-    position: relative;
-}
-
-/* The Advanced disclosure keeps its compact look. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
-@media (pointer: coarse), (hover: none) {
-    .detailsToggle::before {
-        content: '';
-        position: absolute;
-        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        width: max(100%, var(--xc-control-hit-min, 24px));
-        height: max(100%, var(--xc-control-hit-min, 24px));
-    }
-}
-
-.detailsToggle:hover {
-    color: var(--xc-text);
-}
-
-.detailsList {
-    composes: card from '../../ui/Card.module.css';
-    display: grid;
-    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
-    gap: 0;
-    margin: var(--xc-space-2) 0 0;
-}
-
-.advancedReviewList {
-    display: grid;
-    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
-    gap: 0;
-    margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-1);
-}
-
-.detailsLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0;
-    align-self: center;
-    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
-}
-
-.detailsValue {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    margin: 0;
-    word-break: break-word;
-    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
-    text-align: end;
-    font-variant-numeric: tabular-nums;
-}
-
-.detailsLabel ~ .detailsLabel,
-.detailsValue ~ .detailsValue {
-    border-top: var(--xc-table-row-divider);
-}
-
-@media not all and (min-width: 400px) {
-    .detailsList,
-    .advancedReviewList {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .detailsLabel {
-        padding-bottom: 0;
-    }
-
-    .detailsValue {
-        padding-top: var(--xc-space-1);
-        text-align: start;
-    }
-
-    .detailsValue ~ .detailsValue {
-        border-top: 0;
-    }
-}
-
-.detailsValue code,
-.coinControlValue,
-.coinControlSummary dd,
 .txid,
 .successMono {
     direction: ltr;
@@ -197,111 +86,8 @@
     font-size: var(--xc-text-xs);
 }
 
-.rbfRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) 0;
-}
-
-.coinControlList {
-    composes: card from '../../ui/Card.module.css';
-    margin: var(--xc-space-2) 0 var(--xc-space-3);
-    box-sizing: border-box;
-    min-inline-size: 0;
-    width: 100%;
-}
-
-.coinControlToolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-}
-
-.coinControlActions {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
-.coinControlRows {
-    composes: scrollArea from '../../ui/Screen.module.css';
-    max-height: 18rem;
-    margin-top: var(--xc-space-2);
-    overflow-y: auto;
-}
-
-.coinControlRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) 0;
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    min-width: 0;
-}
-
-.coinControlRow > input {
-    flex: 0 0 auto;
-}
-
-.coinControlValue {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.coinControlValue,
-.coinControlRow small {
-    display: block;
-}
-
-.coinControlRow small {
-    color: var(--xc-text-muted);
-}
-
-.coinControlDust {
-    display: inline-block;
-    margin-inline-start: var(--xc-space-2);
-    /* The compact badge keeps a 1px block inset below the spacing scale. */
-    padding: 1px var(--xc-space-1);
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 55%, transparent);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-warning, #B07A00);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-}
-
-.coinControlSummary {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-2) 0 0;
-    padding-top: var(--xc-space-2);
-    border-top: 1px solid var(--xc-border);
-}
-
-.coinControlSummary div {
-    min-width: 0;
-}
-
-.coinControlSummary dt {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-}
-
-.coinControlSummary dd {
-    /* The value needs a 2px offset below the spacing scale. */
-    margin: 2px 0 0;
-    color: var(--xc-text);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
-}
+/* The coin-control list moved to the shared Advanced section
+   (formStandard/AdvancedSection.module.css). */
 
 .successTitle {
     font-size: var(--xc-text-xl);
@@ -310,13 +96,12 @@
     color: var(--xc-success);
 }
 
+/* The Transaction ID row's label, left of its value like every fact row. */
 .successLabel {
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0 0 var(--xc-space-1);
+    font-weight: 400;
+    margin: 0;
 }
 
 .txid {
@@ -339,7 +124,7 @@
     composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
     align-items: stretch;
 }
 
@@ -364,31 +149,36 @@
     text-align: center;
 }
 
+/* The sent facts: one label-left, value-right row per fact with divider
+   lines, inside the success card (no card in a card, no uppercase labels). */
 .successSummary {
-    composes: card from '../../ui/Card.module.css';
     margin: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-    gap: var(--xc-space-2) var(--xc-space-3);
+    display: flex;
+    flex-direction: column;
 }
 
 .successRow {
     display: flex;
-    flex-direction: column;
-    /* The compact summary needs a 2px gap below the spacing scale. */
-    gap: 2px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
     min-width: 0;
+    padding-block: var(--xc-space-2);
+}
+.successRow + .successRow {
+    border-top: 1px solid var(--xc-border);
 }
 .successRow dt {
-    font-size: var(--xc-text-xs);
+    flex: 0 0 auto;
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 .successRow dd {
     margin: 0;
+    min-width: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    text-align: end;
     word-break: break-word;
 }
 
@@ -396,16 +186,27 @@
     font-family: var(--xc-font-mono, monospace);
 }
 
+/* Transaction ID: its label left, the id and its copy icon right, the
+   explorer link under the row. */
 .successTxidBlock {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding-block-start: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
 }
 
 .successTxidRow {
     display: flex;
     align-items: stretch;
+    justify-content: flex-end;
+    min-width: 0;
     gap: var(--xc-space-2);
+}
+
+.successTxidBlock > .successLink {
+    grid-column: 1 / -1;
 }
 
 .successLink {
@@ -442,6 +243,19 @@
     gap: var(--xc-space-1);
 }
 
+.assetPickerLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
+    min-width: 0;
+}
+
+.assetPickerLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text-muted);
+}
+
 .assetPickerButton {
     appearance: none;
     display: inline-flex;
@@ -462,22 +276,40 @@
     outline-offset: 2px;
 }
 
-.heroIconWrapInteractive {
-    appearance: none;
-    background: transparent;
-    border: none;
+/* The Change asset hero carries the shared Button classes (btn ghost lg).
+   Two classes outrank the single-class .btn, .ghost and .lg rules wherever
+   a copy of Button.module.css lands in the cascade, so the hero keeps its
+   bare 88px circle: no fill, no border, no padding, no gap, the page font,
+   no size floor or column cap. The two state variables resolve the Button
+   hover and press rules to no fill and an edge in the text colour, as the
+   plain button had. */
+.heroIconWrap.heroIconWrapInteractive {
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentcolor;
+    display: flex;
+    gap: normal;
+    min-height: auto;
+    max-width: none;
     padding: 0;
-    cursor: pointer;
+    border: 0;
     border-radius: 50%;
+    background: transparent;
     color: inherit;
     font: inherit;
+    transition: none;
 }
 
-.heroIconWrapInteractive:hover {
+/* The Button press rule nudges and darkens; the hero never did. */
+.heroIconWrap.heroIconWrapInteractive:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.heroIconWrap.heroIconWrapInteractive:hover:not(:disabled) {
     filter: brightness(0.96);
 }
 
-.heroIconWrapInteractive:focus-visible {
+.heroIconWrap.heroIconWrapInteractive:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: var(--xc-space-1);
 }
@@ -529,52 +361,21 @@
     box-shadow: 0 0 0 1px var(--xc-border);
 }
 
-/* PC-52 multi-recipient rows. Each extra recipient is boxed so the eye can
-   tell one recipient's address+amount pair from the next; the first recipient
-   stays in the main form flow, unboxed, because it is the ordinary send. */
-.recipientRows {
+/* The Single, Multi or Advanced panel under the Payment tabs: its fields keep
+   the section body's own 8px rhythm (G80, G81). */
+.sendModePanel {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
-    margin: var(--xc-space-3) 0;
-}
-
-.recipientRow {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.recipientRowHead {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-}
-
-.recipientRowLabel {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
+    gap: var(--xc-form-gap, var(--xc-space-2));
+    min-width: 0;
 }
 
 /* Native font scaling enlarges labels without changing the CSS viewport.
    Phone-width review grids and action rows reflow before their text competes
    for the same line. */
 @media not all and (min-width: 480px) {
-    .detailsList,
-    .advancedReviewList {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .detailsLabel {
-        align-self: start;
-    }
-
     .successTxidRow,
-    .saveRecipientActions,
-    .recipientRowHead {
+    .saveRecipientActions {
         flex-wrap: wrap;
     }
 

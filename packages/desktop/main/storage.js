@@ -21,10 +21,34 @@
 // a crash mid-write never leaves a half-written vault. OS rename is
 // atomic on all three target platforms (POSIX `rename` + Windows
 // `MoveFileEx` with MOVEFILE_REPLACE_EXISTING via fs.rename).
+//
+// Compare-and-swap: a save that carries `expected` lands only while the file
+// still holds those bytes (null = no file), as the extension and in-memory
+// backends do. Every save and clear on one path runs in order, so two
+// windows that onboard at once cannot both write over an empty vault, and
+// two writes never share the `.tmp` sibling.
 
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { StorageBackend } from '@xchain-wallet/core/storage/backend.js';
+import {
+    StorageBackend,
+    VaultConflictError,
+    vaultBlobsEqual,
+} from '@xchain-wallet/core/storage/backend.js';
+
+/** Tail of the write queue per vault path, shared by every backend on that path. */
+const writeQueues = new Map();
+
+function enqueueWrite(path, run) {
+    const prior = writeQueues.get(path) ?? Promise.resolve();
+    const next = prior.then(run, run);
+    const tail = next.then(() => {}, () => {});
+    writeQueues.set(path, tail);
+    tail.then(() => {
+        if (writeQueues.get(path) === tail) writeQueues.delete(path);
+    });
+    return next;
+}
 
 export class FileStorageBackend extends StorageBackend {
     /**
@@ -53,21 +77,36 @@ export class FileStorageBackend extends StorageBackend {
     }
 
     /**
-     * Electron routes vault persistence through one main-process writer, so expected is intentionally ignored.
      * @param {Uint8Array} blob
-     * @param {{ expected?: Uint8Array | null }} [_options]
+     * @param {{ expected?: Uint8Array | null }} [options]   when present, the
+     *   save lands only while the file holds exactly these bytes (null = no file)
+     * @throws {VaultConflictError} the file no longer holds `expected`
      */
-    async save(blob, _options) {
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('FileStorageBackend.save: blob must be a Uint8Array');
         }
-        // Ensure the parent dir exists (first-run case).
-        await fs.mkdir(dirname(this._filePath), { recursive: true });
-        await fs.writeFile(this._tmpPath, blob, { mode: 0o600 });
-        await fs.rename(this._tmpPath, this._filePath);
+        const compare = options != null && Object.hasOwn(options, 'expected');
+        const expected = compare ? (options.expected ?? null) : null;
+        if (compare && expected !== null && !(expected instanceof Uint8Array)) {
+            throw new TypeError('FileStorageBackend.save: expected must be a Uint8Array or null');
+        }
+        return enqueueWrite(this._filePath, async () => {
+            if (compare && !vaultBlobsEqual(await this.load(), expected)) {
+                throw new VaultConflictError();
+            }
+            // Ensure the parent dir exists (first-run case).
+            await fs.mkdir(dirname(this._filePath), { recursive: true });
+            await fs.writeFile(this._tmpPath, blob, { mode: 0o600 });
+            await fs.rename(this._tmpPath, this._filePath);
+        });
     }
 
     async clear() {
+        return enqueueWrite(this._filePath, () => this._clearNow());
+    }
+
+    async _clearNow() {
         // Remove both the vault ciphertext and any half-written .tmp sibling
         // a crash mid-save may have left. clear() runs on Reset, so a stray
         // vault.bin.tmp holding the encrypted vault document must not outlive

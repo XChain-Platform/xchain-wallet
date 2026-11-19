@@ -54,6 +54,20 @@ export function inclusionOf(res) {
 }
 
 /**
+ * The UTXO list out of an encoder `get_utxos` reply, in either shape the
+ * SDK client documents (`{ utxos: [...] }` today, a bare array on older
+ * encoders). Anything else is "did not answer".
+ *
+ * @param {unknown} res
+ * @returns {any[] | null}
+ */
+export function utxoListOf(res) {
+    if (Array.isArray(res)) return res;
+    const list = /** @type {any} */ (res)?.utxos;
+    return Array.isArray(list) ? list : null;
+}
+
+/**
  * Look up each hash once and return the ones a block carries.
  *
  * @param {object} args

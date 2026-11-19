@@ -27,7 +27,7 @@
 // it explicitly.
 
 import { useEffect, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import {
     activatePanicMode,
     deactivatePanicMode,
@@ -35,7 +35,7 @@ import {
     getPanicRemainingMs,
     subscribePanicModeSaveStatus,
 } from '../../../flows/panicMode.js';
-import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
+import { COMPACT_CONTROL, ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -101,7 +101,7 @@ export function PanicModeRow() {
                         {t('settings.panic.remaining')}
                     </span>
                 </div>
-                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
+                <Button ref={swap.target} type="button" size="sm" variant="secondary" icon={<Icon.UnlockIcon />} onClick={handleDeactivate}>
                     {t('settings.panic.deactivate')}
                 </Button>
             </div>
@@ -120,10 +120,10 @@ export function PanicModeRow() {
                         </span>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                        <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
+                        <Button type="button" size="sm" variant="secondary" icon={<Icon.XIcon />} onClick={() => setConfirming(false)}>
                             {t('common.cancel')}
                         </Button>
-                        <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
+                        <Button type="button" size="sm" variant="danger" icon={<Icon.LockIcon />} onClick={handleActivate}>
                             {t('settings.panic.confirm24HourFreeze')}
                         </Button>
                     </div>
@@ -140,14 +140,14 @@ export function PanicModeRow() {
                     {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
-            <Button ref={swap.target} type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="danger" style={COMPACT_CONTROL} icon={<Icon.LockIcon />} onClick={() => setConfirming(true)}>
                 {t('settings.developer.activate2')}
             </Button>
         </div>
     );
 }
 
-function formatPanicCountdown(ms) {
+export function formatPanicCountdown(ms) {
     const totalMin = Math.max(0, Math.ceil(ms / 60_000));
     if (totalMin < 60) return `${totalMin}m`;
     const hours = Math.floor(totalMin / 60);

@@ -31,6 +31,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../helpers/openFormSections.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
@@ -111,6 +112,8 @@ afterEach(() => cleanup());
 // Every form in the group renders the chain through NetworkField, whose
 // button names itself "Network: <display name>".
 const chainName = async () => {
+    // Network sits in the From section, which starts closed.
+    await openSection('From');
     const button = await screen.findByRole('button', { name: /^Network: / });
     return button.getAttribute('aria-label') || button.textContent;
 };
@@ -169,7 +172,8 @@ describe('a locked token context keeps its own chain', () => {
         ['DividendForm', DividendForm, {}],
     ])('%s', async (_name, Form, props) => {
         mount(Form, { ...props, initialChainId: LTC, initialTick: 'XCP' }, messagingWith());
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue('ltc1qindex0indexindexindexindexindexindex'));
+        await openSection('From');
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue('ltc1qindex0indexindexindexindexindexindex'));
     });
 });
 
@@ -198,7 +202,10 @@ const SOURCE_FORMS = [
     { name: 'DividendForm', Form: DividendForm, props: {} },
 ];
 
-const readFrom = async () => (await screen.findByLabelText('From')).value;
+const readFrom = async () => {
+    await openSection('From');
+    return (await screen.findByLabelText('From address')).value;
+};
 
 describe.each(SOURCE_FORMS)('$name source default', ({ Form, props }) => {
     it('defaults to the active address, not the newest one', async () => {

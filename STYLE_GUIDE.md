@@ -62,11 +62,12 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `480px` | compact grids and dense controls |
 | `600px` | the form and narrow route boundary |
 | `640px` | rail layout and sidebar begin |
+| `834px` | wide licence terms use a centred two-thirds content column; menus, lists, and paired panels may gain columns |
 | `900px` | full layout and labelled sidebar begin |
 | `48rem` | wide collectible grids |
 | `1024px` | desktop reference frame and future desktop-only refinements |
 
-The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `834px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 833px, 899px, and 1023px are aliases, not additional breakpoints.
 
 ### The list rule: full width to the scrollbar
 
@@ -94,7 +95,7 @@ Use `<ListRow>` for repeated, full-width items that share one reading order: opt
     <FormPage
         label="Verify signature"
         onSubmit={handleSubmit}
-        status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        status={error ? <Notice tone="danger">{error}</Notice> : null}
         actions={<Button type="submit" variant="primary" loading={busy}>Verify signature</Button>}
     >
         <Input label="Address" ... />
@@ -144,13 +145,33 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as icon controls at the Back control size (small), with a touch-floor hit area, so the header keeps one height |
 | `nested` | marks a sub-screen that shares its parent route id (a Settings section, a Contacts detail, a review step), so Back always shows |
 
-**When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, History, Send and Scan. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
+**When Back shows**: the chevron follows the shell's one navigation history (G06). A page opened from another page (Token detail's Send or Receive, a market's Trade, any list row) shows Back, and Back returns to that page with its item. A root page, one opened from the sidebar, the bottom bar, the menu, the command palette or a go-to shortcut, shows none, since the history starts over on it and there is nothing to go back to. Shells open a root with `nav.navigateRoot` and a push with `nav.navigate`, and hand `nav.canGoBack` to `ShellRouteOutlet`, which PageHeader reads; outside a shell Back always shows. A sub-screen whose Back steps inside its page (a review step, a picker) passes `nested` and always shows Back. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture and Android Back still run `onBack`, which takes a root page to Home.
 
 **Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
 
+## Wallet menu
+
+`packages/core/src/shared/walletMenu.js` is the one catalogue of wallet destinations. The header menu button, Cmd/Ctrl+K, the left nav and the bottom tab bar all read their rows from it, so a destination has one label, one icon and one view id on every shell and at every width. Add or rename a destination there and nowhere else; a component never hard-codes a menu label or icon.
+
+- **One menu.** The header menu button and Cmd/Ctrl+K open the same surface, the command palette grown into the menu. With an empty query it shows the catalogue; typing filters with the palette search, and Enter runs the highlighted row.
+- **Outlined group boxes.** Each group (Wallet, Trade, Manage, People) sits in its own box with a `1px solid var(--xc-border-strong)` border, the card radius and the group heading inside the box. Settings and Lock wallet form a footer row under the boxes. The current view's row is highlighted.
+- **Label-width columns.** Columns are as wide as their labels, with as many as fit: four at tablet and desktop widths, two on a phone (Wallet and People stacked on the left, Trade and Manage on the right). Nothing scrolls on a 390x844 phone.
+- **Presentation.** Below 640px of container width the menu is a full-height sheet with the search box in its top bar beside the close button. At 640px and wider it is a dropdown panel under the app bar at the right edge, sized to its content. The menu has no visible title; its accessible name is "Wallet menu". The Cmd/Ctrl+K hint shows only on wide pointer layouts.
+- **Five-tab bar.** The bottom tab bar holds Home, Send, Receive, History and Settings, with no overflow tab and no sheet. In signer mode Send and Receive hide.
+- **Left nav.** The sidebar keeps its shortcut list with every label and icon read from the catalogue, and Settings and Lock wallet at its foot.
+- **No unread dots.** The menu button, menu rows, sidebar and tab bar never show an unread dot or count.
+
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and ignores repeat taps, `disabled` ignores taps, and neither changes the button's colours (G130: a button never looks disabled). Never disable a button to wait for valid input: keep it enabled and answer the tap with the form's error summary and field messages (G129). `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+
+## Notices, form errors and toasts
+
+Use `<Notice>` from `@xchain-wallet/core/ui` for a message about the page the user is on (`StatusMessage` is the same component under its older name). It has three tones: `info`, `danger` (every warning, error and critical caution) and `success`. The look is one: a fill tinted in the tone, a thin border of the same tone, 8px corners, the tone icon, an optional bold `title`, the body, at most one `action` and an optional X (`onDismiss`). There is no solid red fill and no coloured edge bar, and a notice never sits inside a card. A static critical caution that is on the page from the first paint uses `role="note"`.
+
+A form that validates on submit uses `useFormErrors()` and hands the object to `FormPage` or `FormFrame` as `errors`: one danger notice ("Fix N things to continue" plus the list) at the top of the page, each failing field outlined red with its own line under it, both clearing as the user fixes the field.
+
+A toast takes the same tones and icons over the raised surface: info, success, and danger for both its `warning` and `error` variants, with the X to dismiss.
 
 For dialogs use the shared `NoticeModal` (one OK) from `@xchain-wallet/core/shared/components/NoticeModal.jsx` and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/ConfirmModal.jsx`, never `alert()` or `confirm()`.
 
@@ -162,7 +183,7 @@ Buttons and field primitives share one visual height scale. Pass the component's
 
 | size | token and height | use it when | do | do not |
 |---|---|---|---|---|
-| `sm` | `--xc-control-h-sm`, 28px (36px on touch) | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
+| `sm` | 28px painted, with a 44px hit area on touch | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
 | `md` | `--xc-control-h-md`, 36px (44px on touch) | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby route-local height such as 40px |
 | `lg` | `--xc-control-h-lg`, 44px (48px on touch) | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
 
@@ -170,7 +191,7 @@ On coarse-pointer or no-hover devices the tokens step up to 36/44/48px, so touch
 
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px with a weightier label), stepping up to 36/44/48px on touch. `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px painted with a 44px hit area on touch), `md` (36px, 44px on touch, default), or `lg` (44px, 48px on touch, with a weightier label). `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same named size scale; any visibly compact control must keep its larger touch target outside the painted box.
 
 **Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 

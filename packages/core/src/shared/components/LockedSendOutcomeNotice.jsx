@@ -18,7 +18,7 @@
 // so it is told once and needs no control of its own.
 
 import { useEffect, useRef, useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { StatusMessageGroup } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/pending.js';
@@ -113,13 +113,14 @@ export function LockedSendOutcomeNotice({ walletId, routeKey }) {
     if (outcomes.length === 0) return null;
     const anyNotSent = outcomes.some((o) => o.kind !== 'sent');
     return (
-        <StatusMessage variant={anyNotSent ? 'warning' : 'success'} testId="locked-send-outcome">
-            {outcomes.map((o) => (
-                <p key={o.id}>
-                    <strong>{t(LEAD[o.kind] ?? LEAD.unsent)}</strong>{' '}
-                    {t(BODY[o.kind] ?? BODY.unsent, { summary: summaryOf(o), transactionId: shortTxid(o.txid) })}
-                </p>
-            ))}
-        </StatusMessage>
+        <StatusMessageGroup
+            testId="locked-send-outcome"
+            entries={outcomes.map((o) => ({
+                key: o.id,
+                variant: anyNotSent ? 'warning' : 'success',
+                title: t(LEAD[o.kind] ?? LEAD.unsent),
+                children: t(BODY[o.kind] ?? BODY.unsent, { summary: summaryOf(o), transactionId: shortTxid(o.txid) }),
+            }))}
+        />
     );
 }

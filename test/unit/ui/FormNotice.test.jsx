@@ -21,7 +21,9 @@ describe('<FormNotice>', () => {
         expect(screen.getByText('Heads up')).toBeInTheDocument();
     });
 
-    it('shows a notice written mid-form as the first item of the page, above the form', () => {
+    // The lifted notice is the form's first item (operator 2026-11-16): inside
+    // the one form card from 600px, leading the bare fields below it.
+    it('shows a notice written mid-form as the first item of the form, at its top', () => {
         const { container } = render(
             <FormPage actions={<button type="submit">Go</button>}>
                 <input aria-label="Amount" />
@@ -30,8 +32,8 @@ describe('<FormNotice>', () => {
             </FormPage>,
         );
         const form = container.querySelector('form');
-        expect(form.previousElementSibling).toContainElement(screen.getByText('Heads up'));
-        expect(form).not.toContainElement(screen.getByText('Heads up'));
+        expect(form.firstElementChild).toHaveAttribute('data-form-status');
+        expect(form.firstElementChild).toContainElement(screen.getByText('Heads up'));
         expect(screen.getAllByText('Heads up')).toHaveLength(1);
     });
 
@@ -44,55 +46,57 @@ describe('<FormNotice>', () => {
         );
         const form = container.querySelector('form');
         const first = screen.getByText('First warning');
-        expect(form).not.toContainElement(first);
+        expect(form.firstElementChild).toContainElement(first);
         expect(first.tagName).toBe('P');
         const box = first.closest('[data-variant]');
         expect(box).toContainElement(screen.getByText('Second warning'));
         expect(container.querySelectorAll('[data-variant]')).toHaveLength(1);
     });
 
-    it('takes a list of status notices above the form and shows nothing for an all-empty list', () => {
+    it('takes a list of status notices at the top of the form and shows nothing for an all-empty list', () => {
         const { container, rerender } = render(
             <FormPage status={[null, <p key="a">Draft saved</p>, false]}>
                 <input aria-label="Amount" />
             </FormPage>,
         );
         const form = container.querySelector('form');
-        expect(form.previousElementSibling).toContainElement(screen.getByText('Draft saved'));
+        expect(form.firstElementChild).toHaveAttribute('data-form-status');
+        expect(form.firstElementChild).toContainElement(screen.getByText('Draft saved'));
         rerender(
             <FormPage status={[null, false]}>
                 <input aria-label="Amount" />
             </FormPage>,
         );
+        expect(container.querySelector('[data-form-status]')).toBeNull();
         expect(container.querySelector('form').previousElementSibling).toBeNull();
     });
 
-    it('opens a lifted notice with its bold lead-in', () => {
+    it('opens a lifted notice with its block title', () => {
         const { container } = render(
             <FormPage actions={<button type="submit">Go</button>}>
                 <input aria-label="Amount" />
-                <FormNotice variant="warning" lead="Destroy is irreversible.">The burned amount cannot be recovered.</FormNotice>
+                <FormNotice variant="warning" title="Destroy is irreversible.">The burned amount cannot be recovered.</FormNotice>
             </FormPage>,
         );
-        const lead = screen.getByText('Destroy is irreversible.');
-        expect(lead.tagName).toBe('STRONG');
-        expect(container.querySelector('form')).not.toContainElement(lead);
-        expect(lead.closest('[data-variant]')).toHaveTextContent('Destroy is irreversible. The burned amount cannot be recovered.');
+        const title = screen.getByText('Destroy is irreversible.');
+        expect(title.tagName).toBe('DIV');
+        expect(title.nextElementSibling).toHaveTextContent('The burned amount cannot be recovered.');
+        expect(container.querySelector('form').firstElementChild).toContainElement(title);
     });
 
-    it('opens the first of several lines with the bold lead-in, in place and lifted', () => {
-        const { unmount } = render(<FormNotice lead="Heads up." lines={['First line.', 'Second line.']} />);
-        let lead = screen.getByText('Heads up.');
-        expect(lead.tagName).toBe('STRONG');
-        expect(lead.closest('p')).toHaveTextContent('Heads up. First line.');
+    it('keeps a title above several lines, in place and lifted', () => {
+        const { unmount } = render(<FormNotice title="Heads up." lines={['First line.', 'Second line.']} />);
+        let title = screen.getByText('Heads up.');
+        expect(title.tagName).toBe('DIV');
+        expect(title.nextElementSibling).toContainElement(screen.getByText('First line.'));
         unmount();
         render(
             <FormPage>
-                <FormNotice lead="Heads up." lines={['First line.', 'Second line.']} />
+                <FormNotice title="Heads up." lines={['First line.', 'Second line.']} />
             </FormPage>,
         );
-        lead = screen.getByText('Heads up.');
-        expect(lead.closest('p')).toHaveTextContent('Heads up. First line.');
+        title = screen.getByText('Heads up.');
+        expect(title.nextElementSibling).toContainElement(screen.getByText('First line.'));
         expect(screen.getByText('Second line.').tagName).toBe('P');
     });
 

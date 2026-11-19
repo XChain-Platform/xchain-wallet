@@ -16,7 +16,10 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
-    'ui.qrScanner.scanWithCamera': 'Scan with camera',
+    'ui.field.optional': 'Optional',
+    'ui.field.about': 'About {label}',
+    'ui.field.clear': 'Clear {label}',
+    'ui.qrScanner.scanWithCamera': 'Scan with Camera',
     'ui.qrScanner.scanningPointTheCameraAt': 'Scanning… point the camera at a QR code.',
     'ui.qrScanner.opensTheCameraToRead': 'Opens the camera to read a QR code.',
     'ui.qrScanner.qrScanner': 'QR scanner',
@@ -44,13 +47,12 @@ const messages = {
         "Camera access isn't available in this browser. Paste the code below instead.",
     'ui.qrScanner.xchainWalletUsesTheCamera':
         'XChain Wallet uses the camera only to scan QR codes while this scanner is open. You can paste the code instead.',
-    'ui.qrScanner.continueToCamera': 'Continue to camera',
+    'ui.qrScanner.continueToCamera': 'Continue to Camera',
     'ui.qrScanner.startingCamera': 'Starting camera…',
     'ui.feeSelector.feePriorityHelpLabel': 'Fee priority help',
     'ui.feeSelector.pickHowFastThisTransaction':
         'Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate.',
     'ui.feeSelector.min': 'min',
-    'ui.feeSelector.feeEstimateUnavailableForThis': 'Fee estimate unavailable for this network.',
     'ui.feeSelector.slow': 'Slow',
     'ui.feeSelector.normal': 'Normal',
     'ui.feeSelector.fast': 'Fast',
@@ -61,8 +63,6 @@ const messages = {
     'ui.feeSelector.customFeeRate': 'Custom fee rate ({unit})',
     'ui.feeSelector.editFeeRate': 'Edit fee rate ({unit})',
     'ui.feeSelector.selectToEditTheFee': 'Select to edit the fee rate',
-    'ui.feeSelector.liveFeeEstimateUnavailableUsing':
-        'Live fee estimate unavailable. Using safe default rates. Custom fees remain available.',
     'ui.animatedQrFrames.animatedQr': 'Animated QR',
     'ui.animatedQrFrames.preparing': 'Preparing {qrAlt}',
     'ui.animatedQrFrames.frame': 'Frame',
@@ -74,11 +74,13 @@ const messages = {
     'ui.animatedQrFrames.prev': 'Prev',
     'ui.animatedQrFrames.nextFrame': 'Next frame',
     'ui.chainPicker.selectANetwork': 'Select a network',
+    'ui.networkPicker.selectNetwork': 'Select {network}',
+    'ui.networkPicker.rowDescription': '{ticker} · {network}',
     'ui.addressCombobox.contact': 'Contact',
     'ui.addressCombobox.recent': 'Recent',
     'ui.formErrorSummary.formErrors': 'Form errors',
-    'ui.formErrorSummary.fixThisField': 'Fix this field:',
-    'ui.formErrorSummary.fixTheseFields': 'Fix these {length} fields:',
+    'ui.formErrorSummary.fixThisField': 'Fix 1 thing to continue',
+    'ui.formErrorSummary.fixTheseFields': 'Fix {length} things to continue',
     'ui.iconSelect.select': 'Select…',
     'ui.iconSelect.options': 'Options',
     'ui.copyButton.copyValue': 'Copy value',

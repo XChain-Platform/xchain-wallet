@@ -67,7 +67,7 @@ function mountMintSettings(tokenInfo = Promise.resolve(TOKEN_INFO)) {
 // address list resolves and a mint field holds text, and a click on a
 // disabled button is silently dropped.
 async function submitWhenEnabled() {
-    const button = screen.getByRole('button', { name: /update token/i });
+    const button = screen.getByRole('button', { name: /update mint settings/i });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
 }
@@ -81,53 +81,55 @@ afterEach(() => {
 
 describe('TokenAdminForm mint setting validation', () => {
     it.each([
-        ['Max mint per transaction (optional)', '1,000', 'Max mint per transaction must be a positive number.'],
-        ['Max mint per address (optional)', 'Infinity', 'Max mint per address must be a positive number.'],
-        ['Mint supply now (optional)', 'many', 'Mint supply must be a positive number.'],
-        ['Minting opens at block (optional)', '10.5', 'Minting start must be a whole block number.'],
-        ['Minting closes at block (optional)', 'later', 'Minting close must be a whole block number.'],
+        ['Max mint per transaction', '1,000', 'Max mint per transaction must be a positive number.'],
+        ['Max mint per address', 'Infinity', 'Max mint per address must be a positive number.'],
+        ['Mint supply now', 'many', 'Mint supply must be a positive number.'],
+        ['Minting opens at block', '10.5', 'Minting start must be a whole block number.'],
+        ['Minting closes at block', 'later', 'Minting close must be a whole block number.'],
     ])('refuses malformed text in %s before composing', async (label, value, message) => {
         const composeForConfirm = mountMintSettings();
         fireEvent.change(await screen.findByLabelText(label), { target: { value } });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(message);
+        // The failing field alone is outlined.
+        expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('keeps a mint setting typed before the token record arrives', async () => {
         let resolveTokenInfo;
         const composeForConfirm = mountMintSettings(new Promise((resolve) => { resolveTokenInfo = resolve; }));
-        const field = await screen.findByLabelText('Max mint per transaction (optional)');
+        const field = await screen.findByLabelText('Max mint per transaction');
         fireEvent.change(field, { target: { value: '1,000' } });
 
         await act(async () => { resolveTokenInfo({ ...TOKEN_INFO, mintMax: '500' }); });
 
         expect(field).toHaveValue('1,000');
         await submitWhenEnabled();
-        expect(await screen.findByRole('alert')).toHaveTextContent('Max mint per transaction must be a positive number.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Max mint per transaction must be a positive number.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('requires an amount before accepting a new-supply destination', async () => {
         const composeForConfirm = mountMintSettings();
-        fireEvent.change(await screen.findByLabelText('Send that new supply to (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Send that new supply to'), {
             target: { value: SOURCE.address },
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Sending new supply needs a mint supply amount.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Sending new supply needs a mint supply amount.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('rejects fractional mint settings for an indivisible token', async () => {
         const composeForConfirm = mountMintSettings();
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), {
             target: { value: '1.5' },
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Mint supply must be a whole number because MINTABLE is indivisible.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -137,26 +139,26 @@ describe('TokenAdminForm mint setting validation', () => {
         const composeForConfirm = mountMintSettings(Promise.resolve({
             ...TOKEN_INFO, maxSupply: '1000', totalSupply: '400',
         }));
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), {
             target: { value: '700' },
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Only 600 MINTABLE can still be minted.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Only 600 MINTABLE can still be minted.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('checks the new-supply destination against the selected chain', async () => {
         const composeForConfirm = mountMintSettings();
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), {
             target: { value: '10' },
         });
-        fireEvent.change(screen.getByLabelText('Send that new supply to (optional)'), {
+        fireEvent.change(screen.getByLabelText('Send that new supply to'), {
             target: { value: 'not-an-address' },
         });
         await submitWhenEnabled();
 
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i));
+        await waitFor(() => expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/not valid for Bitcoin/i));
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -166,10 +168,10 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
 
     it('refuses a mint supply that takes supply past the cap before composing', async () => {
         const composeForConfirm = mountMintSettings(Promise.resolve(CAPPED));
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '601' } });
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), { target: { value: '601' } });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Only 600 MINTABLE can still be minted.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -177,7 +179,7 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
 
     it('composes a mint supply that lands exactly on the cap', async () => {
         const composeForConfirm = mountMintSettings(Promise.resolve(CAPPED));
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '600' } });
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), { target: { value: '600' } });
         await submitWhenEnabled();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
@@ -185,7 +187,7 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
 
     it('composes any mint supply for an uncapped token', async () => {
         const composeForConfirm = mountMintSettings(Promise.resolve({ ...TOKEN_INFO, totalSupply: '400', maxSupply: null }));
-        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '99999' } });
+        fireEvent.change(await screen.findByLabelText('Mint supply now'), { target: { value: '99999' } });
         await submitWhenEnabled();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
@@ -193,7 +195,7 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
 });
 
 describe('TokenAdminForm callback payout token', () => {
-    function mountCallbackSettings(payoutInfo) {
+    function mountCallbackSettings(payoutInfo, callbackTick) {
         const composeForConfirm = vi.fn();
         const target = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
@@ -202,7 +204,9 @@ describe('TokenAdminForm callback payout token', () => {
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
             getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve(
-                tick === 'MINTABLE' ? { ...TOKEN_INFO, creator: SOURCE.address, totalSupply: '0' } : payoutInfo(tick),
+                tick === 'MINTABLE'
+                    ? { ...TOKEN_INFO, creator: SOURCE.address, totalSupply: '0', callbackTick }
+                    : payoutInfo(tick),
             )),
             getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
             getHoldersForToken: vi.fn().mockResolvedValue([]),
@@ -231,35 +235,35 @@ describe('TokenAdminForm callback payout token', () => {
         return composeForConfirm;
     }
 
-    async function fillCallback(tick) {
-        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: tick } });
+    async function fillCallback() {
+        await screen.findByRole('button', { name: /^Callback token:/ });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '950000' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: /update token/i })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: /update callback settings/i })).toBeEnabled());
         // Let the payout token lookup settle before submitting.
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        fireEvent.click(screen.getByRole('button', { name: /update callback settings/i }));
     }
 
     it('refuses the chain coin as the payout token', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'x', totalSupply: '1' }));
-        await fillCallback('BTC');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'x', totalSupply: '1' }), 'BTC');
+        await fillCallback();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('BTC is Bitcoin itself, not an XChain token.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a payout token that does not exist', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: null, locks: {}, creator: null, totalSupply: null, canonicalTick: null }));
-        await fillCallback('NOPE');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: null, locks: {}, creator: null, totalSupply: null, canonicalTick: null }), 'NOPE');
+        await fillCallback();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('No token named NOPE exists on');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('composes a callback that pays in an existing token', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'bc1qpayoutissuer', totalSupply: '1000' }));
-        await fillCallback('PAYTOK');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'bc1qpayoutissuer', totalSupply: '1000' }), 'PAYTOK');
+        await fillCallback();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
     });

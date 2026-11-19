@@ -23,8 +23,7 @@ const SHELLS = {
 };
 
 // Every entry stays on one line so an exception explains itself in review.
-const UNREACHABLE_ROUTE_BASELINE = Object.freeze({
-});
+const UNREACHABLE_ROUTE_BASELINE = Object.freeze({});
 
 function registeredRoutes(sources) {
     const routes = new Set();
@@ -86,8 +85,16 @@ function screenTargets(sources) {
         const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
         traverse(ast, {
             CallExpression(path) {
-                if (!path.findParent((parent) => parent.isJSXAttribute())) return;
                 const { callee } = path.node;
+                // The token page's issuer actions (G12) open their forms through
+                // one map of handlers, each calling openOwnerForm('view', ctx);
+                // the map is passed to TokenDetail as a prop, so its calls sit
+                // in an object literal rather than in a JSX attribute.
+                if (callee.type === 'Identifier' && callee.name === 'openOwnerForm') {
+                    stringTargets(path.node.arguments[0], targets);
+                    return;
+                }
+                if (!path.findParent((parent) => parent.isJSXAttribute())) return;
                 const direct = callee.type === 'Identifier'
                     && ['setUnlockedView', 'openForm'].includes(callee.name);
                 const palette = callee.type === 'MemberExpression'
@@ -97,6 +104,9 @@ function screenTargets(sources) {
                     && callee.property.type === 'Identifier'
                     && callee.property.name === 'navigate';
                 if (direct || palette) stringTargets(path.node.arguments[0], targets);
+                // The wallet picker opens through its own helper, which also
+                // tells Settings which page Back should reopen.
+                if (callee.type === 'Identifier' && callee.name === 'openWalletPicker') targets.add('wallet-picker');
             },
         });
     }

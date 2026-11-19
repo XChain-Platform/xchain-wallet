@@ -10,13 +10,29 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard FromSection and
+// FeeSection.
+import { Button, FormNotice, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (From, main section, Memo, Network fee,
+// status slot, one action).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    MemoSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -24,18 +40,18 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { formatWithThousands, groupDecodedAmounts } from '../utils/amountFormat.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+// The Fees card and its pay-in-native switch render inside FeeSection.
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     estimateNativeSendFee,
@@ -45,11 +61,15 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
+import facts from './FactRows.module.css';
+import cbStyles from './CallbackForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
-import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import {
@@ -57,8 +77,11 @@ import {
     tokenIssuerEligibility,
 } from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
+const CALLBACK_PAYOUT_WARNING = 'The holder count and payout can change until the callback confirms. Holders can split balances across new addresses, so the final payout may be higher than shown.';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -101,7 +124,6 @@ export function callbackTermsError(info, payoutDivisibility = null) {
     }
     return null;
 }
-
 function sameCallbackTerms(left, right) {
     return String(left?.callbackTick || '').trim()
             === String(right?.callbackTick || '').trim()
@@ -152,8 +174,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         addressesByChain,
         loadError,
         chainId,
+        setChainId,
         fromAddress,
         setFromAddressId,
+        chainsWithAddresses,
         descriptor,
         signerReady,
         isWatcherMode,
@@ -173,17 +197,36 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             'No addresses on any network yet. Use Receive to generate one before a callback.',
     });
 
-    const ticker = initialTick || '';
+    const [ticker, setTicker] = useState(initialTick || '');
+    // Network stays an ordinary field even with a preset token. The token
+    // still decides the network: picking one moves Network to its chain, and
+    // moving Network off the token's chain clears the token (handleChainChange).
+    const [tickerChainId, setTickerChainId] = useState(
+        initialTick && initialChainId ? initialChainId : null,
+    );
+    useEffect(() => {
+        if (ticker && !tickerChainId && chainId) setTickerChainId(chainId);
+    }, [chainId, ticker, tickerChainId]);
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    // The standard sections' open state, held above the picker pages
+    // (early returns) so it survives them, and a count of Review presses so
+    // the section holding the refused value reopens on every press.
+    const formSections = useFormSections({ from: false, main: true, memo: false, fee: false });
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by an Execute Callback press (G22): an empty Token then shows red.
+    const [attempted, setAttempted] = useState(false);
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'main' | 'memo' | 'fee' | null} */ (null));
 
-    // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
-    // same typed-word rail as DESTROY / SWEEP).
+    // Typed-confirmation gate: a token recall takes every holder's tokens, so
+    // it keeps a typed word like DESTROY and SWEEP. The hint only says how to
+    // type it; what is recalled is said in the review's warnings card.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'CALLBACK');
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'RECALL');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -309,6 +352,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const handleChainChange = (nextChainId) => {
+        setChainId(nextChainId);
+        if (ticker && tickerChainId && tickerChainId !== nextChainId) {
+            setTicker('');
+            setTickerChainId(null);
+        }
+        setFormError(null);
+    };
     const [refreshing, setRefreshing] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
@@ -333,6 +384,24 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         if (memo.trim().length > 0) p.MEMO = memo.trim();
         return p;
     }, [ticker, memo]);
+    const quoteActionData = useMemo(() => {
+        const sourceValid = Boolean(fromAddress?.address && descriptor?.coin && descriptor?.networkKind
+            && isValidAddressForChain(fromAddress.address, descriptor.coin, descriptor.networkKind));
+        const memoValid = !/[|;]/.test(trimmedMemo) && !memoTooLong;
+        const tickerValid = Boolean(ticker) && !tickerReferenceError(ticker, { noun: 'Token ticker' });
+        const termsValid = configComplete && !callbackTermsError(assetInfo, payoutDivisibility);
+        if (!sourceValid || !tickerValid || !memoValid || !termsValid
+            || issuerEligibility.pending || issuerEligibility.error || !blockReached) return null;
+        return { action: 'CALLBACK', params: actionParams };
+    }, [actionParams, assetInfo, blockReached, configComplete, descriptor, fromAddress,
+        issuerEligibility.error, issuerEligibility.pending, memoTooLong, payoutDivisibility,
+        ticker, trimmedMemo]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     const decoded = useMemo(() => {
         // residual (§5.6 slice 5): the confirm page renders the intent
@@ -343,55 +412,92 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'CALLBACK',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, confirmModalOpen, actionParams, chainId]);
 
-    // Shared preview block: config, live holder count, total payout, and
-    // the dust-split caveat. Rendered on the form and the review stage.
+    const paysText = `${cbAmount} ${cbTick} per unit of ${ticker}`;
+    const blockText = cbBlock == null
+        ? ''
+        : `${String(cbBlock)}${currentHeight != null
+            ? (blockReached ? ' (reached)' : ` (current ${String(currentHeight)})`)
+            : ''}`;
+    const holdersText = summaryLoading && !summary
+        ? 'Loading…'
+        : summary
+            ? `${(Number(summary.recipientCount) || 0).toLocaleString('en-US')}${summary.partial ? '+' : ''}`
+            : 'Unavailable';
+    const payoutText = summary && summary.totalPayout != null
+        ? `${formatWithThousands(summary.totalPayout)} ${cbTick}${summary.partial ? ' (at least)' : ''}`
+        : '';
+    const callbackFacts = [
+        ...(configComplete ? [{ label: 'Pays holders', value: paysText }] : []),
+        ...(blockText ? [{ label: 'Allowed from block', value: blockText }] : []),
+        { label: 'Holders to pay', value: holdersText === 'Unavailable' ? 'Could not check' : holdersText },
+        ...(payoutText ? [{ label: 'Total payout', value: payoutText }] : []),
+    ];
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const reviewDecoded = useMemo(() => (decoded ? {
+        ...decoded,
+        warnings: [...(decoded.warnings || []), CALLBACK_PAYOUT_WARNING],
+    } : null), [decoded]);
+    const legacyComposed = useMemo(() => (reviewDecoded ? {
+        action: 'CALLBACK',
+        chainId,
+        decoded: reviewDecoded,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+        actionWarnings: ['CALLBACK'],
+    } : null), [chainId, quotedProtocolFee.free, quotedProtocolFee.known, reviewDecoded]);
+    const confirmComposed = useMemo(() => {
+        const composed = confirmAction.composed;
+        if (!composed?.decoded) return composed;
+        return {
+            ...composed,
+            decoded: {
+                ...composed.decoded,
+                warnings: [...(composed.decoded.warnings || []), CALLBACK_PAYOUT_WARNING],
+            },
+        };
+    }, [confirmAction.composed]);
+
+    // Shared preview block: config, live holder count and total payout.
     const previewBlock = (
-        <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Pays holders</dt>
-            <dd className={styles.detailsValue}>
+        <>
+        {/* The shared FactRows look: one row per fact, one divider per row.
+            Every label and value holds one line; a long value truncates and
+            keeps its full text in a title. Read-only facts carry no help icon. */}
+        <dl className={`${facts.list} ${cbStyles.facts}`} data-callback-facts="">
+            <dt className={facts.label} title="Pays holders">Pays holders</dt>
+            <dd className={facts.value} title={paysText}>
                 {configComplete
-                    ? `${cbAmount} ${cbTick} per unit of ${ticker}`
+                    ? paysText
                     : termsUnread
                         ? t('balances.unavailable')
-                        : <em>No callback configured for {ticker}.</em>}
+                        : <em>No callback configured for {ticker || 'this token'}.</em>}
             </dd>
             {cbBlock != null ? (
                 <>
-                    <dt className={styles.detailsLabel}>Allowed from block</dt>
-                    <dd className={styles.detailsValue}>
-                        {cbBlock.toLocaleString('en-US')}
-                        {currentHeight != null
-                            ? (blockReached ? ' (reached)' : ` (current ${currentHeight.toLocaleString('en-US')})`)
-                            : ''}
-                    </dd>
+                    <dt className={facts.label} title="Allowed from block">Allowed from block</dt>
+                    <dd className={facts.value} title={blockText}>{blockText}</dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Holders to pay</dt>
-            <dd className={styles.detailsValue}>
-                {summaryLoading && !summary
-                    ? 'Loading…'
-                    : summary
-                        ? `${(Number(summary.recipientCount) || 0).toLocaleString('en-US')}${summary.partial ? '+' : ''}`
-                        : 'Unavailable'}
-            </dd>
+            <dt className={facts.label} title="Holders to pay">Holders to pay</dt>
+            <dd className={facts.value} title={holdersText}>{holdersText}</dd>
             {summary && summary.totalPayout != null ? (
                 <>
-                    <dt className={styles.detailsLabel}>Total payout</dt>
-                    <dd className={styles.detailsValue}>
-                        {formatWithThousands(summary.totalPayout)} {cbTick}
-                        {summary.partial ? ' (at least)' : ''}
-                    </dd>
+                    <dt className={facts.label} title="Total payout">Total payout</dt>
+                    <dd className={facts.value} title={payoutText}>{payoutText}</dd>
                 </>
             ) : null}
         </dl>
+        <p className={styles.hint} data-callback-estimate-hint="">
+            The holder count and payout are indicative: they can change until the callback confirms. Holders can split their balance across new addresses to inflate the payout you owe, so the final cost may be higher than shown.
+        </p>
+        </>
     );
 
     async function openConfirmModal() {
@@ -406,7 +512,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
@@ -417,7 +523,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -474,7 +580,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     }
 
     function guardBeforeSign() {
+        // Each refusal names the section that holds its value, so
+        // that section opens with the message (From, Memo, else the main one).
+        setErrorSection('main');
         if (!chainId || !fromAddress) {
+            setErrorSection('from');
             setFormError('Pick a source address first.');
             return false;
         }
@@ -483,6 +593,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             descriptor.coin,
             descriptor.networkKind,
         )) {
+            setErrorSection('from');
             setFormError('The selected source address is not valid for this network.');
             return false;
         }
@@ -504,7 +615,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             return false;
         }
         if (!configComplete) {
-            setFormError(`${ticker} has no callback configured, so there is nothing to recall. Set the callback token and payout first.`);
             return false;
         }
         const termsError = callbackTermsError(assetInfo, payoutDivisibility);
@@ -514,11 +624,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const m = trimmedMemo;
         if (m.includes('|') || m.includes(';')) {
+            setErrorSection('memo');
             setFormError('Memo cannot contain "|" or ";".');
             return false;
         }
         // Refuse a memo the indexer would reject before the form composes it.
         if (memoTooLong) {
+            setErrorSection('memo');
             setFormError(memoTooLong);
             return false;
         }
@@ -530,7 +642,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     async function refreshBeforeReview() {
         if (demoWallet) {
             if (!blockReached) {
-                return `Callback is not allowed until block ${cbBlock?.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${String(cbBlock)}.`;
             }
             return null;
         }
@@ -575,7 +687,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setCurrentHeight(height);
             const freshBlock = Number(freshInfo.callbackBlock);
             if (height < freshBlock) {
-                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The network is at ${height.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${String(freshBlock)}. The network is at ${String(height)}.`;
             }
             if (typeof messaging?.tokenHolderSummary !== 'function') {
                 return 'Could not refresh the callback payout. Try again.';
@@ -629,8 +741,21 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        // Every press counts, so the section that holds the refused
+        // value opens again even after the user closed it.
+        setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty Token is marked on the field and takes the cursor.
+        if (!ticker) {
+            setErrorSection('main');
+            setFormError(null);
+            setTimeout(() => document.getElementById('callback-token')?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
+        // A token with no callback set stops here with no second notice:
+        // its Pays holders row already reads "No callback configured" (U86).
         if (refreshing || !guardBeforeSign()) return;
         setFormError(null);
         setRefreshing(true);
@@ -640,6 +765,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(refreshError);
             return;
         }
+        setTypedConfirm('');
         if (!isWatcherMode) {
             openConfirmModal();
             return;
@@ -693,17 +819,19 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting' || refreshing}
-            title={stage === 'review' || stage === 'submitting' ? 'Review callback' : 'Execute callback'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Token Recall' : 'Recall Tokens'}
         />
     );
     const wrap = (children) => (
@@ -731,12 +859,12 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // confirming and no holder is being paid yet.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="callback" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="token recall" unsaved={result?.unsaved} />,
             );
         }
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Callback broadcast</h2>
+                <h2 className={styles.successTitle}>Token recall broadcast</h2>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
@@ -750,113 +878,80 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     {' '}once this confirms and indexes.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
     }
 
-    const dustNote = (
-        <p className={styles.hint}>
-            The holder count and payout are indicative: they can change until the callback
-            confirms. Holders can split their balance across new addresses to inflate the
-            payout you owe, so the final cost may be higher than shown.
-        </p>
-    );
-
     if (stage === 'review' || stage === 'submitting') {
-        return wrapForm(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review callback"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Call back'}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={reviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        <Input
+                            label="Type RECALL to confirm"
+                            help={t('common.typedConfirmationHint', { word: 'RECALL' })}
+                            value={typedConfirm}
+                            onChange={(event) => setTypedConfirm(event.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    </>
                 )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <DetailRow label="Token" value={actionParams.TICK} />
-                    {actionParams.MEMO ? <DetailRow label="Memo" value={actionParams.MEMO} /> : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {previewBlock}
-                {dustNote}
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the signed
-                        transaction to a Full-mode wallet to broadcast.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                <Input
-                    label="Type CALLBACK to confirm"
-                    hint={t('common.typedConfirmationCallbackHint')}
-                    value={typedConfirm}
-                    onChange={(e) => setTypedConfirm(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            </FormPage>,
+                summary={{
+                    verb: t('components.confirmSummary.verbExecuteCallback'),
+                    ...(actionParams.TICK ? { ticker: String(actionParams.TICK).toUpperCase() } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: callbackFacts,
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     if (confirmModalOpen) {
         return (
             <ActionConfirmScreen
-                confirmAction={confirmAction}
+                confirmAction={{ ...confirmAction, composed: confirmComposed }}
+                summary={{
+                    verb: t('components.confirmSummary.verbExecuteCallback'),
+                    ...(actionParams.TICK ? { ticker: String(actionParams.TICK).toUpperCase() } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: callbackFacts,
+                }}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -868,17 +963,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     ? hwStatus === 'available'
                     : (signerReady || password.length > 0)) && typedConfirmOk}
                 extraCredentials={(
-                    <>
-                        {previewBlock}
-                        {dustNote}
-                        <Input
-                            label='Type "CALLBACK" to confirm'
-                            hint={t('common.typedConfirmationCallbackReviewHint')}
-                            value={typedConfirm}
-                            onChange={(e) => setTypedConfirm(e.target.value)}
-                            autoComplete="off"
-                        />
-                    </>
+                    <Input
+                        label='Type "RECALL" to confirm'
+                        help={t('common.typedConfirmationHint', { word: 'RECALL' })}
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        autoComplete="off"
+                    />
                 )}
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -894,9 +985,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={handleChainChange}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -907,101 +999,144 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                // CALLBACK recalls a token's supply; the network coin cannot be called back.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
+                onSelect={(selection) => {
+                    const nextChainId = String(selection.chainId || chainId || '');
+                    setTicker(String(selection.tick || ''));
+                    setTickerChainId(nextChainId || null);
+                    if (nextChainId) setChainId(nextChainId);
+                    setTokenPickerOpen(false);
+                    setFormError(null);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    // Section helpers. The section holding the last refusal reopens
+    // on every Review press.
+    const errorKey = (id) => (
+        (formError && errorSection === id) || (id === 'main' && attempted && !ticker) ? reviewAttempt + 1 : 0
+    );
     return wrapForm(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
-            label="Execute callback"
+            label="Recall tokens"
             onSubmit={handleReview}
-            status={formError || issuerEligibility.error ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
-            ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            data-form-standard="execute-callback"
+            status={[formError || issuerEligibility.error ? (
+                <StatusMessage key="error" variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            ) : null]}
+            action={(
+                <FormAction
+                    icon={<Icon.ContractIcon />}
                     loading={refreshing || confirmAction.composing}
-                    disabled={!fromAddress
-                        || issuerEligibility.pending
-                        || !!issuerEligibility.error
-                        || !configComplete
-                        || !!memoTooLong
+                    // G22: enabled whatever the fields hold; a press with
+                    // the Token empty marks it, and every other refusal
+                    // (no callback set, memo too long) shows in the slot.
+                    disabled={issuerEligibility.pending
                         || refreshing
                         || confirmAction.composing}
                 >
-                    {!isWatcherMode ? 'Execute callback' : 'Preview'}
-                </Button>
+                    Recall Tokens
+                </FormAction>
             )}
-        >
-            <FormNotice variant="warning" role="alert" lead="Callback recalls everything.">
-                {`Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
-            </FormNotice>
-
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
-            ) : null}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From (token owner)"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
+            /* From holds the Network and the token owner's address. Network
+               is always the normal field: the Token picker moves it to the
+               token's chain, and a Network change off that chain clears the
+               token. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length
+                        ? chainsWithAddresses
+                        : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={handleChainChange}
+                    networkHelp={t('routes.callback.networkHelp')}
                     disabled={refreshing}
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The token owner's address. Only the owner can run a callback, so this must be the address that owns the token."
+                    missing={(
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    )}
+                    revealKey={errorKey('from')}
                 />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
             )}
-
-            {previewBlock}
-            {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
-            {termsUnread ? null : !configComplete ? (
-                <FormNotice variant="warning" role="alert">
-                    {`${ticker} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
-                </FormNotice>
-            ) : !blockReached ? (
-                <FormNotice variant="warning" role="alert">
-                    {`Callback is not allowed yet. It becomes available at block ${cbBlock?.toLocaleString('en-US') ?? ''}`
-                        + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}
-                </FormNotice>
-            ) : null}
-            {dustNote}
-
-            <Input
-                label="Memo (optional)"
-                hint={`${utf8ByteLength(trimmedMemo)} / ${MAX_MEMO_LENGTH} bytes.`}
-                error={memoTooLong || undefined}
-                value={memo}
-                onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
-                autoComplete="off"
-                disabled={refreshing}
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    customEstimate={feeCustomEstimate}
+                    disabled={refreshing}
+                    revealKey={errorKey('fee')}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: { ...nativeFee.toggleProps, disabled: refreshing },
+                    }}
+                />
+            )}
+        >
+            <FormSection
+                id="main"
+                title="Callback"
+                icon={Icon.ContractIcon}
+                {...formSections.bind('main')}
+                revealKey={errorKey('main')}
+                summary={ticker ? String(ticker).toUpperCase() : null}
+            >
+            {(
+                <TokenField
+                    id="callback-token"
+                    error={attempted && !ticker ? 'Pick the token whose callback to run.' : undefined}
+                    label="Token"
+                    help={t('routes.callback.tokenHelp')}
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
                     disabled={refreshing}
                 />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} disabled={refreshing} />
-        </FormPage>,
-    );
-}
+            )}
 
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
+            {/* The facts sit directly in the section, no card of their own. */}
+            {previewBlock}
+            {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
+            {termsUnread || !configComplete ? null : !blockReached ? (
+                <FormNotice variant="warning" role="alert">
+                    {`Callback is not allowed yet. It becomes available at block ${cbBlock == null ? '' : String(cbBlock)}`
+                        + `${currentHeight != null ? ` (network is at ${String(currentHeight)})` : ''}.`}
+                </FormNotice>
+            ) : null}
+            </FormSection>
+            {/* Memo is its own optional section holding only the memo: the
+                section title names the field and carries its count. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={errorKey('memo')}
+                summary={trimmedMemo || 'None'}
+                maxLength={MAX_MEMO_LENGTH}
+                error={memoTooLong || undefined}
+                value={memo}
+                onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
+                disabled={refreshing}
+            />
+        </FormFrame>,
     );
 }

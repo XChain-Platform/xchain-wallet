@@ -21,6 +21,19 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
+
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about the opening chain.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'BTC' })}>Pick BTC</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -95,7 +108,7 @@ function mount({ settings, prefill, addresses = ADDRESSES, overrides = {}, onCha
     return messaging;
 }
 
-const fromField = () => screen.getByLabelText(/^From$/);
+const fromField = () => screen.getByLabelText('From address');
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
@@ -111,7 +124,7 @@ describe('Send opens on the last-used chain', () => {
             prefill: { chainId: LTC, tick: 'LTCASSET' },
         });
         await waitFor(() => expect(fromField().value).toBe(LTC_FROM));
-        expect(screen.getByLabelText('Token')).toHaveValue('LTCASSET');
+        expect(screen.getByRole('button', { name: 'Asset: LTCASSET on Litecoin' })).toBeTruthy();
         // And stays: the load must not re-point a prefilled form.
         await new Promise((r) => { setTimeout(r, 50); });
         expect(fromField().value).toBe(LTC_FROM);
@@ -141,8 +154,10 @@ describe('Send opens on the last-used chain', () => {
         });
 
         await waitFor(() => expect(fromField().value).toBe(testnetAddress.address));
-        expect(screen.getByRole('button', { name: /Change asset \(currently TBTC\)/ })).toBeTruthy();
-        expect(screen.queryByText('TBTC')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Asset: TBTC on Bitcoin' })).toBeTruthy();
+        // The ticker shows once, inside the Asset field, with no testnet tag.
+        const assetField = screen.getByRole('button', { name: 'Asset: TBTC on Bitcoin' });
+        screen.getAllByText('TBTC').forEach((node) => expect(assetField).toContainElement(node));
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
@@ -203,7 +218,8 @@ describe('Send resets asset-specific draft fields', () => {
 
         const amount = await screen.findByLabelText('Amount (PEPE)');
         expect(amount).toHaveValue('1.123456789');
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Asset: PEPE/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick BTC' }));
 
         expect(await screen.findByLabelText('Amount (BTC)')).toHaveValue('');
         expect(screen.getByText('Token changed. The amount was cleared because the new token may use different decimal places.'))
@@ -219,7 +235,7 @@ describe('Send resets asset-specific draft fields', () => {
         });
         await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '77' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(77, BTC) } });
         expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toContain('Custom: 77');
 
         const to = screen.getByLabelText(/^To$/);

@@ -67,7 +67,9 @@ assert.ok(/export function AdvancedActionsForm\b/.test(src), 'AdvancedActionsFor
 // its own unit suite is legitimate and desirable, and the original
 // count-every-export form flagged exactly that (formatValidationError, which has
 // five tests against it) as if it were a second component.
-const componentExports = (src.match(/^export\s+(?:function|const|class)\s+([A-Z]\w*)/gm) || []);
+// PascalCase means a capital then a lower-case letter somewhere: an
+// UPPER_SNAKE constant such as ACTIONS_WITH_DEDICATED_FORMS is data, not a screen.
+const componentExports = (src.match(/^export\s+(?:function|const|class)\s+([A-Z](?=\w*[a-z])\w*)/gm) || []);
 assert.equal(
     componentExports.length,
     1,
@@ -126,8 +128,8 @@ for (const dedicated of ['AIRDROP', 'DIVIDEND', 'DISPENSER', 'BROADCAST', 'ISSUE
     );
 }
 assert.ok(
-    /dedicated form available/.test(src),
-    'dedicated-form decoration shows "(dedicated form available)" label',
+    !/dedicated form available/.test(src),
+    'the picker no longer prints "(dedicated form available)" beside an action',
 );
 
 // --- 6. Core flow guard-rails ----------------------------------------
@@ -247,7 +249,7 @@ for (const [shell, msgPath] of [
     assert.ok(/sendMessage\('sdk\.validateAction'/.test(m), `${shell} routes validateAction`);
 }
 
-// --- 10. ActionsMenu entry + App.jsx sub-route ----------------------
+// --- 10. Settings entry + App.jsx sub-route -------------------------
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -258,15 +260,15 @@ for (const [shell, appPath] of [
     assert.ok(app.includes('AdvancedActionsForm'), `${shell} App.jsx imports AdvancedActionsForm`);
     assert.ok(app.includes("'advanced'"), `${shell} App.jsx tracks the advanced sub-route`);
     assert.ok(
-        surfacesEntry(app, 'advanced', 'Advanced action'),
-        `${shell} App.jsx registers the Advanced action entry`,
+        !surfacesEntry(app, 'advanced', 'Advanced action'),
+        `${shell} keeps Advanced action out of All actions`,
     );
     assert.ok(
-        /onAdvanced:\s*\(\)\s*=>\s*setUnlockedView\('advanced'\)/.test(app),
-        `${shell} App.jsx wires onAdvanced to the advanced sub-route`,
+        /onNavigateToAdvanced=\{\(\) => setUnlockedView\('advanced'\)\}/.test(app),
+        `${shell} Settings wires Advanced action to the advanced sub-route`,
     );
 }
 
 console.log(
-    'OK: advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + ActionsMenu entry + App.jsx sub-route in popup/web/desktop)',
+    'OK: advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + Settings entry + App.jsx sub-route in popup/web/desktop)',
 );

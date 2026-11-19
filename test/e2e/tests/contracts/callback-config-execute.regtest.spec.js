@@ -49,6 +49,7 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    expectManageTokenView,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -60,16 +61,20 @@ import {
     REGTEST_COIN,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     healVenueClock,
     mintXchain,
     nudgeChain,
-    selectVenueChain,
     seedPrices,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm as approveWhenReady,
+    searchMyTokens,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -97,11 +102,9 @@ async function explorerJson(path) {
  */
 async function approveConfirm(page, what = 'this action') {
     const modal = await expectConfirmModal(page, what, 90_000);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
     return modal;
 }
 
@@ -115,18 +118,19 @@ async function readDoneTxid(page, timeoutMs = 180_000) {
     return txid;
 }
 
-/** Opens My Tokens (via the command palette) filtered to one ticker, and opens it. */
+/** Opens My Tokens (via the wallet menu) filtered to one ticker, and opens it. */
 async function openManageToken(page, tick) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
-    const search = main.getByLabel('Search your tokens by ticker or description');
-    await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });
-    await search.fill(tick);
+    // The search sits in the title bar's "Filter tokens" menu, outside main.
+    await searchMyTokens(page, tick);
     const row = main.getByRole('button', { name: `Open ${tick} token details`, exact: true });
     await expect(row.first(), `My Tokens does not list ${tick}`).toBeVisible({ timeout: 60_000 });
     await row.first().click();
-    await expect(main.getByRole('heading', { name: tick, exact: true }), 'Manage Token did not open on this ticker')
-        .toBeVisible({ timeout: 30_000 });
+    // The token opens as the "<TICK> token management" view beside the list.
+    await expectManageTokenView(page, 'Manage Token did not open on this ticker');
+    await expect(page.getByRole('region', { name: `${tick} token management`, exact: true }),
+        `the management view is not showing ${tick}`).toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -134,19 +138,18 @@ async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         const main = await openManageToken(page, tick);
-        const more = main.getByRole('button', { name: 'More', exact: true });
-        await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
-        await more.click();
-        const execute = main.getByRole('menuitem', { name: 'Execute callback', exact: true });
-        if (await execute.isVisible()) {
+        // "Recall tokens" is an Actions row that stays aria-disabled until
+        // the token's callback config has been read back from the chain.
+        const execute = main.locator('[data-action-id="execute-callback"]').first();
+        await expect(execute, 'Manage Token has no "Recall tokens" action').toBeVisible({ timeout: 30_000 });
+        if ((await execute.getAttribute('aria-disabled')) !== 'true') {
             await execute.click();
             return main;
         }
-        await page.keyboard.press('Escape');
         await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
     }
-    throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
+    throw new Error(`Manage Token did not offer "Recall tokens" within ${timeoutMs} ms`);
 }
 
 /** The block height printed on the Callback settings form ("Current block: N."). */
@@ -193,9 +196,8 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            owner = await main.getByLabel('From').inputValue();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            owner = await readIssueSource(main);
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(owner, FUNDING);
@@ -213,12 +215,9 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            expect(await main.getByLabel('From').inputValue(), 'still signing with the funded address').toBe(owner);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            expect(await readIssueSource(main), 'still signing with the funded address').toBe(owner);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
             await approveConfirm(page, 'the ISSUE');
             const txid = await readDoneTxid(page);
@@ -232,16 +231,25 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await clickManageTokenAction(main, 'Callback settings');
 
             main = page.getByRole('main');
-            await expect(main.getByLabel('Callback token'), 'Callback settings never rendered its fields')
+            // Callback token is a token field: a button that opens the token
+            // picker, never a typed box.
+            const callbackToken = main.getByRole('button', { name: /^Callback token:/ });
+            await expect(callbackToken, 'Callback settings never rendered its fields')
                 .toBeVisible({ timeout: 30_000 });
 
             const currentHeight = await readCurrentHeightFromForm(main);
             cbBlock = await callbackBlockAhead(currentHeight);
 
-            await main.getByLabel('Callback token').fill(PAYOUT_TICK);
-            await main.getByLabel('Payout per unit').fill(PAYOUT_AMOUNT);
-            await main.getByLabel('Callback allowed from block').fill(String(cbBlock));
-            await main.getByRole('button', { name: 'Update token', exact: true }).click();
+            await callbackToken.click();
+            await searchTokenPicker(page, PAYOUT_TICK);
+            await page.getByRole('button', { name: new RegExp(`^Select ${PAYOUT_TICK} on `) }).first()
+                .click({ timeout: 30_000 });
+            main = page.getByRole('main');
+            await expect(main.getByRole('button', { name: new RegExp(`^Callback token: ${PAYOUT_TICK} on `) }))
+                .toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Payout per unit').fill(PAYOUT_AMOUNT);
+            await fieldByLabel(main, 'Callback allowed from block').fill(String(cbBlock));
+            await main.getByRole('button', { name: 'Update Callback Settings', exact: true }).click();
 
             await approveConfirm(page, 'the callback settings update');
             const txid = await readDoneTxid(page);
@@ -270,8 +278,8 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             // (assetInfo, the indexer watermark), so re-opening from My Tokens
             // is what proves the BLOCK GATE lifted rather than assuming it did.
             const main = await openExecuteCallbackWhenConfigured(page, TICK);
-            const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
-            await expect(execute, 'Execute callback never became available (block gate or missing config)')
+            const execute = main.getByRole('button', { name: 'Recall Tokens', exact: true });
+            await expect(execute, 'Recall tokens never became available (block gate or missing config)')
                 .toBeEnabled({ timeout: 60_000 });
             await execute.click();
 
@@ -301,15 +309,12 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
  */
 async function approveConfirmWithTypedCallback(page) {
     const modal = await expectConfirmModal(page, 'the callback recall', 90_000);
-    const typed = page.getByLabel('Type "CALLBACK" to confirm');
-    await expect(typed, 'the confirm screen carries no typed-confirmation field for CALLBACK')
+    const typed = fieldByLabel(page, 'Type "RECALL" to confirm');
+    await expect(typed, 'the confirm screen carries no typed-confirmation field for RECALL')
         .toBeVisible({ timeout: 30_000 });
-    await typed.fill('CALLBACK');
-    const password = page.getByLabel('Password', { exact: true });
+    await typed.fill('RECALL');
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled for the typed CALLBACK confirmation')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
     return modal;
 }

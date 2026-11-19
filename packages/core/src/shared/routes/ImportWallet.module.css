@@ -1,33 +1,17 @@
-.mnemonicLabel {
-    display: block;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-/* The header is its own child of the form, which spaces children by the form
-   gap; the negative margin brings the label to the shared label gap above
-   its field, as the Input and Textarea labels sit. */
-.mnemonicHeader {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-1) var(--xc-space-2);
-    min-width: 0;
-    margin-bottom: calc(var(--xc-label-gap) - var(--xc-form-gap));
-}
-
-.mnemonicHeader > * {
-    min-width: 0;
-}
-
+/* 8px is the spacing unit (G80). */
 .scannerBox {
-    margin-bottom: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
     padding: var(--xc-space-2);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
+}
+
+/* A scan message in place of the camera box: no frame of its own, and 8px
+   above (under the tab row) and below (above the field). The form stack adds
+   its gap between children, so the margins are the 8px less that gap. */
+.scannerNotice {
+    margin-block: calc(var(--xc-space-2) - var(--xc-form-gap)) calc(var(--xc-space-2) - var(--xc-form-gap));
 }
 
 .dropZone {
@@ -43,7 +27,10 @@
 }
 
 .dropHint {
-    margin: calc(var(--xc-space-1) / -2) 0 var(--xc-space-3);
+    /* The global paragraph measure (70ch of extra-small text) ends short of
+       the card; the hint spans the full form card like the button below it. */
+    max-width: none;
+    margin: calc(var(--xc-space-1) / -2) 0 var(--xc-space-2);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     line-height: 1.3;
@@ -76,8 +63,16 @@
     font-family: var(--xc-font-mono);
 }
 
+.walletTypeIcon {
+    display: block;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+    object-fit: contain;
+}
+
+/* The form gap spaces this row like every other field; no extra top margin. */
 .advancedRow {
-    margin: var(--xc-space-3) 0 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -100,14 +95,44 @@
     overflow-wrap: anywhere;
 }
 
-.backupHint {
-    margin: 0 0 var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
+/* The chosen backup file's summary, in the drop area's place: the wallet's
+   initials tile, its name, the backup date, the file name and size, and a
+   Change File button, centred as the picture draws it. */
+.backupCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    text-align: center;
 }
 
-.backupPointerCard {
-    composes: card from '../../ui/Card.module.css';
-    margin-bottom: var(--xc-space-2);
-    word-break: break-all;
+/* A file over the card: an outline, so the card's own edge stays the shared one. */
+.backupCard[data-drop-active='true'] {
+    outline: 2px dashed var(--xc-accent-primary);
+    outline-offset: calc(var(--xc-space-1) / 2);
+}
+
+.backupCardName {
+    max-width: none;
+    margin: var(--xc-space-1) 0 0;
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.backupCardDate,
+.backupCardFile {
+    max-width: none;
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
+/* The button sits 8px under the file line. */
+.backupCardFile {
+    margin-block-end: var(--xc-space-1);
 }

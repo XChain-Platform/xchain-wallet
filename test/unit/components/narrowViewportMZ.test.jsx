@@ -26,7 +26,6 @@ vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', async () => {
 
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
-import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import { ToastHost, preloadToastStack, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { TokenField } from '../../../packages/core/src/shared/components/TokenField.jsx';
 import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
@@ -53,7 +52,7 @@ describe('shared M to Z components at a 320px viewport', () => {
     // The app loads the toast cards on idle after first paint; load them up front here.
     beforeAll(() => preloadToastStack());
 
-    it('keeps the searchable NetworkFilter toolbar inside its container', () => {
+    it('keeps the NetworkFilter trigger inside its container and opens the full-screen list', () => {
         const families = ['bitcoin', 'litecoin', 'dogecoin', 'ethereum', 'solana', 'dash', 'cosmos'];
         const chainRegistry = {
             byCoin: (coin) => [{ id: `${coin}-mainnet`, displayName: `${coin} network` }],
@@ -67,15 +66,15 @@ describe('shared M to Z components at a 320px viewport', () => {
             />,
         );
 
+        // The list is the full-screen network picker, so it cannot overflow
+        // the toolbar the way the old dropdown could.
         fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
-        expect(screen.getByRole('listbox')).toBeVisible();
-        expect(screen.getByRole('searchbox', { name: 'Search networks' })).toBeVisible();
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeVisible();
+        expect(screen.getAllByRole('button', { name: /^Select / })).toHaveLength(families.length + 1);
 
         const source = css('NetworkFilter');
         expect(source).toMatch(/\.wrap\s*\{[^}]*min-width:\s*(?:0|min\(10rem, 100%\))/s);
         expect(source).toMatch(/\.trigger\s*\{[^}]*box-sizing:\s*border-box/s);
-        expect(source).toMatch(/\.search\s*\{[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/\.item\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
     });
 
     it('contains a NoticeModal card with long content and a reachable action', () => {
@@ -96,19 +95,6 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(source).toMatch(/\.overlay\s*\{[^}]*box-sizing:\s*border-box/s);
         expect(source).toMatch(/\.panel\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
         expect(source).toMatch(/\.title\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-    });
-
-    it('bounds the open PlatformSwitcher toolbar menu to the phone viewport', () => {
-        renderAt320(<PlatformSwitcher current="wallet" />);
-        fireEvent.click(screen.getByRole('button', { name: 'XChain platform sites' }));
-
-        expect(screen.getByRole('menu')).toBeVisible();
-        expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(1);
-
-        const source = css('PlatformSwitcher');
-        expect(source).toMatch(/\.menu\s*\{[^}]*box-sizing:\s*border-box[^}]*max-width:\s*calc\(100vw/s);
-        expect(source).toMatch(/\.item,\s*\n\.here\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/\.item > span:first-child,\s*\n\.here > span:first-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
     it('contains a TokenField row with an exceptionally long selection', () => {
@@ -186,7 +172,7 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(screen.getByTestId('result-screen-notice')).toBeVisible();
         expect(screen.getByTestId('result-screen-notice').textContent).toContain(title);
         expect(screen.getByRole('textbox', { name: 'Unsigned transaction code' })).toBeVisible();
-        expect(screen.getByRole('button', { name: 'Build another' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Build Another' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Done' })).toBeVisible();
 
         const source = css('WatcherExport');

@@ -21,15 +21,14 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: null }),
 }));
 
-const { NetworkEndpointsSection } = await import(
-    '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
-);
+const { EndpointsHarness } = await import('./networkRowHarness.jsx');
 
 function saveExplorer(value) {
-    render(<NetworkEndpointsSection />);
+    render(<EndpointsHarness />);
+    fireEvent.click(document.querySelector('[data-network-row="bitcoin-mainnet"] button'));
     const block = screen.getByRole('region', { name: 'Bitcoin' });
     fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), { target: { value } });
-    fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+    fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
     return block;
 }
 
@@ -40,13 +39,15 @@ describe('endpoint URL bounds', () => {
     it('refuses a URL longer than 2048 characters', () => {
         const block = saveExplorer(`https://example.com/${'a'.repeat(4096)}`);
         expect(updateSpy).not.toHaveBeenCalled();
-        expect(within(block).getByRole('alert')).toHaveTextContent('longer than 2048 characters');
+        expect(within(block).getAllByRole('alert').map((node) => node.textContent).join(' '))
+            .toContain('longer than 2048 characters');
     });
 
     it('refuses a URL carrying a user name and password', () => {
         const block = saveExplorer('https://user:secret@example.com/x');
         expect(updateSpy).not.toHaveBeenCalled();
-        expect(within(block).getByRole('alert')).toHaveTextContent('Remove the user name and password');
+        expect(within(block).getAllByRole('alert').map((node) => node.textContent).join(' '))
+            .toContain('Remove the user name and password');
     });
 
     it('still saves an https URL with an IDN host and a loopback http URL', () => {

@@ -14,6 +14,7 @@
 
 import { getRecentShellErrors } from './errorCapture.js';
 import { RUNTIME_MESSAGE_TIMEOUT_MS, sendMessage } from '../shared/chromeMessaging.js';
+import { SURFACE_ID } from '../shared/surfaceStateSync.js';
 
 export { sendMessage };
 
@@ -75,6 +76,9 @@ export function createWallet(opts) {
  * @param {string} opts.mnemonic
  * @param {string} [opts.name]
  * @param {string} [opts.bip39Passphrase]
+ * @param {string} [opts.wif]
+ * @param {string} [opts.chainId]
+ * @param {string} [opts.addressType]
  */
 export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
@@ -93,6 +97,37 @@ export function importBackupFresh(opts) {
 }
 
 /**
+ * Forgot Password (operator ruling 2026-11-16): which ways back this device
+ * offers. Pre-host; answers with the vault closed.
+ *
+ * @returns {Promise<{ hasWallet: boolean, phraseReset: boolean }>}
+ */
+export function recoveryStatus() {
+    return /** @type {any} */ (sendMessage('wallet.recovery.status'));
+}
+
+/**
+ * Reset the unlock password with one wallet's recovery phrase, erasing
+ * nothing, then unlock with the new password. Resolves with the unlock reply.
+ *
+ * @param {{ phrase: string, newPassword: string }} opts
+ */
+export function resetPasswordWithPhrase(opts) {
+    return /** @type {any} */ (sendMessage('wallet.recovery.resetWithPhrase', opts));
+}
+
+/**
+ * Prove a backup file would restore (file password, payload, wallet seals)
+ * without touching the vault. Forgot Password erases only after this resolves.
+ *
+ * @param {{ fileContent: string, password: string, walletPassword?: string }} opts
+ * @returns {Promise<{ verified: true, walletName: string, belongsToVault: boolean }>}
+ */
+export function verifyBackupForRestore(opts) {
+    return /** @type {any} */ (sendMessage('wallet.recovery.verifyBackup', opts));
+}
+
+/**
  * Clear the session master key and tear down the background host. Next
  * query of `session.status` returns `locked`.
  *
@@ -100,6 +135,16 @@ export function importBackupFresh(opts) {
  */
 export function lockWallet() {
     return /** @type {any} */ (sendMessage('wallet.lock'));
+}
+
+/** Locked screen (PC-16 Phase B): is auto pay still paying, for how many orders, up to how much. */
+export function lockedAutopayStatus() {
+    return /** @type {any} */ (sendMessage('autopay.locked.status'));
+}
+
+/** Locked screen Stop for auto pay; no password. */
+export function stopLockedAutopay() {
+    return /** @type {any} */ (sendMessage('autopay.locked.stop'));
 }
 
 /**
@@ -130,6 +175,38 @@ export function changePassword(opts) {
  */
 export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
+}
+
+/**
+ * Add a hardware wallet (keys stay on the device) to the open vault.
+ *
+ * @param {{ name: string, device: { vendor: string, model: string, deviceIdentifier: string, firmwareVersion: string | null },
+ *   accounts: Array<{ chainId: string, accountIndex: number, address: string, publicKey: string, derivationPath: string, addressType: string }> }} opts
+ * @returns {Promise<{ wallet: object, signer: object, accounts: object[], addresses: object[] }>}
+ */
+export function addHardwareWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.hardware.add', opts));
+}
+
+/**
+ * Create a fresh vault holding one hardware wallet (pre-host, like
+ * `wallet.create`).
+ *
+ * @param {{ password: string, name: string, device: object, accounts: object[] }} opts
+ * @returns {Promise<{ wallet: object, signer: object, accounts: object[], addresses: object[] }>}
+ */
+export function createHardwareWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.create.hardware', opts));
+}
+
+/**
+ * Balances for addresses a hardware wallet reported before it is saved.
+ *
+ * @param {{ items: Array<{ chainId: string, address: string }> }} opts
+ * @returns {Promise<Array<{ chainId: string, address: string, balance: string, fiat: string | null }>>}
+ */
+export function hardwareBalances(opts) {
+    return /** @type {any} */ (sendMessage('wallet.hardware.balances', opts));
 }
 
 /** @param {{ token: string }} opts */
@@ -294,6 +371,11 @@ export function verifyAction(req) {
  */
 export function getAddressesByChain(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));
+}
+
+/** Every wallet's public addresses in one read: { [walletId]: string[] }. */
+export function getAddressesByWallet() {
+    return /** @type {Promise<Record<string, string[]>>} */ (sendMessage('addresses.byWallet', {}));
 }
 
 /**
@@ -497,10 +579,9 @@ export function releaseEncoderInputs(opts) {
 }
 
 /**
- * Are the coins the held PSBT spends still unspent? The other
- * half of the Approve-time re-check, and the gate a RESUMED confirm (§5.4)
- * must pass before it may be approved at all - a stored session is by
- * construction the oldest PSBT in the wallet.
+ * Are the coins the held PSBT spends still unspent? This is the other half of
+ * the Approve-time re-check for a confirmation left open long enough for a
+ * competing transaction to spend one of its inputs.
  *
  * Answers `unknown` rather than `spent` for anything it could not observe, so
  * a dead explorer can never hard-block a good transaction (§4.2).
@@ -530,37 +611,28 @@ export function requoteNativeFee(opts) {
 }
 
 /**
- * Persist the in-flight confirm so a popup CLOSE (which MV3 does
- * on every focus loss, including the one a hardware prompt causes) costs a tap
- * instead of re-entering the whole form. Stored in `chrome.storage.session`,
- * so it dies with the browser session. This is the only shell that HAS that
- * store, which is what `supported` in the answer reports.
+ * Price a draft action's protocol fee for display before review.
  *
- * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
- * @returns {Promise<{ supported: boolean, stored: boolean }>}
+ * @param {{ chainId: string, source?: string, actionData: { action: string, params: object } }} opts
+ * @returns {Promise<object|null>} an sdk.quoteNativeFee answer when available
  */
-export function putConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
+export function quoteProtocolFee(opts) {
+    return /** @type {any} */ (sendMessage('action.quoteProtocolFee', opts));
 }
 
 /**
- * The stored confirms, for the Home resume card.
+ * The chain's published fee schedule (gas table, gas price, oracle prices).
  *
- * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
+ * @param {{ chainId: string }} opts
+ * @returns {Promise<object|null>} an sdk.getFeeSchedule answer, or null
  */
-export function listConfirmSessions() {
-    return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
+export function getFeeSchedule(opts) {
+    return /** @type {any} */ (sendMessage('sdk.getFeeSchedule', opts));
 }
 
-/**
- * Drop a stored confirm. Called on EVERY terminal state, not as
- * tidy-up: a session outliving its confirm invites a re-approve of a
- * transaction that may already be signed and broadcast (§5.3.4).
- *
- * @param {{ id: string }} opts
- */
-export function clearConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.clear', opts));
+/** Suggested network fee tiers from the chain encoder. @param {{ chainId: string }} opts */
+export function estimateFee(opts) {
+    return /** @type {any} */ (sendMessage('sdk.estimateFee', opts));
 }
 
 /**
@@ -860,8 +932,8 @@ export function importBackupPointerRequest(opts) {
 }
 
 /**
- * §48.3 / G149 : runtime chain activation. Seeds settings.fees +
- * ads.perChain for the chainId and derives the first address on that
+ * §48.3 / G149 : runtime chain activation. Seeds settings.fees
+ * for the chainId and derives the first address on that
  * chain for every existing account. Idempotent.
  *
  * @param {{ walletId: string, chainId: string, password: string, bip39Passphrase?: string, signerId?: string | null }} opts
@@ -1208,6 +1280,21 @@ export function deployChunkedHw(opts) {
 /** PC-38: in-flight chunked deploys (chunks already paid for on chain). */
 export function listPendingDeploys(req) {
     return /** @type {any} */ (sendMessage('pendingDeploys.listForWallet', req));
+}
+
+/** Multi-part file upload or resume. */
+export function fileMultipart(opts) {
+    return /** @type {any} */ (sendMessage('action.fileMultipart', opts));
+}
+
+/** In-flight multi-part file uploads for a wallet. */
+export function listPendingFileUploads(req) {
+    return /** @type {any} */ (sendMessage('pendingFileUploads.listForWallet', req));
+}
+
+/** Discard a saved multi-part file upload. */
+export function discardPendingFileUpload(req) {
+    return /** @type {any} */ (sendMessage('pendingFileUploads.discard', req));
 }
 
 /** @param {{ id: string }} req */
@@ -1741,6 +1828,11 @@ export function governanceVotes(req) {
     return /** @type {any} */ (sendMessage('governance.votes', req));
 }
 
+/** One address's live vote delegations. @param {{ chainId: string, address: string }} req */
+export function governanceVoteDelegations(req) {
+    return /** @type {any} */ (sendMessage('governance.voteDelegations', req));
+}
+
 /**
  * List BROADCAST actions published by an address. Backs the §42.7.5
  * Operator dashboard's Publishing activity section.
@@ -1761,6 +1853,27 @@ export function getBroadcastsForAddress(req) {
  */
 export function getAddressHistory(req) {
     return /** @type {any} */ (sendMessage('history.address', req));
+}
+
+/**
+ * One page of up to 20 addresses' token history, newest first, each action
+ * with its per-address balance effects (explorer POST /history). Home's value
+ * chart pages it by `before` (the previous page's next_cursor).
+ *
+ * @param {{ chainId: string, addresses: string[], before?: string, since?: number, until?: number, limit?: number }} req
+ */
+export function getWalletHistoryBatch(req) {
+    return /** @type {any} */ (sendMessage('history.walletBatch', req));
+}
+
+/**
+ * One page of up to 20 addresses' native coin history (explorer POST
+ * /native_history, the UTXO tracker's own answer), paged by `cursor`.
+ *
+ * @param {{ chainId: string, addresses: string[], cursor?: string, from_height?: number, from_time?: number, to_time?: number, limit?: number }} req
+ */
+export function getNativeHistoryBatch(req) {
+    return /** @type {any} */ (sendMessage('history.nativeBatch', req));
 }
 
 /**
@@ -1877,6 +1990,31 @@ export function listCoSignerAccounts(req) {
     return /** @type {any} */ (sendMessage('coSigner.list', req));
 }
 
+/** @param {{ walletId: string }} req */
+export function getCoSignerAccountBalances(req) {
+    return /** @type {any} */ (sendMessage('coSigner.balances', req));
+}
+
+/** @param {{ chainId: string, ticks: string[] }} req */
+export function resolveCoSignerTokenIds(req) {
+    return /** @type {any} */ (sendMessage('coSigner.resolveTokenIds', req));
+}
+
+/** Co-sign requests waiting on the owner for one agent account. @param {{ accountId: string }} req */
+export function listCoSignRequests(req) {
+    return /** @type {any} */ (sendMessage('coSign.pending', req));
+}
+
+/** @param {{ id: string }} req */
+export function refuseCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.refuse', req));
+}
+
+/** Bring the request's approval window forward to approve it there. @param {{ id: string }} req */
+export function focusCoSignRequest(req) {
+    return /** @type {any} */ (sendMessage('coSign.focus', req));
+}
+
 /** @param {{ id: string }} req */
 export function getCoSignerAccount(req) {
     return /** @type {any} */ (sendMessage('coSigner.get', req));
@@ -1921,6 +2059,16 @@ export function listMultisigReceiveAddresses(req) {
  */
 export function startMultisigSigningSession(req) {
     return /** @type {any} */ (sendMessage('multisigSign.start', req));
+}
+
+/** @param {object} req */
+export function startMultisigSend(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.startSend', req));
+}
+
+/** @param {{ walletId: string, envelope: object }} req */
+export function importMultisigSigningRequest(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.importRequest', req));
 }
 
 /** @param {{ sessionId: string }} req */
@@ -2051,6 +2199,11 @@ export function getTokenInfo(req) {
  */
 export function getSupplyHistory(req) {
     return /** @type {any} */ (sendMessage('token.supplyHistory', req));
+}
+
+/** @param {{ chainId: string, address: string, tick: string }} req */
+export function getMintedAmountForAddress(req) {
+    return /** @type {any} */ (sendMessage('token.mintedAmountForAddress', req));
 }
 
 /**
@@ -2403,6 +2556,9 @@ export function clearPriceAlert(req) {
 export function rearmPriceAlert(req) {
     return /** @type {any} */ (sendMessage('priceAlert.rearm', req));
 }
+export function listAlertInbox() { return /** @type {any} */ (sendMessage('alertInbox.list', {})); }
+export function markAlertRead(req) { return /** @type {any} */ (sendMessage('alertInbox.markRead', req)); }
+export function markAllAlertsRead() { return /** @type {any} */ (sendMessage('alertInbox.markAllRead', {})); }
 
 // §41.3.4 ORDER + §41.3.5 CANCEL signing lanes.
 export function orderAction(opts) {
@@ -2439,6 +2595,14 @@ export function buildCoinpayPsbtRequest(opts) {
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpayObligationsForAddress(req) {
     return /** @type {any} */ (sendMessage('coinpays.obligationsForAddress', req));
+}
+/**
+ * What each listed payment buys, in one call for the whole Payments due list.
+ *
+ * @param {{ obligations: Array<{ chainId: string, address: string, orderMatchActionIndex: string, coinAmount: unknown, coinTicker?: string }> }} req
+ */
+export function getCoinpayMatchSides(req) {
+    return /** @type {any} */ (sendMessage('coinpays.matchSides', req));
 }
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpaysForAddress(req) {
@@ -2783,6 +2947,11 @@ export function restoreConnectedSite(req) {
     return /** @type {any} */ (sendMessage('sites.restore', req));
 }
 
+/** Live sign-request throttle: limits plus each site's used count and wait. */
+export function getSignThrottleStatus() {
+    return /** @type {Promise<{ burst: number, windowMs: number, sites: Array<{ origin: string, used: number, waitMs: number }> }>} */ (sendMessage('sites.throttleStatus'));
+}
+
 // §12 / G009 : origin blocklist.
 export function listBlockedOrigins() {
     return /** @type {Promise<string[]>} */ (sendMessage('sites.listBlocked'));
@@ -2846,7 +3015,7 @@ export function getAirdropRecipients(req) {
  * @param {{ walletId: string }} req
  */
 export function removeWallet(req) {
-    return /** @type {any} */ (sendMessage('wallet.remove', req));
+    return /** @type {any} */ (sendMessage('wallet.remove', { ...req, surfaceId: SURFACE_ID }));
 }
 
 /**
@@ -2854,7 +3023,7 @@ export function removeWallet(req) {
  * settings.privacy.priceDataEnabled; returns `{ disabled: true }` when
  * the user has opted out.
  *
- * @param {{ chainIds: string[], includeSparkline?: boolean }} opts
+ * @param {{ chainIds: string[], includeSparkline?: boolean, includeHistory?: boolean }} opts
  */
 export function getNativePricesRequest(opts) {
     return /** @type {any} */ (sendMessage('prices.native', opts));

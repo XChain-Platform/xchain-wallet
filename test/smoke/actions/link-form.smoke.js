@@ -35,16 +35,19 @@ const src = readFileSync(formPath, 'utf8');
 assert.ok(/export function LinkForm\b/.test(src),
     'LinkForm is a named export');
 
-// Two-panel composer: side panels carry chain picker + action_index.
-assert.ok(/Network A/.test(src), 'LinkForm renders the Network A panel');
-assert.ok(/Network B/.test(src), 'LinkForm renders the Network B panel');
-assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
+// Layout 3 (U93): Action 1 and Action 2 cards each carry a network picker
+// and an action number; the old Network A / Network B panels are gone.
+assert.ok(/function ActionCard\b/.test(src), 'LinkForm uses an ActionCard sub-component');
+assert.ok(/number="1"/.test(src) && /number="2"/.test(src),
+    'LinkForm renders the Action 1 and Action 2 cards');
+assert.ok(!/Network A|Network B/.test(src), 'LinkForm no longer renders Network A / Network B panels');
 
-// Submit-on selector: defaults to chain A, can switch to chain B.
-assert.ok(/submitOn/.test(src),
-    'LinkForm tracks which network the LINK is submitted on');
-assert.ok(/Submit the link on/.test(src),
-    'LinkForm exposes a "Submit the link on" selector');
+// The form's own Network decides where the LINK is submitted; there is no
+// submit-on choice.
+assert.ok(/const submitChainId = formChainId;/.test(src),
+    'LinkForm submits on the form Network');
+assert.ok(!/submitOn|Submit the link on/.test(src),
+    'LinkForm has no submit-on selector');
 
 // Decoded preview: calls getActionByIndex per side.
 for (const call of [
@@ -80,11 +83,14 @@ assert.ok(reviewFnStart !== -1 && submitFnStart !== -1 && reviewFnStart < submit
 const reviewFnBody = src.slice(reviewFnStart, submitFnStart);
 assert.ok(!reviewFnBody.includes('linkAction'),
     'handleReview body does not call linkAction (signing is gated by review)');
-// Review block renders a plain-language preview for both actions.
-assert.ok(/>First action</.test(src),
-    'Review stage shows the First action label');
-assert.ok(/>Second action</.test(src),
-    'Review stage shows the Second action label');
+// Confirm Standard carries the two decoded previews as facts, without the
+// retired bespoke review rows.
+assert.ok(/<ConfirmActionModal/.test(src),
+    'watcher review uses the shared Confirm Standard modal');
+assert.ok(/label: 'Action 1'[\s\S]*?decodePreview\(preview1\.action\)/.test(src),
+    'Confirm facts show the first decoded action');
+assert.ok(/label: 'Action 2'[\s\S]*?decodePreview\(preview2\.action\)/.test(src),
+    'Confirm facts show the second decoded action');
 assert.ok(!/Side [AB] decoded/.test(src),
     'Review stage carries no decoder jargon in its labels');
 assert.ok(!/JSON\.stringify\(action\)/.test(src),
@@ -92,11 +98,8 @@ assert.ok(!/JSON\.stringify\(action\)/.test(src),
 // Network fee row from estimateNativeSendFee.
 assert.ok(/estimateNativeSendFee/.test(src),
     'LinkForm imports and uses estimateNativeSendFee for the Network fee row');
-assert.ok(/Network fee/.test(src),
-    'Review stage shows a Network fee row');
-// Header title switches on review.
-assert.ok(/Review link/.test(src),
-    "Header switches to 'Review link' in review/submitting stages");
+assert.ok(/networkFee=\{feeEstimate\?\.coinAmount && feeCoinTicker \? \{[\s\S]*?ticker: feeCoinTicker/.test(src),
+    'Confirm Standard receives the known Network fee');
 
 // --- Core flow ---
 

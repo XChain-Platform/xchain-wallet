@@ -61,10 +61,17 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    closeListFilter,
+    openListFilter,
+    selectListFilterOption,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -91,22 +98,6 @@ const OTHER_CHAIN = REGTEST_COIN === 'RBTC'
 
 /** Unique per run: the venue chain carries markets from every prior session. */
 const RUN_TAG = `browse-${Date.now()}`;
-
-/**
- * The wallet's plain-language pill text per stored status.
- *
- * Copied from BetFeedsList's `statusLabel` ON PURPOSE rather than imported: a
- * spec that imports the mapping it is checking passes when the mapping changes,
- * which is the one thing it exists to notice.
- */
-const PILL_TEXT = {
-    open: 'Taking bets',
-    closed: 'Betting closed',
-    resolved: 'Settled',
-    resolved_void: 'Void, refunded',
-    cancelled: 'Cancelled, refunded',
-    expired: 'Expired, refunded',
-};
 
 async function explorerJson(path, coin = REGTEST_COIN) {
     const res = await fetch(`${EXPLORER_URL}/${coin}/api/${path}`, {
@@ -191,26 +182,29 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
  * list, which reads as the market having vanished.
  */
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(page.getByRole('main'));
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 /** Every market card currently rendered, as {index, text}. */
+// The card draws no market number or status pill (operator ruling
+// 2026-11-13); each carries its number as data-market-index, and the list
+// it sits in (the "Positions available" filter or "All markets") is what says which
+// status the wallet read.
 async function renderedCards(page) {
-    const cards = page.getByRole('main').getByRole('button', { name: /^#\d+\s/ });
+    const cards = page.getByRole('main').locator('[data-market-index]');
     const out = [];
     for (const card of await cards.all()) {
-        const text = (await card.innerText()) || '';
-        const index = (text.match(/#(\d+)/) || [])[1];
-        if (index) out.push({ index, text });
+        const index = await card.getAttribute('data-market-index');
+        if (index) out.push({ index, text: (await card.innerText()) || '' });
     }
     return out;
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -239,7 +233,7 @@ test.describe('BET browse', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address').inputValue();
+            oracle = await (await openFromAddress(main)).inputValue();
             expect(oracle, `this wallet has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(oracle, FUNDING);
@@ -269,21 +263,20 @@ test.describe('BET browse', () => {
             const main = page.getByRole('main');
             await selectVenueChain(main);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Browse pills ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
-            await main.getByLabel('Betting closes')
+            await fieldByLabel(main, 'Question').fill(`Browse pills ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             const until = Date.now() + 180_000;
             let feed = null;
@@ -298,13 +291,12 @@ test.describe('BET browse', () => {
             heightAtCreate = await tipHeight();
         });
 
-        await test.step('the default list is the open ones, and every pill matches the chain', async () => {
+        await test.step('the default list is the open ones, and every card is open on chain', async () => {
             await gotoBettingHub(page);
 
-            const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+            const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             await expect(mine, `the market this run created is missing from the browse list`)
                 .toBeVisible({ timeout: 30_000 });
-            await expect(mine).toContainText(PILL_TEXT.open);
 
             // The whole visible page cross-checked against the indexer, one row
             // at a time. This is also the demo-fallback sweep (D-11 / D-12):
@@ -318,9 +310,6 @@ test.describe('BET browse', () => {
                 expect(String(stored.feed_status),
                     `#${card.index} is listed under "Taking bets" but the chain stores `
                     + `${stored.feed_status}`).toBe('open');
-                expect(card.text,
-                    `#${card.index}: the pill does not match the stored status ${stored.feed_status}`)
-                    .toContain(PILL_TEXT[String(stored.feed_status)]);
             }
         });
 
@@ -377,15 +366,12 @@ test.describe('BET browse', () => {
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
                 await gotoBettingHub(page);
-                const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+                const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
                 try {
                     await expect(mine,
                         'a market past its deadline but still open on chain vanished from the open list: '
                         + 'the wallet is recomputing status from the clock')
                         .toBeVisible({ timeout: 30_000 });
-                    await expect(mine,
-                        'the wallet recomputed the status from the clock instead of showing what the chain stored')
-                        .toContainText(PILL_TEXT.open);
                 } catch (err) {
                     // A parked miner does not stop another session's
                     // generate_blocks, so the chain is asked again before the
@@ -424,16 +410,15 @@ test.describe('BET browse', () => {
             // this never happened at all (a trace of the failing run showed six
             // list requests, all in the first thirty seconds), so the row stayed
             // under "Taking bets" indefinitely. Two refresh cycles of headroom.
-            await expect(page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) }),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'the hub never re-read the chain: a market that closed while the list was on '
                 + 'screen is still listed under "Taking bets" (D-117)')
                 .toBeHidden({ timeout: 75_000 });
 
-            await page.getByRole('button', { name: 'All markets', exact: true }).click();
-            const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+            await selectListFilterOption(page, 'Filter prediction markets', 'Status', 'All markets');
+            const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             await expect(mine, '"All markets" does not list the market that just closed')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(mine).toContainText(PILL_TEXT.closed);
 
             // The terminal states only exist on a chain with history, which is
             // why this is asserted here rather than manufactured: the venue
@@ -444,15 +429,10 @@ test.describe('BET browse', () => {
             for (const card of cards) {
                 const row = await feedRow(card.index);
                 expect(row, `market #${card.index} is on screen but not on chain (demo row?)`).toBeTruthy();
-                const want = PILL_TEXT[String(row.feed_status)];
-                if (!want) continue;   // a status this wallet renders through its generic fallback
-                expect(card.text,
-                    `#${card.index}: the pill does not match the stored status ${row.feed_status}`)
-                    .toContain(want);
                 if (String(row.feed_status) !== 'open') terminal += 1;
             }
             expect(terminal,
-                '"All markets" showed nothing but open markets, so the non-open pills went unchecked')
+                '"All markets" showed nothing but open markets, so it never listed a non-open one')
                 .toBeGreaterThan(0);
         });
 
@@ -467,10 +447,14 @@ test.describe('BET browse', () => {
             // market rightly stays listed.
             const other = OTHER_CHAIN;
             const main = page.getByRole('main');
-            const picker = main.getByRole('button', { name: /^Network:/ }).first();
+            // The hub's Network field sits in the title bar's filter menu.
+            const filters = await openListFilter(page, 'Filter prediction markets');
+            const picker = filters.getByRole('button', { name: /^Network:/ }).first();
             await picker.click();
-            await main.getByRole('option', { name: new RegExp(`^${other.label}\\b`) }).first().click();
+            await page.getByRole('dialog', { name: 'Network' })
+                .getByRole('button', { name: new RegExp(`^Select ${other.label}\\b`) }).first().click();
             await expect(picker).toHaveAttribute('aria-label', new RegExp(other.label), { timeout: 15_000 });
+            await closeListFilter(page, 'Filter prediction markets');
 
             // Matched on the LABEL, not the index: action indexes are per
             // chain, so the other chain having a market #<same number> is

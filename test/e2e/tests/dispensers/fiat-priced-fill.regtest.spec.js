@@ -47,7 +47,8 @@
 //       --config=playwright.regtest.config.js tests/dispensers/fiat-priced-fill.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -65,7 +66,14 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
+    approveConfirm,
+    FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
+    openDispenserPanel,
+    readPayToBuySendTo,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The dispenser create pays a real coin protocol fee on this chain. */
@@ -152,7 +160,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -198,6 +206,8 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
         let coinUsd;
         /** Coin the buyer must pay for exactly one fill, at the venue's own price. */
         let payPerFill;
+        /** The dispenser payment address the phone page's Pay to buy names. */
+        let phoneSendTo;
 
         await test.step('the SELLER opens a dispenser priced in dollars, not in coin', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Fiat Seller' });
@@ -205,9 +215,9 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -227,7 +237,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The dispenser opens on the Source, the address the buyer pays below.
@@ -236,18 +246,19 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, 'XCHAIN');
 
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
             // The lane under test. The trigger price is left EMPTY on purpose:
             // a fiat dispenser carries GET_AMOUNT 0 and derives the coin price
             // at settlement, which is exactly what makes the buyer-side model
             // below interesting.
-            await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat (optional)').selectOption(FIAT_CODE);
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
+            await pickFiatCurrency(main, FIAT_CODE);
             await main.getByLabel(/^Fiat amount/).fill(String(FIAT_AMOUNT));
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.action)).toBe('DISPENSER');
@@ -288,9 +299,9 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // uses with the dispenser form's Source).
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
-            buyer = await form.getByLabel('From').inputValue();
+            buyer = await (await openFromAddress(form)).inputValue();
             expect(buyer, `the buyer wallet has no ${REGTEST_CHAIN_LABEL} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyer, 'the buyer wallet derived the seller\'s address').not.toBe(seller);
@@ -318,11 +329,11 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
                 `the Send form is composing on the wrong chain: no ${coin} amount field`)
                 .toBeVisible({ timeout: 30_000 });
 
-            await page.getByLabel('To', { exact: true }).fill(seller);
+            await fieldByLabel(page, 'To').fill(seller);
             await page.getByRole('textbox', { name: /^Amount/ }).fill(payPerFill);
             await main.getByRole('button', { name: 'Send', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
                 .toBeVisible({ timeout: 180_000 });
         });
@@ -368,28 +379,24 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // buy surface must never quote a price of zero, because a buyer who
             // pays it gets nothing and a buyer who trusts it thinks the goods
             // are free.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(main.getByLabel('Token ticker')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token ticker').fill('XCHAIN');
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the fiat dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
+            // This leg reads the phone layout: the helper narrows to the
+            // dispenser's full page, opens Buy and reads Pay to buy before the
+            // viewport widens. The desktop side panel is the next step.
             const coin = REGTEST_COIN.slice(1);
-            const panel = page.getByRole('main');
-            // The panel has to actually be there, or the two assertions under
-            // this would pass on a screen that says nothing at all.
-            await expect(panel, 'no pay-to-buy panel rendered for a fiat dispenser at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-
-            const text = await panel.innerText();
+            const text = await openDispenserForBuy(page, {
+                seller, tick: 'XCHAIN', index: dispenserIndex, what: `the fiat dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                // The panel has to actually be there, or the two assertions
+                // under this would pass on a screen that says nothing at all.
+                await expect(panel, 'no pay-to-buy panel rendered for a fiat dispenser at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                phoneSendTo = await readPayToBuySendTo(panel);
+                return panel.innerText();
+            });
+            // The dispenser opened on the seller's Source and the buyer's
+            // payment to that address bought the fill above.
+            expect(phoneSendTo, 'the phone Pay to buy names an address other than the dispenser the buyer paid')
+                .toBe(seller);
             // D-144. The exact string this used to print was "Send exactly 0 LTC
             // per fill", so the pattern is anchored on how the panel words a
             // price rather than on one phrasing of it. A buyer who follows a
@@ -407,6 +414,50 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(text,
                 'the buy panel does not tell a buyer what a fill costs, in any currency')
                 .toContain(`${FIAT_AMOUNT} ${FIAT_CODE}`);
+        });
+
+        await test.step('and what the BUYER is shown in the desktop side panel', async () => {
+            // At the configured desktop width Browse dispensers opens a picked
+            // dispenser in the list's side panel, and that panel is the only
+            // buyer surface a desktop buyer reaches. For a fiat price it has no
+            // in-wallet form, so it carries the full page's Pay to buy block in
+            // place of the dead-end "no price this wallet can pay" line (#83).
+            await openDispenserPanel(page, {
+                seller, tick: 'XCHAIN', index: dispenserIndex, what: `the fiat dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel.getByRole('heading', { name: 'Pay to buy', exact: true }),
+                    'the desktop side panel offers a fiat dispenser no Pay to buy block, so a desktop buyer cannot buy it')
+                    .toBeVisible({ timeout: 30_000 });
+                const payToBuy = panel.getByRole('region', { name: 'Pay to buy', exact: true });
+                await expect(payToBuy.getByRole('button', { name: 'Copy Dispenser Payment Address', exact: true }),
+                    'the side panel Pay to buy offers no way to copy the payment address')
+                    .toBeVisible();
+                await expect(payToBuy.getByText('Price per fill', { exact: true }),
+                    'the side panel Pay to buy does not state a fill price').toBeVisible();
+                await expect(payToBuy.getByText('You receive per fill', { exact: true }),
+                    'the side panel Pay to buy does not state what a fill gives').toBeVisible();
+                await expect(payToBuy, 'the side panel Pay to buy does not quote the dispenser\'s fiat price')
+                    .toContainText(`${FIAT_AMOUNT} ${FIAT_CODE}`);
+                await expect(panel.getByTestId('dispenser-buy-form'),
+                    'the side panel offers an in-wallet buy form for a price this wallet cannot size')
+                    .toHaveCount(0);
+                // Checked after the block rendered, so an unloaded panel cannot pass it.
+                await expect(panel.getByText('This dispenser has no price this wallet can pay.', { exact: true }),
+                    'the side panel still shows the dead-end line beside Pay to buy')
+                    .toHaveCount(0);
+
+                expect(await readPayToBuySendTo(panel),
+                    'the desktop side panel names a different payment address from the phone page')
+                    .toBe(phoneSendTo);
+
+                // D-144 in Details: a fiat dispenser stores GET_AMOUNT 0, so no
+                // coin price per token exists and the row reads "-".
+                const perToken = panel.getByTestId('embedded-details')
+                    .locator('dt', { hasText: /^Price per token$/ })
+                    .locator('xpath=following-sibling::dd[1]');
+                await expect(perToken, 'the side panel quotes a coin price per token for a fiat-priced dispenser')
+                    .toHaveText('-');
+            });
         });
     });
 });

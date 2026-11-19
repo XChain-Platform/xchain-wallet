@@ -50,45 +50,61 @@ describe('shared route dark-mode colors', () => {
 
     it('keeps warning, send-gate, and official-region borders visible in dark mode', () => {
         const send = routeCss('Send');
-        // The official-token notice is the shared success message, so its
-        // border is the success row's own; the send warnings are the shared
-        // warning message, so theirs is the warning row's.
+        // Official project membership is a Details row on Token detail, not a
+        // bordered notice; the shared success message keeps its own border.
+        // The send warnings are the shared warning message, so theirs is the
+        // warning row's.
         const detail = readFileSync('packages/core/src/shared/routes/TokenDetail.jsx', 'utf8');
+        const detailStyles = routeCss('TokenDetail');
         const message = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
         expect(send).not.toMatch(/^\.warnings\s*\{/m);
-        expect(message).toMatch(/\.row\.warning\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
+        // Notice Standard (2026-11-15): a warning is the red danger look.
+        expect(message).toMatch(/\.row\.warning,\s*\.row\.error\s*\{[^}]*border:\s*1px solid var\(--xc-danger\)/s);
         // The small test send suggestion is the shared info message, so its
         // border is the info row's own.
         expect(send).not.toMatch(/\.testSendGate\s*\{/);
         expect(message).toMatch(/\.row\.info\s*\{[^}]*border:\s*1px solid var\(--xc-info/s);
-        expect(detail).toMatch(/<StatusMessage variant="success">\s*This token is an official token/);
+        expect(detail).toMatch(/className=\{styles\.officialLine\}/);
+        expect(detailStyles).toMatch(/\.officialLine\s*\{[^}]*border:\s*1px solid var\(--xc-success\)/s);
+        expect(detail).not.toMatch(/This token is an official token/);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success/s);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg/s);
-        for (const border of ['--xc-warning', '--xc-info', '--xc-success']) {
+        for (const border of ['--xc-warning', '--xc-danger', '--xc-info', '--xc-success']) {
             expect(contrast(dark[border], dark['--xc-surface-raised']), border).toBeGreaterThanOrEqual(3);
         }
     });
 
-    // The composer send control is the kit primary Button: its focus ring is
-    // drawn outside the accent fill, on the raised footer surface.
+    // The thread composer is one full-width kit Input with no send button
+    // (2026-11-13 redesign; Enter sends). Its focus ring is the Input's
+    // focus-ring halo, drawn on the raised footer surface, and the route CSS
+    // must not strip it.
     it('keeps the composer focus ring above 3:1 against the surface it is drawn on', () => {
         const inbox = readFileSync('packages/core/src/shared/routes/MessagingInbox.jsx', 'utf8');
-        const button = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
-        expect(inbox).toMatch(/<Button type="submit" variant="primary"[^>]*aria-label="Send message"/);
-        expect(routeCss('MessagingInbox')).not.toMatch(/\.composerSend\b/);
-        expect(button).toMatch(/\.btn:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\)[^}]*outline-offset:\s*2px/s);
+        const input = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const routeStyles = routeCss('MessagingInbox');
+        const composer = inbox.slice(inbox.indexOf('function ThreadComposer'));
+        expect(composer).toMatch(/<Input\b[^>]*className=\{local\.composerInput\}/s);
+        expect(routeStyles).not.toMatch(/\.composerSend\b/);
+        expect(routeStyles).not.toMatch(/\.composerInput:focus(?:-visible)?\s*\{[^}]*box-shadow:\s*none/s);
+        expect(input).toMatch(/\.input:focus\s*\{[^}]*box-shadow:\s*0 0 0 3px var\(--xc-focus-ring\)/s);
         for (const theme of [light, dark]) {
             expect(contrast(theme['--xc-focus-ring'], theme['--xc-surface-raised']))
                 .toBeGreaterThanOrEqual(3);
         }
     });
 
-    it('uses the on-accent token for token hero controls and small text', () => {
+    it('uses scheme-owned hero tokens for token hero controls and small text', () => {
         const css = routeCss('TokenDetail');
         expect(css).not.toMatch(/rgba\(255,\s*255,\s*255/);
-        expect(css).toMatch(/\.balanceHeroSwap,[\s\S]*?var\(--xc-on-accent\) 15%/);
-        for (const selector of ['balanceHeroAmountCode', 'balanceHeroNoteCode', 'balanceHeroHidden']) {
-            expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-on-accent\\)`, 's'));
+        const heroCss = readFileSync('packages/core/src/shared/components/TotalBalanceHero.module.css', 'utf8');
+        expect(heroCss).toMatch(/\.eye\s*\{[^}]*background:\s*var\(--xc-hero-chip-bg\)[^}]*border:\s*1px solid var\(--xc-hero-border\)[^}]*color:\s*var\(--xc-hero-chip-text\)/s);
+        // The balance hero's code, note and hidden classes were retired with
+        // the old hero. The icon fallback and secondary figures now take the
+        // semantic hero roles selected by the active scheme.
+        for (const selector of ['cardCaptionIconFallback']) {
+            expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-hero-chip-text\\)`, 's'));
         }
+        expect(css).toMatch(/\.cardSecondary\s*\{[^}]*color:\s*var\(--xc-hero-text-muted\)/s);
+        expect(css).not.toMatch(/\.balanceHero/);
     });
 });

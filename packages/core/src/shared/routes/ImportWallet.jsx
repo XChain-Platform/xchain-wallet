@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     Button,
     Checkbox,
-    ChainPicker,
+    FieldIconButton,
     FormPage,
     Input,
     Textarea,
@@ -23,18 +23,27 @@ import {
     QrScanner,
     StatusMessage,
     Tabs,
-    InfoTip,
     FormErrorSummary,
+    useFormErrors,
+    IconSelect,
+    Select,
     Switch,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import homeTabsStyles from '../components/HomeTabs.module.css';
 import { AdsNotice } from '../components/AdsNotice.jsx';
+import { FileField } from '../components/FileField.jsx';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import { detectQrContent } from '../../uri/detectQrContent.js';
+import { activeNetworkLabel } from '../utils/activeNetworkSwitch.js';
+import { formatBytes } from '../utils/formatBytes.js';
+import { parseBackupEnvelope } from '../../crypto/backup.js';
 import { englishWordlist } from '../../crypto/mnemonic.js';
+import { COUNTERWALLET_WORDLIST } from '../../crypto/counterwallet.js';
 import { normalizeRecoveryPhrase } from '../../crypto/recoveryPhrase.js';
+import * as branding from '../../branding/branding.js';
 import {
     importPhraseFormat,
     importPhraseFormatArg,
@@ -51,28 +60,29 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
-// The three password fields, their hints, and the copy for every way
-// a restore can fail, all from one place so a message can never name a field
-// this screen does not show.
+import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import {
-    RESTORE_PASSWORD_INTRO,
-    RESTORE_PASSWORD_LABELS,
-    RESTORE_PASSWORD_HINTS,
-    restoreDeviceHint,
-    restoreDeviceLabel,
-    restoreFailureMessage,
-    restorePasswordRequiredMessage,
-} from '../../flows/restorePasswordCopy.js';
+    WIF_IMPORT_ADDRESS_TYPES,
+    defaultWifImportAddressType,
+    wifImportPreview,
+    wifImportVersionByte,
+} from '../utils/wifImportPreview.js';
+// Which role refused a restore's password, read from the bare message the
+// shell boundary leaves, so the screen can ask for exactly one more password.
+import { restoreFailureKind } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
-import { formatOrList, t } from '../../i18n/index.js';
+import { formatOrList, getFormatLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/adsNotice.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/renameWallet.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const MIN_PASSWORD_LENGTH = 8;
+const CONFIRM_PASSWORD_MESSAGE = 'Confirm your password.';
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const BIP39_WORDS = new Set(englishWordlist);
+const COUNTERWALLET_WORDS = new Set(COUNTERWALLET_WORDLIST);
 const MAX_WORD_SUGGESTIONS = 5;
 
 function normalizePhraseEntry(value) {
@@ -88,9 +98,58 @@ function wordRangeAt(value, cursor) {
     return { start, end, prefix: value.slice(start, safeCursor).toLowerCase() };
 }
 
-// The one restore error that IS about the file rather than a password, and so
-// the only one the Browse affordance belongs on.
-const NO_BACKUP_CONTENT_MESSAGE = 'Pick a backup file, paste its contents, or scan a backup pointer.';
+// The field ids a restore refusal points at, so focus lands on the field
+// whose red sentence explains it.
+const BACKUP_FIELD_IDS = Object.freeze({
+    file: 'xc-backup-file',
+    password: 'import-backup-file-password',
+    wallet: 'import-backup-wallet-password',
+    device: 'import-backup-device-password',
+});
+
+/**
+ * What the chosen file's plaintext header says about it, for the summary card.
+ * The header is not authenticated (only the payload is), so every field is
+ * treated as untrusted display text: a missing, blank, invisible or overlong
+ * name falls back, and a date that does not parse is left out.
+ *
+ * @param {{ walletName?: unknown, createdAt?: unknown }} envelope
+ * @returns {{ walletName: string, backedUp: string | null }}
+ */
+function backupHeaderSummary(envelope) {
+    const rawName = typeof envelope?.walletName === 'string' ? envelope.walletName.trim() : '';
+    const walletName = rawName.length > 0 && hasVisibleText(rawName)
+        ? Array.from(rawName).slice(0, NAME_MAX_LENGTH).join('')
+        : t('importWallet.backup.unnamed');
+    const created = typeof envelope?.createdAt === 'string' ? Date.parse(envelope.createdAt) : Number.NaN;
+    let backedUp = null;
+    if (Number.isFinite(created)) {
+        try {
+            backedUp = new Intl.DateTimeFormat(getFormatLocale(), {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+            }).format(new Date(created));
+        } catch {
+            backedUp = null;
+        }
+    }
+    return { walletName, backedUp };
+}
+
+/**
+ * The copy for a restore failure that is about the file rather than a
+ * password, or null when the failure is not one of those.
+ *
+ * @param {import('../../flows/restorePasswordCopy.js').RestoreFailureKind} kind
+ * @returns {string | null}
+ */
+function backupFileFailureCopy(kind) {
+    if (kind === 'not-backup') return t('importWallet.backup.error.notBackup');
+    if (kind === 'newer') return t('importWallet.backup.error.newer');
+    if (kind === 'damaged' || kind === 'no-kdf') return t('importWallet.backup.error.damaged');
+    return null;
+}
 
 /**
  * One line for the toast after an import, or null when there is nothing to
@@ -117,13 +176,9 @@ function labelSyncRestoredMessage(labelSync) {
  * words) and Counterwallet-legacy (12 words). The core
  * `importMnemonic` flow auto-detects format.
  *
- * When `variant="freewallet"` (§40.13), the form rebrands for users
- * migrating from FreeWallet: title + copy call out FreeWallet
- * explicitly, the default wallet name is "FreeWallet", and the
- * word-count validator tightens to 12 (FreeWallet only ever used a
- * 12-word Counterwallet mnemonic). The import path is otherwise
- * identical. The format detector still dispatches to the
- * Counterwallet-legacy or BIP39 code path as appropriate.
+ * The Wallet type field selects BIP39 or the legacy Counterwallet format.
+ * `variant="freewallet"` remains as a deep-link compatibility input and only
+ * preselects the combined FreeWallet / PartyWallet choice in that field.
  *
  * @param {object} props
  * @param {() => void} props.onBack
@@ -154,54 +209,92 @@ export function ImportWallet({
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const isFreeWallet = importVariant === 'freewallet';
-    const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
+    const [walletType, setWalletType] = useState(() => (
+        importVariant === 'freewallet' ? 'freewallet' : 'bip39'
+    ));
+    const isLegacyType = walletType === 'freewallet';
+    const acceptedWordCounts = isLegacyType ? [12] : ACCEPTED_WORD_COUNTS;
     // Recovery phrase, private-key, and encrypted-backup imports share this
-    // route. The FreeWallet variant stays pinned to its recovery phrase.
+    // route. A legacy deep link starts on the phrase lane with its type chosen.
     const [lane, setLane] = useState(() =>
         /** @type {'mnemonic' | 'wif' | 'backup'} */ (
-            !isFreeWallet && takeForgotPasswordRestoreLane(initialLane) === 'backup'
+            importVariant !== 'freewallet' && takeForgotPasswordRestoreLane(initialLane) === 'backup'
                 ? 'backup'
                 : 'mnemonic'
         ),
     );
-    const defaultWalletName = isFreeWallet ? 'FreeWallet' : 'Imported Wallet';
+    const defaultWalletName = 'Imported Wallet';
     const [name, setName] = useState(defaultWalletName);
     // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
     const walletName = name.trim() || defaultWalletName;
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
     const [wif, setWif] = useState('');
-    const [wifChainId, setWifChainId] = useState('bitcoin-mainnet');
+    const [wifCoin, setWifCoin] = useState('');
+    const [wifNetwork, setWifNetwork] = useState('');
+    const [wifAddressType, setWifAddressType] = useState('');
     const [wifWarningAck, setWifWarningAck] = useState(false);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [backupContent, setBackupContent] = useState('');
+    // What the summary card shows about the chosen file: its name and size,
+    // and the wallet name and backup date from the file's plaintext header.
+    const [backupFile, setBackupFile] = useState(
+        /** @type {{ name: string, size: number, walletName: string, backedUp: string | null } | null} */ (null),
+    );
+    // A restore reaches up to three secrets: the one that opens the FILE, the
+    // one that opens the WALLET's own seal inside it, and (adding to an open
+    // vault) the one this device already unlocks with. Most people use one
+    // password for all of them, so the screen asks once and tries it in every
+    // role, and asks for another only when a role refuses it: the wallet field
+    // after the file opened but the wallet stayed locked, the device field
+    // after an open vault refused it. A fresh install has no device password
+    // of its own: the restored wallet keeps its own password here.
     const [backupPassword, setBackupPassword] = useState('');
-    // Three different secrets reach the restore, and conflating any
-    // two of them produces a wallet that restores looking complete and then
-    // cannot sign. `backupPassword` opens the FILE. `backupWalletPassword`
-    // opens the WALLET's own seal, which travelled inside the file sealed
-    // under whatever password it had on its old device. `backupDevicePassword`
-    // is what this device unlocks with, and the seal is moved onto it.
     const [backupWalletPassword, setBackupWalletPassword] = useState('');
     const [backupDevicePassword, setBackupDevicePassword] = useState('');
-    const [backupOverwrite, setBackupOverwrite] = useState(false);
-    const [backupFileName, setBackupFileName] = useState(/** @type {string | null} */ (null));
-    // §15.4 QR-from-backup-pointer restore. When a scanned QR classifies
-    // as a `backup-pointer`, we stash the parsed pointer here and the
-    // backup lane switches from "decode this file content" to "resolve
-    // this pointer, then decode". The backup password field is shared:
-    // the envelope stays password-encrypted either way.
-    const [backupScanning, setBackupScanning] = useState(false);
-    const [backupPointer, setBackupPointer] = useState(/** @type {import('../../uri/backupPointer.js').BackupPointer | null} */ (null));
+    const [backupNeedsWalletPassword, setBackupNeedsWalletPassword] = useState(false);
+    const [backupNeedsDevicePassword, setBackupNeedsDevicePassword] = useState(false);
+    // The form error standard: one error map for the whole form. A submit validates every
+    // field into it, the notice at the top lists the problems, each failing field is
+    // outlined on its border, and a field drops its own entry when it changes.
+    const formErrors = useFormErrors();
+    // The one field a restore refusal is about, shown as a red sentence under
+    // that field (G22); it is that field's entry in the map. Form-level failures
+    // use the map's 'form' entry (`error`).
+    const backupFieldName = /** @type {keyof typeof BACKUP_FIELD_IDS | undefined} */ (
+        Object.keys(BACKUP_FIELD_IDS).find((field) => formErrors.errors[BACKUP_FIELD_IDS[field]])
+    );
+    const backupFieldError = backupFieldName
+        ? { field: backupFieldName, message: formErrors.errors[BACKUP_FIELD_IDS[backupFieldName]] }
+        : null;
+    /** @param {{ field: keyof typeof BACKUP_FIELD_IDS, message: string } | null} entry  null drops every backup field's entry */
+    function setBackupFieldError(entry) {
+        if (entry) {
+            formErrors.validate({ [BACKUP_FIELD_IDS[entry.field]]: entry.message });
+            return;
+        }
+        for (const id of Object.values(BACKUP_FIELD_IDS)) formErrors.clear(id);
+    }
     // §15.6: optional 25th-word BIP39 passphrase. Hidden behind a toggle so
     // users who never set one don't have to read the warning copy.
-    // FreeWallet imports follow the Counterwallet legacy code path, which
+    // Legacy imports follow the Counterwallet code path, which
     // rejects a passphrase, so we don't expose the toggle there.
     const [showPassphrase, setShowPassphrase] = useState(false);
     const [bip39Passphrase, setBip39Passphrase] = useState('');
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    // §20: the imported wallet's mode, chosen once here; Normal by default.
+    // A restored backup carries its own wallet's mode instead.
+    // A failure that names no field (a refused scan or drop, the vault refusing the
+    // import) is the map's 'form' entry; setting null drops only that entry.
+    const error = formErrors.errors.form ?? null;
+    function setError(message) {
+        if (message) formErrors.fail(message);
+        else formErrors.clear('form');
+    }
+    // The phrase also changes by a scan, a paste, a dropped file or a suggested word, none
+    // of which fire the field's own change handler, so its entry leaves here.
+    const clearFormError = formErrors.clear;
+    useEffect(() => { clearFormError('xc-mnemonic'); }, [mnemonic, clearFormError]);
     const [validationAttempt, setValidationAttempt] = useState(0);
     const [busy, setBusy] = useState(false);
     const [continuing, setContinuing] = useState(false);
@@ -215,6 +308,8 @@ export function ImportWallet({
     const [walletElsewhere, setWalletElsewhere] = useState(false);
     useOwnWalletWriteHold(ownWriteGuard, mode === 'fresh' && (busy || adsNotice));
     const [scanning, setScanning] = useState(false);
+    // The camera box holds a message (denied, no camera) instead of a picture.
+    const [scanMessage, setScanMessage] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
@@ -226,17 +321,94 @@ export function ImportWallet({
     const importedWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
     const mountedRef = useRef(true);
     const inputGeneration = inputGenerationRef.current;
-    const wifChains = useSupportedChains().filter(
-        (descriptor) => Number.isInteger(descriptor.wifVersionByte),
+    const supportedChains = useSupportedChains();
+    const wifChains = useMemo(
+        () => supportedChains.filter(
+            (descriptor) => Number.isInteger(descriptor.wifVersionByte),
+        ),
+        [supportedChains],
     );
-    // ChainPicker resolves ids through a registry; the supported list is the only one this lane needs.
-    const wifChainRegistry = {
-        get: (id) => wifChains.find((descriptor) => descriptor.id === id),
-    };
+    const wifCoinFamilies = useMemo(() => {
+        const families = new Map();
+        for (const descriptor of wifChains) {
+            const current = families.get(descriptor.coin);
+            if (!current || (descriptor.networkKind === 'mainnet' && current.networkKind !== 'mainnet')) {
+                families.set(descriptor.coin, descriptor);
+            }
+        }
+        const preferred = new Map(['bitcoin', 'litecoin', 'dogecoin'].map((coin, index) => [coin, index]));
+        return [...families.values()].sort((a, b) => (
+            (preferred.get(a.coin) ?? Number.MAX_SAFE_INTEGER)
+            - (preferred.get(b.coin) ?? Number.MAX_SAFE_INTEGER)
+        ));
+    }, [wifChains]);
+    const effectiveWifCoin = wifCoin || wifCoinFamilies[0]?.coin || '';
+    const wifCoinChains = useMemo(() => {
+        const networks = new Map();
+        for (const descriptor of wifChains) {
+            if (descriptor.coin === effectiveWifCoin && !networks.has(descriptor.networkKind)) {
+                networks.set(descriptor.networkKind, descriptor);
+            }
+        }
+        return [...networks.values()];
+    }, [effectiveWifCoin, wifChains]);
+    const effectiveWifNetwork = wifCoinChains.some(
+        (descriptor) => descriptor.networkKind === wifNetwork,
+    )
+        ? wifNetwork
+        : (wifCoinChains.find((descriptor) => descriptor.networkKind === 'mainnet')?.networkKind
+            || wifCoinChains[0]?.networkKind
+            || '');
+    const wifDescriptor = wifCoinChains.find(
+        (descriptor) => descriptor.networkKind === effectiveWifNetwork,
+    ) || null;
+    const effectiveWifChainId = wifDescriptor?.id || '';
+    const wifAddressTypes = wifDescriptor
+        ? wifDescriptor.addressTypes.filter((type) => WIF_IMPORT_ADDRESS_TYPES.includes(type))
+        : [];
+    const effectiveWifAddressType = wifDescriptor
+        ? (wifAddressTypes.includes(wifAddressType)
+            ? wifAddressType
+            : defaultWifImportAddressType(wifDescriptor, wif))
+        : '';
+    const wifAddress = wifDescriptor && effectiveWifAddressType
+        ? wifImportPreview({
+            wif,
+            descriptor: wifDescriptor,
+            addressType: effectiveWifAddressType,
+        }) || ''
+        : '';
+    const coinIcon = (descriptor) => (
+        <img
+            src={branding.chainIconSmallUrl(descriptor.id)}
+            alt=""
+            className={styles.walletTypeIcon}
+        />
+    );
+    const wifNetworkOptions = wifCoinChains.map((descriptor) => ({
+        value: descriptor.networkKind,
+        label: activeNetworkLabel(descriptor.networkKind),
+        icon: coinIcon(descriptor),
+    }));
 
     useEffect(() => {
         headingRef.current?.focus();
     }, [lane, adsNotice]);
+
+    // A restore refusal or a newly shown password field puts the cursor in
+    // that field (G22). Keyed on a counter so the same field refusing twice
+    // still moves focus back to it.
+    const [backupFocus, setBackupFocus] = useState(
+        /** @type {{ field: keyof typeof BACKUP_FIELD_IDS, seq: number } | null} */ (null),
+    );
+    useEffect(() => {
+        if (!backupFocus) return;
+        document.getElementById(BACKUP_FIELD_IDS[backupFocus.field])?.focus();
+    }, [backupFocus]);
+
+    function focusBackupField(field) {
+        setBackupFocus((current) => ({ field, seq: (current?.seq ?? 0) + 1 }));
+    }
 
     useEffect(() => {
         mountedRef.current = true;
@@ -249,25 +421,28 @@ export function ImportWallet({
     // A flow step, not an overlay: backgrounding the app keeps what was typed.
     // An open camera makes it an overlay, so a pause runs handleBack, which
     // closes only the camera and releases it while the form stays.
-    useBackHandler(handleBack, busy || adsNotice, scanning || backupScanning ? 'overlay' : 'screen');
+    useBackHandler(handleBack, busy || adsNotice, scanning ? 'overlay' : 'screen');
 
     function clearSensitiveState() {
         setMnemonic('');
         setMnemonicCursor(0);
         setWif('');
+        setWifCoin('');
+        setWifNetwork('');
+        setWifAddressType('');
         setWifWarningAck(false);
         setPassword('');
         setConfirm('');
         setShowPassphrase(false);
         setBip39Passphrase('');
         setBackupContent('');
+        setBackupFile(null);
         setBackupPassword('');
         setBackupWalletPassword('');
         setBackupDevicePassword('');
-        setBackupOverwrite(false);
-        setBackupFileName(null);
-        setBackupPointer(null);
-        setBackupScanning(false);
+        setBackupNeedsWalletPassword(false);
+        setBackupNeedsDevicePassword(false);
+        setBackupFieldError(null);
         setScanning(false);
         setDragOver(false);
     }
@@ -282,7 +457,7 @@ export function ImportWallet({
         invalidatePendingInput();
         clearSensitiveState();
         setLane(nextLane);
-        setError(null);
+        formErrors.reset();
     }
 
     function beginBusy() {
@@ -305,13 +480,9 @@ export function ImportWallet({
             setScanning(false);
             return;
         }
-        if (backupScanning) {
-            setBackupScanning(false);
-            return;
-        }
         invalidatePendingInput();
         clearSensitiveState();
-        setError(null);
+        formErrors.reset();
         if (walletElsewhere) {
             openExistingWallet();
             return;
@@ -325,7 +496,7 @@ export function ImportWallet({
         if (mode !== 'fresh' || !isWalletExistsError(err)) return false;
         invalidatePendingInput();
         clearSensitiveState();
-        setError(null);
+        formErrors.reset();
         setWalletElsewhere(true);
         endBusy();
         return true;
@@ -366,10 +537,8 @@ export function ImportWallet({
         if (error) setError(null);
     }
 
-    // Encrypted-backup drop zone (same .xchain-wallet / JSON / text MIME
-    // set the file picker accepts; reads the content as text and seeds
-    // the existing backupContent state so the rest of the lane behaves
-    // identically to a click-to-pick.
+    // Backup file drop zone: the area, and the summary card that replaces it,
+    // both take a dropped file the same way as a picked one.
     const backupDrop = useDropZone({
         accept: ['.xchain-wallet', 'application/json', '.json', 'text/plain', '.txt'],
         readAs: 'text',
@@ -378,142 +547,169 @@ export function ImportWallet({
             if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
             const validation = typeof message === 'string'
                 && /^(?:File is too large|File type not accepted)/.test(message);
-            setError(validation
-                ? `${message} Choose a supported backup file and try again.`
-                : 'Could not read the backup file. Choose another file and try again.');
+            setBackupFieldError({
+                field: 'file',
+                message: validation
+                    ? t('importWallet.backup.error.fileRejected', { reason: message })
+                    : t('importWallet.backup.error.unreadable'),
+            });
         },
         onFile: ({ file, content }) => {
             if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
-            setBackupPointer(null);
-            setBackupScanning(false);
-            setBackupFileName(file.name);
-            setBackupContent(typeof content === 'string' ? content : '');
+            const text = typeof content === 'string' ? content : '';
+            // Read the plaintext header now, so a file that is not a backup is
+            // refused where it was chosen rather than after a password is typed.
+            let envelope;
+            try {
+                envelope = parseBackupEnvelope(text);
+            } catch (err) {
+                setBackupContent('');
+                setBackupFile(null);
+                setBackupFieldError({
+                    field: 'file',
+                    message: backupFileFailureCopy(restoreFailureKind(err))
+                        || t('importWallet.backup.error.notBackup'),
+                });
+                return;
+            }
+            setBackupContent(text);
+            setBackupFile({ name: file.name, size: file.size, ...backupHeaderSummary(envelope) });
+            // Another file may need other passwords, so a field shown for the
+            // last one goes until this one asks for it.
+            setBackupNeedsWalletPassword(false);
+            setBackupNeedsDevicePassword(false);
+            setBackupWalletPassword('');
+            setBackupDevicePassword('');
+            setBackupFieldError(null);
             if (error) setError(null);
         },
     });
 
-    // Classify a QR frame scanned in the backup lane. Only a backup
-    // pointer is actionable here; a scanned mnemonic / WIF / address is
-    // rejected with a hint (those belong to the recovery-phrase lane and
-    // we never silently import secret material from a stray scan).
-    function handleBackupQrFrame(text) {
-        if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
-        if (typeof text !== 'string' || text.trim().length === 0) return;
-        const detected = detectQrContent(text.trim());
-        if (detected.type === 'backup-pointer') {
-            setBackupContent('');
-            setBackupFileName(null);
-            setBackupPointer(detected.pointer);
-            setBackupScanning(false);
-            if (error) setError(null);
-            return;
-        }
-        setBackupScanning(false);
-        setError('That QR code is not a backup pointer. Use Recovery phrase for a recovery phrase or private-key QR code.');
-    }
-
-    function clearBackupPointer() {
-        setBackupPointer(null);
-        if (error) setError(null);
+    function refuseBackupField(field, message) {
+        setBackupFieldError({ field, message });
+        focusBackupField(field);
     }
 
     async function handleBackupSubmit(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
         if (busyRef.current) return;
-        const usingPointer = backupPointer !== null;
-        if (!usingPointer && backupContent.trim().length === 0) {
-            setError(NO_BACKUP_CONTENT_MESSAGE);
+        // Each empty field is named on the field itself (G22).
+        if (backupContent.trim().length === 0) {
+            refuseBackupField('file', t('importWallet.backup.error.noFile'));
             return;
         }
-        //Checked here rather than only in core so the user
-        // is told which field is empty, BY THE NAME ON THAT FIELD, instead of
-        // reading a flow-level throw about a parameter they cannot see.
         if (backupPassword.length === 0) {
-            setError(restorePasswordRequiredMessage('file', mode));
+            refuseBackupField('password', t('importWallet.backup.error.passwordRequired'));
             return;
         }
-        if (backupWalletPassword.length === 0) {
-            setError(restorePasswordRequiredMessage('wallet', mode));
+        if (backupNeedsWalletPassword && backupWalletPassword.length === 0) {
+            refuseBackupField('wallet', t('importWallet.backup.error.walletPasswordRequired'));
             return;
         }
-        if (backupDevicePassword.length === 0) {
-            setError(restorePasswordRequiredMessage('device', mode));
+        if (backupNeedsDevicePassword && backupDevicePassword.length === 0) {
+            refuseBackupField('device', t('importWallet.backup.error.devicePasswordRequired'));
             return;
         }
-        const conflictArg = backupOverwrite ? 'overwrite' : 'error';
+        // One password, tried in every role until a role refuses it. The
+        // wallet keeps the password that opened it: on a fresh install that
+        // becomes this device's unlock password, so nothing new is chosen.
+        // An open vault can only hold wallets under its own password, so an
+        // add re-locks the wallet with that one: the main field's, which the
+        // vault already accepted unless it refused it and the device field
+        // was shown. Never the wallet field's: that one opened the old seal,
+        // and offering it to the vault would ask for a password it has.
+        const walletPassword = backupNeedsWalletPassword ? backupWalletPassword : backupPassword;
+        let devicePassword = walletPassword;
+        if (mode === 'add') {
+            devicePassword = backupNeedsDevicePassword ? backupDevicePassword : backupPassword;
+        }
         setError(null);
+        setBackupFieldError(null);
         if (!beginBusy()) return;
         try {
             // A fresh install has no vault, so it has no host, so the
             // host-registered restore has nothing to answer it. `fresh` goes to
-            // the pre-host lane, which creates the vault under the new device
-            // password and then merges. Same core flow underneath either way;
-            // the mnemonic lane above splits on exactly the same seam.
+            // the pre-host lane, which creates the vault under the wallet's
+            // password and then merges. A failed attempt leaves the install
+            // fresh, so asking for a second password and trying again is safe.
             if (mode === 'fresh') {
                 if (typeof messaging.importBackupFresh !== 'function') {
-                    setError('Restoring a backup onto a fresh install is not available in this shell.');
+                    setError(t('importWallet.backup.error.unavailable'));
                     endBusy();
                     return;
                 }
                 const result = await messaging.importBackupFresh({
-                    password: backupDevicePassword,
+                    password: devicePassword,
                     backupPassword,
-                    walletPassword: backupWalletPassword,
-                    ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
+                    walletPassword,
+                    fileContent: backupContent,
                 });
                 finishWalletImport(result, { discover: true });
                 return;
             }
-            let result;
-            if (usingPointer) {
-                if (typeof messaging.importBackupPointerRequest !== 'function') {
-                    setError('Backup-pointer restore is not available in this shell.');
-                    endBusy();
-                    return;
-                }
-                result = await messaging.importBackupPointerRequest({
-                    pointer: backupPointer,
-                    password: backupPassword,
-                    walletPassword: backupWalletPassword,
-                    devicePassword: backupDevicePassword,
-                    onConflict: conflictArg,
-                    mode,
-                });
-            } else {
-                if (typeof messaging.importBackupRequest !== 'function') {
-                    setError('Backup restore is not available in this shell.');
-                    endBusy();
-                    return;
-                }
-                result = await messaging.importBackupRequest({
-                    fileContent: backupContent,
-                    password: backupPassword,
-                    // The seal travels with the record, so it has to
-                    // be opened with the wallet's old password and moved onto
-                    // this device's before anything is written.
-                    walletPassword: backupWalletPassword,
-                    devicePassword: backupDevicePassword,
-                    onConflict: conflictArg,
-                    // §19.4 / Cluster H FOLLOWUP 3: 'add' mode tells the
-                    // host to re-mint wallet / account / address ids so
-                    // the restored wallet coexists with what's in the
-                    // vault already (vs the default 'fresh' import that
-                    // keeps the original ids).
-                    mode,
-                });
+            if (typeof messaging.importBackupRequest !== 'function') {
+                setError(t('importWallet.backup.error.unavailable'));
+                endBusy();
+                return;
             }
+            const result = await messaging.importBackupRequest({
+                fileContent: backupContent,
+                password: backupPassword,
+                // The seal travels with the record, so it has to be opened
+                // with the wallet's own password and moved onto this vault's
+                // before anything is written.
+                walletPassword,
+                devicePassword,
+                // A contact or site this device already has stays as it is;
+                // the restored wallet itself gets fresh ids in 'add' mode, so
+                // it never collides.
+                onConflict: 'preserve',
+                mode,
+            });
             finishWalletImport(result, { discover: true });
         } catch (err) {
             if (takeWalletElsewhere(err)) return;
-            // A restore has three passwords in play, so "wrong
-            // password" is never an answer. Whatever came back, the screen
-            // says which of the three boxes it is talking about.
-            setError(userFacingMessage(
-                isVaultConflictError(err) ? err : restoreFailureMessage(err, { mode }),
-                'That backup could not be restored. Check the backup file and try again.',
-            ));
             endBusy();
+            if (isVaultConflictError(err)) {
+                setError(userFacingMessage(err, t('importWallet.backup.error.generic')));
+                return;
+            }
+            const kind = restoreFailureKind(err);
+            switch (kind) {
+                case 'file-password':
+                case 'required-file':
+                    refuseBackupField('password', t('importWallet.backup.error.wrongPassword'));
+                    return;
+                case 'wallet-password':
+                case 'required-wallet':
+                    // The file opened with this password but the wallet did not:
+                    // ask for the wallet's own password, once, in a field of its own.
+                    if (!backupNeedsWalletPassword) {
+                        setBackupNeedsWalletPassword(true);
+                        focusBackupField('wallet');
+                        return;
+                    }
+                    refuseBackupField('wallet', t('importWallet.backup.error.wrongWalletPassword'));
+                    return;
+                case 'device-password':
+                case 'required-device':
+                    if (!backupNeedsDevicePassword) {
+                        setBackupNeedsDevicePassword(true);
+                        focusBackupField('device');
+                        return;
+                    }
+                    refuseBackupField('device', t('importWallet.backup.error.wrongDevicePassword'));
+                    return;
+                default: {
+                    const fileCopy = backupFileFailureCopy(kind);
+                    if (fileCopy) {
+                        setError(fileCopy);
+                        return;
+                    }
+                    setError(userFacingMessage(err, t('importWallet.backup.error.generic')));
+                }
+            }
         }
     }
 
@@ -604,69 +800,69 @@ export function ImportWallet({
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
         if (busyRef.current) return;
-        const nameProblem = walletNameError();
-        if (nameProblem) {
-            setError(nameProblem);
-            return;
-        }
+        // Every field is checked in one pass, one message per field (its first failing
+        // rule), so the notice at the top lists everything to fix at once.
         const trimmed = normalizePhraseEntry(mnemonic);
+        const wordCount = trimmed.length === 0 ? 0 : trimmed.split(' ').length;
+        const acceptedFormat = trimmed.length === 0 || !acceptedWordCounts.includes(wordCount)
+            ? null
+            : importPhraseFormat(trimmed, isLegacyType);
+        let phraseProblem = null;
         if (trimmed.length === 0) {
-            setError('Enter a recovery phrase.');
-            return;
-        }
-        const wordCount = trimmed.split(' ').length;
-        if (!acceptedWordCounts.includes(wordCount)) {
-            setError(t('importWallet.phrase.wrongWordCount', {
+            phraseProblem = 'Enter a recovery phrase.';
+        } else if (!acceptedWordCounts.includes(wordCount)) {
+            phraseProblem = t('importWallet.phrase.wrongWordCount', {
                 expected: formatOrList(acceptedWordCounts),
                 count: wordCount,
-            }));
-            return;
+            });
+        } else if (!acceptedFormat) {
+            phraseProblem = importPhraseRefusal(trimmed, isLegacyType);
         }
-        const acceptedFormat = importPhraseFormat(trimmed, isFreeWallet);
-        if (!acceptedFormat) {
-            setError(importPhraseRefusal(trimmed, isFreeWallet));
-            return;
-        }
+        let passwordProblem = null;
         if (password.length < MIN_PASSWORD_LENGTH) {
-            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-            return;
+            passwordProblem = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+        } else if (walletPasswordCollidesWithDuress(password)) {
+            passwordProblem = DURESS_PASSWORD_COLLISION_MESSAGE;
         }
-        if (password !== confirm) {
-            setError('Passwords do not match.');
-            return;
-        }
-        if (walletPasswordCollidesWithDuress(password)) {
-            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
-            return;
+        let confirmProblem = null;
+        if (confirm.length === 0) {
+            confirmProblem = CONFIRM_PASSWORD_MESSAGE;
+        } else if (password !== confirm) {
+            confirmProblem = 'Passwords do not match.';
         }
         // A checked box with an empty field used to collapse to "no
         // passphrase" and silently derive the passphrase-less wallet, the
         // same wrong addresses the user was ticking the box to avoid. The
         // box is a claim that a passphrase exists, so an empty one is a
         // contradiction to refuse, not a default to fill in.
-        if (!isFreeWallet && showPassphrase && bip39Passphrase.length === 0) {
-            setError('Enter the BIP39 passphrase, or uncheck the box if this wallet does not use one.');
-            return;
-        }
-        setError(null);
+        const passphraseProblem = !isLegacyType && showPassphrase && bip39Passphrase.length === 0
+            ? t('importWallet.passphrase.empty')
+            : null;
+        if (!formErrors.validate({
+            'xc-mnemonic': phraseProblem,
+            'import-name': walletNameError(),
+            'import-password': passwordProblem,
+            'import-confirm': confirmProblem,
+            'import-bip39-passphrase': passphraseProblem,
+        })) return;
         if (!beginBusy()) return;
         try {
-            const passphraseArg = !isFreeWallet && showPassphrase
+            const passphraseArg = !isLegacyType && showPassphrase
                 ? bip39Passphrase
                 : '';
             // The format this lane accepted rides the request, so no shell
             // re-detects the phrase as the other format: about 1 in 30,000
             // FreeWallet phrases also passes the BIP39 checksum, and a BIP39
             // phrase with a typo can still parse as FreeWallet.
-            const formatArg = importPhraseFormatArg(acceptedFormat, isFreeWallet);
+            const formatArg = importPhraseFormatArg(acceptedFormat);
             let result;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, walletMode: 'full',...formatArg });
             } else {
-                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, walletMode: 'full',...formatArg });
             }
             finishWalletImport(result, { discover: true });
             const showRestoredLabels = (labelSync) => {
@@ -727,49 +923,53 @@ export function ImportWallet({
 
     async function handleWifSubmit(event) {
         event.preventDefault();
+        // The submit is always enabled (G22), so a refused press is a submit
+        // attempt and its error joins the linked summary like the other lanes.
+        setValidationAttempt((attempt) => attempt + 1);
         if (busyRef.current) return;
-        const nameProblem = walletNameError();
-        if (nameProblem) {
-            setError(nameProblem);
-            return;
-        }
+        // Every field is checked in one pass, one message per field.
         const trimmedWif = wif.trim();
-        if (trimmedWif.length === 0) {
-            setError('WIF private key is required.');
-            return;
-        }
-        if (!wifChainId) {
-            setError('Pick the network this private key belongs to.');
-            return;
-        }
+        let passwordProblem = null;
         if (password.length < MIN_PASSWORD_LENGTH) {
-            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-            return;
+            passwordProblem = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+        } else if (walletPasswordCollidesWithDuress(password)) {
+            passwordProblem = DURESS_PASSWORD_COLLISION_MESSAGE;
         }
-        if (password !== confirm) {
-            setError('Passwords do not match.');
-            return;
+        let confirmProblem = null;
+        if (confirm.length === 0) {
+            confirmProblem = CONFIRM_PASSWORD_MESSAGE;
+        } else if (password !== confirm) {
+            confirmProblem = 'Passwords do not match.';
         }
-        if (walletPasswordCollidesWithDuress(password)) {
-            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
-            return;
-        }
-        if (!wifWarningAck) {
-            setError('Acknowledge the backup warning before importing this private key.');
-            return;
-        }
-        if (typeof messaging.importMnemonic !== 'function') {
-            setError('Private-key import is not available in this shell.');
-            return;
-        }
-        setError(null);
+        const versionByte = wifImportVersionByte(trimmedWif);
+        const networkProblem = Number.isInteger(versionByte)
+            && wifDescriptor
+            && versionByte !== wifDescriptor.wifVersionByte
+            ? t('importWallet.wif.networkMismatch')
+            : null;
+        if (!formErrors.validate({
+            'import-wif-coin': effectiveWifCoin ? null : t('importWallet.wif.coinRequired'),
+            'import-wif-network': effectiveWifChainId
+                ? networkProblem
+                : t('importWallet.wif.networkRequired'),
+            'import-wif': trimmedWif.length === 0 ? 'WIF private key is required.' : null,
+            'import-name': walletNameError(),
+            'import-password': passwordProblem,
+            'import-confirm': confirmProblem,
+            'import-wif-ack': wifWarningAck ? null : 'Acknowledge the backup warning before importing this private key.',
+            ...(typeof messaging.importMnemonic === 'function'
+                ? {}
+                : { form: 'Private-key import is not available in this shell.' }),
+        })) return;
         if (!beginBusy()) return;
         try {
             const result = await messaging.importMnemonic({
                 password,
                 wif: trimmedWif,
-                chainId: wifChainId,
+                chainId: effectiveWifChainId,
+                addressType: effectiveWifAddressType,
                 name: walletName,
+                walletMode: 'full',
             });
             finishWalletImport(result);
         } catch (err) {
@@ -782,29 +982,24 @@ export function ImportWallet({
         }
     }
 
-    const backupSourceMessage = backupDrop.isDragOver
-        ? 'Drop the backup file here.'
-        : backupFileName
-            ? `Loaded ${backupFileName} (${backupContent.length.toLocaleString()} bytes).`
-            : backupContent.trim().length > 0
-                ? `Backup contents pasted (${backupContent.length.toLocaleString()} bytes).`
-                : 'Choose or drop a backup file onto the box below, paste its contents, or scan a backup pointer.';
+    const backupErrorFor = (field) => (backupFieldError?.field === field ? backupFieldError.message : undefined);
     const normalizedMnemonic = normalizePhraseEntry(mnemonic);
     const mnemonicWordCount = normalizedMnemonic.length === 0
         ? 0
         : normalizedMnemonic.split(' ').length;
-    const detectedPhraseFormat = importPhraseFormat(normalizedMnemonic, isFreeWallet);
-    const phraseHint = isFreeWallet
-        ? (isFull
-            ? t('importWallet.freeWallet.fullSubtitle')
-            : t('importWallet.freeWallet.subtitle'))
-        : (isFull
-            ? t('importWallet.phrase.fullSubtitle')
-            : t('importWallet.phrase.subtitle'));
+    const detectedPhraseFormat = importPhraseFormat(normalizedMnemonic, isLegacyType);
+    const phraseHelp = isLegacyType
+        ? t('importWallet.phrase.legacyHelp')
+        : t('importWallet.phrase.help');
+    const phraseHint = isLegacyType
+        ? t('importWallet.phrase.legacyWordList')
+        : t('importWallet.phrase.bip39WordList');
+    const phraseWordlist = isLegacyType ? COUNTERWALLET_WORDLIST : englishWordlist;
+    const phraseWords = isLegacyType ? COUNTERWALLET_WORDS : BIP39_WORDS;
     const activeWord = wordRangeAt(mnemonic, mnemonicCursor);
-    const wordSuggestions = activeWord.prefix.length < 2 || BIP39_WORDS.has(activeWord.prefix)
+    const wordSuggestions = activeWord.prefix.length < 2 || phraseWords.has(activeWord.prefix)
         ? []
-        : englishWordlist
+        : phraseWordlist
             .filter((word) => word.startsWith(activeWord.prefix))
             .slice(0, MAX_WORD_SUGGESTIONS);
 
@@ -823,136 +1018,70 @@ export function ImportWallet({
         });
     }
 
-    const laneSwitcher = !isFreeWallet ? (
+    // A tab shows one short word so the three fit one line at 360px (G42);
+    // a screen reader still hears the full lane name.
+    const tabLabel = (IconGlyph, text, fullName = null) => (
+        <span className={homeTabsStyles.tabWithIcon}>
+            <span className={homeTabsStyles.tabIcon} aria-hidden="true"><IconGlyph /></span>
+            {fullName ? (
+                <>
+                    <span aria-hidden="true">{text}</span>
+                    <span className="sr-only">{fullName}</span>
+                </>
+            ) : text}
+        </span>
+    );
+    const laneSwitcher = (
         <Tabs
             items={[
-                { id: 'mnemonic', label: t('importWallet.recoveryPhrase') },
+                { id: 'mnemonic', label: tabLabel(Icon.DocumentIcon, t('importWallet.tab.phrase'), t('importWallet.recoveryPhrase')) },
                 ...(mode === 'fresh'
-                    ? [{ id: 'wif', label: t('importWallet.wif.tab') }]
+                    ? [{ id: 'wif', label: tabLabel(Icon.KeyIcon, t('importWallet.wif.tab')) }]
                     : []),
-                { id: 'backup', label: t('importWallet.encryptedBackup') },
+                { id: 'backup', label: tabLabel(Icon.UploadIcon, t('importWallet.tab.backup'), t('importWallet.encryptedBackup')) },
             ]}
             value={lane}
             onChange={changeLane}
             disabled={busy}
             aria-label={t('importWallet.lane')}
-            style={{ marginBottom: 'var(--xc-space-3)' }}
+            // A tab row sits 8px above the content it switches (G81). The form
+            // stack already adds its gap between children, so the margin is the
+            // 8px less that gap (negative on the 16px default), never 8px more.
+            style={{ marginBottom: 'calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)))' }}
         />
-    ) : null;
+    );
 
-    const formDisabledReason = lane === 'backup'
-        ? backupPointer === null && backupContent.trim().length === 0
-            ? 'Choose a backup file, paste its contents, or scan a backup pointer to continue.'
-            : backupPassword.length === 0
-                ? `Enter the ${RESTORE_PASSWORD_LABELS.file.toLowerCase()} to continue.`
-                : backupWalletPassword.length === 0
-                    ? `Enter the ${RESTORE_PASSWORD_LABELS.wallet.toLowerCase()} to continue.`
-                    : backupDevicePassword.length === 0
-                        ? `Enter the ${restoreDeviceLabel(mode).toLowerCase()} to continue.`
-                        : null
-        : lane === 'wif'
-        ? wif.trim().length === 0
-            ? 'Enter a private key to continue.'
-            : password.length === 0
-                ? 'Enter a password to continue.'
-                : confirm.length === 0
-                    ? 'Confirm your password to continue.'
-                    : null
-        : mnemonic.trim().length === 0
-            ? 'Enter a recovery phrase to continue.'
-            : password.length === 0
-                ? 'Enter a password to continue.'
-                : confirm.length === 0
-                    ? 'Confirm your password to continue.'
-                    : null;
-    const lowerError = String(error || '').toLowerCase();
-    let importErrorTarget;
-    if (lane === 'backup') {
-        if (error === NO_BACKUP_CONTENT_MESSAGE) {
-            importErrorTarget = { id: 'xc-backup-content', label: 'Backup file contents' };
-        } else if (lowerError.includes(RESTORE_PASSWORD_LABELS.file.toLowerCase())) {
-            importErrorTarget = { id: 'import-backup-file-password', label: RESTORE_PASSWORD_LABELS.file };
-        } else if (lowerError.includes(RESTORE_PASSWORD_LABELS.wallet.toLowerCase())) {
-            importErrorTarget = { id: 'import-backup-wallet-password', label: RESTORE_PASSWORD_LABELS.wallet };
-        } else if (lowerError.includes(restoreDeviceLabel(mode).toLowerCase())) {
-            importErrorTarget = { id: 'import-backup-device-password', label: restoreDeviceLabel(mode) };
-        }
-    } else if (/^Wallet name/i.test(error || '')) {
-        importErrorTarget = { id: 'import-name', label: 'Wallet name' };
-    } else if (/recovery phrase|expected .*word|mnemonic/i.test(error || '')) {
-        importErrorTarget = { id: 'xc-mnemonic', label: 'Recovery phrase' };
-    } else if (/at least .* characters/i.test(error || '') || error === DURESS_PASSWORD_COLLISION_MESSAGE) {
-        importErrorTarget = { id: 'import-password', label: 'Password' };
-    } else if (/Passwords do not match/i.test(error || '')) {
-        importErrorTarget = { id: 'import-confirm', label: 'Confirm password' };
-    } else if (/BIP39 passphrase/i.test(error || '')) {
-        importErrorTarget = { id: 'import-bip39-passphrase', label: 'BIP39 passphrase' };
-    }
-    const importErrors = error ? [{ ...importErrorTarget, message: error }] : [];
-    // The summary links field errors after a submit attempt. An error raised
-    // before any submit (a rejected scan, an unreadable file or drop) has no
-    // attempt to anchor to, so it shows as a plain error message instead.
-    // The refusal follows a submit, so the notice takes focus like any other
-    // submit error: the form is often scrolled down to its Import button.
+    const passwordHelp = `${t('importWallet.password.fullHelp')} ${t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}`;
+
+    // G22: the submit is always enabled. Each handler refuses an empty
+    // required field by name, so there is no standing "Enter X to continue"
+    // notice. Every lane's problems are entries of the form's error map (`formErrors`):
+    // the notice at the top of the page lists them, and the failing fields are outlined.
+    // A failure that names no field (a rejected scan, an unreadable file or drop, the
+    // vault refusing the import) is a plain line in the same notice.
     const formStatus = walletElsewhere ? (
         <FormErrorSummary
             errors={[{ message: t('importWallet.walletElsewhere') }]}
             focusKey={validationAttempt || 1}
             recovery={{ label: t('importWallet.unlockExisting'), onAction: openExistingWallet }}
         />
-    ) : error && validationAttempt === 0 ? (
-        <StatusMessage variant="error">{error}</StatusMessage>
-    ) : error ? (
-        <FormErrorSummary
-            errors={importErrors}
-            focusKey={validationAttempt}
-            recovery={
-                // Anchored on the "no file yet" message
-                // itself. It used to fire on any error mentioning
-                // "backup file", which now includes the wrong-password
-                // copy - offering Browse to a user whose file is fine
-                // sends them to fix the wrong thing.
-                lane === 'backup' && error === NO_BACKUP_CONTENT_MESSAGE
-                    ? { label: t('importWallet.browse'), onAction: backupDrop.openFilePicker }
-                    : undefined
-            }
-        />
-    ) : formDisabledReason ? (
-        <StatusMessage id="import-wallet-disabled-reason">
-            {formDisabledReason}
-        </StatusMessage>
     ) : null;
 
     const formActions = lane === 'backup' ? (
         <Button
             type="submit"
-            variant="primary"
+            variant="success"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={Boolean(formDisabledReason)}
-            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
             {t('send.draft.restore')}
-        </Button>
-    ) : lane === 'wif' ? (
-        <Button
-            type="submit"
-            variant="primary"
-            loading={busy}
-            icon={<Icon.KeyIcon />}
-            disabled={Boolean(formDisabledReason)}
-            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
-        >
-            {t('importWallet.import')}
         </Button>
     ) : (
         <Button
             type="submit"
-            variant="primary"
+            variant="success"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={Boolean(formDisabledReason)}
-            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
             {t('importWallet.import')}
         </Button>
@@ -960,13 +1089,11 @@ export function ImportWallet({
 
     const pageTitle = adsNotice
         ? t('adsNotice.title')
-        : isFreeWallet
-            ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
-            : lane === 'backup'
-                ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
+        : lane === 'backup'
+                ? t('importWallet.backup.title')
                 : lane === 'wif'
-                    ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
-                    : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'));
+                    ? t('importWallet.wif.title')
+                    : t('importWallet.title');
     // The window title names the lane the heading shows.
     useDocumentTitleSection(pageTitle);
 
@@ -979,170 +1106,172 @@ export function ImportWallet({
                     ? handleWifSubmit
                     : handleSubmit}
             status={formStatus}
+            errors={formErrors}
             actions={formActions}
         >
             {laneSwitcher}
             {lane === 'backup' ? (
                 <>
-                    <div className={styles.mnemonicHeader}>
-                        <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
-                            {t('importWallet.backup.file')}
-                        </label>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={null}
-                            onClick={() => {
-                                setBackupScanning((s) => !s);
-                                if (error) setError(null);
-                            }}
-                            disabled={busy}
-                            aria-pressed={backupScanning}
-                            aria-expanded={backupScanning}
-                            aria-controls="xc-backup-scanner"
+                    {backupFile ? (
+                        /* The chosen file's summary takes the drop area's place, and
+                           still takes a dropped file, so another can replace it. */
+                        <section
+                            {...backupDrop.rootProps}
+                            className={styles.backupCard}
+                            aria-label={t('importWallet.backup.summary')}
                         >
-                            {backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
-                        </Button>
-                    </div>
-                    {backupScanning ? (
-                        <div id="xc-backup-scanner" className={styles.scannerBox}>
-                            <QrScanner onFrame={handleBackupQrFrame} alt={t('importWallet.backup.scannerAlt')} />
-                        </div>
-                    ) : null}
-                    {backupPointer ? (
-                        /* No kit card represents a loaded file pointer with an independently disabled action. */
-                        <div className={styles.backupPointerCard} role="status">
-                            <p className={styles.backupHint}>
-                                {t('importWallet.backup.pointerLoaded', {
-                                    name: backupPointer.name ? `: ${backupPointer.name}` : '',
+                            {/* The hidden native picker remains raw because the kit has no file-input primitive. */}
+                            <input
+                                {...backupDrop.pickerProps}
+                                aria-label={t('importWallet.backup.file')}
+                                disabled={busy}
+                            />
+                            <IdentityAvatar
+                                name={backupFile.walletName}
+                                context="hero"
+                                variant="asset"
+                                tone="var(--xc-accent-primary)"
+                            />
+                            <p className={styles.backupCardName}>{backupFile.walletName}</p>
+                            {backupFile.backedUp ? (
+                                <p className={styles.backupCardDate}>
+                                    {t('importWallet.backup.backedUp', { date: backupFile.backedUp })}
+                                </p>
+                            ) : null}
+                            <p className={styles.backupCardFile}>
+                                {t('importWallet.backup.fileMeta', {
+                                    name: backupFile.name,
+                                    size: formatBytes(backupFile.size),
                                 })}
-                                {' '}{t('importWallet.backup.location', { location: backupPointer.location })}
                             </p>
                             <Button
+                                id={BACKUP_FIELD_IDS.file}
                                 type="button"
-                                variant="ghost"
+                                variant="secondary"
                                 size="sm"
-                                icon={null}
-                                onClick={clearBackupPointer}
+                                icon={<Icon.RefreshIcon />}
+                                onClick={backupDrop.openFilePicker}
                                 disabled={busy}
                             >
-                                {t('importWallet.backup.useFile')}
+                                {t('importWallet.backup.changeFile')}
                             </Button>
-                        </div>
+                            {backupErrorFor('file') ? (
+                                // A dropped file refused while this one stays chosen.
+                                <StatusMessage variant="error">{backupErrorFor('file')}</StatusMessage>
+                            ) : null}
+                        </section>
                     ) : (
-                        <>
-                    {/* The hidden native picker remains raw because the kit has no file-input primitive. */}
-                    <input
-                        {...backupDrop.pickerProps}
-                        id="xc-backup-file"
-                        aria-label={t('importWallet.backup.file')}
-                        aria-describedby="xc-backup-source-status"
-                        disabled={busy}
-                    />
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        icon={null}
-                        onClick={backupDrop.openFilePicker}
-                        disabled={busy}
-                    >
-                        {t('importWallet.backup.chooseFile')}
-                    </Button>
-                    <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
-                        {backupSourceMessage}
-                    </p>
-                    <Textarea
-                        id="xc-backup-content"
-                        {...backupDrop.rootProps}
-                        label={t('importWallet.backup.contents')}
-                        size={isFull ? 'lg' : 'md'}
-                        className={`${styles.mnemonicText}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
-                        value={backupContent}
-                        onChange={(e) => {
-                            setBackupContent(e.target.value);
-                            if (e.target.value !== backupContent) setBackupFileName(null);
-                            if (error) setError(null);
-                        }}
-                        placeholder={`{${t('importWallet.backup.placeholder.version')}{${t('importWallet.backup.placeholder.kdf')}`}
-                        spellCheck={false}
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        autoComplete="off"
-                        rows={4}
-                        disabled={busy}
-                        aria-describedby="xc-backup-source-status"
-                    />
-                        </>
+                        <FileField
+                            variant="area"
+                            id={BACKUP_FIELD_IDS.file}
+                            label={t('importWallet.backup.choose')}
+                            hint={t('importWallet.backup.orDrop')}
+                            inputLabel={t('importWallet.backup.file')}
+                            drop={backupDrop}
+                            error={backupErrorFor('file')}
+                            errorKey={validationAttempt}
+                            disabled={busy}
+                        />
                     )}
-                    {/*. The copy has to earn each of these:
-                        three password fields on one screen is exactly where
-                        users give up, and the reason they are all here is that
-                        the backup carries a sealed wallet, not a plain one. So
-                        the screen says that out loud BEFORE the three boxes: a
-                        user who does not know there are three roles reads the
-                        second and third fields as the app asking twice. */}
-                    <p className={styles.backupHint}>
-                        {RESTORE_PASSWORD_INTRO}
-                    </p>
                     <Input
-                        id="import-backup-file-password"
+                        id={BACKUP_FIELD_IDS.password}
                         type="password"
-                        label={RESTORE_PASSWORD_LABELS.file}
-                        hint={RESTORE_PASSWORD_HINTS.file}
+                        revealable
+                        label={t('importWallet.backup.password')}
+                        help={mode === 'add'
+                            ? t('importWallet.backup.passwordHelpAdd')
+                            : t('importWallet.backup.passwordHelp')}
                         value={backupPassword}
+                        error={backupErrorFor('password')}
+                        errorKey={validationAttempt}
                         onChange={(e) => {
                             setBackupPassword(e.target.value);
+                            if (backupFieldError?.field === 'password') setBackupFieldError(null);
                             if (error) setError(null);
                         }}
                         autoComplete="off"
                         disabled={busy}
                     />
-                    <Input
-                        id="import-backup-wallet-password"
-                        type="password"
-                        label={RESTORE_PASSWORD_LABELS.wallet}
-                        hint={RESTORE_PASSWORD_HINTS.wallet}
-                        value={backupWalletPassword}
-                        onChange={(e) => {
-                            setBackupWalletPassword(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        autoComplete="off"
-                        disabled={busy}
-                    />
-                    <Input
-                        id="import-backup-device-password"
-                        type="password"
-                        label={restoreDeviceLabel(mode)}
-                        hint={restoreDeviceHint(mode)}
-                        value={backupDevicePassword}
-                        onChange={(e) => {
-                            setBackupDevicePassword(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        autoComplete="off"
-                        disabled={busy}
-                    />
-                    <Switch
-                        className={styles.advancedToggle}
-                        label={t('importWallet.backup.overwrite')}
-                        checked={backupOverwrite}
-                        onChange={(e) => setBackupOverwrite(e.target.checked)}
-                        disabled={busy}
-                    />
+                    {backupNeedsWalletPassword ? (
+                        <Input
+                            id={BACKUP_FIELD_IDS.wallet}
+                            type="password"
+                            revealable
+                            label={t('importWallet.backup.walletPassword')}
+                            help={t('importWallet.backup.walletPasswordHelp')}
+                            hint={t('importWallet.backup.walletPasswordReason')}
+                            value={backupWalletPassword}
+                            error={backupErrorFor('wallet')}
+                            errorKey={validationAttempt}
+                            onChange={(e) => {
+                                setBackupWalletPassword(e.target.value);
+                                if (backupFieldError?.field === 'wallet') setBackupFieldError(null);
+                                if (error) setError(null);
+                            }}
+                            autoComplete="off"
+                            disabled={busy}
+                        />
+                    ) : null}
+                    {backupNeedsDevicePassword ? (
+                        <Input
+                            id={BACKUP_FIELD_IDS.device}
+                            type="password"
+                            revealable
+                            label={t('importWallet.backup.devicePassword')}
+                            help={t('importWallet.backup.devicePasswordHelp')}
+                            hint={t('importWallet.backup.devicePasswordReason')}
+                            value={backupDevicePassword}
+                            error={backupErrorFor('device')}
+                            errorKey={validationAttempt}
+                            onChange={(e) => {
+                                setBackupDevicePassword(e.target.value);
+                                if (backupFieldError?.field === 'device') setBackupFieldError(null);
+                                if (error) setError(null);
+                            }}
+                            autoComplete="off"
+                            disabled={busy}
+                        />
+                    ) : null}
                 </>
             ) : null}
             {lane === 'mnemonic' ? (
             <>
-            <div className={styles.mnemonicHeader}>
-                <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
-                    {t('importWallet.recoveryPhrase')}
-                </label>
-            </div>
+            <IconSelect
+                id="import-wallet-type"
+                label={t('importWallet.walletType')}
+                help={t('importWallet.walletTypeHelp')}
+                value={walletType}
+                onChange={(nextType) => {
+                    setWalletType(nextType);
+                    setShowPassphrase(false);
+                    setBip39Passphrase('');
+                    formErrors.clear('xc-mnemonic');
+                    if (error) setError(null);
+                }}
+                disabled={busy}
+                options={[
+                    {
+                        value: 'bip39',
+                        label: t('importWallet.walletType.bip39'),
+                        sub: t('importWallet.walletType.bip39Description'),
+                        icon: <Icon.DocumentIcon />,
+                    },
+                    {
+                        value: 'freewallet',
+                        label: t('importWallet.walletType.legacy'),
+                        sub: t('importWallet.walletType.legacyDescription'),
+                        icon: <img src={branding.freeWalletWallyUrl()} alt="" className={styles.walletTypeIcon} />,
+                    },
+                ]}
+            />
             {scanning ? (
-                <div className={styles.scannerBox}>
-                    <QrScanner onFrame={handleQrFrame} alt={t('importWallet.phrase.scannerAlt')} />
+                <div className={scanMessage ? styles.scannerNotice : styles.scannerBox}>
+                    <QrScanner
+                        onFrame={handleQrFrame}
+                        alt={t('importWallet.phrase.scannerAlt')}
+                        noticeInPlace
+                        onNoticeChange={setScanMessage}
+                    />
                 </div>
             ) : null}
             <div
@@ -1155,7 +1284,12 @@ export function ImportWallet({
                 onDrop={handleFileDrop}
             >
                 <Textarea
+                    label={t('importWallet.recoveryPhrase')}
+                    help={phraseHelp}
                     hint={phraseHint}
+                    counter={isLegacyType
+                        ? t('importWallet.phrase.legacyCount', { count: mnemonicWordCount })
+                        : t('importWallet.phrase.wordCount', { count: mnemonicWordCount })}
                     id="xc-mnemonic"
                     ref={textareaRef}
                     size={isFull ? 'lg' : 'md'}
@@ -1178,39 +1312,29 @@ export function ImportWallet({
                     autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
-                    // Two text rows plus the action strip keep the empty box
-                    // the height the three-row box had; it grows as words come.
-                    rows={2}
+                    rows={3}
                     disabled={busy}
-                    aria-describedby="xc-mnemonic-status"
-                    actions={(
-                        <>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                icon={null}
-                                onClick={() => {
-                                    setScanning((s) => !s);
-                                    if (error) setError(null);
-                                }}
-                                disabled={busy}
-                                aria-pressed={scanning}
-                            >
-                                {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
-                            </Button>
-                        </>
+                    aria-describedby={detectedPhraseFormat === 'bip39' || detectedPhraseFormat === 'counterwallet' ? 'xc-mnemonic-status' : undefined}
+                    fieldAction={(
+                        <FieldIconButton
+                            icon={<Icon.QrCodeIcon />}
+                            label={scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
+                            onClick={() => {
+                                setScanning((current) => !current);
+                                setScanMessage(false);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                            aria-pressed={scanning}
+                        />
                     )}
                 />
-                <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
-                    <span>
-                        {isFreeWallet
-                            ? t('importWallet.phrase.freeWalletCount', { count: mnemonicWordCount })
-                            : t('importWallet.phrase.wordCount', { count: mnemonicWordCount })}
-                    </span>
-                    {detectedPhraseFormat === 'bip39' ? <span>{t('importWallet.phrase.bip39Detected')}</span> : null}
-                    {detectedPhraseFormat === 'counterwallet' ? <span>{t('importWallet.phrase.counterwalletDetected')}</span> : null}
-                </div>
+                {detectedPhraseFormat === 'bip39' || detectedPhraseFormat === 'counterwallet' ? (
+                    <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
+                        {detectedPhraseFormat === 'bip39' ? <span>{t('importWallet.phrase.bip39Detected')}</span> : null}
+                        {detectedPhraseFormat === 'counterwallet' ? <span>{t('importWallet.phrase.legacyDetected')}</span> : null}
+                    </div>
+                ) : null}
                 {wordSuggestions.length > 0 ? (
                     /* The transient word-completion group has no style-guide list primitive. */
                     <div className={styles.wordSuggestions} aria-label={t('importWallet.phrase.suggestions')}>
@@ -1230,13 +1354,14 @@ export function ImportWallet({
                         ))}
                     </div>
                 ) : null}
-                <p className={styles.dropHint}>
-                    {dragOver ? t('importWallet.phrase.releaseToLoad') : t('importWallet.phrase.dropHint')}
-                </p>
+                {dragOver ? (
+                    <p className={styles.dropHint}>{t('importWallet.phrase.releaseToLoad')}</p>
+                ) : null}
             </div>
             <Input
                 id="import-name"
                 label={t('renameWallet.name')}
+                help={t('importWallet.walletNameHelp')}
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 autoComplete="off"
@@ -1246,11 +1371,8 @@ export function ImportWallet({
                 id="import-password"
                 type="password"
                 label={t('common.password')}
-                hint={
-                    isFull
-                        ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
-                        : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })
-                }
+                // U57: the length rule is static help, so it lives in the tip.
+                help={passwordHelp}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -1263,6 +1385,7 @@ export function ImportWallet({
                 id="import-confirm"
                 type="password"
                 label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
+                help={t('importWallet.confirmPasswordHelp')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -1271,29 +1394,24 @@ export function ImportWallet({
                 autoComplete="new-password"
                 disabled={busy}
             />
-            {!isFreeWallet ? (
+            {!isLegacyType ? (
                 <div className={styles.advancedRow}>
-                    <div className={styles.advancedToggle}>
-                        <Switch
-                            label={t('importWallet.passphrase.toggle')}
-                            checked={showPassphrase}
-                            onChange={(e) => {
-                                setShowPassphrase(e.target.checked);
-                                if (!e.target.checked) setBip39Passphrase('');
-                            }}
-                            disabled={busy}
-                        />
-                        <InfoTip
-                            aria={t('importWallet.passphrase.help')}
-                            label={t('importWallet.passphrase.helpBody')}
-                        />
-                    </div>
+                    <Switch
+                        label={t('importWallet.passphrase.toggle')}
+                        help={t('importWallet.passphrase.helpBody')}
+                        checked={showPassphrase}
+                        onChange={(e) => {
+                            setShowPassphrase(e.target.checked);
+                            if (!e.target.checked) setBip39Passphrase('');
+                        }}
+                        disabled={busy}
+                    />
                     {showPassphrase ? (
                         <Input
                             id="import-bip39-passphrase"
                             type="password"
                             label={t('importWallet.passphrase.label')}
-                            hint={t('importWallet.passphrase.hint')}
+                            help={t('importWallet.passphrase.hint')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
@@ -1309,44 +1427,105 @@ export function ImportWallet({
             ) : null}
             {lane === 'wif' ? (
                 <>
+                    <IconSelect
+                        id="import-wif-coin"
+                        label={t('importWallet.wif.coin')}
+                        help={t('importWallet.wif.coinHelp')}
+                        value={effectiveWifCoin}
+                        onChange={(coin) => {
+                            setWifCoin(coin);
+                            setWifAddressType('');
+                            formErrors.clear('import-wif-network');
+                            if (error) setError(null);
+                        }}
+                        options={wifCoinFamilies.map((descriptor) => ({
+                            value: descriptor.coin,
+                            label: descriptor.displayName,
+                            icon: coinIcon(descriptor),
+                        }))}
+                        disabled={busy}
+                    />
+                    <IconSelect
+                        id="import-wif-network"
+                        label={t('importWallet.wif.chain')}
+                        help={t('importWallet.wif.chainHelp')}
+                        value={effectiveWifNetwork}
+                        onChange={(nextNetwork) => {
+                            setWifNetwork(nextNetwork);
+                            setWifAddressType('');
+                            if (error) setError(null);
+                        }}
+                        options={wifNetworkOptions}
+                        disabled={busy}
+                    />
+                    {wifDescriptor ? (
+                        <Select
+                            label={t('importWallet.wif.addressType')}
+                            help={t('importWallet.wif.addressTypeHelp')}
+                            value={effectiveWifAddressType}
+                            onChange={(e) => {
+                                setWifAddressType(e.target.value);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            {wifAddressTypes.map((type) => (
+                                <Select.Option key={type} value={type} icon={<Icon.AddressIcon />}>{addressTypeLabel(type)}</Select.Option>
+                            ))}
+                        </Select>
+                    ) : null}
                     <Input
+                        id="import-wif"
                         type="password"
                         label={t('importWallet.wif.key')}
-                        hint={t('importWallet.wif.subtitle')}
+                        help={t('importWallet.wif.keyHelp')}
                         value={wif}
                         onChange={(e) => {
-                            setWif(e.target.value);
+                            const nextWif = e.target.value;
+                            setWif(nextWif);
+                            const versionByte = wifImportVersionByte(nextWif);
+                            const matchingChains = wifChains.filter(
+                                (descriptor) => descriptor.wifVersionByte === versionByte,
+                            );
+                            const matchingCoins = new Set(matchingChains.map((descriptor) => descriptor.coin));
+                            const matchedChain = matchingChains.find(
+                                (descriptor) => descriptor.id === effectiveWifChainId,
+                            ) || matchingChains.find(
+                                (descriptor) => descriptor.coin === effectiveWifCoin,
+                            ) || (matchingCoins.size === 1 ? matchingChains[0] : null);
+                            if (matchedChain && matchedChain.id !== effectiveWifChainId) {
+                                setWifCoin(matchedChain.coin);
+                                setWifNetwork(matchedChain.networkKind);
+                                setWifAddressType('');
+                            }
+                            formErrors.clear('import-wif-network');
                             if (error) setError(null);
                         }}
                         autoComplete="off"
                         spellCheck={false}
                         disabled={busy}
                     />
-                    <ChainPicker
-                        label={t('importWallet.wif.chain')}
-                        value={wifChainId}
-                        onChange={(chainId) => {
-                            setWifChainId(chainId);
-                            if (error) setError(null);
-                        }}
-                        chainIds={wifChains.map((descriptor) => descriptor.id)}
-                        chainRegistry={wifChainRegistry}
-                        disabled={busy}
+                    <Input
+                        label={t('verifySignature.address')}
+                        value={wifAddress}
+                        readOnly
+                        autoComplete="off"
+                        spellCheck={false}
                     />
                     <Input
                         id="import-name"
                         label={t('renameWallet.name')}
+                        help={t('importWallet.walletNameHelp')}
                         value={name}
                         onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                         autoComplete="off"
                         disabled={busy}
                     />
                     <Input
+                        id="import-password"
                         type="password"
                         label={t('common.password')}
-                        hint={isFull
-                            ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
-                            : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}
+                        help={passwordHelp}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -1356,8 +1535,10 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Input
+                        id="import-confirm"
                         type="password"
                         label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
+                        help={t('importWallet.confirmPasswordHelp')}
                         value={confirm}
                         onChange={(e) => {
                             setConfirm(e.target.value);
@@ -1367,11 +1548,14 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Checkbox
+                        id="import-wif-ack"
                         className={styles.advancedToggle}
                         label={t('importWallet.wif.ack')}
+                        help={t('importWallet.wif.ackHelp')}
                         checked={wifWarningAck}
                         onChange={(e) => {
                             setWifWarningAck(e.target.checked);
+                            formErrors.clear('import-wif-ack');
                             if (error) setError(null);
                         }}
                         disabled={busy}
@@ -1381,8 +1565,11 @@ export function ImportWallet({
         </FormPage>
     );
 
-    const screenHeader = (
+    const pageHeader = (
         <PageHeader
+            // Every step sits inside Add wallet (or onboarding), so Back
+            // always steps back within the flow.
+            nested
             onBack={handleBack}
             backLabel={t('importWallet.backToSetup')}
             backDisabled={busy || adsNotice}
@@ -1401,6 +1588,9 @@ export function ImportWallet({
             ) : null}
         />
     );
+    // Before a wallet exists, onboarding shows only this page header. In add
+    // mode the unlocked shell supplies its app header above the same page header.
+    const screenHeader = pageHeader;
 
     const continueAfterNotice = () => {
         if (continuePendingRef.current) return;
@@ -1441,12 +1631,11 @@ export function ImportWallet({
     if (adsNotice) {
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage
-                    label={t('adsNotice.title')}
+                <AdsNotice
+                    onContinue={continueAfterNotice}
+                    busy={continuing}
                     status={noticeError ? <StatusMessage variant="error">{noticeError}</StatusMessage> : null}
-                >
-                    <AdsNotice onContinue={continueAfterNotice} busy={continuing} />
-                </FormPage>
+                />
             </Screen>
         );
     }

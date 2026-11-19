@@ -24,25 +24,24 @@ import {
 
 const VIEWPORT = { width: 360, height: 800 };
 
-// Root destinations mirror ROUTE_NAV_GROUPS. Marketplace uses the command
-// palette because compact navigation intentionally keeps it out of More.
-// `tab` marks the bottom-bar tabs: the tab bar already links to them, so
-// their header shows no Back control at this width.
+// Root destinations mirror the wallet-menu catalogue. The bottom bar or the
+// wallet menu opens each one as a navigation root, so none shows Back (U17,
+// G06); the mirrored Back is checked on a pushed page after the walk.
 const ROUTES = [
-    { name: 'Home' },
-    { name: 'History', tab: true },
-    { name: 'Send', tab: true },
-    { name: 'Receive', back: true },
-    { name: 'Scan', tab: true },
-    { name: 'DEX', back: true },
-    { name: 'Marketplace', back: true, palette: true },
-    { name: 'Dispensers', back: true },
-    { name: 'Contracts', back: true },
-    { name: 'Messaging', back: true },
-    { name: 'Contacts', back: true },
-    { name: 'Lists', back: true },
-    { name: 'Payments due', back: true },
-    { name: 'Settings', back: true },
+    { name: 'Home', id: 'home' },
+    { name: 'History', id: 'history' },
+    { name: 'Send', id: 'send' },
+    { name: 'Receive', id: 'receive' },
+    { name: 'Scan', id: 'scan' },
+    { name: 'DEX', id: 'markets' },
+    { name: 'Marketplace', id: 'market-activity' },
+    { name: 'Dispensers', id: 'dispensers-list' },
+    { name: 'Contracts', id: 'contracts-list' },
+    { name: 'Messaging', id: 'messaging' },
+    { name: 'Contacts', id: 'contacts' },
+    { name: 'Lists', id: 'lists' },
+    { name: 'Payments due', id: 'obligations' },
+    { name: 'Settings', id: 'settings' },
 ];
 
 async function settle(page) {
@@ -53,56 +52,54 @@ async function settle(page) {
 
 async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
-
-    const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    const developerMode = page.getByRole('switch', { name: 'Developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
     }
 
-    await page.getByRole('button', { name: 'Back to settings' }).click();
-    await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
+    // Back once: the switch lives on the Advanced group page.
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    // Language is a row on the Appearance group page.
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
+    // Language is a list of choices; a pick saves and returns.
+    await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    // The field's own label is localized too, so in the pseudo locale it reads
-    // as the wrapped pseudo string rather than "Language".
-    await expect(page.getByLabel(/^\u200F?⟦Language⟧$/)).toHaveValue('pseudo-rtl');
+    // The Appearance rows are not all in the catalogue yet, so the row may
+    // read in plain English under the pseudo locale.
+    await page.getByRole('main').getByRole('button', { name: /^‏?⟦?Language⟧?\b/ }).click();
+    await expect(
+        page.locator('[data-settings-choice="pseudo-rtl"] button'),
+        'the language list marks pseudo-RTL as the saved choice',
+    ).toHaveAttribute('aria-current', 'true');
+    await page.locator('button:has(svg[data-xc-directional]):visible').first().click();
 }
 
 // The pseudo locale wraps every translated string, the navigation and the
-// palette chrome and command titles included, as RLM + "⟦" + English + "⟧".
+// menu chrome and row titles included, as RLM + "⟦" + English + "⟧".
 // Match that form, so the walk still proves each label went through translation.
 function pseudoName(name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`^\\u200F?⟦${escaped}⟧`);
 }
 
-async function gotoPseudoSection(page, name) {
+async function gotoPseudoSection(page, name, id) {
     const navItem = page.getByRole('navigation').getByRole('button', { name: pseudoName(name) }).first();
     if (await navItem.isVisible().catch(() => false)) {
         await navItem.click();
         return;
     }
-    await page.getByRole('navigation').getByRole('button', { name: pseudoName('More') }).first().click();
-    const sheet = page.getByRole('dialog', { name: pseudoName('More') });
-    await expect(sheet, `no More sheet to find "${name}" in`).toBeVisible();
-    await sheet.getByRole('button', { name: pseudoName(name) }).first().click();
+    await page.getByRole('button', { name: pseudoName('Open menu') }).first().click();
+    const menu = page.getByRole('dialog', { name: pseudoName('Wallet menu') });
+    await expect(menu, `no wallet menu to find "${name}" in`).toBeVisible();
+    await menu.locator(`[data-wallet-menu-row="${id}"]`).click();
 }
 
 async function gotoRoute(page, route) {
-    if (!route.palette) {
-        await gotoPseudoSection(page, route.name);
-        return;
-    }
-
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: pseudoName('Command palette') });
-    await expect(palette).toBeVisible();
-    await palette.getByRole('combobox').fill(route.name);
-    // Command titles go through translation now, so in the pseudo locale they
-    // carry the same RLM and bracket wrapper as the navigation labels.
-    await palette.getByRole('option', { name: new RegExp(`^\\u200F?⟦?${route.name}\\b`) }).first().click();
-    await expect(palette).toBeHidden();
+    await gotoPseudoSection(page, route.name, route.id);
 }
 
 async function expectNoHorizontalOverflow(page, label) {
@@ -175,22 +172,23 @@ test.describe('responsive RTL route sweep', () => {
                 await gotoRoute(page, route);
                 await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
-                if (route.back) {
-                    await expectBackAtStartWithMirroredChevrons(page, route.name);
-                } else if (route.tab) {
-                    const heading = page.getByRole('heading', { level: 1 }).first();
-                    await expect(heading).toBeVisible();
-                    // h1 > title group > PageHeader row
-                    await expect(
-                        heading.locator('xpath=../..').locator('button:has(svg[data-xc-directional])'),
-                        `${route.name}: a bottom-bar tab shows a redundant back control`,
-                    ).toHaveCount(0);
-                } else {
-                    await expect(unlockedShell(page)).toBeVisible();
-                }
+                await expect(page.getByRole('heading', { level: 1 }).first()).toBeAttached();
+                // Home has no PageHeader and its Send and Receive actions
+                // carry directional icons, so look for the Back control by name.
+                await expect(
+                    page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back⟧/ }),
+                    `${route.name}: a navigation root shows a back control`,
+                ).toHaveCount(0);
 
                 await expectNoHorizontalOverflow(page, `${route.name} at ${VIEWPORT.width}px RTL`);
             });
         }
+
+        await test.step('a pushed page mirrors its Back', async () => {
+            await gotoPseudoSection(page, 'Settings', 'settings');
+            await page.getByRole('main').getByRole('button', { name: /^‏?⟦?Appearance⟧?\b/ }).click();
+            await expectBackAtStartWithMirroredChevrons(page, 'Settings, Appearance');
+            await expectNoHorizontalOverflow(page, `Settings, Appearance at ${VIEWPORT.width}px RTL`);
+        });
     });
 });

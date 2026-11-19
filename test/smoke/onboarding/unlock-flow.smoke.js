@@ -31,9 +31,8 @@ import { webcrypto } from 'node:crypto';
 
 // Node 18 exposes `globalThis.crypto` only under the experimental flag.
 // `@noble/hashes` + `crypto.getRandomValues` in kdf.js expect the bare
-// global, and the `crypto.subtle` AES-GCM used by Vault opens through
-// the same surface: install the polyfill before importing anything
-// that touches it.
+// global, and Vault's noble AES-GCM implementation draws IVs from the same
+// surface. Install the polyfill before importing anything that touches it.
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
 }

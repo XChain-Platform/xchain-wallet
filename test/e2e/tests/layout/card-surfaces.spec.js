@@ -10,7 +10,7 @@
 
 // Every card looks the same: walk the key routes of the demo wallet at a
 // phone, a tablet and a desktop size, with the Settings inline forms opened,
-// and the Locked screen with its lockout notice and forgot-password panel,
+// and the Locked screen with its lockout notice and Forgot Password page,
 // and measure each bordered card in the page content. All of them share one
 // solid 1px border in the border colour, the card radius and the card
 // padding (or none, for a flush list whose rows carry their own), no card or
@@ -27,6 +27,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { selectNamedToken } from '../../fixtures/crossChain.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
@@ -36,28 +37,30 @@ const VIEWPORTS = [
 ];
 
 const ROUTES = [
-    { label: 'Home coins', open: (page) => gotoSection(page, 'Home') },
-    { label: 'Home tokens', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Tokens'); } },
+    // Home's tabs are Balances, NFTs and DeFi; History holds the activity list.
+    { label: 'Home balances', open: (page) => gotoSection(page, 'Home') },
     { label: 'Home NFTs', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'NFTs'); } },
-    { label: 'Home activity', rows: true, open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Activity'); } },
+    { label: 'Home DeFi', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'DeFi'); } },
     { label: 'History', rows: true, open: (page) => gotoSection(page, 'History') },
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive') },
-    { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions') },
-    { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses') },
-    { label: 'Issue a token', open: (page) => palette(page, 'Issue a token directly') },
-    { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button').filter({ hasText: /\// })) },
+    { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions', 'Staking') },
+    { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses', 'Contacts') },
+    { label: 'Issue a token', open: issueForm },
+    { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button', { name: /^Open .* market$/ })) },
     { label: 'Dispenser detail', open: (page) => openFirst(page, 'Dispensers', page.getByRole('main').locator('li').getByRole('button')) },
     { label: 'My orders', open: (page) => palette(page, 'My orders') },
     { label: 'Settings', open: (page) => openSettings(page) },
-    { label: 'Settings This wallet', open: (page) => settingsSection(page, 'This wallet') },
-    { label: 'Settings This wallet Export', form: true, open: (page) => settingsForm(page, 'This wallet', 'Export…') },
-    { label: 'Settings This wallet Change password', form: true, open: (page) => settingsForm(page, 'This wallet', 'Change…') },
-    { label: 'Settings This wallet Remove', form: true, open: (page) => settingsForm(page, 'This wallet', 'Remove…') },
-    { label: 'Settings Backup Export', form: true, open: (page) => settingsForm(page, 'Backup', 'Export…') },
-    { label: 'Settings Backup Show phrase', form: true, open: (page) => settingsForm(page, 'Backup', 'Show…') },
-    { label: 'Settings Backup Test', form: true, open: (page) => settingsForm(page, 'Backup', 'Test…') },
-    { label: 'Settings Fees', open: (page) => settingsSection(page, 'Fees') },
+    // Settings is grouped: Wallets, Security, Backup and Recovery, Privacy and Sites, Appearance,
+    // Notifications, Network and Fees and Advanced.
+    { label: 'Settings Wallets', open: (page) => settingsSection(page, 'Wallets') },
+    { label: 'Settings My Wallets', open: (page) => settingsSubPage(page, 'Wallets', 'My Wallets') },
+    { label: 'Settings My Accounts', open: (page) => settingsSubPage(page, 'Wallets', 'My Accounts') },
+    { label: 'Settings Security Change password', form: true, open: (page) => settingsDirectPage(page, 'Security', 'Wallet password') },
+    { label: 'Settings Backup Export', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Encrypted backup file') },
+    { label: 'Settings Backup Show phrase', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Recovery phrase') },
+    { label: 'Settings Backup Test', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Test backup') },
+    { label: 'Settings Fees', open: (page) => settingsSection(page, 'Network and Fees') },
     { label: 'Settings About', open: (page) => settingsSection(page, 'About') },
 ];
 
@@ -66,20 +69,32 @@ async function homeTab(page, name) {
     await tab.click();
 }
 
-async function palette(page, destination) {
+// The menu filters by entry label, so a destination known by its subtitle is
+// found by typing the label (`query`) and picking the row that shows it.
+async function palette(page, destination, query = destination) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('combobox').fill(destination);
-    await dialog.getByRole('option').filter({ hasText: destination }).first().click();
+    await dialog.getByRole('combobox').fill(query);
+    // A renamed entry fails here by name instead of a click that waits out the test.
+    const option = dialog.getByRole('option').filter({ hasText: destination }).first();
+    await expect(option, `the palette offers "${destination}"`).toBeVisible();
+    await option.click();
     await expect(dialog).toBeHidden();
+}
+
+/** The palette's token entry opens the Issue Token form, with its template as an optional selector. */
+async function issueForm(page) {
+    await palette(page, 'Issue token');
+    await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
 }
 
 /** Opens a section and then the first item its list offers. */
 async function openFirst(page, section, items) {
     await gotoSection(page, section);
     await items.first().click();
-    await expect(page.getByRole('button', { name: /^Back/ }).first()).toBeVisible();
+    // A wide window opens the detail beside the list, so there is no Back button there.
+    if (page.viewportSize().width < 1024) await expect(page.getByRole('button', { name: /^Back/ }).first()).toBeVisible();
     await page.waitForTimeout(1000);
 }
 
@@ -88,20 +103,37 @@ async function settingsSection(page, name) {
     // Settings reopens on the last section; step back to the list first.
     const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
     if (await back.count()) await back.click();
-    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
-    await expect(page.getByRole('button', { name: 'Back to settings' }).first()).toBeVisible();
+    // By the row text: a field help tip is named 'About <label>' (U57), so a name
+    // pattern such as ^About would match the first tip instead of the About row.
+    await page.getByRole('main').getByRole('button').filter({ hasText: new RegExp(`^\\s*${name}`) }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 }
 
-/** Opens a Settings section and then one of its inline forms by the row's action. */
-async function settingsForm(page, section, action) {
-    await settingsSection(page, section);
-    await page.getByRole('main').getByRole('button', { name: action, exact: true }).first().click();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first()).toBeVisible();
+/** Opens a Settings group and then one of its list pages by the row title. */
+async function settingsSubPage(page, group, row) {
+    await settingsSection(page, group);
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}\\b`) }).first().click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
-/** Locks from whichever lock control this width shows. */
+/**
+ * Opens a Settings group and then one of its rows. These pages land straight
+ * on their form (no intro button, no Cancel; Back leaves), so the form itself
+ * is what must show.
+ */
+async function settingsDirectPage(page, group, row) {
+    await settingsSection(page, group === 'Backup' ? 'Backup and Recovery' : group);
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}`) }).first().click();
+    await expect(page.getByRole('main').locator('form').filter({ visible: true }).first()).toBeVisible();
+}
+
+/** Locks from the side menu's Lock wallet, or the Lock wallet button in the wallet menu header. */
 async function lock(page) {
-    await page.getByRole('button', { name: /^Lock( wallet)?$/ }).filter({ visible: true }).first().click();
+    const lockButton = page.getByRole('button', { name: /^Lock( wallet)?$/ }).filter({ visible: true }).first();
+    if (!(await lockButton.isVisible().catch(() => false))) {
+        await page.getByRole('button', { name: 'Open menu' }).click();
+    }
+    await lockButton.click();
     await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
 }
 
@@ -133,7 +165,8 @@ function rowListFaults() {
         return ['Top', 'Right', 'Bottom', 'Left'].every((side) => cs[`border${side}Style`] === 'solid'
             && cs[`border${side}Width`] === '1px' && cs[`border${side}Color`] === borderColor);
     };
-    const rows = [...main.querySelectorAll('ul > li > button')].filter((el) => el.getBoundingClientRect().height > 40);
+    const rows = [...main.querySelectorAll('button[data-activity-row], button[data-history-row]')]
+        .filter((el) => el.getBoundingClientRect().height > 40);
     const pad = getComputedStyle(document.documentElement).getPropertyValue('--xc-card-pad').trim();
     const faults = [];
     for (const row of rows) {
@@ -259,7 +292,9 @@ function cardFaults() {
         // A card shape with a tinted border (a red remove confirm) is a
         // second card look; tone belongs to the shared notice.
         const neutral = sides.every((s) => cs[`border${s}Color`] === borderColor);
-        if (!neutral && cs.borderTopLeftRadius.startsWith(radius) && sides.every((s) => cs[`padding${s}`] === pad)) {
+        // Operator ruling 2026-11-17: Home's Allocation card keeps its tinted border.
+        const allocation = /^Allocation\b/.test((el.innerText || '').trim());
+        if (!neutral && !allocation && cs.borderTopLeftRadius.startsWith(radius) && sides.every((s) => cs[`padding${s}`] === pad)) {
             faults.push(`${describe(el)}: card with a tinted border ${cs.borderTopColor}`);
         }
         if (!neutral) continue;
@@ -271,11 +306,22 @@ function cardFaults() {
         if (radii.size !== 1 || ![...radii][0].startsWith(radius)) faults.push(`${describe(el)}: radius ${[...radii].join(' ')}, card radius ${radius}`);
         const pads = new Set(sides.map((s) => cs[`padding${s}`]));
         const padding = [...pads].join(' ');
-        if (pads.size !== 1 || (padding !== pad && padding !== '0px')) faults.push(`${describe(el)}: padding ${padding}, card padding ${pad}`);
+        // Operator ruling 2026-11-17: the Locked screen's form card keeps 8px sides with its own
+        // vertical space; its sides must still be the card padding.
+        const lockedCard = /unlockForm/.test(el.className) && cs.paddingLeft === pad && cs.paddingRight === pad;
+        if (!lockedCard && (pads.size !== 1 || (padding !== pad && padding !== '0px'))) faults.push(`${describe(el)}: padding ${padding}, card padding ${pad}`);
     }
     for (const box of boxes) {
         const outer = cards.find((card) => card !== box && card.contains(box));
-        if (outer) faults.push(`${describe(box)}: ${cards.includes(box) ? 'card' : 'box'} inside ${describe(outer)}`);
+        if (!outer) continue;
+        // Operator ruling 2026-11-17: a wide form card holds its section boxes (the Send and
+        // Issue sections, Receive's action list, the Forgot Password restore card), and the
+        // Dispenser detail's quantity stepper sits in its embedded card. Any other box in a
+        // card is still a box in a box.
+        const inFormCard = /formCard/.test(outer.className) && /^(section|ul)\.(optionalSection|list|restoreCard)\b/.test(describe(box));
+        const stepper = /embeddedCard/.test(outer.className) && /^div\.stepperField\b/.test(describe(box));
+        if (inFormCard || stepper) continue;
+        faults.push(`${describe(box)}: ${cards.includes(box) ? 'card' : 'box'} inside ${describe(outer)}`);
     }
     return { cards: cards.length, faults };
 }
@@ -293,8 +339,13 @@ for (const viewport of VIEWPORTS) {
             await settle(page, { escape: !route.form });
             const result = await page.evaluate(cardFaults);
             measured += result.cards;
-            faults.push(...result.faults.map((fault) => `${route.label}: ${fault}`));
+            // Operator ruling 2026-11-17: the Dispenser detail's wide section card keeps 12px padding and radius.
+            faults.push(...result.faults
+                .filter((fault) => !(route.label === 'Dispenser detail' && /^section\.card .*(padding 12px, card padding|radius 12px, card radius)/.test(fault)))
+                .map((fault) => `${route.label}: ${fault}`));
             if (route.rows) {
+                // The rows load after the route opens; measure once the first one is drawn.
+                await expect(page.getByRole('main').locator('button[data-activity-row], button[data-history-row]').first()).toBeVisible();
                 const list = await page.evaluate(rowListFaults);
                 expect(list.rows, `${route.label} shows activity rows to measure`).toBeGreaterThan(1);
                 faults.push(...list.faults.map((fault) => `${route.label}: ${fault}`));
@@ -315,23 +366,30 @@ for (const viewport of VIEWPORTS) {
     });
 }
 
-test('the Locked screen and its forgot-password panel share the card rules at every size', async ({ page }) => {
+test('the Locked screen and its Forgot Password page share the card rules at every size', async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
     await createWallet(page);
     await lock(page);
     const faults = [];
     let measured = 0;
+    // The Forgot Password button opens its own page (operator ruling
+    // 2026-11-16: phrase reset, backup restore, erase); Back steps from a
+    // way-back page to the choices, then to the Locked screen.
+    const back = () => page.getByRole('button', { name: 'Back to previous screen' });
     for (const viewport of VIEWPORTS) {
         const size = `${viewport.width}x${viewport.height}`;
         await page.setViewportSize(viewport);
         measured += await measure(page, `Locked ${size}`, faults);
-        await page.getByRole('button', { name: 'Forgot password?' }).click();
+        await page.getByRole('button', { name: 'Forgot Password?' }).click();
+        await expect(page.getByRole('list', { name: 'Ways back into your wallet' })).toBeVisible();
         measured += await measure(page, `Locked forgot ${size}`, faults);
-        await page.getByRole('button', { name: 'Use recovery phrase' }).click();
-        await expect(page.getByText(/This permanently deletes every wallet/)).toBeVisible();
-        measured += await measure(page, `Locked forgot phrase ${size}`, faults);
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-        await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
+        await page.getByRole('button', { name: /^Erase Everything/ }).click();
+        await expect(page.getByText(/This removes every wallet, imported private key/)).toBeVisible();
+        measured += await measure(page, `Locked forgot erase ${size}`, faults);
+        await back().click();
+        await expect(page.getByRole('list', { name: 'Ways back into your wallet' })).toBeVisible();
+        await back().click();
+        await expect(page.getByRole('button', { name: 'Forgot Password?' })).toBeVisible();
     }
     // Wide sizes draw the form card, so the walk measured at least those.
     expect(measured).toBeGreaterThan(1);
@@ -341,9 +399,17 @@ test('the Locked screen and its forgot-password panel share the card rules at ev
 test('every card in the confirm stack is the same width at every size', async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
     await createWallet(page);
-    await palette(page, 'Prove address ownership');
-    await page.getByLabel(/^Message/).first().fill('Card width check');
-    await page.getByRole('button', { name: /^(Review|Sign|Continue)/ }).filter({ visible: true }).first().click();
+    // Sign message signs in place with no approval page (ruling U92), so an
+    // order review opens the confirm stack instead.
+    await palette(page, 'Create order');
+    const main = page.getByRole('main');
+    // Each side is an asset button with a picker.
+    const chain = { chainId: 'bitcoin-mainnet', chainLabel: 'Bitcoin' };
+    await selectNamedToken(page, 'Give asset', { ...chain, tick: 'XCP' });
+    await selectNamedToken(page, 'Get asset', { ...chain, tick: 'PEPECASH' });
+    await main.getByRole('textbox', { name: /^Give amount/ }).fill('1');
+    await main.getByRole('textbox', { name: /^Get amount/ }).fill('2');
+    await main.getByRole('button', { name: 'Place Order', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);
@@ -370,3 +436,100 @@ test('every card in the confirm stack is the same width at every size', async ({
         expect(widths[0], `${size}: cards fill the stack`).toBe(stack);
     }
 });
+
+/**
+ * Runs in the page. A card keeps its inset: every visible line of text and
+ * every field inside a bordered card sits at least the card padding inside
+ * the card's border box on the sides and top. Row lists whose rows carry
+ * their own padding are measured the same way, through their text.
+ */
+function cardInsetFaults() {
+    const root = document.querySelector('main') || document.body;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const pad = parseFloat(rootStyle.getPropertyValue('--xc-card-pad'));
+    const probe = document.createElement('div');
+    probe.style.border = '1px solid var(--xc-border)';
+    document.body.append(probe);
+    const borderColor = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    const sides = ['Top', 'Right', 'Bottom', 'Left'];
+    const isCard = (el) => {
+        const cs = getComputedStyle(el);
+        return sides.every((s) => cs[`border${s}Style`] === 'solid' && cs[`border${s}Width`] === '1px'
+            && cs[`border${s}Color`] === borderColor) && parseFloat(cs.borderTopLeftRadius) > 0;
+    };
+    const describe = (el) => {
+        const cls = [...el.classList].map((c) => c.replace(/^_|_[a-z0-9]{5}(_\d+)?$/gi, '')).slice(0, 2).join('.');
+        return `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''} "${(el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 24)}"`;
+    };
+    const cards = [...root.querySelectorAll('*')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height >= 40 && !el.matches('button, a, label, summary, [role="button"]') && isCard(el);
+    });
+    const faults = [];
+    for (const card of cards) {
+        const box = card.getBoundingClientRect();
+        const targets = [];
+        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            for (const r of range.getClientRects()) targets.push({ r, what: node.textContent.trim().slice(0, 24) });
+        }
+        for (const field of card.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select, textarea')) {
+            targets.push({ r: field.getBoundingClientRect(), what: `field ${field.tagName.toLowerCase()}` });
+        }
+        for (const { r, what } of targets) {
+            if (!r.width || !r.height) continue;
+            // Text scrolled out of a scroll panel is not on screen to touch an edge.
+            if (r.bottom <= box.top || r.top >= box.bottom) continue;
+            const left = r.left - box.left;
+            const right = box.right - r.right;
+            const top = r.top - box.top;
+            // A flush list carries its rows' own spacing: its sides keep the 4px
+            // floor and its top is left to the rows.
+            const padded = parseFloat(getComputedStyle(card).paddingTop) > 0;
+            const need = padded ? pad - 0.5 : 4;
+            const short = [['left', left], ['right', right], ...(padded ? [['top', top]] : [])].filter(([, gap]) => gap < need);
+            if (short.length) {
+                faults.push(`${describe(card)}: "${what}" ${short.map(([side, gap]) => `${side} ${gap.toFixed(1)}px`).join(', ')}, card padding ${pad}px`);
+                break;
+            }
+        }
+    }
+    return { cards: cards.length, faults };
+}
+
+const INSET_VIEWPORTS = [
+    { width: 360, height: 800 },
+    { width: 1440, height: 900 },
+];
+
+test.describe('onboarding cards keep their inset', () => {
+    test.use({ acceptLicense: false });
+    for (const viewport of INSET_VIEWPORTS) {
+        test(`the license card text sits inside the card padding at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            await page.goto('/');
+            await expect(page.getByLabel('License terms')).toBeVisible();
+            await settle(page, { escape: false });
+            const result = await page.evaluate(cardInsetFaults);
+            expect(result.cards, 'onboarding shows the license card').toBeGreaterThan(0);
+            expect(result.faults).toEqual([]);
+        });
+    }
+});
+
+for (const viewport of INSET_VIEWPORTS) {
+    test(`Home card text sits inside the card padding at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+        test.setTimeout(10 * 60 * 1000);
+        await page.setViewportSize(viewport);
+        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        await gotoSection(page, 'Home');
+        await settle(page);
+        const result = await page.evaluate(cardInsetFaults);
+        expect(result.cards, 'Home shows cards to measure').toBeGreaterThan(0);
+        expect(result.faults).toEqual([]);
+    });
+}

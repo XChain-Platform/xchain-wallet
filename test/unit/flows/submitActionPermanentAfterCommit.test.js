@@ -111,6 +111,8 @@ describe('submitAction: permanent refusal after the commit landed', () => {
             const err = await run(h, onBroadcastFailure).catch((e) => e);
             expect(err).toBeInstanceOf(BroadcastFailedError);
             expect(err.name).toBe(BROADCAST_FAILED_PERMANENT_NAME);
+            expect(err.commitLanded).toBe(true);
+            expect(err.commitTxid).toBe('commit-txid');
             const row = await onlyPending(h);
             expect(row.status).toBe('broadcast');
             expect(typeof row.broadcastAt).toBe('string');
@@ -129,6 +131,8 @@ describe('submitAction: permanent refusal after the commit landed', () => {
         });
         const err = await run(h, onBroadcastFailure).catch((e) => e);
         expect(err.name).toBe(BROADCAST_FAILED_PERMANENT_NAME);
+        expect(err.commitLanded).toBeUndefined();
+        expect(err.commitTxid).toBeUndefined();
         const row = await onlyPending(h);
         expect(row.status).toBe('failed');
         expect(row.txHex).toBe('commit-txid-hex');

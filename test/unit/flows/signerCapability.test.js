@@ -75,9 +75,9 @@ describe('encoderSignerOptions', () => {
     });
 });
 
-// The chunk lane's phase-2 reveal is dispatched AFTER the phase-1 commit is
-// on chain, so this is asked of the injected Signer (by `kind`) before the
-// commit is signed; the wrong answer here is the user's coin, not an error.
+// The chunk lane's phase-2 reveal is signed after the phase-1 commit and before
+// anything is broadcast, so this is asked of the injected Signer (by `kind`)
+// before the commit is signed; a wrong answer fails inside the vendor converter.
 describe('signerSupportsChunkReveal', () => {
     it('accepts the software signer, the only kind that signs the reveal', () => {
         expect(signerSupportsChunkReveal({ kind: 'software' })).toBe(true);

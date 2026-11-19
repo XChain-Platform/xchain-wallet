@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// HomeFilterBar keeps the token query and network filter visible together
-// directly above the Home asset tabs.
+// HomeFilterBar keeps the token query and network filter together wherever
+// Home presents its list controls, including the compact header popover.
 
 import { Icon, Input } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
@@ -18,23 +18,31 @@ import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
+ * @param {'menu'} [props.variant]                 stacks both controls inside the Home list popover
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {string[]} props.coinFamilies                     ordered coin family list (e.g. ['bitcoin','litecoin','dogecoin'])
  * @param {string} props.networkFilter                      'all' or a coin id
  * @param {(coin: string) => void} props.onNetworkFilterChange
  * @param {string} props.tokenQuery                         free-text token filter
  * @param {(query: string) => void} props.onTokenQueryChange
+ * @param {string} [props.searchPlaceholder]                names what the search covers on the current tab
+ * @param {string} [props.searchLabel]                      the search box's accessible name for that tab
+ * @param {import('react').ReactNode} [props.middle]        a control placed between the search and the network filter
  */
 export function HomeFilterBar({
+    variant,
     chainRegistry,
     coinFamilies,
     networkFilter,
     onNetworkFilterChange,
     tokenQuery,
     onTokenQueryChange,
+    searchPlaceholder,
+    searchLabel,
+    middle = null,
 }) {
     return (
-        <div className={styles.bar}>
+        <div className={`${styles.bar} ${variant === 'menu' ? styles.menu : ''}`}>
             <div className={styles.searchWrap}>
                 <span className={styles.searchIcon} aria-hidden="true">
                     <Icon.SearchIcon />
@@ -47,12 +55,13 @@ export function HomeFilterBar({
                     autoCorrect="off"
                     spellCheck={false}
                     className={styles.search}
-                    placeholder={t('home.filter.searchTokens')}
-                    aria-label={t('home.filter.searchTokensByName')}
+                    placeholder={searchPlaceholder || t('home.filter.searchTokens')}
+                    aria-label={searchLabel || t('home.filter.searchTokensByName')}
                     value={tokenQuery || ''}
                     onChange={(e) => onTokenQueryChange(e.target.value)}
                 />
             </div>
+            {middle}
             <div className={styles.networkWrap}>
                 <NetworkFilter
                     chainRegistry={chainRegistry}
@@ -60,6 +69,7 @@ export function HomeFilterBar({
                     value={networkFilter || 'all'}
                     onChange={onNetworkFilterChange}
                     ariaLabel={t('home.filter.filterByNetwork')}
+                    fieldLook={variant === 'menu'}
                 />
             </div>
         </div>

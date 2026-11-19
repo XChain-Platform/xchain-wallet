@@ -40,13 +40,13 @@ describe('segmented control outline', () => {
     });
 });
 
-// An interactive list row is a control, so it carries the same 1px control
-// edge as inputs, chips and checkboxes; a static row stays edgeless.
+// List rows sit in flush list cards separated by divider lines, so neither a
+// static nor an interactive row draws an edge of its own.
 describe('list row outline', () => {
-    it('gives an interactive row the 1px control border', () => {
+    it('gives an interactive row no control border', () => {
         const interactive = ruleBody('.interactive', listRowCss);
         expect(interactive).not.toBeNull();
-        expect(interactive).toMatch(/border:\s*1px solid var\(--xc-control-border\)\s*;/);
+        expect(interactive).not.toMatch(/border:\s*1px solid var\(--xc-control-border\)/);
     });
 
     it('keeps a static row edgeless', () => {

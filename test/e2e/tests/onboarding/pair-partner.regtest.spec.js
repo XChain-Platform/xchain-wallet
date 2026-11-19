@@ -11,8 +11,13 @@
 // Campaign coverage map, "Onboarding & wallet lifecycle" -> "Pair a watcher or
 // signer" (§20.5), undriven since the lane shipped.
 //
-// WHY THIS ONE. It is the fourth onboarding lane and the only one that ends
-// with two DEVICES trusting each other. Its whole reason to exist is stated in
+// WHERE IT LIVES NOW. The lane left the welcome screen on 2026-11-15 and is
+// Settings, Advanced, "Use another phone as a signer": each device first has a
+// Normal wallet (an open vault), and the lane ADDS the shared phrase to it as
+// a new wallet in the picked role.
+//
+// WHY THIS ONE. It is the only lane that ends with two DEVICES trusting each
+// other. Its whole reason to exist is stated in
 // `flows/pairPartner.js`: before it, a mistyped word in the shared recovery
 // phrase surfaced as a PSBT the offline signer could not sign, discovered after
 // the air-gap round trip with no diagnosis attached. So the assertion that
@@ -59,7 +64,7 @@
 //       --config=playwright.regtest.config.js tests/onboarding/pair-partner.regtest.spec.js
 
 import {
-    expect, test, dismissIntroCarousel,
+    expect, test, createWallet, fillPairAnotherPhone,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -67,6 +72,7 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     encodeXcwChunks, createXcwCollector, addChunkToCollector,
 } from '../../../../packages/core/src/uri/psbtQr.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -80,6 +86,9 @@ const FOREIGN_MNEMONIC =
 
 /** The wire prefix from `flows/pairPartner.js`. */
 const PAIR_PREFIX = 'XCW-PAIR:';
+
+/** The shell's offline sentence (reachability.notice.offline), which joins a form's notice box. */
+const OFFLINE_NOTICE = /You['’]re offline\./;
 
 /** A camera-equipped browser is launched outside the project, so it needs the absolute URL. */
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
@@ -124,31 +133,42 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
     // A browser launched by `launchWithQrCamera` is not the config's project, so
     // it has no baseURL and needs the absolute one.
     await page.goto(url);
-    await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Pair a watcher or signer' }).click();
+    // The lane needs an open vault, so the device gets a Normal wallet first,
+    // the way a user has one before opening Settings.
+    await createWallet(page, { password: PASSWORD, name: 'Device Wallet', navigate: false });
 
-    // The role stage names the OTHER half, which is the wording a user reasons
-    // about ("this device watches") - not the mode string.
-    const roleButton = role === 'watcher'
-        ? 'This device watches. Pair a signer'
-        : 'This device signs. Pair a watcher';
-    await page.getByRole('button', { name: roleButton }).click();
-
-    await page.getByLabel('Wallet name').fill(name);
-    await page.getByLabel('Shared recovery phrase').fill(mnemonic);
-    await page.getByLabel('Password for this device').fill(PASSWORD);
-    await page.getByLabel('Confirm password').fill(PASSWORD);
+    // The role buttons say what THIS phone does, the wording a user reasons
+    // about, not the mode string.
+    await fillPairAnotherPhone(page, { words: mnemonic, name, password: PASSWORD, walletMode: role });
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // Argon2id on the import, then the host derives an account node per active
     // chain. Both are slow enough to need the long budget. Race the code box
-    // against the error row so a lane that CANNOT build a payload reports why
-    // in seconds instead of timing out two minutes later with no diagnosis.
+    // against the code slot's own failed state so a lane that CANNOT build a
+    // payload reports why in seconds instead of timing out two minutes later.
+    //
+    // NOT AGAINST ANY ALERT. A fresh device sits on mainnet, which the venue
+    // runner cannot reach, so the form's notice box carries the shell's
+    // "You're offline" line beside its Public Codes note, and that box is an
+    // alert while the code is still building. The slot itself says "No
+    // pairing code yet." once a build ends without a code, and "Building…"
+    // while it runs; it reads "No pairing code yet." for one render before
+    // the build starts, so a failure is two reads in a row a second apart.
     const codeBox = page.getByText(new RegExp(`^${PAIR_PREFIX}`));
-    const failed = page.getByRole('alert');
-    await codeBox.or(failed).first().waitFor({ state: 'visible', timeout: 120_000 });
+    const noCode = page.getByText('No pairing code yet.', { exact: true });
+    let noCodeReads = 0;
+    await expect.poll(async () => {
+        if (await codeBox.count() > 0) return 'code';
+        noCodeReads = (await noCode.isVisible()) ? noCodeReads + 1 : 0;
+        return noCodeReads >= 2 ? 'failed' : 'pending';
+    }, {
+        timeout: 120_000,
+        intervals: [1_000],
+        message: 'the pairing lane neither showed this device\'s code nor ended its build',
+    }).not.toBe('pending');
     if (await codeBox.count() === 0) {
-        throw new Error(`the pairing lane could not build this device's code: ${(await failed.first().innerText()).trim()}`);
+        const notice = page.locator('[data-form-status]').first();
+        throw new Error(`the pairing lane could not build this device's code: ${(await notice.innerText()).trim()}`);
     }
 
     const code = (await codeBox.innerText()).trim();
@@ -166,8 +186,11 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
  */
 async function submitPartnerCode(page, { partnerCode, cta }) {
     const paired = page.getByText(/^Paired\./);
-    // `StatusMessage variant="error"` is the only role="alert" on this screen.
-    const failed = page.getByRole('alert');
+    // A refusal is the form's error summary, an alert of its own. The notice
+    // box above it is an alert too on a device the venue leaves offline, and
+    // its Try Again label changes while the shell re-checks, so it is left out
+    // or a re-check would read as a new refusal.
+    const failed = page.getByRole('alert').filter({ hasNotText: OFFLINE_NOTICE });
 
     // A REFUSAL FROM THE PREVIOUS ATTEMPT IS STILL ON SCREEN when this runs
     // again, and it would satisfy a plain "wait for an alert" instantly - which
@@ -178,7 +201,7 @@ async function submitPartnerCode(page, { partnerCode, cta }) {
     // consecutive messages are equal.)
     const previous = (await failed.count()) > 0 ? (await failed.first().innerText()).trim() : null;
 
-    await page.getByLabel('Paste the other wallet\'s code').fill(partnerCode);
+    await fieldByLabel(page, 'Paste the other wallet\'s code').fill(partnerCode);
     await page.getByRole('button', { name: cta, exact: true }).click();
 
     let result = null;
@@ -428,7 +451,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(false);
 
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: foreignCode.code, cta: 'Pair a signer',
+                    partnerCode: foreignCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'the watcher PAIRED with a signer restored from a different recovery phrase. '
@@ -445,13 +468,13 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // Same seed, same fingerprint, both halves watchers: a pair
                 // that would leave nobody able to sign. Only the mode says so.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a signer',
+                    partnerCode: watcherCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'a watcher paired with ANOTHER watcher, so both halves of the "air-gapped pair" '
                     + 'build transactions and neither one signs them')
                     .toBe(false);
-                expect(/must be in signer mode/i.test(res.message),
+                expect(/set up for the same job/i.test(res.message),
                     'the wrong-role pairing was refused without naming the role that is missing')
                     .toBe(true);
             });
@@ -462,7 +485,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // and a correctly-set-up user would be told their devices do
                 // not match.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: signerCode.code, cta: 'Pair a signer',
+                    partnerCode: signerCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'the genuine signer half was refused after two failed attempts, so the form is '
@@ -481,7 +504,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // testing only one direction leaves the signer unaware of its
                 // watcher.
                 const res = await submitPartnerCode(signer.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a watcher',
+                    partnerCode: watcherCode.code, cta: 'Pair the Other Phone',
                 });
                 expect(res.ok,
                     'the signer half refused the watcher it had just been paired WITH, so the lane '
@@ -547,7 +570,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 + 'the collector was bypassed')
                 .toBeVisible({ timeout: 60_000 });
 
-            const box = page.getByLabel('Paste the other wallet\'s code');
+            const box = fieldByLabel(page, 'Paste the other wallet\'s code');
             await expect.poll(async () => (await box.inputValue()).length, {
                 timeout: 180_000,
                 message: 'the capture never completed: the partner-code box stayed empty while the '
@@ -564,7 +587,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
             // And the point of all of it: a device that has only ever SEEN the
             // other one pairs with it.
             const res = await submitPartnerCode(page, {
-                partnerCode: (await box.inputValue()).trim(), cta: 'Pair a watcher',
+                partnerCode: (await box.inputValue()).trim(), cta: 'Pair the Other Phone',
             });
             expect(res.ok,
                 'the code arrived intact over the camera and the pairing was still refused, so the '

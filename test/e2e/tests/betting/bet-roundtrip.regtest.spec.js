@@ -40,7 +40,7 @@
 //    (wrong outcome index, wrong tick, wrong stake) passes the first and fails
 //    the second.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     explorerJson as venueJson,
@@ -48,13 +48,17 @@ import {
     REGTEST_COIN,
     fundAddress,
     healVenueClock,
+    selectListNetwork,
     selectVenueChain,
     minerRpc,
     mintXchain,
     switchToRegtest,
     unlockAfterReload,
     betDetailRefusal,
+    approveConfirm as approveWhenReady,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -132,13 +136,12 @@ function toLocalDateTimeInput(unixSec) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** Fills a password field only when the form is asking for one. */
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -240,14 +243,15 @@ async function openCreateMarket(page) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The HUB has a NetworkField of its own (BetFeedsList), separate from the
     // create form's, and it defaults to Bitcoin - so a market created on the
     // venue chain is simply not in the list this lists, and finding it by
-    // "#<index>" waits out its budget looking at the wrong chain.
-    await selectVenueChain(page.getByRole('main'), 'Network');
+    // "#<index>" waits out its budget looking at the wrong chain. It sits in
+    // the title bar's filter menu.
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 test.describe('BET round trip on regtest', () => {
@@ -319,7 +323,7 @@ test.describe('BET round trip on regtest', () => {
             // a previous run had left coins on it, and would fail on a clean chain.
             // Fund the address the form will actually sign with.
             await openCreateMarket(page);
-            oracle = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            oracle = await (await openFromAddress(page.getByRole('main'))).inputValue();
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative passes on Litecoin only because `[mn2]` also matches
             // there, and fails outright on a chain whose bech32 HRP differs.
@@ -354,12 +358,12 @@ test.describe('BET round trip on regtest', () => {
             const main = page.getByRole('main');
             // The address that will sign must still be the one that was funded: the
             // default is derived from wallet state, so assert it rather than trust it.
-            expect(await main.getByLabel('Your oracle address').inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the form still signs with the funded address').toBe(oracle);
 
             // The token field is a chip rather than an input, and its accessible
             // name is "<label>: <selection or placeholder>".
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
 
             // It opens a picker rather than taking free text, so the wager tick can
@@ -369,20 +373,22 @@ test.describe('BET round trip on regtest', () => {
             // by their stable data key rather than by role.
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Round trip ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
+            await fieldByLabel(main, 'Question').fill(`Round trip ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
 
             // Venue fact 1: from the CHAIN's clock. Far enough out that the bet
             // below lands while the market is still open, short enough that the
             // close step's wall-clock wait stays small (see DEADLINE_LEAD_SEC).
             const now = await chainTime();
             deadlineSec = now + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(deadlineSec));
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/).fill(toLocalDateTimeInput(deadlineSec));
 
-            await main.getByLabel('Your fee (optional)').fill(FEE_PCT);
+            // Quick view keeps the fee inside the closed Default Terms section.
+            await openFormSection(main, 'Default Terms');
+            await fieldByLabel(main, 'Your Fee').fill(FEE_PCT);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await approveConfirm(page);
 
             // The chain's answer, not the app's: the feed row exists, is owned by
@@ -429,7 +435,8 @@ test.describe('BET round trip on regtest', () => {
             // goes on resolving the original oracle address. The bet then
             // never changes hands and the failure reads as a wallet defect.
             await selectVenueChain(page.getByRole('main'), 'Coin');
-            await page.getByRole('button', { name: /^Generate/ }).click();
+            // The Add addresses form submits with "Add Address" in its footer.
+            await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
             // Pick the row that is neither the oracle nor already active, open it,
             // and make it the active address: every action, the bet included,
@@ -446,12 +453,12 @@ test.describe('BET round trip on regtest', () => {
             expect(generated.length, 'a second address exists to bet from').toBeGreaterThan(0);
 
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            await page.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: 'Set active' }).click();
             // Same in-flight-write race as the one documented at the bettor
             // activation below: Use awaits the write before navigating, so
             // anything that navigates on its own before then gets overridden.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
+            await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
@@ -489,7 +496,7 @@ test.describe('BET round trip on regtest', () => {
                 .filter((a) => a && a !== oracle);
             expect(onThisChain.length, 'a second address ON THIS CHAIN exists to bet from').toBeGreaterThan(0);
             await page.getByRole('button', { name: `View address ${onThisChain[0]}` }).click();
-            const willSignAs = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            const willSignAs = await (await openFromAddress(page.getByRole('main'))).inputValue();
             expect(willSignAs, 'the form did not take the oracle address just chosen').toBe(onThisChain[0]);
             expect(willSignAs, 'the wallet now signs as some other address').not.toBe(oracle);
             punter = willSignAs;
@@ -527,13 +534,13 @@ test.describe('BET round trip on regtest', () => {
         await test.step('make the bettor the active address, and check it took', async () => {
             await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${punter}` }).click();
-            const actions = page.getByRole('group', { name: 'Address actions' });
+            const actions = page.getByRole('list', { name: 'Actions', exact: true });
             await expect(actions, 'the address screen did not open').toBeVisible({ timeout: 30_000 });
             // The address screen offers Use only on an address that is not the
             // chain's active one already. The form picker above can have made the
             // bettor active, in which case there is nothing to press and the
             // "Active" badge check below is the precondition that matters.
-            const use = actions.getByRole('button', { name: 'Use' });
+            const use = actions.getByRole('button', { name: 'Set active' });
             if (await use.count() > 0) {
                 await use.click();
 
@@ -547,18 +554,21 @@ test.describe('BET round trip on regtest', () => {
                 // failure screenshot showing HOME, which is the whole tell.
                 // Leaving the detail screen IS the write having completed, so that
                 // is what gets waited on rather than a timeout.
-                await expect(page.getByRole('group', { name: 'Address actions' }),
+                await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                     'Use never completed, so the active-address write is still in flight')
                     .toBeHidden({ timeout: 30_000 });
 
-                // Use navigates back to Home on success, so the badge has to be read
-                // by walking in again - the same §5 screen fact the WIF-import spec
-                // recorded about this control.
-                await openPaletteCommand(page, 'Addresses');
-                await page.getByRole('button', { name: `View address ${punter}` }).click();
             }
-            await expect(page.getByRole('main').getByText('Active', { exact: true }),
-                'the bettor did not become the active address, so the market screen will '
+            // Use navigates back on success, so the badge is read by walking in
+            // again - the same §5 screen fact the WIF-import spec recorded
+            // about this control.
+            await openPaletteCommand(page, 'Addresses');
+            // The address LIST marks the active address with an "Active" badge
+            // on its row (AddressList addrActive); the detail screen carries no
+            // badge, it only stops offering Set active.
+            await expect(page.getByRole('button', { name: `View address ${punter}` })
+                .getByText('Active', { exact: true }),
+            'the bettor did not become the active address, so the market screen will '
                 + 'refuse the bet as a self-bet').toBeVisible({ timeout: 15_000 });
         });
 
@@ -569,7 +579,7 @@ test.describe('BET round trip on regtest', () => {
             // 20 seconds later, which measured 25 ms past a 30 s click budget in
             // CI. The row is waited for on a budget that covers one throttled
             // retry before it is clicked.
-            const market = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            const market = page.locator(`[data-market-index="${feedIndex}"]`);
             await expect(market, `the betting hub never listed market #${feedIndex}`)
                 .toBeVisible({ timeout: 120_000 });
             await market.click();
@@ -580,13 +590,19 @@ test.describe('BET round trip on regtest', () => {
             // getByRole("heading", { name: "Place a bet" }) matches nothing and
             // waits out the whole budget. This is the §3.10 screen fact the
             // SWEEP spec recorded, hit again here.
-            const yes = main.getByRole('button', { name: 'Yes', exact: true });
+            // The market opens on Details; the outcome buttons are on the Bet
+            // tab, and tapping one opens the Place Bet step with the stake.
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
+            const yes = main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Buy Yes,/ });
             await expect(yes, 'the place-bet surface did not open').toBeVisible({ timeout: 30_000 });
 
             await yes.click();
-            await main.getByLabel(/^Stake/).fill(STAKE);
+            await expect(main.getByRole('form', { name: 'Buy a position' }), 'tapping the outcome did not open Place Bet')
+                .toBeVisible({ timeout: 30_000 });
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
             await approveConfirm(page);
 
             // The pool is the settlement predicate itself (§7 sums only
@@ -646,27 +662,39 @@ test.describe('BET round trip on regtest', () => {
             // Back to the oracle address: only the feed's source may resolve.
             await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${oracle}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            await page.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: 'Set active' }).click();
             // Third site of the same in-flight-write race, and the most costly
             // if it fires: "My markets" lists by the ACTIVE address, so an
             // unfinished switch shows the oracle's console empty and the
             // failure reads as the market having vanished.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
+            await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
             await openPaletteCommand(page, 'My markets');
+            // My markets is the All list narrowed to this wallet's markets
+            // (ruling 2026-11-13), so it keeps All's Status filter, which
+            // opens on Taking bets; this market has closed.
+            await page.getByRole('button', { name: 'Filter prediction markets' }).click();
+            await page.getByRole('combobox', { name: 'Status' }).click();
+            await page.getByRole('option', { name: 'All markets' }).click();
 
             const main = page.getByRole('main');
             // This list reads the shared explorer too, so it gets the hub's
             // throttled-retry budget.
-            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`)),
+            const card = main.locator(`[data-market-index="${feedIndex}"]`);
+            await expect(card,
                 `My markets never listed market #${feedIndex}`).toBeVisible({ timeout: 120_000 });
-            await main.getByRole('button', { name: 'Resolve', exact: true }).first().click();
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            // The oracle posts the result from the market page's owner Actions tab.
+            await card.click();
+            await main.getByRole('tab', { name: 'Actions', exact: true }).click();
+            // An action list row (G101): its name is the title, then the description.
+            await main.getByRole('button', { name: /^Post result/ }).click();
+            await main.getByRole('group', { name: 'Winning outcome' })
+                .getByRole('button', { name: 'Yes', exact: true }).click();
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review resolve', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Result', exact: true }).click();
             await approveConfirm(page);
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'resolved', 'resolved');

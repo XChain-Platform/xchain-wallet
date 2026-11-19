@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
+import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
-import { StalenessLabel } from './StalenessLabel.jsx';
-import { useMessaging } from '../useMessaging.js';
+import { IdentityAvatar } from './WalletIdentity.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useBalanceUnit } from '../hooks/useBalanceUnit.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { isDemoWallet } from '../../flows/demoMode.js';
-import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import styles from './TotalBalanceHero.module.css';
 import {
     formatFiatAmount as formatFiatValue,
@@ -25,105 +25,57 @@ import {
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
+import { readWalletTile, tileRadius, WALLET_TILE_EVENT, walletTileText } from '../utils/walletTile.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/components.js';
-
-const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
-
-function compactActionsMatch() {
-    if (typeof window === 'undefined') return false;
-    if (typeof window.matchMedia === 'function') {
-        return window.matchMedia(COMPACT_ACTIONS_QUERY).matches;
-    }
-    return window.innerWidth < 480;
-}
-
-function useCompactActions() {
-    const [compact, setCompact] = useState(compactActionsMatch);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-        if (typeof window.matchMedia !== 'function') {
-            const onResize = () => setCompact(compactActionsMatch());
-            window.addEventListener('resize', onResize);
-            return () => window.removeEventListener('resize', onResize);
-        }
-
-        const query = window.matchMedia(COMPACT_ACTIONS_QUERY);
-        const onChange = (event) => setCompact(event.matches);
-        setCompact(query.matches);
-        if (typeof query.addEventListener === 'function') {
-            query.addEventListener('change', onChange);
-            return () => query.removeEventListener('change', onChange);
-        }
-        if (typeof query.addListener === 'function') {
-            query.addListener(onChange);
-            return () => query.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
-
-    return compact;
-}
-
-function enabledMenuItems(menu) {
-    return Array.from(menu?.querySelectorAll([
-        '[role="menuitem"]:not([aria-disabled="true"])',
-        '[role="menuitemcheckbox"]:not([aria-disabled="true"])',
-    ].join(',')) || []);
-}
 
 /**
  * Hero block at the top of Home: total fiat value across every
  * priced row (coins + tokens + NFTs). Honours the active network
  * filter so flipping to BTC shows only BTC-side wealth.
  *
- * The eye toggle hides the number for shoulder-surfing scenarios
- * (public coffee-shop unlocks, etc.). State is component-local so
- * it resets on reload, not persisted.
+ * Its controls sit in one "Balance actions" menu at every width (the
+ * same BalanceHeroMenu a token's balance hero uses): hide the chart,
+ * hide the balance for shoulder-surfing moments, then the Home-only
+ * rows below.
  *
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
- * @param {string | null} [props.walletId]       the wallet these rows belong to; only used to tell a demo wallet apart, which prices itself from its own fixtures instead of the live oracle
+ * @param {string | null} [props.walletId]       the wallet whose data source supplies prices
  * @param {'all' | string} props.networkFilter
- * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
- * @param {number | null} [props.pricesFetchedAt] Unix ms of the oldest live price used by the total.
  * @param {() => void} [props.onRefresh]          refreshes balances and any expired prices.
  * @param {boolean} [props.refreshing]            whether a manual refresh is running.
- * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
- * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
- * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
- * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
+ * @param {() => void} [props.onCommandPalette]  when provided, adds a search row that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
+ * @param {() => void} [props.onLockWallet]      when provided, adds a lock row. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, walletId, networkFilter, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap, onUnitChange }) {
     const labelId = useId();
+    const [, setWalletTileVersion] = useState(0);
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
-    // The demo wallet prices its synthetic test-network holdings on purpose.
-    const testCoinsOnly = !isDemoWallet(walletId)
+    // A source that prices test coins treats those holdings as portfolio data.
+    const testCoinsOnly = !source.pricesTestCoins
         && rowsWithChain.length > 0
         && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
-    const { total, unpriced, priceUnavailable } = useMemo(() => {
-        const sum = sumFiatValue(rows);
-        const meaningful = (rows || []).filter(hasNonZeroQuantity);
-        const meaningfulSum = sumFiatValue(meaningful);
-        return {
-            ...sum,
-            unpriced: meaningfulSum.unpriced,
-            priceUnavailable: meaningful.length > 0 && meaningfulSum.priced === 0,
-        };
-    }, [rows]);
+    const { total } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
-    const { messaging } = useMessaging();
     const fiatCurrency = String(settings?.fiatCurrency || 'USD').toUpperCase();
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
-    const compactActions = useCompactActions();
-    const [actionsOpen, setActionsOpen] = useState(false);
-    const actionsWrapRef = useRef(null);
-    const actionsTriggerRef = useRef(null);
-    const actionsMenuRef = useRef(null);
+    const [coinPrimary, toggleCoinPrimary] = useBalanceUnit('home');
+    useEffect(() => {
+        const handleWalletTile = (event) => {
+            if (!event.detail?.walletId || event.detail.walletId === walletId) {
+                setWalletTileVersion((version) => version + 1);
+            }
+        };
+        window.addEventListener(WALLET_TILE_EVENT, handleWalletTile);
+        return () => window.removeEventListener(WALLET_TILE_EVENT, handleWalletTile);
+    }, [walletId]);
+    const walletTile = readWalletTile(walletId);
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -134,31 +86,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const nativeChainIds = useMemo(() => {
         const set = new Set();
         for (const r of rows || []) {
-            if (r?.kind === 'native' && isMainnetChainId(r.chainId)) {
+            if (r?.kind === 'native' && (source.pricesTestCoins || isMainnetChainId(r.chainId))) {
                 set.add(r.chainId);
             }
         }
         return Array.from(set);
-    }, [rows]);
+    }, [rows, source.pricesTestCoins]);
     const nativeChainKey = nativeChainIds.join(',');
-
-    // A demo wallet prices itself from its own fixtures. Every other
-    // number in this hero is synthetic, so a LIVE 24h move applied to
-    // imaginary holdings was never the honest version of this line: it
-    // made a third-party request from a wallet whose whole design is to
-    // fetch nothing, and whether that request landed before a screenshot
-    // decided whether the change line was there at all - which moved the
-    // entire card 24px and was the last thing keeping two store-listing
-    // captures of one tree from matching.
-    const isDemo = isDemoWallet(walletId);
 
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
         if (nativePriceMap !== undefined) return undefined;
-        if (isDemo) {
-            setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
-            return undefined;
-        }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
             setPriceMap({});
             return undefined;
@@ -172,7 +110,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
     const effectivePriceMap = nativePriceMap ?? priceMap;
 
     // Compute 24h delta: for each native row with a known change pct,
@@ -201,114 +139,96 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         return { delta, pct };
     }, [rows, effectivePriceMap, total]);
 
-    const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
-    const hasUnpriced = unpriced > 0;
-    const stalePriceAsOf = oldestStalePriceTimestamp(rows);
-    // A failed price refresh keeps the last 24h move on screen, so its age
-    // joins the one freshness line instead of reading as current.
-    const staleChangeAsOf = oldestStaleChangeTimestamp(rows, effectivePriceMap);
-    // Test networks show no fiat, but a saved balance still says how old it is.
-    const portfolioUpdatedAt = testCoinsOnly
-        ? oldestFreshnessTimestamp(lastSyncedAt)
-        : oldestFreshnessTimestamp(
-            lastSyncedAt,
-            pricesFetchedAt,
-            stalePriceAsOf,
-            staleChangeAsOf,
-        );
-    const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !hidden && (testCoinsOnly
-        ? hasUpdate
-        : (hasChange || hasUnpriced || hasUpdate));
+    // A holding without a price adds nothing to the total and no status
+    // text: a price simply shows when one exists.
+    // The summary row stays while the balance is hidden (its figures masked),
+    // so hiding the balance never changes the card's height. The card carries
+    // no last-updated time; Settings, About shows when balances last loaded.
+    const showMeta = hidden || Boolean(rangeChange) || hasChange;
     // A row whose balance read failed carries no number, so the headline
     // cannot sum it as zero: with nothing else priced the total is unknown,
     // and beside priced rows it is a floor, the way the row itself says.
     const unreadRows = (rows || []).filter((row) => row?.unavailable === 'all' || row?.unavailable === 'partial');
     const balanceUnread = unreadRows.length > 0 && Number(total) === 0;
     const balanceFloor = unreadRows.length > 0 && !balanceUnread ? 'At least ' : '';
-    const balanceDisplay = testCoinsOnly
+    // The swap row shows the total in a coin instead of fiat: the filtered
+    // network's coin, or BTC across every network, priced from the same
+    // native price map as the change line. Without that price it stays off.
+    const unitRow = (rows || []).find((row) => row?.kind === 'native' && typeof row.chainId === 'string'
+        && (networkFilter !== 'all' || row.chainId.startsWith('bitcoin-'))) || null;
+    const unitTick = unitRow ? String(unitRow.tick || '').toUpperCase() : '';
+    const unitPrice = unitRow ? Number(effectivePriceMap[unitRow.chainId]?.priceFiat) : NaN;
+    const canShowInCoin = !testCoinsOnly && !balanceUnread
+        && Boolean(unitTick) && Number.isFinite(unitPrice) && unitPrice > 0;
+    const showInCoin = coinPrimary && canShowInCoin;
+    // The chart behind the card draws in the same unit (each point divided by
+    // the coin's price at that point), so the card says which unit it shows.
+    const unitChainId = showInCoin ? unitRow.chainId : '';
+    useEffect(() => {
+        if (typeof onUnitChange !== 'function') return;
+        onUnitChange(unitChainId ? { tick: unitTick, chainId: unitChainId, price: unitPrice } : null);
+    }, [onUnitChange, unitChainId, unitTick, unitPrice]);
+    const coinAmount = showInCoin
+        ? new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(Number(total) / unitPrice)
+        : null;
+    const balanceDisplay = showInCoin
+        ? `${balanceFloor}${coinAmount}`
+        : testCoinsOnly
         ? 'Test coins have no value'
         : balanceUnread
             ? 'Balance unavailable'
-            : priceUnavailable
-                ? 'Price unavailable'
-                : `${balanceFloor}${formatFiatAmount(total, fiatCurrency, fiatLocale, true)}`;
-    const balanceSpeech = testCoinsOnly
+            : `${balanceFloor}${formatFiatAmount(total, fiatCurrency, fiatLocale, true)}`;
+    const balanceSpeech = showInCoin
+        ? `${balanceFloor}${coinAmount} ${unitTick}`
+        : testCoinsOnly
         ? 'Test coins have no value'
         : balanceUnread
             ? 'Balance unavailable'
-            : priceUnavailable
-                ? 'Price unavailable'
-                : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
-    const balanceIsMessage = testCoinsOnly || priceUnavailable || balanceUnread;
-    const actionItems = [
+            : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
+    const balanceIsMessage = testCoinsOnly || balanceUnread;
+    // The hero's own toggles, the same rows a token's balance hero offers;
+    // a checked row means the chart or the balance is on screen.
+    const heroMenuItems = [
+        // Privacy first, the unit swap last, the same order on every hero.
+        {
+            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, onSelect: toggleHidden, checked: !hidden,
+        },
+        !testCoinsOnly ? {
+            id: 'swap',
+            label: showInCoin
+                ? t('components.totalBalanceHero.showWalletValue', { unit: fiatCurrency })
+                : t('components.totalBalanceHero.showWalletBalance', { unit: unitTick || 'BTC' }),
+            Icon: Icon.SwapIcon,
+            onSelect: toggleCoinPrimary,
+            disabled: !canShowInCoin,
+        } : null,
+    ].filter(Boolean);
+    // Home-only rows. A shell with no header or nav passes the settings,
+    // search and lock handlers, so the menu is where those live there.
+    const homeMenuItems = [
         typeof onRefresh === 'function' ? {
             id: 'refresh',
             label: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
-            title: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
             Icon: Icon.RefreshIcon,
-            handler: onRefresh,
+            onSelect: onRefresh,
             disabled: refreshing,
             className: refreshing ? styles.refreshing : '',
         } : null,
-        typeof onOpenSettings === 'function' ? ({
-            id: 'settings', label: t('components.totalBalanceHero.openSettings'), title: t('home.settings'), Icon: Icon.GearIcon, handler: onOpenSettings,
-        }) : null,
+        typeof onOpenSettings === 'function' ? {
+            id: 'settings', label: t('components.totalBalanceHero.openSettings'), Icon: Icon.GearIcon, onSelect: onOpenSettings,
+        } : null,
         typeof onCommandPalette === 'function' ? {
-            id: 'search', label: t('components.leftNav.openCommandPalette'), title: t('components.leftNav.searchCmdCtrlK'), Icon: Icon.SearchIcon, handler: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
+            id: 'search', label: t('components.leftNav.openCommandPalette'), Icon: Icon.SearchIcon, onSelect: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
         } : null,
-        typeof onToggleFilter === 'function' ? {
-            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), title: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, handler: onToggleFilter, pressed: filterOpen,
-        } : null,
-        !testCoinsOnly ? {
-            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), title: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, handler: toggleChartVisible, pressed: chartVisible,
-        } : null,
-        {
-            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), title: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, handler: toggleHidden,
-        },
         typeof onLockWallet === 'function' ? {
-            id: 'lock', label: t('home.lockWallet'), title: t('home.lockWallet'), Icon: Icon.LockIcon, handler: onLockWallet,
+            id: 'lock', label: t('home.lockWallet'), Icon: Icon.LockIcon, onSelect: onLockWallet,
         } : null,
     ].filter(Boolean);
-
-    useEffect(() => {
-        if (!actionsOpen) return undefined;
-        const onPointerDown = (event) => {
-            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
-        };
-        const onKeyDown = (event) => {
-            if (event.key !== 'Escape') return;
-            event.preventDefault();
-            setActionsOpen(false);
-            actionsTriggerRef.current?.focus();
-        };
-        // Tabbing out of the menu closes it, as the header menu does, so no
-        // menu stays open while focus sits on the page behind it.
-        const onFocusIn = (event) => {
-            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
-        };
-        window.addEventListener('mousedown', onPointerDown);
-        window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('focusin', onFocusIn);
-        return () => {
-            window.removeEventListener('mousedown', onPointerDown);
-            window.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('focusin', onFocusIn);
-        };
-    }, [actionsOpen]);
-
-    useEffect(() => {
-        if (actionsOpen) enabledMenuItems(actionsMenuRef.current)[0]?.focus();
-    }, [actionsOpen]);
-
-    useEffect(() => {
-        if (!compactActions) setActionsOpen(false);
-    }, [compactActions]);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -316,12 +236,37 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         // addresses went uncounted (xchain-wallet#57). The label says what the
         // figure is.
         <section className={styles.hero} aria-labelledby={labelId}>
-            <div className={styles.row}>
-                <span id={labelId} className={styles.label}>
-                    {t('components.totalBalanceHero.activeAddressBalance')}
-                    {filterLabel ? (
-                        <span className={styles.scope}>· {filterLabel}</span>
-                    ) : null}
+            <div className={`${styles.row} ${styles.rowWithActions}`}>
+                {/* A network filter never adds the network's name here (U12);
+                    the filter button's dot says a filter is on. */}
+                <span id={walletName ? undefined : labelId} className={walletName ? `${styles.label} ${styles.walletLabel}` : styles.label}>
+                    {walletName ? (
+                        <>
+                            <span
+                                className={styles.walletLabelIcon}
+                                aria-hidden="true"
+                                style={{ '--xc-avatar-shape': tileRadius(walletTile.shape) }}
+                            >
+                                <IdentityAvatar
+                                    name={walletName}
+                                    text={walletTileText(walletName)}
+                                    seed={walletId}
+                                    context="header"
+                                    variant="asset"
+                                    tone={walletTile.colour}
+                                    src={walletTile.image || null}
+                                />
+                            </span>
+                            <span className={styles.walletLabelCopy}>
+                                <span id={labelId} className={styles.walletLabelText}>{walletName}</span>
+                                <span className={styles.modeCaption}>
+                                    {showInCoin
+                                        ? t('components.totalBalanceHero.walletBalance')
+                                        : t('components.totalBalanceHero.walletValue')}
+                                </span>
+                            </span>
+                        </>
+                    ) : t('components.totalBalanceHero.activeAddressBalance')}
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
@@ -334,106 +279,41 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             <span className={styles.amountValue}>
                                 {balanceDisplay}
                             </span>
-                            {!testCoinsOnly && !priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
+                            {!testCoinsOnly ? <span className={styles.amountCode}>{showInCoin ? unitTick : fiatCurrency}</span> : null}
                         </>
                     )}
                 </div>
-                {compactActions ? (
-                    <div ref={actionsWrapRef} className={styles.compactActions}>
+                {/* The hero toggles (show in BTC, chart, balance) sit in the card
+                    as buttons; the rest stay in the actions menu. */}
+                <div className={`${styles.actions} ${styles.inlineActions}`}>
+                    {heroMenuItems.map(({ id, label: itemLabel, Icon: ItemIcon, onSelect, disabled, checked, className: itemClass }) => (
                         <Button
-                            ref={actionsTriggerRef}
+                            key={id}
                             type="button"
-                            className={styles.eye}
-                            onClick={() => setActionsOpen((open) => !open)}
-                            aria-label={t('components.totalBalanceHero.balanceActions')}
-                            aria-haspopup="menu"
-                            aria-expanded={actionsOpen ? 'true' : 'false'}
-                            title={t('components.totalBalanceHero.balanceActions')}
-                            icon={<Icon.MoreIcon />}
+                            className={`${styles.eye} ${itemClass || ''}`}
+                            onClick={onSelect}
+                            disabled={disabled}
+                            aria-label={itemLabel}
+                            aria-pressed={typeof checked === 'boolean' ? (checked ? 'true' : 'false') : undefined}
+                            title={itemLabel}
+                            icon={<ItemIcon />}
                         >
                             {null}
                         </Button>
-                        {actionsOpen ? (
-                            <div
-                                ref={actionsMenuRef}
-                                className={styles.actionMenu}
-                                role="menu"
-                                aria-label={t('components.totalBalanceHero.balanceActions')}
-                                onKeyDown={(event) => {
-                                    if (!event.target.closest?.('[role="menuitem"], [role="menuitemcheckbox"]')) return;
-                                    const items = enabledMenuItems(actionsMenuRef.current);
-                                    const index = items.indexOf(document.activeElement);
-                                    let nextIndex = null;
-                                    if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
-                                    if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
-                                    if (event.key === 'Home') nextIndex = 0;
-                                    if (event.key === 'End') nextIndex = items.length - 1;
-                                    if (nextIndex === null || items.length === 0) return;
-                                    event.preventDefault();
-                                    items[nextIndex]?.focus();
-                                }}
-                            >
-                                {actionItems.map(({ id, label, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts }) => (
-                                    <Button
-                                        key={id}
-                                        type="button"
-                                        role={pressed === undefined ? 'menuitem' : 'menuitemcheckbox'}
-                                        className={styles.actionRow}
-                                        disabled={disabled}
-                                        aria-disabled={disabled ? 'true' : undefined}
-                                        aria-checked={pressed === undefined ? undefined : String(Boolean(pressed))}
-                                        aria-keyshortcuts={keyShortcuts}
-                                        onClick={() => {
-                                            setActionsOpen(false);
-                                            handler();
-                                        }}
-                                        icon={<ActionIcon />}
-                                    >
-                                        {label}
-                                    </Button>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
-                ) : (
-                    <div className={styles.actions}>
-                        {actionItems.map(({ id, label, title, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts, className }) => (
-                            id === 'settings' ? (
-                                <Button
-                                    key={id}
-                                    type="button"
-                                    className={styles.eye}
-                                    onClick={handler}
-                                    aria-label={t('components.totalBalanceHero.openSettings')}
-                                    title={title}
-                                    icon={<ActionIcon />}
-                                >
-                                    {null}
-                                </Button>
-                            ) : (
-                                <Button
-                                    key={id}
-                                    type="button"
-                                    className={`${styles.eye} ${pressed ? styles.eyeActive : ''} ${className || ''}`}
-                                    onClick={handler}
-                                    disabled={disabled}
-                                    aria-pressed={pressed === undefined ? undefined : String(Boolean(pressed))}
-                                    aria-label={label}
-                                    aria-keyshortcuts={keyShortcuts}
-                                    title={title}
-                                    icon={<ActionIcon />}
-                                >
-                                    {null}
-                                </Button>
-                            )
-                        ))}
-                    </div>
-                )}
+                    ))}
+                    {homeMenuItems.some((item) => item.id !== 'refresh') ? <BalanceHeroMenu items={[]} extraItems={homeMenuItems.filter((item) => item.id !== 'refresh')} /> : null}
+                </div>
             </div>
             {showMeta ? (
-                <div className={styles.meta} aria-label={t('components.totalBalanceHero.balanceSummary')}>
+                <div className={styles.meta} role="group" aria-label={t('components.totalBalanceHero.balanceSummary')}>
                     <span className={styles.metaLeft}>
-                        {hasChange && !testCoinsOnly ? (
+                        {!hidden && rangeChange ? (
+                            <span className={rangeChange.direction === 'positive' ? styles.changePositive : rangeChange.direction === 'negative' ? styles.changeNegative : styles.changeNeutral}>
+                                {rangeChangeText(rangeChange, { showInCoin, unitPrice, unitTick, locale: fiatLocale })}
+                            </span>
+                        ) : hidden && !testCoinsOnly ? (
+                            <span className={`${styles.hidden} ${styles.hiddenChange}`} aria-label={t('balances.balanceHidden')}>••••</span>
+                        ) : hasChange && !testCoinsOnly ? (
                             <span
                                 className={
                                     changeDisplay.direction === 'positive' ? styles.changePositive
@@ -447,81 +327,28 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                 ({changeDisplay.text}{t('components.totalBalanceHero.24h')}
                             </span>
                         ) : null}
-                        {hasUnpriced && !testCoinsOnly ? (
-                            <span className={styles.metaUnpriced}>
-                                {unpricedLabel(rows)}
-                            </span>
-                        ) : null}
                     </span>
-                    {hasUpdate ? (
-                        <StalenessLabel
-                            lastSyncedAt={portfolioUpdatedAt}
-                            warnAfterMs={5 * 60_000}
-                            className={styles.metaRight}
-                        />
-                    ) : null}
                 </div>
             ) : null}
         </section>
     );
 }
 
-function oldestFreshnessTimestamp(...timestamps) {
-    const valid = timestamps.filter((timestamp) => (
-        typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
-    ));
-    return valid.length > 0 ? Math.min(...valid) : null;
-}
-
-function oldestStaleChangeTimestamp(rows, priceMap) {
-    let oldest = null;
-    for (const row of rows || []) {
-        if (row?.kind !== 'native' || !row.chainId || fiatValueOf(row) == null) continue;
-        const entry = priceMap?.[row.chainId];
-        if (entry?.stale !== true || !Number.isFinite(entry.change24hPct)) continue;
-        const timestamp = Number(entry.fetchedAt);
-        if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
-        if (oldest === null || timestamp < oldest) oldest = timestamp;
-    }
-    return oldest;
-}
-
-function oldestStalePriceTimestamp(rows) {
-    let oldest = null;
-    for (const row of rows || []) {
-        if (row?.fiatRateStale !== true || typeof row.fiatRate !== 'number') continue;
-        const timestamp = Date.parse(row.fiatRateFetchedAt);
-        if (!Number.isFinite(timestamp)) continue;
-        if (oldest === null || timestamp < oldest) oldest = timestamp;
-    }
-    return oldest;
-}
-
-// The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE
-// are coins, so "3 tokens not priced" misnamed them. Counts the same rows
-// `sumFiatValue` counts as unpriced.
-function unpricedLabel(rows) {
-    let coins = 0;
-    let tokens = 0;
-    for (const r of rows || []) {
-        if (!hasNonZeroQuantity(r)) continue;
-        if (sumFiatValue([r]).unpriced === 0) continue;
-        if (r?.kind === 'native') coins += 1;
-        else tokens += 1;
-    }
-    const parts = [];
-    if (coins > 0) parts.push(`${coins} ${coins === 1 ? 'coin' : 'coins'}`);
-    if (tokens > 0) parts.push(`${tokens} ${tokens === 1 ? 'token' : 'tokens'}`);
-    return `${parts.join(' and ')} not priced`;
-}
-
-function hasNonZeroQuantity(row) {
-    try {
-        return BigInt(row?.quantity ?? 0) !== 0n;
-    } catch {
-        const quantity = Number(row?.quantity);
-        return Number.isFinite(quantity) && quantity !== 0;
-    }
+/**
+ * The balance card's change pill text. The chart reports the
+ * selected range's change in fiat; with a coin as the card's unit, the
+ * amount is that fiat change at the coin's current price. Home's card and
+ * the coin and token card both print it through here.
+ *
+ * @param {{ text: string | null, delta: number | null, arrow: string, pctText: string }} rangeChange
+ * @param {{ showInCoin: boolean, unitPrice: number, unitTick: string, locale: string }} unit
+ */
+export function rangeChangeText(rangeChange, { showInCoin, unitPrice, unitTick, locale }) {
+    // A chart drawn in the coin already measured its change in it.
+    if (rangeChange.inCoin) return rangeChange.text || '…';
+    return rangeChange.text && showInCoin && Number.isFinite(rangeChange.delta)
+        ? `${rangeChange.arrow} ${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(rangeChange.delta / unitPrice)} ${unitTick}${rangeChange.pctText ? ` (${rangeChange.pctText})` : ''}`
+        : (rangeChange.text || '…');
 }
 
 // Per-row fiat value used by the 24h-change accumulator. Mirrors the

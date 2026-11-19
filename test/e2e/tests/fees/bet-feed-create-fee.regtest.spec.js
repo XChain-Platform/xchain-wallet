@@ -48,7 +48,7 @@
 // only variable between free and priced - a market's life includes that window,
 // which is a real cost hiding in a field users read as a safety margin.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -63,7 +63,10 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -141,17 +144,17 @@ async function actionFee(actionIndex) {
 }
 
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(new RegExp(`([\\d.]+)\\s*${COIN}`))?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    const coin = text.match(new RegExp(`Protocol fee\\s*${COIN}\\s*([\\d.]+)`))?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    const coin = text.match(new RegExp(`([\\d.,]+)\\s*${COIN}`))?.[1]?.replace(/,/g, '');
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
 }
 
@@ -170,7 +173,7 @@ function toLocalDateTimeInput(unixSec) {
  * deadline is the only thing that differs between the two legs.
  */
 async function composeMarket(page, { label, daysOut }) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
 
@@ -181,27 +184,31 @@ async function composeMarket(page, { label, daysOut }) {
 
     // The wager tick is a picker, not free text, so it can only offer something
     // this address holds. Rows declare role="listitem", hence the data key.
-    const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+    const tokenField = main.getByRole('button', { name: /^Token:/ });
     await expect(tokenField).toBeVisible({ timeout: 30_000 });
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-    await main.getByLabel('What is being bet on').fill(label);
-    await main.getByLabel('Outcome 0').fill('Yes');
-    await main.getByLabel('Outcome 1').fill('No');
+    await fieldByLabel(main, 'Question').fill(label);
+    await fieldByLabel(main, 'Outcome 1').fill('Yes');
+    await fieldByLabel(main, 'Outcome 2').fill('No');
 
     const now = await chainTime();
-    await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await fieldByLabel(main, /^(?:Closes|Purchases Close)$/).fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the
     // composed transaction.
-    const quoteText = await main.getByText(/Opening this market (is free|costs about)/)
-        .first().innerText();
+    // The sentence sits in the Speed and Fees section, closed by default.
+    await openFormSection(main, 'Speed and Fees');
+    const quote = main.getByText(/Opening this market (is free|costs about)/).first();
+    await expect(quote, 'the form never stated what opening this market costs')
+        .toBeVisible({ timeout: 30_000 });
+    const quoteText = await quote.innerText();
 
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Review market', exact: true }).click();
+    await main.getByRole('button', { name: 'Open Market', exact: true }).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -209,7 +216,7 @@ async function composeMarket(page, { label, daysOut }) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -235,17 +242,17 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Market Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Betting');
+            await openPaletteCommand(page, 'Prediction markets');
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address').inputValue();
+            oracle = await (await openFromAddress(main)).inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(oracle, FUNDING);
 
-            // LEAVE THIS FORM FIRST. `mintXchain` opens the command palette
+            // LEAVE THIS FORM FIRST. `mintXchain` opens the wallet menu
             // with `getByRole('combobox').first()`, and the create-market form
             // carries its own <select> ("Time to publish the result"), which is
             // the first combobox on the page - so the fixture tries to type
@@ -286,7 +293,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'with the 90-free-days rule')
                 .toMatch(/Opening this market is free/);
 
-            await expect(page.getByTestId('confirm-protocol-fee'),
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'the confirm screen states a protocol fee for a market that costs nothing')
                 .toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
@@ -326,7 +333,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // NUMBER 2, the coin fee the confirm screen projects, which is what
             // the composed transaction actually carries.
-            await expect(page.getByTestId('confirm-protocol-fee'),
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'the coin-fee lane also states an XCHAIN protocol fee, which reads as a second charge')
                 .toHaveCount(0);
             const minerSats = await screenNetworkFeeSats(page);

@@ -92,12 +92,12 @@ assert.ok(/estimateNativeSendFee/.test(src),
 assert.ok(/Network fee/.test(src),
     'CrossChainSwapForm review screen includes a Network fee row');
 // Header title switches on stage.
-assert.ok(/Review swap/.test(src),
-    'CrossChainSwapForm header title says "Review swap" in review/submitting stage');
-// The primary action names the review step on every lane. The confirm lane
+assert.ok(/Review Swap/.test(src),
+    'CrossChainSwapForm header title says "Review Swap" in review/submitting stage');
+// The primary action names the swap outcome on every lane. The confirm lane
 // still composes once and signs only after Approve.
-assert.ok(/Preparing review…'[\s\S]{0,80}: 'Review'/.test(src),
-    'CrossChainSwapForm labels its primary button "Review"');
+assert.ok(/Preparing Cross-Chain Swap…'[\s\S]{0,80}: 'Create Cross-Chain Swap'/.test(src),
+    'CrossChainSwapForm labels its primary button "Create Cross-Chain Swap"');
 
 // §5.6 confirm lane: the cross-chain GET_ADDRESS is a destination on ANOTHER
 // chain, and the confirm page's output-set cross-check is the only thing

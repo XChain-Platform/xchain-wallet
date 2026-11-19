@@ -78,7 +78,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
         let utils;
         await domAct(async () => { utils = mount(records); await drain(); });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
         return utils;
@@ -88,12 +88,12 @@ describe('DeployContractForm resuming an unfinished publish', () => {
         const utils = await resumed();
 
         const gas = utils.getByLabelText('Gas limit');
-        const constructor = utils.getByLabelText('Constructor params (optional)');
+        const constructor = utils.getByLabelText('Constructor params');
         expect(gas).toHaveValue('200000');
         expect(constructor).toHaveValue('alpha|beta');
         // The flow assembles from the record, so an edit here would change the
         // review and not the transaction.
-        for (const field of [gas, constructor, utils.getByLabelText('Cooldown blocks (optional)'), utils.getByLabelText('Slash destination (optional)')]) {
+        for (const field of [gas, constructor, utils.getByLabelText('Cooldown blocks'), utils.getByLabelText('Slash destination')]) {
             expect(field).toBeDisabled();
         }
     });
@@ -105,22 +105,22 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: 'typed' } });
+            fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: 'typed' } });
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
 
-        expect(utils.getByLabelText('Constructor params (optional)')).toHaveValue('');
+        expect(utils.getByLabelText('Constructor params')).toHaveValue('');
     });
 
     it('leaves the fields editable for a run with no stored plan', async () => {
         const utils = await resumed([pendingRecord({ assembleParams: undefined })]);
 
         expect(utils.getByLabelText('Gas limit')).not.toBeDisabled();
-        expect(utils.getByLabelText('Constructor params (optional)')).not.toBeDisabled();
+        expect(utils.getByLabelText('Constructor params')).not.toBeDisabled();
     });
 
     it('unlocks the fields once the run is discarded', async () => {
@@ -130,7 +130,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Resume publishing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Resume Publishing' }));
             await drain();
         });
         expect(utils.getByLabelText('Gas limit')).toBeDisabled();
@@ -169,7 +169,7 @@ describe('DeployContractForm discarding an unfinished publish', () => {
             await drain();
         });
         expect(cleared).toEqual([]);
-        expect(utils.getByRole('button', { name: 'Resume publishing' })).toBeInTheDocument();
+        expect(utils.getByRole('button', { name: 'Resume Publishing' })).toBeInTheDocument();
 
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Discard' }));
@@ -180,7 +180,7 @@ describe('DeployContractForm discarding an unfinished publish', () => {
             await drain();
         });
         expect(cleared).toEqual(['run-1']);
-        expect(utils.queryByRole('button', { name: 'Resume publishing' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Resume Publishing' })).toBeNull();
     });
 
     it('discards at once when no chunk has been sent', async () => {
@@ -216,16 +216,20 @@ describe('DeployContractForm review of a chunked publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+            // The standard action label is Title Case.
+            fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
             await drain();
         });
         return utils;
     }
 
-    it('says the network fee is paid for every transaction of the run', async () => {
+    it('totals the known network fees and names every transaction of the run', async () => {
         const utils = await review({ single: false, totalChunks: 2, codeHash: 'ab' });
 
-        expect(utils.getByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
-        expect(utils.getByText('Network fee').nextSibling).toHaveTextContent(/ for each of 3 transactions$/);
+        expect(utils.getByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(utils.getByText('Transactions').nextSibling)
+            .toHaveTextContent('2 chunks and 1 assembling transaction');
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.000045 BTC');
+        expect(utils.queryByTestId('confirm-total-main')).toBeNull();
     });
 });

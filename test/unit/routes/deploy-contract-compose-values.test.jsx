@@ -21,7 +21,7 @@ import { DeployContractForm } from '../../../packages/core/src/shared/routes/Dep
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = [
     'module.exports = {',
-    "  meta: { name: 'Review Contract', description: 'Exercises the publish review.', version: '1.0.0' },",
+    "  meta: { name: 'Review Contract', description: 'Exercises the publish review.', version: '9.8.7' },",
     '  run() { return 1; }',
     '};',
 ].join('\n');
@@ -46,7 +46,7 @@ function harness() {
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
         listPendingDeploys: () => Promise.resolve([]),
         planDeploy: () => Promise.resolve({ single: true, totalChunks: 0, codeHash: 'ab' }),
-        getContractExportedMeta: () => Promise.resolve({ status: 'present', name: 'Review Contract', description: 'x', version: '1.0.0' }),
+        getContractExportedMeta: () => Promise.resolve({ status: 'present', name: 'Review Contract', description: 'x', version: '9.8.7' }),
         validateContractCode: () => Promise.resolve({ valid: true }),
         composeForConfirm: (args) => {
             composed.push(args);
@@ -93,7 +93,8 @@ async function publish(utils, fields) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        // The standard action label is Title Case.
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
         await drain();
     });
 }
@@ -108,14 +109,14 @@ describe('DeployContractForm composes the values it validated', () => {
 
     it.each(['1e3', '1.0', '0x10', '14 4'])('refuses the cooldown "%s" instead of sending it as typed', async (cooldown) => {
         const { utils, composed } = await openForm();
-        await publish(utils, { 'Gas limit': '250000', 'Cooldown blocks (optional)': cooldown });
+        await publish(utils, { 'Gas limit': '250000', 'Cooldown blocks': cooldown });
         expect(composed).toHaveLength(0);
         expect(utils.container.textContent).toContain('Cooldown blocks must be an integer between 1 and 100000.');
     });
 
     it('sends a padded cooldown as the whole number it names', async () => {
         const { utils, composed } = await openForm();
-        await publish(utils, { 'Gas limit': '250000', 'Cooldown blocks (optional)': ' 0144 ' });
+        await publish(utils, { 'Gas limit': '250000', 'Cooldown blocks': ' 0144 ' });
         expect(composed).toHaveLength(1);
         expect(composed[0].actionData.params.COOLDOWN_BLOCKS).toBe('144');
     });

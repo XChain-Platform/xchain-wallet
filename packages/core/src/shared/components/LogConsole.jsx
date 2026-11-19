@@ -20,18 +20,30 @@
 // that opens later sees the full session backlog. The component never
 // detaches; leaving it attached for the rest of the session is
 // cheaper than re-arming on every Developer Mode visit.
+//
+// The page that hosts it (Developer options > Logs and diagnostics console)
+// keeps the level toggles, Copy all and Clear in its title-bar filter panel
+// with the search (G04, operator walk 2026-11-15): useLogConsole holds the
+// state, LogConsoleControls draws the panel's part and LogConsole the list.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Chip, Icon } from '@xchain-wallet/core/ui';
 import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { titleCase } from '../utils/titleCase.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/history.js';
+import styles from './LogConsole.module.css';
 
-const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
+export const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
+
+// The console text is monospace at the small size, one step above the
+// extra-small it used to be (operator walk 2026-11-15: too small to read).
+export const LOG_TEXT_SIZE = 'var(--xc-text-sm)';
 const MAX_VISIBLE_ENTRIES = 200;
 const SAFE_ENTRY_CACHE = new WeakMap();
 
@@ -57,7 +69,7 @@ const PANEL = {
     border: 'var(--xc-card-border)',
     borderRadius: 'var(--xc-card-radius)',
     fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
+    fontSize: LOG_TEXT_SIZE,
 };
 
 const LIST = {
@@ -65,9 +77,11 @@ const LIST = {
     overflowY: 'auto',
 };
 
+// The time (HH:MM:SS) and level ("error" at most) columns are sized in
+// characters of the monospace face, so they fit at any text size.
 const ROW = {
     display: 'grid',
-    gridTemplateColumns: '52px 64px 1fr',
+    gridTemplateColumns: '8ch 5ch minmax(0, 1fr)',
     gap: 'var(--xc-space-1)',
     padding: '2px 4px',
     borderBottom: '1px solid var(--xc-border)',
@@ -78,37 +92,6 @@ const LEVEL_COLORS = {
     info: 'var(--xc-text)',
     warn: 'var(--xc-warning, #C28A00)',
     error: 'var(--xc-danger-fg)',
-};
-
-const FILTER_CHIP = {
-    border: '1px solid var(--xc-border)',
-    background: 'transparent',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    minWidth: 'var(--xc-tap-min)',
-    minHeight: 'var(--xc-tap-min)',
-    padding: '2px 8px',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-    textTransform: 'capitalize',
-};
-const FILTER_CHIP_ACTIVE = {
-    ...FILTER_CHIP,
-    background: 'var(--xc-accent-primary)',
-    borderColor: 'var(--xc-accent-primary)',
-    color: 'var(--xc-bg)',
-};
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    minWidth: 'var(--xc-tap-min)',
-    minHeight: 'var(--xc-tap-min)',
-    padding: '2px 8px',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
 };
 
 const SR_ONLY = {
@@ -131,7 +114,11 @@ function formatTime(ms) {
     return `${hh}:${mm}:${ss}`;
 }
 
-export function LogConsole() {
+/**
+ * The console's state: the buffer, the level and search filters, and the
+ * Copy all and Clear actions. Mounting it attaches the process-wide buffer.
+ */
+export function useLogConsole() {
     const [allEntries, setAllEntries] = useState(() => logConsole.entries());
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
@@ -214,62 +201,100 @@ export function LogConsole() {
         })();
     };
 
+    return {
+        allEntries,
+        filtered,
+        visible,
+        enabledLevels,
+        toggleLevel,
+        search,
+        setSearch,
+        // A level turned off narrows the list, so the filter button shows it.
+        levelsNarrowed: enabledLevels.size !== ALL_LEVELS.length,
+        copyState,
+        onCopy,
+        onClear,
+    };
+}
+
+/** A level's name as its toggle shows it ("Warn"). */
+const levelLabel = (level) => level.charAt(0).toUpperCase() + level.slice(1);
+
+/**
+ * The console's own filter-panel content, under the panel's search box: one
+ * toggle per level (any mix on), then Copy all and Clear.
+ *
+ * @param {{ state: ReturnType<typeof useLogConsole> }} props
+ */
+export function LogConsoleControls({ state }) {
+    const { enabledLevels, toggleLevel, copyState, onCopy, onClear } = state;
     return (
-        <div style={PANEL}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)', alignItems: 'center' }}>
-                {ALL_LEVELS.map((level) => {
-                    const active = enabledLevels.has(level);
-                    return (
-                        <button
-                            key={level}
-                            type="button"
-                            onClick={() => toggleLevel(level)}
-                            aria-pressed={active}
-                            style={active ? FILTER_CHIP_ACTIVE : FILTER_CHIP}
-                        >
-                            {level}
-                        </button>
-                    );
-                })}
-                <input
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={t('components.logConsole.searchMessages')}
-                    aria-label={t('components.logConsole.searchLogMessages')}
-                    style={{
-                        flex: 1,
-                        minWidth: 120,
-                        background: 'var(--xc-bg-muted)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        minHeight: 'var(--xc-tap-min)',
-                        padding: '2px 6px',
-                        fontSize: 'var(--xc-text-xs)',
-                    }}
-                />
-                <button
+        <div className={styles.controls} data-log-console-controls="">
+            <div className={styles.levels}>
+                {ALL_LEVELS.map((level) => (
+                    <Chip
+                        key={level}
+                        pressed={enabledLevels.has(level)}
+                        onPressedChange={() => toggleLevel(level)}
+                        data-log-level={level}
+                    >
+                        {levelLabel(level)}
+                    </Chip>
+                ))}
+            </div>
+            <div className={styles.actions}>
+                <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.CopyIcon />}
                     onClick={onCopy}
-                    style={ACTION_BTN}
                     aria-label={t('components.logConsole.copyAllLogEntries')}
                     title={t('components.logConsole.copyFilteredLogEntriesPlus')}
                 >
-                    {copyState === 'copied'
+                    {/* A kit button's label is Title Case (G01), its copy states included. */}
+                    {titleCase(copyState === 'copied'
                         ? t('history.copy.copied')
                         : copyState === 'failed'
                             ? t('components.logConsole.copyFailedClipboardUnavailable')
-                            : t('components.logConsole.copyAll')}
-                </button>
-                <button type="button" onClick={onClear} style={ACTION_BTN} aria-label={t('components.logConsole.clearLogBuffer')}>
-                    {t('common.clear')}
-                </button>
+                            : t('components.logConsole.copyAll'))}
+                </Button>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.TrashIcon />}
+                    onClick={onClear}
+                    aria-label={t('components.logConsole.clearLogBuffer')}
+                >
+                    {/* In a filter panel a bare "Clear" reads as clearing the
+                        filters; this one empties the log buffer. */}
+                    {titleCase(t('components.logConsole.clearLogBuffer'))}
+                </Button>
             </div>
+        </div>
+    );
+}
+
+/**
+ * The console messages list. Pass the page's useLogConsole state so the
+ * filters in its title bar narrow it; without one it reads the buffer itself
+ * with every level shown.
+ *
+ * @param {{ state?: ReturnType<typeof useLogConsole> }} [props]
+ */
+export function LogConsole({ state } = {}) {
+    return state ? <LogConsoleList state={state} /> : <OwnLogConsole />;
+}
+
+function OwnLogConsole() {
+    return <LogConsoleList state={useLogConsole()} />;
+}
+
+function LogConsoleList({ state }) {
+    const { allEntries, filtered, visible, copyState } = state;
+    return (
+        <div style={PANEL} data-log-console-list="">
             <div style={LIST} role="log" aria-label={t('components.logConsole.recentConsoleEntries')} aria-live="polite">
                 {copyState !== 'idle' ? (
                     <span style={SR_ONLY}>

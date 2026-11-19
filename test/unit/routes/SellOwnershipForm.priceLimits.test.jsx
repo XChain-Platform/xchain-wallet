@@ -57,7 +57,7 @@ function mount(messaging) {
 
 async function listAt(price) {
     fireEvent.change(screen.getByRole('textbox', { name: /^Price/ }), { target: { value: price } });
-    const list = screen.getByRole('button', { name: 'List name for sale' });
+    const list = screen.getByRole('button', { name: /^List ownership for sale$/i });
     await waitFor(() => expect(list).not.toBeDisabled());
     fireEvent.click(list);
 }
@@ -87,10 +87,9 @@ describe('SellOwnershipForm price limits', () => {
         const messaging = messagingWith();
         mount(messaging);
         await screen.findByLabelText(/^Price/);
-        fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose price token' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select GOLD on Bitcoin/ }));
-        await screen.findByRole('textbox', { name: /^Price \(in GOLD\)/ });
+        await screen.findByRole('textbox', { name: /^Price \(GOLD\)/ });
 
         await listAt('1001');
 

@@ -11,10 +11,11 @@
 // MyOrdersView (PC-17): the unified, cross-pair "My orders" surface. It
 // lists every ORDER the wallet placed (as SOURCE) across all chains and
 // addresses - including native-coin pairs, which the per-market
-// OpenOrdersPanel silently drops - and offers Cancel (ORDER v1) and Edit
-// (ORDER v2) on the ones still open. Native-coin-GIVE rows carry the
-// PC-16 auto-pay toggle (the same per-order revocation the interim
-// OpenOrdersPanel row provided).
+// OpenOrdersPanel silently drops - as one plain list, newest first, each
+// row carrying its status chip (operator 2026-11-13: no Open / Closed split).
+// Every row opens the order's detail page (OrderDetail), which holds Cancel
+// (ORDER v1), Edit (ORDER v2), the PC-16 auto-pay toggle for native-coin
+// GIVE orders and the lifecycle timeline.
 //
 // Status derivation: the list feed (getOrdersForAddress) carries only the
 // action-VALIDITY status, and a single order's getAction(...).state.status
@@ -25,125 +26,37 @@
 // open is read once
 // through orders.detail, whose `state` block nets settled matches out of
 // give_remaining and reports `complete` or `filled` once the order is fully filled.
-// Cancel/edit are offered only while an order is open.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, Skeleton } from '@xchain-wallet/core/ui';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
-import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
-import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { ResultScreen } from '../components/ResultScreen.jsx';
-import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
-import { useSignerReady } from '../hooks/useSignerReady.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
-import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { boundListIndex } from '../../flows/accessListSlots.js';
-import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
-import { useSettings } from '../hooks/useSettings.js';
-import { explorerPageUrl } from '../utils/explorerLinks.js';
-import { formatLocalDateTime } from '../utils/dateTime.js';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { deriveStatus, extractRows, fillStateOf, orderStatusLabel, sideAmountText, sideLabel } from '../utils/orderView.js';
+import { hasOrderCancelBroadcast, orderKey } from '../utils/orderCancelMarks.js';
+import { OrderRow } from './OrderRow.jsx';
+import { OrderDetail } from './OrderDetail.jsx';
 import L from './ObligationsView.module.css';
-import F from './IssueTokenForm.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
-const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
-    allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/
-).test(String(value ?? '').trim());
-
-function extractRows(resp) {
-    let rows = [];
-    if (Array.isArray(resp)) rows = resp;
-    else if (Array.isArray(resp?.data)) rows = resp.data;
-    else if (Array.isArray(resp?.rows)) rows = resp.rows;
-    else if (Array.isArray(resp?.orders)) rows = resp.orders;
-    // A null or scalar entry from the explorer would throw while reading a row field.
-    return rows.filter((row) => row !== null && typeof row === 'object' && !Array.isArray(row));
-}
-
-// A side's human label: ownership, a token amount, or a native-coin amount
-// (empty tick = the chain's native coin).
-function sideLabel(tick, coin, amount, ownership) {
-    if (Number(ownership) === 1) return `ownership of ${detailText(tick)}`;
-    const amountText = detailText(amount);
-    const unitText = detailText(tick || coin);
-    return amountText === '-' && unitText === '-' ? '-' : `${amountText} ${unitText}`;
-}
-
-function detailText(value) {
-    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
-    const text = String(value).trim();
-    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
-}
-
-function isNativeGive(row) {
-    return !row.give_tick || String(row.give_tick).length === 0;
-}
+// The status helpers moved to utils/orderView.js; tests and callers still
+// import them from here.
+export { deriveStatus, fillStateOf } from '../utils/orderView.js';
 
 // How many orders.detail reads are in flight at once while the open
 // subset is enriched; the whole batch is still one wait.
 const FILL_READ_CONCURRENCY = 6;
 
-const CLOSED_LABELS = Object.freeze({
-    filled: 'Filled',
-    cancelling: 'Cancelling',
-    cancelled: 'Cancelled',
-    expiring: 'Expiring',
-    expired: 'Expired',
-    invalid: 'Invalid',
+// The filter's Status choices; a transitional status files with the one it
+// becomes (Cancelling with Cancelled, Expiring with Expired).
+const STATUS_GROUP = Object.freeze({
+    open: 'open',
+    filled: 'filled',
+    cancelling: 'cancelled',
+    cancelled: 'cancelled',
+    expiring: 'expired',
+    expired: 'expired',
 });
-
-// The lifecycle half of an order detail. `state.status` is the indexer's
-// latest order status (open / cancelling / cancelled / expiring / expired /
-// complete / filled) and `state.give_remaining` is the give amount net of settled
-// matches, zeroed once the order is terminal. Null when the detail lacks
-// the block, so the caller falls back to the feeds alone. The optional
-// expiry_status records the chain-clock classification from the query flow.
-export function fillStateOf(detail) {
-    const state = detail && typeof detail === 'object' ? detail.state : null;
-    if (!state || typeof state !== 'object') return null;
-    return {
-        status: String(state.status || ''),
-        giveRemaining: state.give_remaining ?? null,
-        expiration: state.expiration ?? null,
-        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
-    };
-}
-
-export function deriveStatus(item, cancelledKeys, nowSec) {
-    if (cancelledKeys.has(item.key)) return 'cancelled';
-    if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
-    const fill = item.fill;
-    if (fill) {
-        if (fill.status === 'complete' || fill.status === 'filled') return 'filled';
-        if (fill.status === 'cancelling') return 'cancelling';
-        if (fill.status === 'cancelled') return 'cancelled';
-        if (fill.status === 'expiring') return 'expiring';
-        if (fill.status === 'expired') return 'expired';
-        const remaining = compareDecimalStrings(fill.giveRemaining, '0');
-        if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
-        if (fill.expiryStatus === 'expired') return 'expired';
-        if (fill.expiryStatus != null) return 'open';
-    }
-    const exp = Number(fill?.expiration ?? item.row.expiration);
-    if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
-    return 'open';
-}
-
-// The give amount still on offer when an open order has been partly
-// filled; null when nothing has filled or the detail did not say.
-function partialRemaining(item) {
-    const fill = item.fill;
-    if (!fill || fill.status !== 'open') return null;
-    const aboveZero = compareDecimalStrings(fill.giveRemaining, '0');
-    const belowTotal = compareDecimalStrings(fill.giveRemaining, item.row.give_amount);
-    if (aboveZero !== 1 || belowTotal !== -1) return null;
-    return String(fill.giveRemaining);
-}
 
 // The list feed hydrates each row with its detail's `state` block when the
 // chain clock is current, so a row that carries a lifecycle status already
@@ -178,37 +91,20 @@ async function readFillStates(messaging, candidates) {
     return fills;
 }
 
-function fmtDate(unixSec) {
-    const n = Number(unixSec);
-    // Protocol expirations are Unix seconds. A current millisecond timestamp
-    // otherwise renders as a plausible date tens of thousands of years away.
-    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
-    return formatLocalDateTime(n);
-}
-
-function withFormattedExpiration(confirmAction) {
-    const decoded = confirmAction?.composed?.decoded;
-    if (!decoded || !Array.isArray(decoded.details)) return confirmAction;
-    const replacements = [];
-    const details = decoded.details.map((detail) => {
-        if (!/expir/i.test(String(detail?.label || ''))) return detail;
-        const formatted = fmtDate(detail.value);
-        if (!formatted) return detail;
-        replacements.push([String(detail.value), formatted]);
-        return { ...detail, value: formatted };
-    });
-    if (replacements.length === 0) return confirmAction;
-    const summary = replacements.reduce(
-        (value, [raw, formatted]) => String(value).split(raw).join(formatted),
-        decoded.summary,
-    );
-    return {
-        ...confirmAction,
-        composed: {
-            ...confirmAction.composed,
-            decoded: { ...decoded, summary, details },
-        },
-    };
+// The list items for a demo wallet: the bundled demo orders, owned by the
+// first address on each chain, each with its hydrated fill state.
+function demoOrderItems(chains, nowMs) {
+    const items = [];
+    for (const [chainId, addrs] of Object.entries(chains || {})) {
+        const owner = (addrs || []).find((a) => typeof a?.address === 'string' && a.address.length > 0);
+        if (!owner) continue;
+        for (const row of flowsLib.synthesizeDemoOrders(chainId, owner.address, { now: nowMs })) {
+            const key = orderKey(chainId, row.action_index);
+            items.push({ chainId, owner, row, key, cancelled: false, cancelledKeys: new Set(), fill: fillStateOf(row) });
+        }
+    }
+    items.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
+    return items;
 }
 
 /**
@@ -217,22 +113,26 @@ function withFormattedExpiration(confirmAction) {
  * @param {string} [props.accountId]
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCreateOrder]
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onOpenOrder]
+ *   opens the order-detail route; a host without that route leaves it out
+ *   and the detail opens in place
+ * @param {(chainId: string, tick1: string, tick2: string) => void} [props.onOpenMarket]
+ *   the shell's market navigation, handed to the in-place order detail
  */
-export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
+export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder, onOpenOrder, onOpenMarket }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [items, setItems] = useState(/** @type {any[] | null} */ (null));
-    const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [autopayByKey, setAutopayByKey] = useState(/** @type {Map<string, any>} */ (new Map()));
-    const [activeAction, setActiveAction] = useState(/** @type {{ type: 'cancel' | 'edit', item: any } | null} */ (null));
-    const [cancellingKeys, setCancellingKeys] = useState(/** @type {Set<string>} */ (new Set()));
-    // PC-21: which order's lifecycle timeline is expanded inline (by row key).
-    const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
+    // The order the in-place detail shows, when no host route opens it.
+    const [openRef, setOpenRef] = useState(/** @type {{ chainId: string, actionIndex: string } | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    // The title-line filter's state (search text, Status and Sort).
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
     const loadRequestId = useRef(0);
-    const autopayRequestId = useRef(0);
 
     useEffect(() => {
         const current = Math.floor(Date.now() / 1000);
@@ -252,8 +152,13 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
         if (flowsLib.isDemoWallet(walletId)) {
-            setByChain({});
-            setItems([]);
+            // A demo wallet has no explorer history; it lists the bundled
+            // demo orders owned by its first address on each chain.
+            const chains = typeof messaging?.getAddressesByChain === 'function'
+                ? ((await messaging.getAddressesByChain(walletId, accountId).catch(() => null)) || {})
+                : {};
+            if (requestId !== loadRequestId.current) return;
+            setItems(demoOrderItems(chains, Date.now()));
             setLoadError(null);
             return;
         }
@@ -266,7 +171,6 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
             if (requestId !== loadRequestId.current) return;
-            setByChain(chains);
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
@@ -286,7 +190,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             for (const r of results) {
                 for (const c of r.cancels) {
                     if (String(c.source) === r.p.owner.address && String(c.status || 'valid') === 'valid') {
-                        cancelledKeys.add(`${r.p.chainId}:${c.order_action_index}`);
+                        cancelledKeys.add(orderKey(r.p.chainId, c.order_action_index));
                     }
                 }
             }
@@ -297,7 +201,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     // Only orders this wallet placed (is the seller/SOURCE of); the
                     // feed also returns orders where the address is the get_address.
                     if (String(o.source) !== r.p.owner.address) continue;
-                    const key = `${r.p.chainId}:${o.action_index}`;
+                    const key = orderKey(r.p.chainId, o.action_index);
                     if (seen.has(key)) continue;
                     seen.add(key);
                     all.push({ chainId: r.p.chainId, owner: r.p.owner, row: o, key });
@@ -319,84 +223,80 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         }
     }, [messaging, walletId, accountId]);
 
-    const loadAutopay = useCallback(async () => {
-        const requestId = ++autopayRequestId.current;
-        if (flowsLib.isDemoWallet(walletId)) {
-            setAutopayByKey(new Map());
-            return;
-        }
-        if (typeof messaging?.listAutopayOrders !== 'function') return;
-        try {
-            if (typeof messaging.resolveAutopayIndexes === 'function') {
-                await messaging.resolveAutopayIndexes({ walletId }).catch(() => {});
-            }
-            const records = await messaging.listAutopayOrders({ walletId });
-            if (requestId !== autopayRequestId.current) return;
-            const map = new Map();
-            for (const rec of records || []) {
-                if (rec?.orderActionIndex != null) {
-                    map.set(`${rec.chainId}:${rec.orderActionIndex}`, rec);
-                }
-            }
-            setAutopayByKey(map);
-        } catch { /* toggle is best-effort UI */ }
-    }, [messaging, walletId]);
-
     useEffect(() => {
         load();
-        loadAutopay();
-        return () => {
-            loadRequestId.current += 1;
-            autopayRequestId.current += 1;
-        };
-    }, [load, loadAutopay]);
+        return () => { loadRequestId.current += 1; };
+    }, [load]);
 
-    async function handleAutopayToggle(record) {
-        if (typeof messaging?.setAutopayEnabled !== 'function') return;
-        await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true }).catch(() => {});
-        await loadAutopay();
-    }
-
+    // The title bar holds the filter and New order (plus) icons; the
+    // page body is only the order list.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter orders"
+            searchPlaceholder="Search"
+            searchLabel="Search orders"
+        >
+            {/* Filter-panel dropdowns carry no visible label; each option names itself. */}
+            <Select
+                aria-label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <Select.Option value="all" icon={<Icon.ListIcon />}>All statuses</Select.Option>
+                <Select.Option value="open" icon={<Icon.PlayIcon />}>Open</Select.Option>
+                <Select.Option value="filled" icon={<Icon.CheckIcon />}>Filled</Select.Option>
+                <Select.Option value="cancelled" icon={<Icon.XIcon />}>Closed</Select.Option>
+                <Select.Option value="expired" icon={<Icon.HistoryIcon />}>Expired</Select.Option>
+            </Select>
+            <Select
+                aria-label="Sort"
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <Select.Option value="newest" icon={<Icon.HistoryIcon />}>Newest first</Select.Option>
+                <Select.Option value="oldest" icon={<Icon.ClockIcon />}>Oldest first</Select.Option>
+                <Select.Option value="expiring" icon={<Icon.PauseIcon />}>Expiring soonest</Select.Option>
+            </Select>
+        </ListFilterMenu>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
-            title="My orders"
+            title="My Orders"
+            trailing={(
+                <>
+                    {filterMenu}
+                    {onCreateOrder ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New order" title="New order" onClick={onCreateOrder}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so New order sits in
-    // the content's actions row. An empty list offers it from its
-    // EmptyState instead, so the screen never shows it twice.
-    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
+    const wrap = (children, { notices } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage
-                notices={notices}
-                actions={onCreateOrder && !emptyOffersCreate ? (
-                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateOrder}>
-                        New order
-                    </Button>
-                ) : null}
-            >
+            <ListPage notices={notices}>
                 {children}
             </ListPage>
         </Screen>
     );
 
-    if (activeAction) {
+    if (openRef) {
         return (
-            <OrderActionPanel
-                type={activeAction.type}
-                item={activeAction.item}
-                chainAddresses={byChain[activeAction.item.chainId] || []}
-                variant={variant}
+            <OrderDetail
                 walletId={walletId}
-                messaging={messaging}
-                onDone={() => { setActiveAction(null); load(); loadAutopay(); }}
-                onCancelBroadcast={() => setCancellingKeys((current) => {
-                    const next = new Set(current);
-                    next.add(activeAction.item.key);
-                    return next;
-                })}
-                onBack={() => setActiveAction(null)}
+                accountId={accountId}
+                chainId={openRef.chainId}
+                actionIndex={openRef.actionIndex}
+                onBack={() => { setOpenRef(null); load(); }}
+                onOpenMarket={onOpenMarket}
             />
         );
     }
@@ -408,432 +308,66 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             </div>,
         );
     }
-    if (loadError) {
-        return wrap(null, {
-            notices: (
-                <StatusMessage
-                    variant="error"
-                    className={L.hint}
-                    recovery={{ label: 'Try again', onAction: load }}
-                >
-                    {loadError}
-                </StatusMessage>
-            ),
-        });
-    }
-    if (items.length === 0) {
+    // A failed read shows the plain empty state: the app's reachability
+    // banner reports network trouble once, so no page adds its own error or
+    // Try Again (G91).
+    if (loadError || items.length === 0) {
         return wrap(
             <EmptyState
                 title="No orders yet"
                 body="Orders you place on the DEX show up here across every pair."
-                actionLabel={onCreateOrder ? 'Create an order' : undefined}
-                onAction={onCreateOrder}
             />,
-            { emptyOffersCreate: true },
         );
     }
 
+    // A cancel this session broadcast shows Cancelling until the feed lists it.
     const statusOf = (it) => {
         const status = deriveStatus(it, it.cancelledKeys, nowSec);
-        return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
+        return status === 'open' && hasOrderCancelBroadcast(messaging, it.key) ? 'cancelling' : status;
     };
-    const openItems = items.filter((it) => statusOf(it) === 'open');
-    const closedItems = items.filter((it) => statusOf(it) !== 'open');
-
-    const renderRow = (it) => {
-        const status = statusOf(it);
-        const descriptor = chainRegistry.get(it.chainId);
-        const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
-        const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.fill?.expiration ?? it.row.expiration);
-        const remaining = partialRemaining(it);
-        const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
-        const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
-        const consent = autopayByKey.get(it.key);
-        const chip = status === 'open'
-            ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
-            : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
-        return (
-            <li key={it.key} className={L.row}>
-                <div className={L.rowMain}>
-                    <div className={L.rowHead}>
-                        <span className={L.rowTitle}>Give {give} → get {get}</span>
-                        {chip}
-                    </div>
-                    <div className={L.rowMeta}>
-                        {descriptor ? (
-                            <><ChainBadge descriptor={descriptor} size="sm" showName={false} /> {'· '}</>
-                        ) : null}
-                        {'#'}{detailText(it.row.action_index)}
-                        {' · '}<AddressText address={it.owner.address} />
-                    </div>
-                    {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
-                    {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
-                    <div className={L.rowDetail}>
-                        Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
-                    </div>
-                    {consent && isNativeGive(it.row) ? (
-                        <Switch
-                            label={`Auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
-                            checked={consent.autopay === true}
-                            onChange={() => handleAutopayToggle(consent)}
-                        />
-                    ) : null}
-                </div>
-                <div className={L.rowActions}>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        aria-expanded={timelineKey === it.key}
-                        onClick={() => setTimelineKey(timelineKey === it.key ? null : it.key)}
-                    >
-                        {timelineKey === it.key ? 'Hide timeline' : 'Timeline'}
-                    </Button>
-                    {status === 'open' ? (
-                        <>
-                            <Button variant="secondary" size="sm" onClick={() => setActiveAction({ type: 'edit', item: it })}>Edit</Button>
-                            <Button variant="danger" size="sm" onClick={() => setActiveAction({ type: 'cancel', item: it })}>Cancel</Button>
-                        </>
-                    ) : null}
-                </div>
-                {timelineKey === it.key ? (
-                    <MarketLifecycleTimeline
-                        messaging={messaging}
-                        kind="order"
-                        chainId={it.chainId}
-                        address={it.owner.address}
-                        actionIndex={it.row.action_index}
-                        createdBlock={it.row.block_index}
-                    />
-                ) : null}
-            </li>
-        );
+    // The title-line filter narrows the list by search text and Status.
+    const needle = query.trim().toLowerCase();
+    const matches = (it) => {
+        if (!needle) return true;
+        const row = it.row;
+        const hay = [
+            sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership),
+            sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership),
+            // The rows show grouped amounts ("1,000"), so a search typed as shown matches too.
+            sideAmountText(row.give_tick, row.give_coin, row.give_amount, row.give_ownership),
+            sideAmountText(row.get_tick, row.get_coin, row.get_amount, row.get_ownership),
+            row.action_index, it.owner.address, it.chainId, orderStatusLabel(statusOf(it)),
+        ].join(' ').toLowerCase();
+        return hay.includes(needle);
     };
+    const inStatus = (it) => statusFilter === 'all' || STATUS_GROUP[statusOf(it)] === statusFilter;
+    // Items arrive newest first (highest order ID); Sort reorders the list.
+    const expiryOf = (it) => {
+        const n = Number(it.fill?.expiration ?? it.row.expiration);
+        return Number.isFinite(n) && n > 0 ? n : Infinity;
+    };
+    const sorted = [...items];
+    if (sortBy === 'oldest') sorted.reverse();
+    else if (sortBy === 'expiring') sorted.sort((a, b) => expiryOf(a) - expiryOf(b));
+    const shown = sorted.filter((it) => matches(it) && inStatus(it));
 
+    // A filter or search with no matches reads as one plain empty state.
+    if (shown.length === 0) {
+        return wrap(<EmptyState title="No matching orders" body="Change or clear the filter to see more." titleAs="p" />);
+    }
+    const open = (it) => {
+        const ref = { chainId: it.chainId, actionIndex: String(it.row.action_index) };
+        if (typeof onOpenOrder === 'function') onOpenOrder(ref);
+        else setOpenRef(ref);
+    };
     return wrap(
-        <>
-            <SectionHeader title="Open" />
-            {openItems.length > 0 ? (
-                /* Safari needs an explicit list role because this class removes list styling. */
-                <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
-            {closedItems.length > 0 ? (
-                <>
-                    <SectionHeader title="Closed" />
-                    {/* Safari needs an explicit list role because this class removes list styling. */}
-                    <ul className={L.list} role="list" aria-label="Closed orders">{closedItems.map(renderRow)}</ul>
-                </>
-            ) : null}
-        </>,
-    );
-}
-
-/**
- * Cancel (ORDER v1) or Edit (ORDER v2) an open order, signed from its
- * owner address. The form is the input step; signing happens on the shared
- * confirm page with its network pre-flight, or, in watcher mode, the form
- * builds an unsigned transaction.
- */
-function OrderActionPanel({
-    type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
-}) {
-    const demoGuard = useDemoGuard(walletId, { onBack });
-    const { chainId, owner, row } = item;
-    const { settings } = useSettings();
-    const descriptor = chainRegistry.get(chainId);
-    const isCancel = type === 'cancel';
-    const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
-    const currentBlockList = boundListIndex(row.block_list ?? row.blockList);
-    const canRemoveList = isListEditRemoveActive({ chainId });
-    const signerReady = useSignerReady(walletId);
-    const lane = useOwnerActionLane({
-        messaging,
-        walletId,
-        chainId,
-        owner,
-        software: isCancel ? 'cancelOrder' : 'editOrder',
-        hardware: isCancel ? 'cancelOrderHw' : 'editOrderHw',
-    });
-    // An edit re-charges the expiration fee, and off Bitcoin that fee is a
-    // native-coin output the transaction must carry or the indexer rejects it.
-    const nativeFee = useNativeFee(chainId);
-
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [result, setResult] = useState(/** @type {any | null} */ (null));
-    const done = result !== null;
-
-    // Edit fields (prefilled from the order's current values).
-    const [expInput, setExpInput] = useState('');
-    const [allowListIdx, setAllowListIdx] = useState('');
-    const [blockListIdx, setBlockListIdx] = useState('');
-    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
-
-    const editParams = useMemo(() => {
-        /** @type {Record<string, string>} */
-        const p = {};
-        if (expInput.trim()) {
-            const ms = Date.parse(expInput.trim());
-            if (Number.isFinite(ms)) p.EXPIRATION = String(Math.floor(ms / 1000));
-        }
-        if (allowListIdx) p.ALLOW_LIST = allowListIdx;
-        if (blockListIdx) p.BLOCK_LIST = blockListIdx;
-        return p;
-    }, [expInput, allowListIdx, blockListIdx]);
-
-    const editHasChange = Object.keys(editParams).length > 0;
-
-    async function submit(event) {
-        event.preventDefault();
-        if (submitting || lane.composing) return;
-        const orderActionIndex = String(row.action_index ?? '').trim();
-        if (!isCanonicalActionIndex(orderActionIndex)) {
-            setError('Order ID must be a positive whole number.'); return;
-        }
-        if (type === 'edit') {
-            if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
-            if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
-                setError('Expiration must be a future date and time.'); return;
-            }
-            if (allowListIdx && !isCanonicalActionIndex(allowListIdx, { allowZero: true })) {
-                setError('Allow-list ID must be a whole number.'); return;
-            }
-            if (blockListIdx && !isCanonicalActionIndex(blockListIdx, { allowZero: true })) {
-                setError('Block-list ID must be a whole number.'); return;
-            }
-        }
-        setSubmitting(true);
-        setError(null);
-        // The wire params the confirm page composes and previews; the signing
-        // flow rebuilds the same set from `orderActionIndex` and `params`.
-        const params = isCancel
-            ? { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex }
-            : { VERSION: '2', ORDER_ACTION_INDEX: orderActionIndex, ...editParams };
-        try {
-            // The list can be minutes old: re-read cancels and fill state so an
-            // order that expired, filled or was cancelled since is not signed again.
-            // Both reads are fresh, so they never return the list's own answer.
-            let freshCancelledKeys = item.cancelledKeys || new Set();
-            if (typeof messaging.getOrderCancelsForAddress === 'function') {
-                let response;
-                try {
-                    response = await messaging.getOrderCancelsForAddress({ chainId, address: owner.address, fresh: true });
-                } catch {
-                    setError('Could not refresh this order. Try again.');
-                    return;
-                }
-                freshCancelledKeys = new Set();
-                for (const cancel of extractRows(response)) {
-                    if (String(cancel.source) === owner.address
-                        && String(cancel.status || 'valid') === 'valid') {
-                        freshCancelledKeys.add(`${chainId}:${cancel.order_action_index}`);
-                    }
-                }
-            }
-            if (typeof messaging.getOrderDetail === 'function') {
-                let freshDetail;
-                try {
-                    freshDetail = await messaging.getOrderDetail({ chainId, actionIndex: orderActionIndex, fresh: true });
-                } catch {
-                    setError('Could not refresh this order. Try again.');
-                    return;
-                }
-                const freshFill = fillStateOf(freshDetail);
-                if (freshFill) {
-                    const status = deriveStatus(
-                        { ...item, fill: freshFill },
-                        freshCancelledKeys,
-                        Math.floor(Date.now() / 1000),
-                    );
-                    if (status !== 'open') {
-                        setError('This order is not open. Refresh My orders and try again.');
-                        return;
-                    }
-                }
-            }
-            if (freshCancelledKeys.has(item.key)) {
-                setError('This order is not open. Refresh My orders and try again.');
-                return;
-            }
-            const res = await lane.run({
-                actionData: { action: 'ORDER', params },
-                encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
-                submitExtra: isCancel ? { orderActionIndex } : { orderActionIndex, params: editParams },
-            });
-            const txid = res?.txid || res?.broadcast?.txid;
-            if (isCancel && txid && typeof onCancelBroadcast === 'function') onCancelBroadcast();
-            setResult(res || {});
-        } catch (err) {
-            if (!isUserRejection(err)) {
-                setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
-                    chainId,
-                    mandatory: nativeFee.mandatory,
-                    fallback: `Could not ${isCancel ? 'cancel' : 'edit'} the order. Try again.`,
-                }));
-            }
-        } finally {
-            setSubmitting(false);
-        }
-    }
-
-    const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {children}
-        </Screen>
-    );
-
-    if (listPickerFor) {
-        return (
-            <ListPickerScreen
-                variant={variant}
-                messaging={messaging}
-                chainId={chainId}
-                addresses={chainAddresses}
-                filterType="2"
-                title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
-                onSelect={(r) => {
-                    if (listPickerFor === 'allow') setAllowListIdx(r.actionIndex); else setBlockListIdx(r.actionIndex);
-                    setListPickerFor(null);
-                }}
-                onBack={() => setListPickerFor(null)}
-            />
-        );
-    }
-
-    if (lane.open) {
-        return (
-            <ActionConfirmScreen
-                {...lane.confirmProps}
-                confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
-                screenVariant={variant}
-                chainLabel={null}
-                signerReady={signerReady}
-                hintClassName={F.hint}
-            />
-        );
-    }
-
-    if (done) {
-        const txid = result.txid || result.broadcast?.txid;
-        const explorerUrl = explorerPageUrl({
-            chainId,
-            kind: 'transaction',
-            value: txid,
-            settings,
-        });
-        // Signed but not broadcast yet: nothing changed on chain, so no success copy.
-        if (result.queued) {
-            return wrap(
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onDone}
-                    what={isCancel ? 'order cancel' : 'order edit'}
-                    unsaved={result.unsaved}
-                />,
-            );
-        }
-        if (result.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
-        }
-        return wrap(
-            <>
-                <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
-                <p className={F.hint}>
-                    {isCancel
-                        ? 'The order will close and any escrow returns to you once the cancel confirms.'
-                        : 'The order update will take effect once it confirms.'}
-                </p>
-                {txid ? (
-                    <>
-                        <p className={F.successLabel}>Transaction ID</p>
-                        <code className={F.txid}>{txid}</code>
-                        {explorerUrl ? (
-                            <p className={F.hint}>
-                                <a href={explorerUrl} target="_blank" rel="noopener noreferrer">View on explorer ↗</a>
-                            </p>
-                        ) : null}
-                    </>
-                ) : null}
-                <div className={F.actions}><Button variant="primary" onClick={onDone}>Done</Button></div>
-            </>,
-        );
-    }
-
-    return wrap(
-        <FormPage
-            demoGuard={demoGuard}
-            label={isCancel ? 'Cancel order' : 'Edit order'}
-            onSubmit={submit}
-            actions={(
-                <Button
-                    type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing}
-                >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
-                </Button>
-            )}
-        >
-            <p className={F.summary}>
-                Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
-                {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
-            </p>
-            <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Network</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
-                <dt className={F.detailsLabel}>Order</dt>
-                <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
-                <dt className={F.detailsLabel}>From</dt>
-                <dd className={F.detailsValue}><AddressText address={owner.address} /></dd>
-            </dl>
-
-            {isCancel ? (
-                <p className={F.hint}>
-                    Cancelling closes the order and returns the escrowed
-                    {isNativeGive(row) ? ' side' : ` ${row.give_tick}`} to you. If it has coin
-                    payments still due, it stays &quot;cancelling&quot; until those settle.
-                </p>
-            ) : (
-                <>
-                    <Input
-                        label="New expiration (optional)"
-                        type="datetime-local"
-                        hint="Choose a date and time. Leave blank to keep the current expiration."
-                        value={expInput}
-                        onChange={(e) => setExpInput(e.target.value)}
-                    />
-                    <p className={F.successLabel}>Access lists (optional)</p>
-                    <div className={F.actions}>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
-                        </Button>
-                        {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
-                        ) : null}
-                        {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" onClick={() => setBlockListIdx('0')}>Remove block list</Button>
-                        ) : null}
-                    </div>
-                    <p className={F.hint}>
-                        Current: allow list {currentAllowList ? `#${currentAllowList}` : 'none'};
-                        {' '}block list {currentBlockList ? `#${currentBlockList}` : 'none'}. A blank choice is left unchanged.
-                    </p>
-                </>
-            )}
-
-            {lane.isWatcherMode ? (
-                <p className={F.hint}>
-                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                    Signer-mode wallet, then broadcast from a Full-mode wallet.
-                </p>
-            ) : null}
-            {error ? <FormNotice variant="error">{error}</FormNotice> : null}
-
-        </FormPage>,
+        /* Safari needs an explicit list role because this class removes list styling. */
+        <ul className={L.list} role="list" aria-label="Orders">
+            {shown.map((it) => (
+                <li key={it.key} className={L.item} data-order-row={it.key}>
+                    <OrderRow item={it} status={statusOf(it)} onOpen={() => open(it)} />
+                </li>
+            ))}
+        </ul>,
     );
 }

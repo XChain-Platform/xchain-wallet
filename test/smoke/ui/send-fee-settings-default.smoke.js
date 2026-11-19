@@ -76,10 +76,22 @@ assert.doesNotMatch(
 
 // --- effect deps -------------------------------------------------------
 
+// The effect depends on this chain's fee entry, not the whole settings
+// object, so an unrelated settings write never resets the per-send pick.
 assert.match(
     sendSrc,
-    /\[chainId, settings\]/,
-    'effect re-runs when chain or settings change',
+    /const chainFeeSettings = chainId \? settings\?\.fees\?\.\[chainId\] : undefined;/,
+    'seed reads this chain\'s saved fee entry',
+);
+assert.match(
+    sendSrc,
+    /resolveFeeConfig\(chainFeeSettings, desc\)/,
+    'seed resolves the chain\'s fee entry against its descriptor',
+);
+assert.match(
+    sendSrc,
+    /\[chainId, chainFeeSettings\]/,
+    'effect re-runs when the chain or its fee settings change',
 );
 
 console.log('send-fee-settings-default smoke OK');

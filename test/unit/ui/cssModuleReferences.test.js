@@ -18,9 +18,13 @@ const WORD_PATTERN = /\w/;
 
 const DYNAMIC_CLASS_PREFIXES = new Map([
     ['shared/components/PreflightPanel.module.css', ['chip_']],
+    // The market status chip picks its tone through styles[`status_${tone}`].
+    ['shared/components/BetMarketCard.module.css', ['status_']],
     ['shared/components/ToastStack.module.css', ['variant_']],
     ['shared/routes/DispensersList.module.css', ['status_']],
     ['shared/routes/StakingList.module.css', ['status_']],
+    // Sleep's state badge picks its tone through styles[`sleepState_${tone}`].
+    ['shared/routes/IssueTokenForm.module.css', ['sleepState_']],
     ['ui/Button.module.css', ['spinner_']],
     ['shared/components/OverlaySurface.module.css', ['dialogOverlay', 'sheetOverlay']],
 ]);

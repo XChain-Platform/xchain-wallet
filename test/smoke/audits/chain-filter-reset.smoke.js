@@ -13,7 +13,7 @@
 //
 // Until v0.297.0 the per-list chain-filter memory persisted silently
 // (`xc:chainFilter:*` localStorage keys) with no user-facing reset.
-// DisplaySection now grows a "Reset list preferences" button that
+// DisplaySection now grows a "Reset List Preferences" button that
 // wipes the entire namespace, plus a one-shot status line confirming
 // how many keys were cleared.
 
@@ -91,8 +91,8 @@ assert.ok(
     'DisplaySection imports clearAllChainFilters',
 );
 assert.ok(
-    /Reset list preferences/.test(section),
-    'DisplaySection ships a "Reset list preferences" button',
+    /Reset List Preferences/.test(section),
+    'DisplaySection ships a "Reset List Preferences" button',
 );
 assert.ok(
     /onClick=\{resetChainFilters\}/.test(section),

@@ -1,0 +1,43 @@
+.artifact {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.artifactLabel {
+    margin-block-end: var(--xc-label-gap);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.artifactBox {
+    composes: signatureBox from './SignMessageForm.module.css';
+    min-height: auto;
+    margin: 0;
+    padding-block: var(--xc-space-2);
+    padding-inline-start: var(--xc-space-2);
+    padding-inline-end: calc(var(--xc-tap-min) + var(--xc-space-3));
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+}
+
+.artifactCopy {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+}
+
+/* The unsigned transaction code: the shared Textarea draws the box and its
+   end padding (which keeps text clear of the scan icon); this only sets the
+   code font. overflow-wrap breaks a long hex run without splitting the
+   placeholder's words. */
+/* Doubled to outrank the shared field's single-class font rule whatever the load order. */
+.codeInput.codeInput {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    resize: vertical;
+    overflow-wrap: anywhere;
+}

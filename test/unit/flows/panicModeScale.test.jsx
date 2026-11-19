@@ -290,7 +290,7 @@ describe('panic mode at scale: Safety row and notice at 360px', () => {
         await configurePanicModePersistence(store({ refuseSaveAt: 1 }));
         render(<Page />);
         fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         await settle();
 
         expect(screen.getByTestId('panic-save-notice').textContent).toContain("couldn't be saved");
@@ -306,7 +306,7 @@ describe('panic mode at scale: Safety row and notice at 360px', () => {
         await configurePanicModePersistence(store({ refuseClear: true }));
         render(<Page />);
         fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         await settle();
         fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
         await settle();

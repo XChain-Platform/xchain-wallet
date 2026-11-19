@@ -126,6 +126,121 @@ export function restorePasswordRequiredMessage(role, mode) {
  * @returns {string} plain-language copy naming a field on the restore screen
  */
 export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
+    switch (restoreFailureKind(reason)) {
+        case 'no-kdf':
+            return 'The wallet inside this backup file is missing the details needed to unlock it, so '
+                + 'no password can open it. Restore from a different backup file.';
+        case 'device-password':
+            return `That is not the password this app unlocks with. The "${restoreDeviceLabel('add')}" `
+                + 'field wants the password you already unlock this app with; the restored wallet is '
+                + 're-locked with it.';
+        case 'damaged':
+            return 'The wallet inside this backup file is damaged, so no password can open it. '
+                + 'Restore from a different backup file.';
+        case 'newer':
+            return 'This backup was made by a newer version of the app. Update the app, then restore '
+                + 'it again.';
+        case 'not-backup':
+            return 'That is not a wallet backup file this app can read. Choose the backup file you '
+                + 'exported, or paste its whole contents.';
+        case 'required-wallet':
+            return restorePasswordRequiredMessage('wallet', mode);
+        case 'required-device':
+            return restorePasswordRequiredMessage('device', mode);
+        case 'required-file':
+            return restorePasswordRequiredMessage('file', mode);
+        case 'wallet-password':
+            return `The backup file opened, but that is not the password of the wallet inside it. `
+                + `The "${RESTORE_PASSWORD_LABELS.wallet}" field wants the password you unlocked that `
+                + `wallet with on the device you backed it up from, not this file's password and not `
+                + `the password for this device.`;
+        case 'file-password':
+            return `That password did not open the backup file. The "${RESTORE_PASSWORD_LABELS.file}" `
+                + 'field wants the password you set when you exported this file, not the password of '
+                + `the wallet inside it and not the "${restoreDeviceLabel(mode)}" you are setting `
+                + 'below. If all three are right, the file itself has been changed.';
+        case 'conflict':
+            return 'This backup holds records this device already has, so nothing was changed. Tick '
+                + '"Overwrite if any record collides" to restore over them.';
+        default:
+            return sanitize(failureText(reason).raw);
+    }
+}
+
+/**
+ * @typedef {'no-kdf' | 'device-password' | 'damaged' | 'newer' | 'not-backup'
+ *   | 'required-wallet' | 'required-device' | 'required-file'
+ *   | 'wallet-password' | 'file-password' | 'conflict' | 'other'} RestoreFailureKind
+ */
+
+/**
+ * Which way a restore failed, as a kind a screen can act on rather than copy
+ * it must show. The restore screen tries one password in every role and only
+ * asks for another when a role refuses it, so it needs to know WHICH role
+ * refused, not a sentence about it.
+ *
+ * Classified from the name and message together because the error usually
+ * crosses the shell messaging boundary as a bare message: the class is gone
+ * by then, so an `instanceof` check would never match in the extension.
+ *
+ * @param {unknown} reason   the caught error, or its message
+ * @returns {RestoreFailureKind}
+ */
+export function restoreFailureKind(reason) {
+    const { hay } = failureText(reason);
+
+    // Checked before any password matcher: this one is NOT about a password at
+    // all, and its old wording ("the backed-up wallet record has no kdfParams")
+    // mentions the backed-up wallet, so the wallet matcher below would claim it
+    // and send the user off to retype a password that was never the problem.
+    if (/no kdfparams|missing the details needed to unlock/.test(hay)) return 'no-kdf';
+    // The open vault refused the device box. Checked before the required and
+    // wrong-password matchers, since its copy quotes the device label.
+    if (/restoredevicepassworderror|not the password this app unlocks with/.test(hay)) return 'device-password';
+    // A damaged seal on the wallet inside the backup. Also not about a
+    // password: retyping one cannot help, so it must win before the
+    // wrong-password matchers below.
+    if (/backupsealdamagederror|wallet inside this backup file is damaged/.test(hay)) return 'damaged';
+    // A backup a newer release wrote: its envelope, payload or a record inside
+    // carries a version above the one this build reads. Nothing is wrong with
+    // the file or the passwords, so it must win before the envelope matcher.
+    if (isNewerBackup(hay)) return 'newer';
+    // The contents are not a backup envelope at all (another app's file, a
+    // truncated copy). Core's wording ("unexpected magic \"undefined\"") names
+    // its own field names, and no password is at fault.
+    if (/file is not valid json|input must be a json|envelope must be an object|unexpected magic|unsupported formatversion|encryption\.(?:algorithm|kdf|iv)|payload must be a base64/.test(hay)) {
+        return 'not-backup';
+    }
+    // "Required" failures, from core (which words them with the fresh-install
+    // labels, having no idea which mode is restoring) or from a shell guard
+    // (which still words them as parameter names).
+    //
+    // Checked BEFORE the wrong-password matchers, not after: core's "the
+    // Password of the wallet in this backup field is required" quotes a label
+    // the wrong-password matcher also looks for, so the later ordering turned
+    // an empty box into "that is not the password", which is a different
+    // instruction and the wrong one.
+    if (isRequiredFailure(hay, 'wallet')) return 'required-wallet';
+    if (isRequiredFailure(hay, 'device')) return 'required-device';
+    if (isRequiredFailure(hay, 'file')) return 'required-file';
+    // The backed-up wallet's own password. Checked before the file one: its
+    // message also mentions the backup file (it says the file opened), so the
+    // file matcher below would otherwise claim it and name the wrong field.
+    if (/backupseedpassworderror|backed-up wallet|wallet inside it did not|wallet in this backup/.test(hay)) {
+        return 'wallet-password';
+    }
+    if (/backuppassworderror|wrong password or tampered file|did not open the backup file/.test(hay)) {
+        return 'file-password';
+    }
+    if (/refusing to overwrite/.test(hay)) return 'conflict';
+    return 'other';
+}
+
+/**
+ * @param {unknown} reason
+ * @returns {{ raw: string, hay: string }}   the message, and name plus message lowercased for matching
+ */
+function failureText(reason) {
     const raw = typeof reason === 'string'
         ? reason
         : (reason && typeof (/** @type {any} */ (reason).message) === 'string'
@@ -134,78 +249,7 @@ export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
     const name = reason && typeof (/** @type {any} */ (reason).name) === 'string'
         ? /** @type {any} */ (reason).name
         : '';
-    const hay = `${name} ${raw}`.toLowerCase();
-
-    // Checked before any password matcher: this one is NOT about a password at
-    // all, and its old wording ("the backed-up wallet record has no kdfParams")
-    // mentions the backed-up wallet, so the wallet matcher below would claim it
-    // and send the user off to retype a password that was never the problem.
-    if (/no kdfparams|missing the details needed to unlock/.test(hay)) {
-        return 'The wallet inside this backup file is missing the details needed to unlock it, so '
-            + 'no password can open it. Restore from a different backup file.';
-    }
-    // A damaged seal on the wallet inside the backup. Also not about a
-    // password: retyping one cannot help, so it must win before the
-    // wrong-password matchers below.
-    // The open vault refused the device box. Checked before the required and
-    // wrong-password matchers, since its copy quotes the device label.
-    if (/restoredevicepassworderror|not the password this app unlocks with/.test(hay)) {
-        return `That is not the password this app unlocks with. The "${restoreDeviceLabel('add')}" `
-            + 'field wants the password you already unlock this app with; the restored wallet is '
-            + 're-locked with it.';
-    }
-    if (/backupsealdamagederror|wallet inside this backup file is damaged/.test(hay)) {
-        return 'The wallet inside this backup file is damaged, so no password can open it. '
-            + 'Restore from a different backup file.';
-    }
-    // A backup a newer release wrote: its envelope, payload or a record inside
-    // carries a version above the one this build reads. Nothing is wrong with
-    // the file or the passwords, so it must win before the envelope matcher.
-    if (isNewerBackup(hay)) {
-        return 'This backup was made by a newer version of the app. Update the app, then restore '
-            + 'it again.';
-    }
-    // The contents are not a backup envelope at all (pasted text, another
-    // app's file, a truncated copy). Core's wording ("unexpected magic
-    // \"undefined\"") names its own field names, and no password is at fault.
-    if (/file is not valid json|input must be a json|envelope must be an object|unexpected magic|unsupported formatversion|encryption\.(?:algorithm|kdf|iv)|payload must be a base64/.test(hay)) {
-        return 'That is not a wallet backup file this app can read. Choose the backup file you '
-            + 'exported, or paste its whole contents.';
-    }
-    // "Required" failures, from core (which words them with the fresh-install
-    // labels, having no idea which mode is restoring) or from a shell guard
-    // (which still words them as parameter names). Re-worded here so an 'add'
-    // restore names the label that screen is actually showing.
-    //
-    // Checked BEFORE the wrong-password matchers, not after: core's "the
-    // Password of the wallet in this backup field is required" quotes a label
-    // the wrong-password matcher also looks for, so the later ordering turned
-    // an empty box into "that is not the password", which is a different
-    // instruction and the wrong one.
-    if (isRequiredFailure(hay, 'wallet')) return restorePasswordRequiredMessage('wallet', mode);
-    if (isRequiredFailure(hay, 'device')) return restorePasswordRequiredMessage('device', mode);
-    if (isRequiredFailure(hay, 'file')) return restorePasswordRequiredMessage('file', mode);
-    // The backed-up wallet's own password. Checked before the file one: its
-    // message also
-    // mentions the backup file (it says the file opened), so the file matcher
-    // below would otherwise claim it and name the wrong field.
-    if (/backupseedpassworderror|backed-up wallet|wallet inside it did not|wallet in this backup/.test(hay)) {
-        return `The backup file opened, but that is not the password of the wallet inside it. `
-            + `The "${RESTORE_PASSWORD_LABELS.wallet}" field wants the password you unlocked that `
-            + `wallet with on the device you backed it up from, not this file's password and not `
-            + `the password for this device.`;
-    }
-    if (/backuppassworderror|wrong password or tampered file|did not open the backup file/.test(hay)) {
-        return `That password did not open the backup file. The "${RESTORE_PASSWORD_LABELS.file}" `
-            + 'field wants the password you set when you exported this file, not the password of '
-            + `the wallet inside it and not the "${restoreDeviceLabel(mode)}" you are setting `
-            + 'below. If all three are right, the file itself has been changed.';
-    }
-    if (/refusing to overwrite/.test(hay)) {
-        return 'This backup holds records this device already has, so nothing was changed. Tick '
-            + '"Overwrite if any record collides" to restore over them.';
-    }
-    return sanitize(raw);
+    return { raw, hay: `${name} ${raw}`.toLowerCase() };
 }
 
 /**

@@ -73,11 +73,12 @@ async function fillAndPublish({ messaging, source, constructorParams }) {
     await domAct(async () => {
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: source } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
-        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: constructorParams } });
+        fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: constructorParams } });
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        // The standard action label is Title Case.
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Contract' }));
         await drain();
     });
     return utils;
@@ -111,5 +112,35 @@ describe('DeployContractForm refuses constructor arguments too large to verify, 
         const utils = await fillAndPublish({ messaging, source: bigSource, constructorParams: '' });
 
         expect(utils.container.textContent).not.toMatch(/one action holds/);
+    });
+});
+
+describe('Back on the hardware sign page during a chunked deploy', () => {
+    it('returns to the review with no error and re-lists the resumable run', async () => {
+        const { messaging } = mount({ single: false });
+        const back = Object.assign(new Error('signPsbt failed: Signing stopped from the hardware wallet page (HW_SIGN_BACK).'), { code: 'HW_SIGN_BACK' });
+        const deployChunkedHw = vi.fn().mockRejectedValue(back);
+        const listPendingDeploys = vi.fn().mockResolvedValue([]);
+        Object.assign(messaging, {
+            getAddressesByChain: () => Promise.resolve({ [CHAIN]: [{ ...ADDRESS, source: 'trezor' }] }),
+            getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: ADDRESS.id, address: ADDRESS.address } }),
+            getSignerStatus: () => Promise.resolve({ status: 'available' }),
+            deployChunkedHw,
+            listPendingDeploys,
+        });
+        const bigSource = `${SOURCE}\n// ${'z'.repeat(9000)}`;
+        const utils = await fillAndPublish({ messaging, source: bigSource, constructorParams: '' });
+        const publish = await utils.findByRole('button', { name: 'Approve' });
+        const listedBefore = listPendingDeploys.mock.calls.length;
+        await domAct(async () => {
+            fireEvent.click(publish);
+            await drain(32);
+        });
+
+        expect(deployChunkedHw).toHaveBeenCalledTimes(1);
+        expect(utils.container.textContent).not.toMatch(/HW_SIGN_BACK|hardware wallet page/);
+        expect(utils.queryByRole('alert')).toBeNull();
+        expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        expect(listPendingDeploys.mock.calls.length).toBeGreaterThan(listedBefore);
     });
 });

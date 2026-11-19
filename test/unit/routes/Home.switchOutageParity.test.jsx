@@ -187,7 +187,8 @@ describe('Home under a partial balance outage', () => {
         render(tree(messaging, WALLET_A.id, 'account-a'));
         await waitFor(() => expect(document.body.textContent).toMatch(/At least/));
         // Rows and headline agree: the headline is a floor, not a total.
-        const hero = screen.getByText(/balance$/i, { selector: 'section[aria-labelledby] span' }).closest('section');
+        // The card is labelled with the wallet's name now, so find it by the floor it shows.
+        const hero = screen.getAllByText(/At least/)[0].closest('section[aria-labelledby]');
         expect(hero.textContent).toMatch(/At least \$50,000\.00/);
     });
 
@@ -195,7 +196,8 @@ describe('Home under a partial balance outage', () => {
         writeBalanceCache(WALLET_A.id, 'account-a', {
             balances: { [CHAIN]: [nativeRow('bc1qgood', 'BTC', '100000000')] },
             activeByChain: {},
-            fetchedAt: Date.now() - 60_000,
+            // Older than the five-minute reuse window, so the open refreshes.
+            fetchedAt: Date.now() - 6 * 60_000,
         });
         const messaging = baseMessaging({
             listWallets: vi.fn().mockResolvedValue([WALLET_A]),

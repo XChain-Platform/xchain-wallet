@@ -76,20 +76,20 @@ describe('<Tabs>', () => {
         expect(coins).toHaveFocus();
     });
 
-    it('uses the shared medium control height and hides overflow scrollbars', () => {
-        const css = readFileSync('packages/core/src/ui/Tabs.module.css', 'utf8');
+    it('uses the shared view-toggle sheet: 44px row, hidden overflow scrollbars, one-line labels', () => {
+        // Tabs draw the one view-toggle look from the SegmentedControl sheet.
+        const css = readFileSync('packages/core/src/ui/SegmentedControl.module.css', 'utf8');
 
-        expect(css).toMatch(/\.tabs\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
-        // Each tab is at least a default control tall, which is 44px on touch.
-        expect(css).toMatch(/\.tab\s*\{[^}]*min-height:\s*var\(--xc-control-h-md\)/s);
-        expect(css).toMatch(/\.tabs\s*\{[^}]*border-bottom:\s*1px solid var\(--xc-control-border\)/s);
-        expect(css).toMatch(/\.tabs\s*\{[^}]*overflow-x:\s*auto/s);
-        expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
-        expect(css).toMatch(/\.tab:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
-        expect(css).toMatch(/\.tab\[aria-selected='true'\]\s*\{[^}]*var\(--xc-control-selected\)/s);
-        // A short tab row shrinks and wraps its labels before it ever scrolls.
-        expect(css).toMatch(/\.tab\s*\{[^}]*flex:\s*0 1 auto;[^}]*white-space:\s*normal;/s);
-        expect(css).not.toMatch(/\.tab\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(css).toMatch(/\.segmented\s*\{[^}]*--xc-control-h-md:\s*44px/s);
+        expect(css).toMatch(/\.segmented\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
+        expect(css).toMatch(/\.segmented\s*\{[^}]*overflow-x:\s*auto/s);
+        expect(css).toMatch(/\.segmented::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
+        expect(css).toMatch(/\.segment:focus-visible\s*\{[^}]*outline:\s*2px solid/s);
+        expect(css).toMatch(/\.segment:is\(\[aria-checked='true'\], \[aria-selected='true'\]\)\s*\{[^}]*var\(--xc-toggle-selected-bg\)/s);
+        // Labels never wrap: items share the row evenly but never shrink
+        // below their own label; narrow rows give up side padding first.
+        expect(css).toMatch(/\.segment\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*max-content;[^}]*white-space:\s*nowrap;/s);
+        expect(css).not.toMatch(/overflow-wrap:\s*anywhere/);
     });
 
     it('can disable every tab while an owning flow is busy', () => {

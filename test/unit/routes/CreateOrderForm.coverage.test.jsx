@@ -88,16 +88,25 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
 }));
 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import {
+    openOrderSection, pickOrderAsset, pickOrderCoin, showFullOrderView,
+} from '../../helpers/orderAssetPicker.js';
 
-function fillBasicOrder() {
-    fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'xcp' } });
-    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
-    fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
+// Gives XCP and gets BTC through the Asset picker, in Quick or in Full.
+async function fillBasicOrder({ full = false } = {}) {
+    await pickOrderAsset('give', 'xcp', { full });
+    if (full) {
+        fireEvent.change((await screen.findAllByLabelText('Amount'))[0], { target: { value: '2.5' } });
+        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
+        return;
+    }
+    fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '2.5' } });
+    fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '0.1' } });
 }
 
 async function renderForm(props = {}) {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} {...props} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 beforeEach(() => {
@@ -132,94 +141,116 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateOrderForm coverage', () => {
-    it('names each side once: the section says You give, its radio group says what it picks', async () => {
+    it('names each side once: the Order section holds one group per side, captioned You give and You get', async () => {
+        showFullOrderView();
         await renderForm();
 
         expect(screen.getAllByText('You give')).toHaveLength(1);
         expect(screen.getAllByText('You get')).toHaveLength(1);
-        const give = screen.getByRole('region', { name: 'You give' });
-        expect(within(give).getByRole('group', { name: 'Asset type' })).toBeInTheDocument();
-        expect(screen.queryByRole('group', { name: 'You give' })).toBeNull();
+        const give = screen.getByRole('group', { name: 'You give' });
+        const get = screen.getByRole('group', { name: 'You get' });
+        // Each side is an Asset picker and an Amount, not a coin-or-token radio pair.
+        expect(within(give).getByRole('button', { name: /^Asset:/ })).toBeInTheDocument();
+        expect(within(give).getByLabelText('Amount')).toBeInTheDocument();
+        expect(within(get).getByRole('button', { name: /^Asset:/ })).toBeInTheDocument();
+        expect(screen.queryByRole('group', { name: 'Asset type' })).toBeNull();
+        expect(screen.queryByRole('radio', { name: 'A token' })).toBeNull();
     });
 
-    it('exposes kit choice controls through their native semantic roles', async () => {
+    it('exposes the ownership and auto-pay controls through their native semantic roles', async () => {
+        showFullOrderView();
         await renderForm();
 
-        const giveToken = screen.getAllByRole('radio', { name: 'A token' })[0];
-        expect(giveToken).toHaveAttribute('name', 'You give-type');
-        expect(giveToken).toHaveAttribute('value', 'token');
-        expect(screen.getByRole('checkbox', {
-            name: 'Trade ownership of this ticker (not a balance)',
+        // Ownership is its own optional section in both input styles (operator 2026-11-13).
+        openOrderSection('Ownership');
+        expect(screen.getByRole('switch', {
+            name: 'Trade ownership of the give token (not a balance)',
         })).toBeInTheDocument();
 
-        fireEvent.click(screen.getAllByRole('radio', { name: 'Native BTC' })[0]);
+        await pickOrderCoin('give', 'Bitcoin', { full: true });
 
-        expect(screen.getByRole('switch', { name: 'Enable auto-pay' })).toBeChecked();
-        expect(screen.getByRole('checkbox', {
-            name: 'I understand this web wallet only auto-pays while it is open and unlocked.',
-        })).not.toBeChecked();
+        // Ownership is a token-side choice, so a coin side carries no switch.
+        expect(screen.queryByRole('switch', { name: /^Trade ownership of the give/ })).toBeNull();
+        openOrderSection('Order Terms');
+        expect(screen.getByRole('switch', { name: 'Auto pay' })).toBeChecked();
+        // The keep-open fact is a confirm-screen notice, never a form gate.
+        expect(screen.queryByRole('checkbox', { name: /I understand/ })).toBeNull();
     });
 
-    it('keeps the receive address with the get side and names the last section for all it holds', async () => {
+    it('keeps the receive address with the get side and the expiration in Order Terms', async () => {
+        showFullOrderView();
         await renderForm();
 
-        const getSection = screen.getByRole('region', { name: 'You get' });
-        expect(getSection).toContainElement(screen.getByLabelText('Receive at (optional)'));
-        const timing = screen.getByRole('region', { name: 'Timing and fees' });
-        // The section title no longer repeats the Expiration choice right below it.
-        expect(timing).toContainElement(screen.getByRole('group', { name: 'Expiration' }));
+        const sectionOf = (el) => el.closest('[data-form-section]')?.getAttribute('data-form-section');
+        expect(sectionOf(screen.getByLabelText('Receive at'))).toBe('order');
+        openOrderSection('Order Terms');
+        // Expiration is the icon dropdown (G44), not a radio group.
+        expect(sectionOf(screen.getByRole('combobox', { name: /^Expiration/ }))).toBe('options');
         expect(screen.queryByRole('heading', { name: 'Expiration' })).toBeNull();
-        // Help text among the fields lines up with them instead of centring.
-        expect(screen.getByText(/Both sides of this order settle on the same chain/).className).toMatch(/hintLeft/);
+        // The same-network note lives in the From address help tip, not as a line under Network,
+        // and the Network field carries its own help tip.
+        expect(screen.queryByText(/Both sides of this order settle on the same chain/)).toBeNull();
+        openOrderSection('From');
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'About From address' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Both sides of the order settle on this network');
     });
 
     it('surfaces actionable validation for malformed order fields', async () => {
+        showFullOrderView();
         await renderForm();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByText('Enter the ticker to give.')).toBeInTheDocument();
 
-        fillBasicOrder();
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
+        await fillBasicOrder({ full: true });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'bad|address' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+        // The form error and the Receive at field error both carry it.
+        expect((await screen.findAllByText('This is not a valid address.')).length).toBeGreaterThan(0);
 
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad;memo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '' } });
+        openOrderSection('Order Terms');
+        // Memo is its own section (operator 2026-11-13).
+        openOrderSection('Memo');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad;memo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
+        // The specific time starts from the Expires shown; clearing it is the empty expiry.
+        fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+        expect(await screen.findByText('Pick an expiration date and time, or choose a common term.'))
             .toBeInTheDocument();
     });
 
     it('rejects malformed ticker IDs, excess precision, and give amounts above balance before review', async () => {
+        showFullOrderView();
         await renderForm();
 
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: '^bad' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
+        await pickOrderAsset('give', '^bad', { full: true });
+        fireEvent.change((await screen.findAllByLabelText('Amount'))[0], { target: { value: '2.5' } });
         fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "Give ticker can be a name, or ^ followed by the token's number (^123).",
         );
 
-        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.55' } });
+        await pickOrderAsset('give', 'XCP', { full: true });
+        fireEvent.change((await screen.findAllByLabelText('Amount'))[0], { target: { value: '2.55' } });
         await waitFor(() => expect(state.messaging.getTokenInfo).toHaveBeenCalled());
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Give amount can have at most 1 decimal place for XCP.',
-        );
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+        // The amount field shows its own decimal-places error beside the form's.
+        await waitFor(() => expect(screen.getAllByRole('alert')
+            .some((a) => /at most 1 decimal place/.test(a.textContent))).toBe(true));
 
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '100.1' } });
+        fireEvent.change(screen.getAllByLabelText('Amount')[0], { target: { value: '100.1' } });
         await waitFor(() => expect(state.messaging.getWalletBalances).toHaveBeenCalled());
-        await act(async () => {});
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByText(/XCP available/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Give amount exceeds your available XCP balance of 100.',
         );
@@ -238,9 +269,9 @@ describe('CreateOrderForm coverage', () => {
         });
         const onManageOrders = vi.fn();
         await renderForm({ onManageOrders });
-        fillBasicOrder();
+        await fillBasicOrder();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
         expect(await screen.findByText('Order broadcast')).toBeInTheDocument();
         expect(state.confirm).toHaveBeenCalledWith(expect.objectContaining({
@@ -268,34 +299,39 @@ describe('CreateOrderForm coverage', () => {
             params: expect.objectContaining({ GIVE_TICK: 'XCP', GET_AMOUNT: '0.1' }),
         }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'My orders' }));
+        fireEvent.click(screen.getByRole('button', { name: 'My Orders' }));
         expect(onManageOrders).toHaveBeenCalledOnce();
     });
 
     it('previews and builds an unsigned order in watcher mode', async () => {
         state.watcher = true;
         state.submit.mockResolvedValue({ psbtHex: 'deadbeef' });
+        showFullOrderView();
         await renderForm();
-        fillBasicOrder();
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '1devmockabc' } });
+        await fillBasicOrder({ full: true });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '1devmockabc' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText('Review order')).toBeInTheDocument();
-        expect(screen.getByText(/Watcher mode:/)).toBeInTheDocument();
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('0.1 BTC');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('1devmockabc');
-        expect(screen.getByText('Settlement address')).toBeInTheDocument();
-        expect(screen.getByText('Default window')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('2.5 XCP');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('0.1 BTC');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('1devmockabc');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Expiration3 months');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(document.body).not.toHaveTextContent('Estimate unavailable');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-        expect(screen.getByLabelText('Ticker')).toHaveValue('XCP');
-        expect(screen.getByLabelText('Amount')).toHaveValue('2.5');
-        expect(screen.getByLabelText('Amount (BTC)')).toHaveValue('0.1');
-        expect(screen.getByLabelText('Receive at (optional)')).toHaveValue('1devmockabc');
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByTestId('confirm-reject'));
+        expect(screen.getAllByRole('button', { name: /^Asset:/ })[0]).toHaveAccessibleName(/^Asset: XCP/);
+        expect(screen.getAllByLabelText('Amount')[0]).toHaveValue('2.5');
+        // Back from review the coin amount shows padded to 8 decimals (U61).
+        expect(screen.getByLabelText('Amount (BTC)')).toHaveValue('0.10000000');
+        expect(screen.getByLabelText('Receive at')).toHaveValue('1devmockabc');
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
         await waitFor(() => expect(state.submit).toHaveBeenCalledWith(expect.objectContaining({
             params: expect.objectContaining({ GIVE_TICK: 'XCP', GET_AMOUNT: '0.1' }),
             password: '',
@@ -308,39 +344,41 @@ describe('CreateOrderForm coverage', () => {
         state.watcher = true;
         state.submit.mockRejectedValue(new Error('orderAction: encoder POST /internal/order failed'));
         await renderForm();
-        fillBasicOrder();
+        await fillBasicOrder();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not create the order. Check the details and try again.',
         );
         expect(document.body).not.toHaveTextContent('/internal/order');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('2.5 XCP');
     });
 
     it.each([
-        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
         // The shared action-text refusal answers first, before the memo's own check.
         ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
         ['a tab', 'a\tb', /Memo cannot contain control characters/],
     ])('refuses a memo %s before composing', async (_label, memo, message) => {
         await renderForm();
-        fillBasicOrder();
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await fillBasicOrder();
+        openOrderSection('Order Terms');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: memo } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(state.confirm).not.toHaveBeenCalled();
     });
 
     it('accepts a memo of exactly 250 bytes', async () => {
         await renderForm();
-        fillBasicOrder();
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(250) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await fillBasicOrder();
+        openOrderSection('Order Terms');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'x'.repeat(250) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         await waitFor(() => expect(state.messaging.composeForConfirm.mock.calls.length + state.confirm.mock.calls.length + state.submit.mock.calls.length).toBeGreaterThan(0));
     });
 });

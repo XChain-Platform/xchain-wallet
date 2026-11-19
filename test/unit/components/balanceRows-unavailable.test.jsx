@@ -165,3 +165,64 @@ describe('BalanceList network labelling', () => {
         expect(screen.queryByText(/mainnet/i)).toBeNull();
     });
 });
+
+describe('buildBalanceRows: a failed token read is not an empty token list', () => {
+    const tokensDown = (address, extra = {}) => entry(address, {
+        native: { tick: 'BTC', quantity: '5', divisibility: 8 },
+        tokens: [],
+        unavailable: ['tokens'],
+        unavailableReason: 'balance service returned invalid token data',
+        ...extra,
+    });
+    const holding = (address, quantity) => entry(address, {
+        native: { tick: 'BTC', quantity: '5', divisibility: 8 },
+        tokens: [{ tick: 'PEPE', quantity: String(quantity), divisibility: 8 }],
+    });
+
+    it('a chain whose only token read failed flags the coin row, not the coin balance', () => {
+        const rows = buildBalanceRows({ [CHAIN]: [tokensDown('bc1qa')] }, chainRegistry);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].tokensUnavailable).toBe(true);
+        expect(rows[0].tokensUnavailableReason).toMatch(/invalid token data/);
+        expect(rows[0].unavailable).toBeUndefined();
+    });
+
+    it('a healthy chain carries no token flag', () => {
+        const rows = buildBalanceRows({ [CHAIN]: [holding('bc1qa', 7)] }, chainRegistry);
+        expect(rows.map((r) => r.tokensUnavailable)).toEqual([undefined, undefined]);
+        expect(rows.find((r) => r.tick === 'PEPE').unavailable).toBeUndefined();
+    });
+
+    it('a token read from one address and failed on another is a floor, not the total', () => {
+        const rows = buildBalanceRows(
+            { [CHAIN]: [holding('bc1qa', 7), tokensDown('bc1qb')] },
+            chainRegistry,
+        );
+        const pepe = rows.find((r) => r.tick === 'PEPE');
+        expect(pepe.quantity).toBe('7');
+        expect(pepe.unavailable).toBe('partial');
+        expect(pepe.unavailableReason).toMatch(/invalid token data/);
+        expect(rows.find((r) => r.kind === 'native').tokensUnavailable).toBe(true);
+    });
+
+    it('a failure on one chain leaves another chain clean', () => {
+        const rows = buildBalanceRows({
+            [CHAIN]: [tokensDown('bc1qa')],
+            'litecoin-mainnet': [entry('ltc1qa', {
+                native: { tick: 'LTC', quantity: '9', divisibility: 8 },
+                tokens: [],
+            })],
+        }, chainRegistry);
+        const ltc = rows.find((r) => r.chainId === 'litecoin-mainnet');
+        expect(ltc.tokensUnavailable).toBeUndefined();
+    });
+
+    it('a partial token row renders as a floor', () => {
+        const rows = buildBalanceRows(
+            { [CHAIN]: [holding('bc1qa', 700000000), tokensDown('bc1qb')] },
+            chainRegistry,
+        );
+        render(<BalanceList rows={rows.filter((r) => r.kind !== 'native')} />);
+        expect(screen.getByText(/^At least/)).toBeTruthy();
+    });
+});

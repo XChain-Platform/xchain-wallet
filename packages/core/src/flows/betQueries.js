@@ -10,9 +10,9 @@
 
 // BET read queries (no signing). Thin passthroughs to the SDK's explorer
 // bet-read methods (getBetFeeds / getBetFeed / getBets / getOracleStats), which
-// read the indexer's bet_feeds / bets tables. Back BetFeedsList (market
-// browser), BetFeedDetail (market + pools + place-bet), MyBets and the oracle
-// console. Mirrors voteQueries.js.
+// read the indexer's bet_feeds / bets tables. Back BetFeedsList (the market
+// browser with its My bets and My markets tabs) and BetFeedDetail (market +
+// pools + place-bet). Mirrors voteQueries.js.
 
 /**
  * @typedef {Object} BetQueryOpts
@@ -50,9 +50,11 @@ export async function betFeedsForChain({ sdkRegistry, chainId, query, type, opts
  * Fetch one market by its id (the creating action_index), with per-outcome pools
  * and the full status timeline attached.
  *
- * The pools this returns are summed over OPEN bets only, which is the same
- * predicate settlement uses, so a projected payout computed from them matches
- * what the chain will actually pay.
+ * The pools this returns are a display aggregate: the explorer sums every bet
+ * that escrowed, excluding only invalid rows. They equal the pool settlement
+ * pays from only while the market is open, because bets leave `open` in the
+ * action that ends the market while the settled rows stay in the sum. Project a
+ * payout from them only for a market that still takes bets.
  * @param {{ sdkRegistry: object, chainId: string, feedIndex: string | number, opts?: object }} params
  */
 export async function betFeedDetail({ sdkRegistry, chainId, feedIndex, opts }) {
@@ -80,7 +82,7 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
  * THE MISMATCH THIS EXISTS TO CLOSE: `betFeedDetail` returns `pools` as the
  * explorer's `GROUP BY outcome` result, so it is a list of ROWS
  * (`{ outcome, pool, bet_count }`) and it only carries outcomes that already have
- * an open bet. `sdk.betting.projectPayout` wants amounts indexed BY outcome. Hand
+ * a bet. `sdk.betting.projectPayout` wants amounts indexed BY outcome. Hand
  * it the rows unchanged and both failure modes are silent: an outcome nobody has
  * backed yet sits past the end of the short row list and is rejected as out of
  * range, and a row that IS in range stringifies to "[object Object]" inside the

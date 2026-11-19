@@ -135,10 +135,11 @@ function focusableWithin(container) {
     // Exclude elements hidden via `hidden`/`inert`/aria-hidden. We do NOT
     // filter on offsetParent: it is null under jsdom (no layout) AND for
     // position:fixed elements, so it would drop legitimately-visible modal
-    // controls. The modal never renders hidden focusables, so the selector +
-    // hidden/inert checks are sufficient.
+    // controls. Browsers with checkVisibility can also exclude controls hidden
+    // by CSS, while environments without it keep the existing behavior.
     return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
         if (el.hidden) return false;
+        if (typeof el.checkVisibility === 'function' && !el.checkVisibility()) return false;
         // tabindex=-1 opts a control out of the Tab order, so the trap skips it too.
         if (el.getAttribute('tabindex') === '-1') return false;
         if (el.closest('[inert]')) return false;
@@ -260,8 +261,13 @@ export function useFocusTrap(containerRef, {
         if (container.contains(ownerDoc.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
         } else if (!suppressInitialFocus && initial && typeof initial.focus === 'function') {
-            // Defer to after paint so the element is actually focusable.
-            requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
+            // Defer to after paint so the element is actually focusable. A
+            // focus move into the dialog before that frame (a keyboard user
+            // already on a row) wins over the default.
+            requestAnimationFrame(() => {
+                if (container.contains(ownerDoc.activeElement)) return;
+                try { initial.focus(); } catch { /* noop */ }
+            });
         }
 
         const onKeyDown = (e) => {

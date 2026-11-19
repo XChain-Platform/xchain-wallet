@@ -116,3 +116,89 @@ describe('KeychainSessionBackend', () => {
         expect(() => sessionKeyPathFor(path)).toThrow(/userDataDir is required/);
     });
 });
+
+describe('KeychainSessionBackend key encoding', () => {
+    it('hex-encodes a key that sits at an offset inside a larger buffer', async () => {
+        const storage = safeStorage();
+        const backend = new KeychainSessionBackend({ safeStorage: storage, filePath: '/profile/session.bin' });
+        const slab = new Uint8Array([9, 9, 1, 2, 3, 9]);
+
+        await backend.save(slab.subarray(2, 5));
+
+        expect(storage.encryptString).toHaveBeenCalledWith('010203');
+    });
+
+    it('encodes the key without copying it into a second buffer', async () => {
+        const storage = safeStorage();
+        const backend = new KeychainSessionBackend({ safeStorage: storage, filePath: '/profile/session.bin' });
+        const from = vi.spyOn(Buffer, 'from');
+        try {
+            await backend.save(new Uint8Array([1, 2, 3, 4]));
+            const copies = from.mock.calls.filter(([source]) => source instanceof Uint8Array);
+            expect(copies).toHaveLength(0);
+        } finally {
+            from.mockRestore();
+        }
+    });
+});
+
+describe('KeychainSessionBackend conditional save', () => {
+    const OLD_KEY = new Uint8Array([1, 1, 1, 1]);
+    const NEW_KEY = new Uint8Array([2, 2, 2, 2]);
+
+    it('lands when the slot still holds the expected key', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: safeStorage(), filePath: '/profile/session.bin' });
+        await backend.save(OLD_KEY);
+
+        await backend.save(NEW_KEY, { expected: OLD_KEY });
+
+        expect(await backend.load()).toEqual(NEW_KEY);
+    });
+
+    it('refuses when the slot holds another key', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: safeStorage(), filePath: '/profile/session.bin' });
+        await backend.save(NEW_KEY);
+
+        await expect(backend.save(new Uint8Array([3, 3, 3, 3]), { expected: OLD_KEY }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+
+        expect(await backend.load()).toEqual(NEW_KEY);
+    });
+
+    it('refuses after a clear and leaves the slot empty', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: safeStorage(), filePath: '/profile/session.bin' });
+        await backend.save(OLD_KEY);
+        await backend.clear();
+
+        await expect(backend.save(NEW_KEY, { expected: OLD_KEY }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+
+        expect(await backend.load()).toBeNull();
+    });
+
+    it('refuses when a clear lands during the read that checks the slot', async () => {
+        const backend = new KeychainSessionBackend({
+            safeStorage: safeStorage({ decryptString: vi.fn(() => '01010101') }),
+            filePath: '/profile/session.bin',
+        });
+        fs.readFile.mockImplementation(async () => {
+            await backend.clear();
+            return Buffer.from('cipher');
+        });
+
+        await expect(backend.save(NEW_KEY, { expected: OLD_KEY }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+
+        expect(await backend.load()).toBeNull();
+        expect(fs.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('still saves unconditionally when no expectation is given', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: safeStorage(), filePath: '/profile/session.bin' });
+        await backend.clear();
+
+        await backend.save(NEW_KEY);
+
+        expect(await backend.load()).toEqual(NEW_KEY);
+    });
+});

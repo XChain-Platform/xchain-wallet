@@ -43,22 +43,26 @@ for (const v of [1, 5, 15, 60]) {
 }
 assert.ok(src.includes('value: 0'), 'autolock supports 0 (never)');
 
-// Live rows: test-send warning, always-on recipient protection, biometric
+// Live rows: test-send threshold, the lookalike warnings switch, biometric
 // unlock, panic-mode activation, and automatic backup reminders.
-assert.match(src, /New-recipient test-send warning \(sats\)/, 'test-send warning row present');
-assert.match(src, /testSendThresholdSats:\s*threshold/, 'test-send writes through grace.testSendThresholdSats');
-assert.match(src, /native-coin sends above this amount/, 'test-send threshold explains its scope');
-assert.match(src, /outside your contacts\s*and send history/, 'test-send threshold explains recipient novelty');
-assert.match(src, /Lookalike address warnings/, 'lookalike warning status is present');
-assert.match(src, /Always on/, 'lookalike warnings are not presented as optional');
-assert.match(src, /<BiometricRow \/>/, 'biometric unlock row mounted');
+assert.match(src, /(?:t\('settings\.safety\.newRecipientTestSendWarning'\)|New-recipient test send)/, 'test-send row present');
+// The threshold is an amount in the display currency (operator ruling 2026-11-14).
+assert.match(src, /testSendThresholdFiat:\s*threshold/, 'test-send writes through grace.testSendThresholdFiat');
+assert.doesNotMatch(src, /testSendThresholdSats/, 'nothing here reads or writes the legacy sats threshold');
+assert.match(src, /(?:t\('settings\.help\.safety\.testSend'\)|native-coin sends worth more than this amount)/, 'test-send threshold explains its scope and recipient novelty');
+assert.match(src, /(?:t\('settings\.safety\.lookalikeAddressWarnings'\)|Lookalike address warnings)/, 'lookalike warning row is present');
+// Lookalike warnings is a switch (operator ruling 2026-11-14), on unless turned off.
+assert.match(src, /lookalikeWarnings:\s*next/, 'lookalike switch writes grace.lookalikeWarnings');
+assert.match(src, /checked=\{lookalikeWarningsEnabled\(settings\)\}/, 'lookalike switch reads the shared default-on rule');
+// On its own row page the biometric row opens straight on its form (`direct`).
+assert.match(src, /<BiometricRow direct=\{only === 'biometric'\} \/>/, 'biometric unlock row mounted');
 assert.match(src, /<PanicModeRow \/>/, 'panic-mode activation row mounted');
 // The auto-arm toggle was removed: nothing reads panicMode.enabled, so the
 // section must not offer a preference that does nothing.
 assert.doesNotMatch(src, /Auto-arm panic mode/, 'no auto-arm toggle (no code delivers auto-arming)');
 assert.doesNotMatch(src, /panicMode:\s*\{\s*enabled/, 'Safety section does not write panicMode.enabled');
-assert.match(src, /Backup reminders/, 'backup reminders row present');
-assert.match(src, /wallets without a verified recovery phrase/, 'backup reminders describe actual automatic scope');
+assert.match(src, /(?:t\('settings\.safety\.backupReminders'\)|Backup reminders)/, 'backup reminders row present');
+assert.match(src, /(?:t\('settings\.safety\.shownAutomaticallyForWalletsWithout'\)|wallets without a verified recovery phrase)/, 'backup reminders describe actual automatic scope');
 assert.doesNotMatch(src, /backupReminders:\s*e\.target\.value/, 'ignored backup cadence is not offered');
 
 // Settings.jsx wiring

@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 
 const BTC = 'bitcoin-mainnet';
@@ -20,7 +21,12 @@ const address = (id, chain) => ({
     signerId: 'signer-1',
 });
 
-afterEach(cleanup);
+// Every case here runs as a watch-only wallet. The mode comes from the wallet
+// list, not from settings.
+beforeEach(() => {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+});
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('LinkForm action preview validation', () => {
     it('does not advance when either referenced action cannot be verified', async () => {
@@ -29,7 +35,7 @@ describe('LinkForm action preview validation', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn(({ chainId }) => (chainId === BTC
                 ? Promise.reject(new Error('not found'))
@@ -43,19 +49,20 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
-        expect(await screen.findByRole('button', { name: 'Looking up actions…' })).toBeDisabled();
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on the network A'));
+        expect(await screen.findByRole('button', { name: 'Looking Up Actions…' })).toBeDisabled();
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify Action 1'));
         // The second lookup can still be running when the first one's error
-        // shows, so wait for the button to read Review again.
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        // shows, so wait for the main action button to become available again.
+        // The action label and review title are Title Case.
+        fireEvent.click(await screen.findByRole('button', { name: 'Link Actions' }));
 
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
-        expect(screen.queryByText('Review link')).not.toBeInTheDocument();
+        expect(screen.queryByText('Review Link')).not.toBeInTheDocument();
     });
 
     it('treats numerically identical action indices as the same action', async () => {
@@ -63,7 +70,7 @@ describe('LinkForm action preview validation', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn().mockResolvedValue({ action: 'SEND', tick: 'TOKEN', amount: '1' }),
             buildActionPsbtRequest: vi.fn(),
@@ -75,7 +82,7 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '01' } });
         fireEvent.change(inputs[1], { target: { value: '1' } });
 
@@ -89,7 +96,7 @@ describe('LinkForm action preview validation', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn().mockResolvedValue({ action: 'SEND', tick: 'TOKEN', amount: '1' }),
         };
@@ -100,17 +107,17 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Link Actions' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Link Actions' }));
 
-        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        const restored = await screen.findAllByLabelText('Action to reference');
+        fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
+        const restored = await screen.findAllByLabelText('Action number');
         expect(restored[0]).toHaveValue('10');
         expect(restored[1]).toHaveValue('20');
-        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('labels the review previews in plain words and never shows raw action JSON', async () => {
@@ -119,7 +126,7 @@ describe('LinkForm action preview validation', () => {
         const client = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
             getActionByIndex: vi.fn(({ chainId }) => Promise.resolve(chainId === BTC
                 ? { action: 'SEND', tick: 'TOKEN', amount: '1' }
@@ -132,15 +139,15 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Link Actions' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Link Actions' }));
 
-        expect(await screen.findByText('First action')).toBeInTheDocument();
-        expect(screen.getByText('Second action')).toBeInTheDocument();
-        expect(screen.getByText('Action details unavailable')).toBeInTheDocument();
+        expect(await screen.findByText('Action 1')).toBeInTheDocument();
+        expect(screen.getByText('Action 2')).toBeInTheDocument();
+        expect(screen.getByText(/details unavailable/i)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/Side [AB] decoded|tx_hash/);
     });
 });

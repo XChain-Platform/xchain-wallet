@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '../fixtures/wallet.js';
 import { freezeMotion } from '../fixtures/wallet.js';
-import { WCAG_TAGS } from '../fixtures/a11y.js';
+import { WCAG_TAGS, withoutRuledContrast } from '../fixtures/a11y.js';
 import { createSweep } from './sweep.js';
 
 const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', 'axe-sweep');
@@ -35,7 +35,10 @@ test('axe sweep', async ({ page }, testInfo) => {
     // checks the WCAG-only tags leave out.
     const onScreen = async (p, label) => {
         await freezeMotion(p);
-        const { violations } = await new AxeBuilder({ page: p }).withTags([...WCAG_TAGS, 'best-practice']).analyze();
+        // White text on the U97 success fill is a ruled exception, not a finding.
+        const violations = withoutRuledContrast(
+            (await new AxeBuilder({ page: p }).withTags([...WCAG_TAGS, 'best-practice']).analyze()).violations,
+        );
         screens.push({
             label,
             violations: violations.map((v) => ({

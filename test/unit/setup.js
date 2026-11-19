@@ -47,6 +47,34 @@ beforeEach(({ task }) => {
     };
 });
 
+// Wallet modes the shell (or a test) published, or a reader merged from a
+// wallet list, live in a module store; one test's wallets must not decide the
+// next test's mode. Imported here, after the test file's mocks are in place,
+// so a file that mocks the hook module keeps its mock (and may have no reset).
+afterEach(async () => {
+    try {
+        const store = await import('../../packages/core/src/shared/hooks/useWalletMode.js');
+        store.resetWalletModes?.();
+    } catch { /* mocked module without a reset */ }
+    // A form's Advanced choices (fee bumping, chosen coins, change address)
+    // live in a module store too, keyed by form and source address.
+    try {
+        const advanced = await import('../../packages/core/src/shared/components/formStandard/advancedOptions.js');
+        advanced.resetAdvancedStore?.();
+    } catch { /* mocked module without a reset */ }
+    // A clean load saves its read, and a saved read under five minutes old
+    // answers the next mount without a request; no test inherits another's.
+    try {
+        const store = globalThis.localStorage;
+        for (let i = (store?.length ?? 0) - 1; i >= 0; i -= 1) {
+            const key = store.key(i);
+            if (key?.startsWith('xc:balanceCache:') || key?.startsWith('xc:ownedTokens:')) store.removeItem(key);
+        }
+        const freshness = await import('../../packages/core/src/shared/utils/walletDataFreshness.js');
+        freshness._resetWalletDataStale?.();
+    } catch { /* no DOM storage, or a mocked module */ }
+});
+
 afterEach(() => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;

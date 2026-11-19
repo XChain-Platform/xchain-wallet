@@ -8,21 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Token wizard keeps the resumable draft Issue token keeps: form values
-// only, scoped to the wallet and the network, written once the user has
-// typed something, offered back behind a Restore banner after any unmount
-// (lock, auto-lock, reload, popup close), and dropped on Discard and on a
-// confirmed issuance.
+// The Create a token route (the one Issue Token form) keeps a resumable
+// draft: form values only, scoped to the wallet and the network, written once
+// the user has typed something, offered back behind a Restore banner after any
+// unmount (lock, auto-lock, reload, popup close), and dropped on Discard and
+// on a confirmed issuance.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const CHAIN = 'bitcoin-regtest';
 const WALLET = 'w-wizard-draft';
-const KEY = `xc:formdraft:token-wizard:${WALLET}`;
+// The form's own draft view (useFormDraft `issue-token`).
+const KEY = `xc:formdraft:issue-token:${WALLET}`;
+const OTHER_WALLET_KEY = 'xc:formdraft:issue-token:other-wallet';
 const ADDR_1 = {
     id: 'addr-1',
     address: 'bcrt1qexampleexampleexampleexampleexample0',
@@ -68,12 +71,15 @@ function mount(messaging, walletId = WALLET) {
     ));
 }
 
-async function reachDetails(template = 'Utility token') {
-    fireEvent.click(await screen.findByText(template));
-    await screen.findByLabelText('Fee paid by');
-    fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-    await screen.findByText('Step 3 of 4: Details');
+// The form, loaded with its source resolved.
+async function reachForm() {
+    await screen.findByLabelText('Ticker');
+    await waitFor(() => expect(screen.getByLabelText('From address').value).not.toBe(''));
 }
+
+const tickerField = () => screen.getByRole('textbox', { name: /^(Ticker|Subtoken name)$/, hidden: true });
+const supplyField = () => screen.getByRole('textbox', { name: 'Max supply' });
+const divisibleSwitch = () => screen.getByRole('switch', { name: /Divisible/ });
 
 function stored() {
     const raw = localStorage.getItem(KEY);
@@ -85,20 +91,21 @@ afterEach(() => {
     localStorage.clear();
 });
 
-describe('TokenWizard draft', () => {
-    it('saves typed details and restores them on Details after a remount', async () => {
+describe('Issue Token draft', () => {
+    it('saves typed details and restores them after a remount', async () => {
         const messaging = makeMessaging();
         const first = mount(messaging);
-        await reachDetails();
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'DRAFTY' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '4200' } });
-        fireEvent.click(screen.getByRole('switch', { name: /Divisible/ }));
-        fireEvent.change(screen.getByLabelText('Description (optional)'), { target: { value: 'kept' } });
+        await reachForm();
+        fireEvent.change(tickerField(), { target: { value: 'DRAFTY' } });
+        fireEvent.change(supplyField(), { target: { value: '4200' } });
+        // Divisible starts on; turning it off is a choice the draft keeps.
+        fireEvent.click(divisibleSwitch());
+        fireEvent.change(screen.getByLabelText('Token description'), { target: { value: 'kept' } });
 
         await waitFor(() => {
             expect(stored()?.values).toMatchObject({
-                template: 'utility', chainId: CHAIN, name: 'DRAFTY', supply: '4200',
-                divisible: true, description: 'kept',
+                chainId: CHAIN, ticker: 'DRAFTY', supply: '4200',
+                divisible: false, description: 'kept',
             });
         });
         expect(stored().network).toBe('regtest');
@@ -106,123 +113,119 @@ describe('TokenWizard draft', () => {
         expect(stored().values).not.toHaveProperty('stage');
 
         // Lock, auto-lock, reload and popup close all unmount the route; the
-        // next visit starts on Template with the banner and nothing submitted.
+        // next visit opens an empty form with the banner and nothing submitted.
         first.unmount();
         mount(messaging);
         expect(await screen.findByText(/Nothing was submitted\./)).toBeInTheDocument();
-        expect(screen.getByText('Step 1 of 4: Template')).toBeInTheDocument();
+        expect(tickerField()).toHaveValue('');
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
-        await screen.findByText('Step 3 of 4: Details');
-        expect(screen.getByLabelText('Token name (ticker)')).toHaveValue('DRAFTY');
-        expect(screen.getByLabelText('Supply')).toHaveValue('4200');
-        expect(screen.getByRole('switch', { name: /Divisible/ })).toBeChecked();
-        expect(screen.getByLabelText('Description (optional)')).toHaveValue('kept');
+        await waitFor(() => expect(tickerField()).toHaveValue('DRAFTY'));
+        expect(supplyField().value.replace(/,/g, '')).toMatch(/^4200(\.0+)?$/);
+        expect(divisibleSwitch()).not.toBeChecked();
+        expect(screen.getByLabelText('Token description')).toHaveValue('kept');
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.issueToken).not.toHaveBeenCalled();
 
         // Restored values keep autosaving.
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '4300' } });
+        fireEvent.change(supplyField(), { target: { value: '4300' } });
         await waitFor(() => expect(stored()?.values.supply).toBe('4300'));
     });
 
-    it('saves nothing for a template and network the user only clicked through', async () => {
+    it('saves nothing for a form the user only opened, and drops a draft emptied again', async () => {
         mount(makeMessaging());
-        await reachDetails('Meme token');
+        await reachForm();
         await new Promise((resolve) => { setTimeout(resolve, 50); });
         expect(localStorage.getItem(KEY)).toBeNull();
 
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'X' } });
-        await waitFor(() => expect(stored()?.values.name).toBe('X'));
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: '' } });
+        fireEvent.change(tickerField(), { target: { value: 'X' } });
+        await waitFor(() => expect(stored()?.values.ticker).toBe('X'));
+        fireEvent.change(tickerField(), { target: { value: '' } });
         await waitFor(() => expect(localStorage.getItem(KEY)).toBeNull());
     });
 
-    it('drops the draft on Discard and saves what is typed next', async () => {
+    it('drops the draft from the X and saves what is typed next', async () => {
         localStorage.setItem(KEY, JSON.stringify({
             savedAt: Date.now(),
             network: 'regtest',
-            values: { template: 'meme', chainId: CHAIN, name: 'OLDNAME', supply: '1' },
+            values: { preset: 'meme', chainId: CHAIN, ticker: 'OLDNAME', supply: '1' },
         }));
         mount(makeMessaging());
         expect(await screen.findByText(/Nothing was submitted\./)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Discard saved draft' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
         expect(localStorage.getItem(KEY)).toBeNull();
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
 
-        await reachDetails('Meme token');
-        expect(screen.getByLabelText('Token name (ticker)')).toHaveValue('');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'NEWNAME' } });
-        await waitFor(() => expect(stored()?.values.name).toBe('NEWNAME'));
+        expect(tickerField()).toHaveValue('');
+        fireEvent.change(tickerField(), { target: { value: 'NEWNAME' } });
+        await waitFor(() => expect(stored()?.values.ticker).toBe('NEWNAME'));
     });
 
     it('never offers a draft to another wallet or on another network', async () => {
         const record = JSON.stringify({
             savedAt: Date.now(),
             network: 'testnet',
-            values: { template: 'meme', chainId: CHAIN, name: 'TESTNETONLY', supply: '1' },
+            values: { preset: 'meme', chainId: CHAIN, ticker: 'TESTNETONLY', supply: '1' },
         });
         localStorage.setItem(KEY, record);
-        localStorage.setItem('xc:formdraft:token-wizard:other-wallet', JSON.stringify({
+        localStorage.setItem(OTHER_WALLET_KEY, JSON.stringify({
             savedAt: Date.now(),
             network: 'regtest',
-            values: { template: 'meme', chainId: CHAIN, name: 'OTHERWALLET', supply: '1' },
+            values: { preset: 'meme', chainId: CHAIN, ticker: 'OTHERWALLET', supply: '1' },
         }));
         mount(makeMessaging());
-        await screen.findByText('Step 1 of 4: Template');
+        await reachForm();
         await new Promise((resolve) => { setTimeout(resolve, 50); });
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
 
         // Typing on this network writes this network's draft, and the other
         // wallet's record is never touched.
-        await reachDetails('Meme token');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'REGTEST' } });
-        await waitFor(() => expect(stored()?.values.name).toBe('REGTEST'));
+        fireEvent.change(tickerField(), { target: { value: 'REGTEST' } });
+        await waitFor(() => expect(stored()?.values.ticker).toBe('REGTEST'));
         expect(stored().network).toBe('regtest');
-        expect(localStorage.getItem('xc:formdraft:token-wizard:other-wallet')).toContain('OTHERWALLET');
+        expect(localStorage.getItem(OTHER_WALLET_KEY)).toContain('OTHERWALLET');
     });
 
-    it('restores a signer the user chose by hand', async () => {
+    it('restores a subtoken and a signer the user chose by hand', async () => {
         localStorage.setItem(KEY, JSON.stringify({
             savedAt: Date.now(),
             network: 'regtest',
             values: {
-                template: 'subtoken', chainId: CHAIN, fromAddressId: 'addr-2', sourceChosen: true,
-                parentToken: 'PARENT', name: 'CHILD', supply: '5',
+                preset: 'subtoken', chainId: CHAIN, fromAddressId: 'addr-2',
+                parentToken: 'PARENT', ticker: 'CHILD', supply: '5',
             },
         }));
         mount(makeMessaging());
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
-        await screen.findByText('Step 3 of 4: Details');
-        expect(screen.getByLabelText('Parent ticker')).toHaveValue('PARENT');
+        // The Parent token selector shows the restored parent on its network.
+        expect(await screen.findByRole('button', { name: /^Parent token: PARENT on / })).toBeTruthy();
         expect(screen.getByLabelText('Subtoken name')).toHaveValue('CHILD');
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(await screen.findByLabelText('Fee paid by')).toHaveValue(ADDR_2.address);
+        // The signer sits in the From section; the restored one stands.
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(ADDR_2.address));
     });
 
     it('clears the draft once the confirm page issues the token', async () => {
         const messaging = makeMessaging();
         const first = mount(messaging);
-        await reachDetails();
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'ISSUED' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
-        await waitFor(() => expect(stored()?.values.name).toBe('ISSUED'));
+        await reachForm();
+        fireEvent.change(tickerField(), { target: { value: 'ISSUED' } });
+        fireEvent.change(supplyField(), { target: { value: '10' } });
+        await waitFor(() => expect(stored()?.values.ticker).toBe('ISSUED'));
 
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await screen.findByText('Step 4 of 4: Review');
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Issue Token' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
         await screen.findByText('ef'.repeat(32));
         expect(messaging.issueToken).toHaveBeenCalledTimes(1);
+        expect(messaging.issueToken.mock.calls[0][0].params).toMatchObject({ TICK: 'ISSUED', MAX_SUPPLY: '10' });
         expect(localStorage.getItem(KEY)).toBeNull();
 
         first.unmount();
         mount(messaging);
-        await screen.findByText('Step 1 of 4: Template');
+        await reachForm();
         await new Promise((resolve) => { setTimeout(resolve, 50); });
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
     });

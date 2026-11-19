@@ -96,13 +96,18 @@ describe('browser autocomplete policy', () => {
             ['ImportWallet.jsx', 'confirm'],
             ['MigrateToBip39.jsx', 'password'],
             ['MigrateToBip39.jsx', 'confirm'],
-            ['PairPartnerWallet.jsx', 'password'],
-            ['PairPartnerWallet.jsx', 'confirm'],
         ];
         for (const [file, value] of expected) {
             expect(control(file, value)?.attributes.autoComplete, `${file}: ${value}`)
                 .toBe('new-password');
         }
+    });
+
+    it('asks the two-phone pairing page for the open wallet password, never a new one', () => {
+        // It moved to Settings, Advanced (2026-11-15) and adds to the open vault
+        // under its own password, so there is no new password and no confirm.
+        expect(control('PairPartnerWallet.jsx', 'password')?.attributes.autoComplete).toBe('current-password');
+        expect(control('PairPartnerWallet.jsx', 'confirm')).toBeFalsy();
     });
 
     it('pairs the unlock password with a stable username token', () => {
@@ -123,7 +128,12 @@ describe('browser autocomplete policy', () => {
         const ignoredTypes = new Set(['checkbox', 'file', 'number', 'radio']);
         for (const [path, file] of Object.entries(files)) {
             for (const entry of file.controls) {
-                const text = Object.values(entry.attributes).join(' ');
+                // The help tip is prose about the field, not what it holds: the
+                // create password's help names the recovery phrase shown next.
+                const text = Object.entries(entry.attributes)
+                    .filter(([name]) => name !== 'help')
+                    .map(([, value]) => value)
+                    .join(' ');
                 if (!/(mnemonic|recovery phrase|private key|\bwif\b|bip39.*passphrase)/i.test(text)) continue;
                 if (ignoredTypes.has(entry.attributes.type)) continue;
                 // The wallet-password gate on a reveal screen only mentions the key in its

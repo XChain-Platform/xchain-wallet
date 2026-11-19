@@ -115,7 +115,7 @@ export function opReturnPayloadHex(scriptPubKeyHex) {
  *
  * @param {Object} opts
  * @param {import('../../core/src/signers/types.js').DecomposedPsbt} opts.decomposed   from sdk.wallet.decomposePsbt
- * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'ltc' | 'doge'). Testnet/regtest are deliberately absent (see CHAIN_ID_TO_TREZOR_COIN).
+ * @param {string} opts.coin                                    Trezor coin short name from CHAIN_ID_TO_TREZOR_COIN ('btc' | 'test' | 'regtest' | 'ltc' | 'tltc' | 'doge').
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @returns {{ coin: string, inputs: object[], outputs: object[], refTxs: object[] }}
  */
@@ -265,6 +265,18 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
                 `toTrezorSignTransaction: output ${idx} has no address (raw script outputs other than OP_RETURN not yet supported)`,
             );
         }
+        // Trezor's Litecoin Testnet coin decodes P2SH at version 58 ("Q..."),
+        // while the wallet and the SDK encode it at 0xc4 ("2..."). The device
+        // would refuse the address as invalid; say why here instead. A 25-byte
+        // base58check payload at version 0xc4 always starts with "2".
+        if (coin === TREZOR_LTC_TESTNET_COIN && /^2/.test(String(out.address))) {
+            throw hardwareNetworkError(
+                `This Trezor can't pay Litecoin testnet address ${out.address}: its firmware reads `
+                + 'Litecoin testnet script addresses in a different format. Pay a tltc1 or m/n '
+                + 'address instead, or use a software wallet for this payment.',
+                'HW_ADDRESS_FORMAT_UNSUPPORTED',
+            );
+        }
         return {
             address: out.address,
             amount: String(out.value),
@@ -272,10 +284,21 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         };
     });
 
+    // Previous transactions. p2pkh inputs always need theirs. Segwit inputs
+    // carry theirs only when the PSBT holds the full previous transaction (the
+    // hardware send path asks the encoder for it with attachPrevTx). When EVERY
+    // input does, all of them go along. Connect 9 (the hosted /9/ the shells
+    // load; read at connect-9.7.4 signTransaction.ts) uses a given refTxs list
+    // as is and fetches from Trezor's own backend only when it is absent, and
+    // that backend cannot see the team regtest rail and has no Litecoin
+    // testnet; Connect 10 throws when any is missing. A partial set is not
+    // sent: under either version it leaves an input unanswered, while omitting
+    // it keeps the earlier backend fetch on mainnet.
+    const allCarryPrevTx = decomposed.inputs.every((inp) => Boolean(inp.prevTxInfo));
     const refTxs = [];
     const seenRefs = new Set();
     for (const inp of decomposed.inputs) {
-        if (inp.scriptType === 'p2pkh' && inp.prevTxInfo) {
+        if (inp.prevTxInfo && (inp.scriptType === 'p2pkh' || allCarryPrevTx)) {
             if (seenRefs.has(inp.prevTxInfo.hash)) continue;
             seenRefs.add(inp.prevTxInfo.hash);
             refTxs.push(inp.prevTxInfo);
@@ -287,21 +310,30 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
     return payload;
 }
 
-// Trezor firmware coin set. Bitcoin ships mainnet / testnet / regtest
-// coin definitions, but Litecoin and Dogecoin are MAINNET-ONLY on Trezor:
-// their testnets are not in the firmware, so the device cannot derive or
-// validate LTC/DOGE testnet addresses at all. Those chainIds intentionally
-// fall through to the throw in chainIdToTrezorCoin, and the wallet uses a
-// software signer for them. Do not "fix" this by pointing them at 'test':
-// that yields Bitcoin-testnet-format addresses, not valid LTC/DOGE ones.
+// Trezor firmware coin set (operator ruling 2026-11-15: mainnet and the test
+// networks wherever the device can sign them). Sources, read 2026-11-15 from
+// trezor-firmware common/defs/bitcoin/*.json and common/defs/support.json:
+//   - "Testnet" (bitcoin_testnet.json): tb, p2pkh 111, p2sh 196, slip44 1.
+//   - "Regtest" (bitcoin_regtest.json): bcrt, p2pkh 111, p2sh 196, slip44 1.
+//   - "Litecoin Testnet" (litecoin_testnet.json): tltc, p2pkh 111, p2sh 58,
+//     slip44 1. Universal firmware only; the Bitcoin-only build lacks it.
+//   - No Dogecoin testnet, Dogecoin regtest or Litecoin regtest coin exists,
+//     so those networks stay refused. Do not alias them onto Bitcoin's coins:
+//     that yields Bitcoin-format addresses, not Litecoin or Dogecoin ones.
 //
-// bitcoin-testnet and bitcoin-regtest are both excluded even though the
-// firmware HAS 'test' and 'regtest' coins: both force SLIP-44 coin-type 1',
-// while the wallet's descriptor anchor deliberately pins 0' on every Bitcoin
-// network (software-signer/backend parity). A 1' hardware derivation silently
-// yields addresses the rest of the wallet cannot see (funds appear missing),
-// so both networks are hardware-unsupported instead. Do not "fix" this by
-// restoring 'test'/'regtest' unless the firmware can be driven at 0'.
+// NATIVE TEST DERIVATION (operator ruling 2026-11-15). A test network derives
+// at the device's own test coin type, slip44 1' (BIP44/49/84 m/<purpose>'/1'/...),
+// exactly as the firmware expects for these coins. Connect's path check and
+// the firmware's Strict safety checks both pass, so no unsafe-path flag is
+// sent and no device setting has to be relaxed, and the test key is never the
+// mainnet key. Mainnet keeps the wallet's mainnet slots (0', 2', 3'), so its
+// addresses still equal the software signer's. The accepted cost: a software
+// wallet restored from the same seed derives test networks at the mainnet
+// slot, so its testnet addresses differ from this device's.
+//
+// Litecoin Testnet decodes P2SH at version 58 while the SDK encodes 0xc4, so
+// TrezorSigner refuses p2sh-p2wpkh derivation there and toTrezorSignTransaction
+// refuses an output to a 0xc4 address.
 //
 // Exported so TrezorSigner.coinTypeFor can resolve a coin short name back to
 // its chain family, and so the cross-signer parity suite can derive its
@@ -310,16 +342,74 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
 /** @type {Record<string, string>} */
 export const CHAIN_ID_TO_TREZOR_COIN = {
     'bitcoin-mainnet': 'btc',
+    'bitcoin-testnet': 'test',
+    'bitcoin-regtest': 'regtest',
     'litecoin-mainnet': 'ltc',
+    'litecoin-testnet': 'tltc',
     'dogecoin-mainnet': 'doge',
 };
 
-// Name the refused networks the way the UI does ("Bitcoin testnet"), never by
-// chainId; ledgerFormat.js keeps the same two labels so the wording matches.
-const REFUSED_NETWORK_LABELS = Object.freeze({
+/** The Connect coin short name for Litecoin Testnet. */
+export const TREZOR_LTC_TESTNET_COIN = 'tltc';
+
+/**
+ * The Connect coins that are test networks. Each carries slip44 1 in its
+ * firmware definition, so TrezorSigner derives them at TREZOR_TEST_COIN_TYPE.
+ * @type {ReadonlySet<string>}
+ */
+export const TREZOR_TEST_COINS = Object.freeze(new Set(['test', 'regtest', 'tltc']));
+
+/** The SLIP-44 coin type of every Trezor test coin, hardened. */
+export const TREZOR_TEST_COIN_TYPE = "1'";
+
+// Network labels as the UI writes them ("Bitcoin testnet"), never chainIds.
+// ledgerFormat.js keeps the same labels so both vendors word refusals alike.
+const NETWORK_LABELS = Object.freeze({
+    'bitcoin-mainnet': 'Bitcoin',
     'bitcoin-testnet': 'Bitcoin testnet',
     'bitcoin-regtest': 'Bitcoin regtest',
+    'litecoin-mainnet': 'Litecoin',
+    'litecoin-testnet': 'Litecoin testnet',
+    'litecoin-regtest': 'Litecoin regtest',
+    'dogecoin-mainnet': 'Dogecoin',
+    'dogecoin-testnet': 'Dogecoin testnet',
+    'dogecoin-regtest': 'Dogecoin regtest',
 });
+
+/**
+ * Per-network support for Trezor, one row per XChain network: whether the
+ * device can derive and sign it (mainnet at the wallet's mainnet paths, test
+ * networks at the device's own 1' paths) and the one-line reason when it
+ * cannot. core/src/flows/hardwareWallet.js builds HARDWARE_NETWORK_SUPPORT,
+ * the connect flow's red-X / green-check table, from this.
+ *
+ * @type {Readonly<Record<string, { supported: boolean, reason: string|null }>>}
+ */
+export const TREZOR_NETWORK_SUPPORT = Object.freeze({
+    'bitcoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-testnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-regtest': Object.freeze({ supported: true, reason: null }),
+    'litecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'litecoin-testnet': Object.freeze({ supported: true, reason: null }),
+    'litecoin-regtest': Object.freeze({ supported: false, reason: 'Trezor firmware has no Litecoin regtest coin.' }),
+    'dogecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'dogecoin-testnet': Object.freeze({ supported: false, reason: 'Trezor firmware has no Dogecoin testnet coin.' }),
+    'dogecoin-regtest': Object.freeze({ supported: false, reason: 'Trezor firmware has no Dogecoin regtest coin.' }),
+});
+
+/**
+ * A plain-language refusal carrying a stable code, so callers branch on
+ * `err.code` and the sign screen can render `err.message` as it is.
+ *
+ * @param {string} message
+ * @param {string} [code]
+ * @returns {Error}
+ */
+export function hardwareNetworkError(message, code = 'HW_NETWORK_UNSUPPORTED') {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+}
 
 /**
  * Map an XChain chainId to Trezor's coin short name. Shared between
@@ -331,19 +421,21 @@ const REFUSED_NETWORK_LABELS = Object.freeze({
  * @returns {string}
  */
 export function chainIdToTrezorCoin(chainId) {
-    const coin = CHAIN_ID_TO_TREZOR_COIN[chainId];
+    const coin = Object.prototype.hasOwnProperty.call(CHAIN_ID_TO_TREZOR_COIN, chainId)
+        ? CHAIN_ID_TO_TREZOR_COIN[chainId]
+        : undefined;
     if (!coin) {
-        if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
-            throw new Error(
-                `This hardware device can't be used on ${REFUSED_NETWORK_LABELS[chainId]} - use a software `
-                + 'wallet for this network. (On this network the device would derive a '
-                + 'different set of addresses than the rest of the wallet, so any funds '
-                + 'would appear missing.)',
+        const row = Object.prototype.hasOwnProperty.call(TREZOR_NETWORK_SUPPORT, chainId)
+            ? TREZOR_NETWORK_SUPPORT[chainId]
+            : null;
+        if (row) {
+            throw hardwareNetworkError(
+                `This hardware device can't be used on ${NETWORK_LABELS[chainId]} - use a software wallet `
+                + `for this network. (${row.reason})`,
             );
         }
-        throw new Error(
-            `trezorFormat: unsupported chainId "${chainId}". Trezor firmware has `
-            + 'no Litecoin/Dogecoin testnet coin; use a software wallet for this network.',
+        throw hardwareNetworkError(
+            `trezorFormat: unsupported chainId "${chainId}"; use a software wallet for this network.`,
         );
     }
     return coin;

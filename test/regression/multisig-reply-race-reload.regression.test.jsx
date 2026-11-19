@@ -115,10 +115,11 @@ describe('the surface that loses a race on one reply reloads the session', () =>
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const reply = buildReplyEnvelope({
             kind: c.kind,
             fingerprint: fingerprintSessionRef({
+                chainId: session.chainId,
                 scheme: session.scheme,
                 threshold: session.threshold,
                 cosignerPubkeys: session.cosignerPubkeys,
@@ -130,12 +131,12 @@ describe('the surface that loses a race on one reply reloads the session', () =>
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: encodeXcwChunks(encodeMultisigEnvelope(reply)).join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/already applied to this step/);
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
         expect(c.stored(await vault.multisigSigningSessions.get(session.id)).map((x) => x.pubkey)).toEqual([A.pub]);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to tracker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Tracker' }));
         expect((await screen.findByLabelText('Multisig signing progress')).textContent).toMatch(/1 of /);
     });
 });

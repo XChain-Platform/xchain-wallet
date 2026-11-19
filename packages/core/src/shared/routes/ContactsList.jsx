@@ -8,17 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { useFocusTrap } from '../utils/focusTrap.js';
-import { useBackHandler } from '../../ui/backStack.js';
+import { copyText } from '../clipboard.js';
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
-import { ListToolbar } from '../components/ListToolbar.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent } from '../components/PanelSplit.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
-import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
+import { ContactAvatar, contactDefaultTone } from '../components/WalletIdentity.jsx';
+// The look editor Edit Wallet and Edit Account use (colour, shape, image).
+import { TileLookFields } from '../components/TileLookFields.jsx';
+import { readContactLook, sameContactLook } from '../utils/contactLook.js';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
@@ -34,6 +40,8 @@ import {
     mergeContactGroup,
 } from '../utils/contactMerge.js';
 import picker from './ContactsList.module.css';
+// The detail pages' facts card (G14): label and value on one line per fact.
+import facts from './FactRows.module.css';
 import { BIDI_CONTROLS } from '../utils/textHardening.js';
 
 // A right-to-left override typed into the name would reverse the text shown in
@@ -46,6 +54,13 @@ const stripBidiControls = (value) => value.replace(BIDI_CONTROLS, '');
 const isVersionConflict = (err) => /changed since this screen loaded/i.test(String(err?.message || err || ''));
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Field help for the contact forms (U57): written for these fields, shown in
+// the label's help tip instead of a hint line under the field.
+const CONTACT_NAME_HELP = 'The name shown in place of this contact\'s addresses across the inbox and history.';
+const CONTACT_ADDRESS_HELP = 'Any address on a supported network. The network is read from the address itself; if it cannot be, you choose it below.';
+const CONTACT_NOTES_HELP = 'Your own notes about this contact, for example how you know them. Search in Contacts matches them too.';
+const CONTACT_LABEL_HELP = 'A short name for this address, such as Savings or Tips jar, shown in its row in place of the network name.';
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
 
 function contactsSortStorageKey(walletId) {
@@ -74,23 +89,44 @@ function persistContactsSort(walletId, value) {
  * Chain icon for a contact entry. The address selects the matching descriptor,
  * while unknown formats keep the question-mark fallback.
  */
-function ChainCoinIcon({ chain, address }) {
+function ChainCoinIcon({ chain, address, size = 'sm' }) {
     const chainId = chainIdFor(chain, address);
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
+    if (descriptor) return <ChainBadge descriptor={descriptor} size={size} />;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
+}
+
+/** The network's name for a contact entry ("Bitcoin"), or "Unknown network". */
+function networkNameFor(entry) {
+    const chain = resolvedChain(entry);
+    return NETWORK_OPTIONS.find((option) => option.value === chain)?.label || 'Unknown network';
+}
+
+/** The networks a contact's addresses are on, each named once ("Bitcoin, Litecoin"). */
+function contactNetworks(contact) {
+    return [...new Set((contact?.entries || []).map(networkNameFor))].join(', ');
+}
+
+/** The day a contact was saved ("12 Oct 2026"), or "Unknown" for a bad stamp. */
+function addedOn(createdAt) {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /**
  * §41.7.4 Contacts. List + detail + create/edit in one route; the
  * UX is read-heavy enough that a separate detail route isn't worth
  * the navigation overhead. Modes:
- *   - 'list'   - table of contacts + Add button
- *   - 'detail' - read view of one contact + Send message / Edit / Delete
- *   - 'edit'   - form for new or existing contact
- *   - 'scan'   - QR scanner, launched from either list or edit
+ *   - 'list'        - table of contacts + Add button
+ *   - 'detail'      - View Contact: Actions, Addresses and Details tabs
+ *   - 'edit'        - form for new or existing contact
+ *   - 'scan'        - QR scanner, launched from the list, the edit form or
+ *                     Add Address
+ *   - 'add-address' - Add Address page: the address (typed, pasted or
+ *                     scanned; its network read from it) and a Label
  *
  * On send-message the parent App.jsx navigates to ComposeMessage with
  * the contact's primary entry pre-filled.
@@ -106,12 +142,18 @@ function ChainCoinIcon({ chain, address }) {
  *   When set, the component opens the new-contact edit form with the address
  *   pre-filled, then calls onScanPrefillConsumed to clear it in the parent.
  * @param {() => void} [props.onScanPrefillConsumed]
+ * @param {{ address: string, chainId?: string, edit?: boolean } | null} [props.openTarget]
+ *   Opens the route on one address (from a conversation's menu): the edit
+ *   form of the contact that holds it when `edit`, else a pre-filled new
+ *   contact. Cleared through onOpenTargetConsumed.
+ * @param {() => void} [props.onOpenTargetConsumed]
  */
-export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed, onOpenBackup }) {
+export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed, onOpenBackup, openTarget, onOpenTargetConsumed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { showToast } = useToast();
     const confirmDialog = useConfirmModal();
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
 
     // §19.5.2 publish nudge. Contacts live only in this device's vault, and
     // the on-chain copy that survives a re-import is written only when the
@@ -138,13 +180,30 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [mode, setMode] = useState(/** @type {'list' | 'detail' | 'edit' | 'scan'} */ ('list'));
+    const [mode, setMode] = useState(
+        /** @type {'list' | 'detail' | 'edit' | 'scan' | 'add-address'} */ ('list'),
+    );
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
+    // View Contact's chosen tab; Add Address returns to the Addresses tab it
+    // opened from.
+    const [detailView, setDetailView] = useState('actions');
 
     // Tracks whether the QR scanner was launched from the edit form, so
     // handleScanned knows to merge the address into the current form state
     // rather than resetting it.
     const [scanFromEdit, setScanFromEdit] = useState(false);
+    // The scanner was opened from Add Address: a scanned address fills its field.
+    const [scanForAddress, setScanForAddress] = useState(false);
+
+    // Add contact opened the New contact form: leaving it for the list hands
+    // focus back to Add contact. A layout effect runs before the page header
+    // would move a lost focus to its heading.
+    const addButtonRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const returnToAddRef = useRef(false);
+    useLayoutEffect(() => {
+        if (mode === 'list' && returnToAddRef.current) addButtonRef.current?.focus({ preventScroll: true });
+        if (mode !== 'edit' && mode !== 'scan') returnToAddRef.current = false;
+    }, [mode]);
 
     // List-view filters. `query` is a free-text match over name / notes /
     // any entry address or label; `networkFilter` keeps only contacts that
@@ -167,6 +226,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             { chain: 'bitcoin', address: '', label: '' },
         ]),
     );
+    // The tile look being edited, as readContactLook returns it: a null field
+    // keeps the default, so a contact saved before looks existed keeps its
+    // colour when only its name or notes change.
+    const [formLook, setFormLook] = useState(
+        /** @type {{ colour: string | null, shape: 'circle' | 'rounded' | null, image: string | null }} */ (readContactLook(null)),
+    );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const submittingRef = useRef(false);
@@ -174,17 +239,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [editVersion, setEditVersion] = useState(/** @type {string | null} */ (null));
     // An error answers the last Save; once the user edits the form it no
     // longer describes it ("Name is required." stayed up under a typed name).
-    useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries]);
+    useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries, formLook]);
 
-    // Add-address modal (launched from the detail view's + button).
-    const [addAddrOpen, setAddAddrOpen] = useState(false);
-    // The add-address dialog traps Tab and returns focus to its opener on close.
-    const addAddrRef = useRef(null);
-    useFocusTrap(addAddrRef, { active: addAddrOpen });
+    // The Add Address page (the Addresses tab's Add Address button): no
+    // modal, since nothing is edited in one (G104).
     const [addAddrValue, setAddAddrValue] = useState('');
+    const [addAddrLabel, setAddAddrLabel] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
-    useBackHandler(addAddrOpen ? () => setAddAddrOpen(false) : undefined, addAddrSaving);
     // The user's answer when the typed address's network cannot be read from
     // its bytes (shared testnet/regtest version bytes); null until they pick.
     const [addAddrChain, setAddAddrChain] = useState(/** @type {string | null} */ (null));
@@ -213,7 +275,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setContacts(loaded);
         } catch (err) {
             if (!isCurrent()) return null;
-            setLoadError(err?.message || 'Failed to load contacts.');
+            setLoadError(userFacingMessage(err, 'Failed to load contacts.'));
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.
@@ -239,11 +301,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         return contacts.find((c) => c.id === activeId) || null;
     }, [activeId, contacts]);
 
+    // Each contact opens on its Actions tab.
+    useEffect(() => { setDetailView('actions'); }, [activeId]);
+
+    // A contact deleted in another window leaves its pages for the list.
+    useEffect(() => {
+        if (contacts && (mode === 'detail' || mode === 'add-address') && !active) setMode('list');
+    }, [contacts, mode, active]);
+
     const contactFormDirty = useMemo(() => {
         if (active) {
             const originalEntries = Array.isArray(active.entries) ? active.entries : [];
             return formName !== String(active.name || '')
                 || formNotes !== String(active.notes || '')
+                || !sameContactLook(formLook, readContactLook(active))
                 || JSON.stringify(formEntries) !== JSON.stringify(originalEntries.map((entry) => ({
                     chain: entry.chain,
                     address: entry.address,
@@ -255,7 +326,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 String(entry.address || '').trim().length > 0
                 || String(entry.label || '').trim().length > 0
             ));
-    }, [active, formName, formNotes, formEntries]);
+    }, [active, formName, formNotes, formEntries, formLook]);
     const leaveEdit = useCallback(() => {
         setMode(active ? 'detail' : 'list');
         if (!active) setActiveId(null);
@@ -281,6 +352,31 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             );
         }).sort(sortBy === 'newest' ? compareContactsByNewest : compareContactsByName);
     }, [contacts, query, networkFilter, sortBy]);
+
+    // Wide Contacts always has a detail beside the list. Keep the selected
+    // contact inside the filtered rows, choosing the first row when the page
+    // opens or a filter removes the previous selection. Narrow Contacts keeps
+    // the existing list-then-detail flow.
+    useEffect(() => {
+        if (!wideContent || !contacts || (mode !== 'list' && mode !== 'detail')) return;
+        const first = filteredContacts[0] || null;
+        if (!first) {
+            if (activeId !== null) setActiveId(null);
+            return;
+        }
+        if (!filteredContacts.some((contact) => contact.id === activeId)) setActiveId(first.id);
+    }, [activeId, contacts, filteredContacts, mode, wideContent]);
+
+    const twoPanel = wideContent
+        && contacts !== null
+        && !loadError
+        && (mode === 'list' || mode === 'detail')
+        && filteredContacts.length > 0;
+
+    const openContact = (contact) => {
+        setActiveId(contact.id);
+        if (!twoPanel) setMode('detail');
+    };
 
     const duplicateGroups = useMemo(() => duplicateNameGroups(contacts), [contacts]);
 
@@ -339,6 +435,32 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         onScanPrefillConsumed?.();
     }, [scanPrefill, contacts, onScanPrefillConsumed]);
 
+    // A thread's overflow menu opens this route aimed at one address: the
+    // contact that holds it opens in the edit form (edit), otherwise the
+    // new-contact form opens with the address pre-filled.
+    useEffect(() => {
+        if (!openTarget || !contacts) return;
+        const existing = findContactByAddress(contacts, openTarget.address);
+        if (existing && openTarget.edit) {
+            setActiveId(existing.id);
+            startEdit(existing);
+        } else if (existing) {
+            setActiveId(existing.id);
+            setMode('detail');
+        } else {
+            const chain = coinFamilyFromChainId(openTarget.chainId) || chainFor(openTarget.address);
+            setActiveId(null);
+            setEditVersion(null);
+            setFormName('');
+            setFormNotes('');
+            setFormEntries([{ chain, address: openTarget.address, label: '' }]);
+            setSubmitError(null);
+            setMode('edit');
+        }
+        onOpenTargetConsumed?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openTarget, contacts]);
+
     // Dismiss the address-picker dropdown on outside click or Escape.
     useEffect(() => {
         if (!addrPicker) return undefined;
@@ -369,6 +491,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setFormNotes('');
             setFormEntries([{ chain: 'bitcoin', address: '', label: '' }]);
         }
+        setFormLook(readContactLook(contact));
         setSubmitError(null);
         setMode('edit');
     }
@@ -376,6 +499,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     function handleScanned(outcome) {
         // ScanRoute fires { kind: 'send', address, chainId? } for plain
         // addresses, BIP21, and xchain: send URIs.
+        if (scanForAddress) {
+            // Add Address: a scanned address fills its field, and its
+            // network is read from it as if it were typed.
+            setScanForAddress(false);
+            setMode('add-address');
+            if (outcome && outcome.kind === 'send' && outcome.address) {
+                setAddAddrValue(outcome.address);
+                setAddAddrChain(coinFamilyFromChainId(outcome.chainId));
+                setAddAddrError(null);
+            } else {
+                showToast({ message: 'No address detected in that QR code.', variant: 'error' });
+            }
+            return;
+        }
         if (outcome && outcome.kind === 'send' && outcome.address) {
             const chain = coinFamilyFromChainId(outcome.chainId) || chainFor(outcome.address);
             if (scanFromEdit) {
@@ -469,8 +606,21 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         setSubmitError(null);
         try {
             if (active) {
+                // The look is written only once it is changed, as the wallet
+                // tile's { colour, image, shape }; an untouched contact keeps
+                // what it had (no look: the default).
+                const lookChanged = !sameContactLook(formLook, readContactLook(active));
+                const look = lookChanged
+                    ? { colour: formLook.colour, image: formLook.image, shape: formLook.shape || 'circle' }
+                    : active.look;
                 await messaging.saveContact({
-                    record: { ...active, name: formName.trim(), notes: formNotes, entries: cleanedEntries },
+                    record: {
+                        ...active,
+                        name: formName.trim(),
+                        notes: formNotes,
+                        entries: cleanedEntries,
+                        ...(look ? { look } : {}),
+                    },
                     expectedUpdatedAt: editVersion,
                 });
             } else {
@@ -517,18 +667,25 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setMode('list');
             await loadContacts();
             if (snapshot) {
-                showToast({
+                // The toast host dismisses the toast as soon as Undo runs, so a
+                // refused restore offers the same Undo again; the retry stays
+                // bound to this snapshot instead of leaving the contact lost.
+                const undoToast = {
                     message: `${displayName} deleted`,
                     actionLabel: 'Undo',
-                    onAction: async () => {
-                        try {
-                            await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
-                            await loadContacts();
-                        } catch (err) {
-                            setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
-                        }
-                    },
-                });
+                    onAction: () => restoreContact(),
+                };
+                const restoreContact = async () => {
+                    try {
+                        await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
+                    } catch (err) {
+                        setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
+                        showToast(undoToast);
+                        return;
+                    }
+                    await loadContacts();
+                };
+                showToast(undoToast);
             }
         } catch (err) {
             setLoadError(userFacingMessage(err, 'Could not delete this contact. Try again.'));
@@ -556,29 +713,53 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         }
     }
 
-    // Remove a single address entry from the active contact, after a
-    // confirmation that mirrors the delete-contact prompt.
+    // An address card's Remove: take that address off the active contact
+    // after the standard confirm dialog, which asks only "Remove this
+    // address?" with Cancel and Remove (operator 2026-11-15: no other copy).
     async function handleDeleteAddress(index) {
         if (!active || deleting) return;
+        if (!active.entries[index]) return;
         setDeleting(`address:${index}`);
         const nextEntries = active.entries.filter((_, i) => i !== index);
         try {
-            if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
+            if (!(await confirmDialog.confirm({
+                title: 'Remove this address?',
+                confirmLabel: 'Remove',
+                confirmIcon: <Icon.TrashIcon />,
+                danger: true,
+            }))) return;
             await messaging.saveContact({
                 record: { ...active, entries: nextEntries },
                 expectedUpdatedAt: active.updatedAt,
             });
             await loadContacts();
         } catch (err) {
-            setLoadError(userFacingMessage(err, 'Could not delete this address. Try again.'));
+            setLoadError(userFacingMessage(err, 'Could not remove this address. Try again.'));
         } finally {
             setDeleting(null);
         }
     }
 
-    // Append the address typed in the add-address modal to the active
-    // contact, auto-detecting its coin network.
-    async function handleAddAddress() {
+    // The Addresses tab's Add Address button: a blank Add Address page.
+    function startAddAddress() {
+        setAddAddrValue('');
+        setAddAddrLabel('');
+        setAddAddrChain(null);
+        setAddAddrError(null);
+        setMode('add-address');
+    }
+
+    async function handleCopyAddress(address) {
+        const result = await copyText(address);
+        showToast(result?.ok
+            ? { message: 'Address copied.' }
+            : { message: 'Could not copy the address.', variant: 'error' });
+    }
+
+    // Save the address on the Add Address page to the active contact,
+    // reading its coin network from the address itself.
+    async function handleAddAddress(event) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (!active || addAddrSaving) return;
         const address = addAddrValue.trim();
         if (!address) {
@@ -602,15 +783,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         }
         setAddAddrSaving(true);
         setAddAddrError(null);
-        const entry = { chain, address, label: '' };
+        const entry = { chain, address, label: stripBidiControls(addAddrLabel).trim() };
         try {
             await messaging.saveContact({
                 record: { ...active, entries: [...active.entries, entry] },
                 expectedUpdatedAt: active.updatedAt,
             });
             await loadContacts();
-            setAddAddrOpen(false);
             setAddAddrValue('');
+            setAddAddrLabel('');
+            setDetailView('addresses');
+            setMode('detail');
         } catch (err) {
             // Reloading moves `active` to the stored version, so Add again
             // appends to the current entries under the current version.
@@ -621,35 +804,81 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         }
     }
 
+    // The title bar holds the filter (search, Network, Sort) and Add contact
+    // as a plain plus at the far right, as on Bet Markets and Messaging; the
+    // page body is only the contact list. The filter waits for the contacts
+    // to load, and it is lit while any of the three is off its default.
+    const listFilter = contacts && !loadError ? (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={networkFilter !== 'all' || sortBy !== 'name'}
+            label="Filter contacts"
+            searchPlaceholder="Search"
+            searchLabel="Search contacts"
+        >
+            <NetworkFilterDropdown
+                value={networkFilter}
+                onChange={setNetworkFilter}
+                announceNetworkCount
+                iconOnly={false}
+            />
+            <Select
+                size="md"
+                value={sortBy}
+                onChange={(e) => {
+                    const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                    setSortBy(value);
+                    persistContactsSort(walletId, value);
+                }}
+                aria-label="Sort contacts"
+            >
+                <Select.Option value="name" icon={<Icon.BookIcon />}>A to Z</Select.Option>
+                <Select.Option value="newest" icon={<Icon.HistoryIcon />}>Newest</Select.Option>
+            </Select>
+        </ListFilterMenu>
+    ) : null;
+
     const header = (
         <PageHeader
-            nested={mode !== 'list'}
+            nested={mode !== 'list' && !twoPanel}
+            backDisabled={mode === 'add-address' && addAddrSaving}
             onBack={() => {
-                if (mode !== 'list') {
-                    if (mode === 'edit') leaveGuard.guardedOnBack();
-                    else setMode('list');
-                } else {
+                if (mode === 'list' || twoPanel) {
                     onBack();
+                } else if (mode === 'edit') {
+                    leaveGuard.guardedOnBack();
+                } else if (mode === 'add-address') {
+                    // Back to the Addresses tab Add Address opened from.
+                    setDetailView('addresses');
+                    setMode('detail');
+                } else {
+                    setMode('list');
                 }
             }}
-            title={mode === 'edit'
-                ? (active ? 'Edit Contact' : 'New contact')
-                : mode === 'detail' ? 'View Contact' : 'Contacts'}
+            title={twoPanel ? 'Contacts' : ({
+                edit: active ? 'Edit Contact' : 'New Contact',
+                detail: 'View Contact',
+                'add-address': 'Add Address',
+            })[mode] || 'Contacts'}
+            trailing={mode === 'list' || twoPanel ? (
+                <>
+                    {listFilter}
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<Icon.PlusIcon />}
+                        ref={addButtonRef}
+                        aria-label="Add contact"
+                        title="Add contact"
+                        onClick={() => { returnToAddRef.current = true; setActiveId(null); startEdit(null); }}
+                    >
+                        {null}
+                    </Button>
+                </>
+            ) : null}
         />
     );
-    // The page header holds only the title and Back, so Add contact sits in
-    // the list's actions row. An empty list offers Create first contact from
-    // its EmptyState instead, so the screen never shows the action twice.
-    const listActions = (emptyOffersCreate = false) => (mode === 'list' && !emptyOffersCreate ? (
-        <Button
-            type="button"
-            variant="secondary"
-            icon={<Icon.PlusIcon />}
-            onClick={() => { setActiveId(null); startEdit(null); }}
-        >
-            Add contact
-        </Button>
-    ) : null);
 
     // The list keeps its own offset: a contact or the edit form swaps into
     // this same Screen, and with one key the short detail view clamped the
@@ -662,7 +891,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             scrollKey={mode === 'list' ? 'list' : mode}
             restoreScroll={mode === 'list'}
         >
-            {children}
+            <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                {children}
+            </div>
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -691,14 +922,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         {loadError}
                     </StatusMessage>
                 )}
-                actions={listActions()}
             />,
         );
     }
 
     if (contacts === null) {
         return wrap(
-            <ListPage actions={listActions()}>
+            <ListPage>
                 <div role="status" aria-label="Loading contacts">
                     <Skeleton.List rows={5} />
                 </div>
@@ -710,10 +940,63 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         return (
             <ScanRoute
                 nested
-                onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
+                onBack={() => {
+                    setScanFromEdit(false);
+                    setScanForAddress(false);
+                    setMode(scanForAddress ? 'add-address' : scanFromEdit ? 'edit' : 'list');
+                }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
             />
+        );
+    }
+
+    if (mode === 'add-address' && active) {
+        // Add Address: paste, type or scan the address (Scan sits inside the
+        // field, U53); the network is read from it, asked only when the
+        // address cannot say; an optional Label; Save Address.
+        return wrap(
+            <FormPage
+                label="Add address"
+                onSubmit={handleAddAddress}
+                status={addAddrError ? (
+                    <StatusMessage variant="error" title="Fix 1 thing to continue">
+                        {addAddrError}
+                    </StatusMessage>
+                ) : null}
+                actions={(
+                    <Button type="submit" variant="success" icon={<Icon.SaveIcon />} loading={addAddrSaving}>
+                        Save Address
+                    </Button>
+                )}
+            >
+                <AddressField
+                    label="Address"
+                    help={CONTACT_ADDRESS_HELP}
+                    icon="scan"
+                    onIconClick={() => { setScanForAddress(true); setMode('scan'); }}
+                    value={addAddrValue}
+                    onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                    error={addAddrError}
+                    placeholder=""
+                    autoFocus
+                    autoComplete="off"
+                />
+                <NetworkReadout
+                    address={addAddrValue}
+                    chain={chainFor(addAddrValue, addAddrChain)}
+                    onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
+                    style={{ margin: '0.25rem 0 0.75rem' }}
+                />
+                <Input
+                    label="Label"
+                    help={CONTACT_LABEL_HELP}
+                    optional
+                    value={addAddrLabel}
+                    onChange={(ev) => setAddAddrLabel(stripBidiControls(ev.target.value))}
+                    autoComplete="off"
+                />
+            </FormPage>,
         );
     }
 
@@ -731,13 +1014,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
-                        Save
+                        Create contact
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
+                <Input label="Name" help={CONTACT_NAME_HELP} value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <AddressField
                     label="Address"
+                    help={CONTACT_ADDRESS_HELP}
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
@@ -755,6 +1039,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
+                    help={CONTACT_NOTES_HELP}
+                    optional
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                 />
@@ -763,9 +1049,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     }
 
     if (mode === 'edit' && active) {
-        // Name + notes only; existing addresses are preserved on save via
+        // Name, look and notes; existing addresses are preserved on save via
         // formEntries (populated from the contact by startEdit). Addresses are
-        // managed from the detail view, not this form.
+        // managed from the detail view, not this form. The look sits with the
+        // name the way Edit Wallet lays it out (RenameWalletForm): the current
+        // tile centred on top, the name, then the shared TileLookFields.
+        const previewContact = { ...active, name: formName || active.name, look: formLook };
         return wrap(
             <FormPage
                 label="Edit contact"
@@ -774,15 +1063,29 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={submitting}>
-                        Save
+                    <Button type="submit" variant="success" icon={<Icon.SaveIcon />} loading={submitting}>
+                        Update Contact
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
+                <div data-contact-look-preview="" style={{ display: 'flex', justifyContent: 'center' }}>
+                    <ContactAvatar contact={previewContact} context="hero" />
+                </div>
+                <Input label="Name" help={CONTACT_NAME_HELP} value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
+                <TileLookFields
+                    kind="contact"
+                    colour={formLook.colour || contactDefaultTone(active)}
+                    onColour={(colour) => setFormLook((prev) => ({ ...prev, colour }))}
+                    shape={formLook.shape || 'circle'}
+                    onShape={(shape) => setFormLook((prev) => ({ ...prev, shape }))}
+                    image={formLook.image}
+                    onImage={(image) => setFormLook((prev) => ({ ...prev, image }))}
+                />
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
+                    help={CONTACT_NOTES_HELP}
+                    optional
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                 />
@@ -790,7 +1093,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         );
     }
 
-    if (mode === 'detail' && active) {
+    const contactDetail = active ? (() => {
         const primary = active.entries[0];
         const multiAddress = active.entries.length > 1;
         // Fire a Send/Message for a specific entry, then close the picker.
@@ -807,180 +1110,205 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             if (multiAddress) setAddrPicker((cur) => (cur === action ? null : action));
             else runAction(action, primary);
         };
-        return wrap(
+        return (
             <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
-                        <IdentityAvatar
-                            name={active.name}
-                            seed={active.avatarSeed || active.id}
-                            context="hero"
-                        />
+                        <ContactAvatar contact={active} context="hero" />
                         <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
                             <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600, overflowWrap: 'anywhere' }}>{active.name}</div>
                         </div>
                     </div>
-                    {active.notes ? (
-                        <>
-                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
-                            <p style={{ margin: 0, color: 'var(--xc-text-muted)' }}>{active.notes}</p>
-                        </>
-                    ) : null}
                 </div>
 
-                <div className={picker.actionsWrap} ref={actionsRef}>
-                    <div className={picker.quickActions} role="group" aria-label="Contact actions">
-                        <Button
-                            type="button"
-                            className={picker.quickAction}
-                            onClick={() => startAction('send')}
-                            disabled={!onSend || !primary}
-                            aria-haspopup={multiAddress ? 'menu' : undefined}
-                            aria-expanded={multiAddress ? (addrPicker === 'send') : undefined}
-                        >
-                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                            <span>Send</span>
-                        </Button>
-                        <Button
-                            type="button"
-                            className={picker.quickAction}
-                            onClick={() => startAction('message')}
-                            disabled={!onSendMessage || !primary}
-                            aria-haspopup={multiAddress ? 'menu' : undefined}
-                            aria-expanded={multiAddress ? (addrPicker === 'message') : undefined}
-                        >
-                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.MessageIcon /></span>
-                            <span>Message</span>
-                        </Button>
-                        <Button
-                            type="button"
-                            className={picker.quickAction}
-                            onClick={() => startEdit(active)}
-                        >
-                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
-                            <span>Edit</span>
-                        </Button>
-                        <Button
-                            type="button"
-                            className={picker.quickAction}
-                            onClick={handleShareContact}
-                        >
-                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.UploadIcon /></span>
-                            <span>Share</span>
-                        </Button>
-                        <Button
-                            type="button"
-                            className={picker.quickAction}
-                            onClick={() => handleDelete(active.id)}
-                            disabled={deleting !== null}
-                            aria-busy={deleting === `contact:${active.id}`}
-                        >
-                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>{deleting === `contact:${active.id}` ? 'Deleting…' : 'Delete'}</span>
-                        </Button>
-                    </div>
-                    {addrPicker ? (
-                        <ul className={picker.addrMenu} role="menu" aria-label="Choose an address">
-                            <li className={picker.addrMenuHead}>
-                                {addrPicker === 'send' ? 'Send to' : 'Message to'}
-                            </li>
-                            {active.entries.map((e, i) => (
-                                <li key={i}>
-                                    <Button
-                                        type="button"
-                                        role="menuitem"
-                                        className={picker.addrMenuItem}
-                                        onClick={() => runAction(addrPicker, e)}
-                                    >
-                                        <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                        <AddressText address={e.address} className={picker.addressText} />
-                                        {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                    </Button>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : null}
-                </div>
-
-                <SectionHeader
-                    title="Addresses"
-                    trailing={(
-                        <Button
-                            type="button"
-                            className={picker.addAddressBtn}
-                            onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
-                            aria-label="Add address"
-                            title="Add address"
-                        >
-                            <Icon.PlusIcon />
-                        </Button>
+                {/* G102: Actions, Addresses and Details tabs under the header,
+                    Actions first and chosen (operator pick 2026-11-15, layout 2). */}
+                <ActionsDetailsToggle
+                    label="Contact sections"
+                    view={detailView}
+                    onViewChange={setDetailView}
+                    extra={{
+                        id: 'addresses',
+                        label: 'Addresses',
+                        icon: <Icon.AddressIcon />,
+                        panel: (
+                            <div className={picker.panelStack}>
+                                {/* One card per address (layout 5) with its own
+                                    Copy, Send and Remove buttons: an operator
+                                    ruling for contact address cards (G124),
+                                    in place of G101 and G111 here. */}
+                                {active.entries.length > 0 ? (
+                                    <ul className={picker.addressCards} aria-label="Addresses">
+                                        {active.entries.map((e, i) => {
+                                            const network = networkNameFor(e);
+                                            const chainId = chainIdFor(resolvedChain(e), e.address);
+                                            const ticker = chainId ? tickerForDescriptor(chainRegistry.get(chainId)) : '';
+                                            const label = e.label?.trim() || '';
+                                            return (
+                                                <li key={`${e.chain}:${e.address}`} className={picker.addressCard} data-contact-address-card="">
+                                                    <div className={picker.addressCardHead}>
+                                                        <ChainCoinIcon chain={resolvedChain(e)} address={e.address} size="md" />
+                                                        <strong className={picker.addressCardName}>{network}</strong>
+                                                        {label ? <span className={picker.addressCardLabel}>{label}</span> : null}
+                                                        {ticker ? <span className={picker.addressCardTicker}>{ticker}</span> : null}
+                                                    </div>
+                                                    <div className={picker.addressCardRow}>
+                                                        <span className={picker.factLabel}>Address</span>
+                                                        <AddressText address={e.address} truncate={false} className={picker.addressCardAddress} />
+                                                    </div>
+                                                    <div className={picker.addressCardActions}>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className={picker.addressCardAction}
+                                                            icon={<Icon.CopyIcon />}
+                                                            aria-label={`Copy ${network} address`}
+                                                            onClick={() => handleCopyAddress(e.address)}
+                                                        >
+                                                            Copy
+                                                        </Button>
+                                                        {/* Send opens the Send form with this
+                                                            address in To and its network chosen. */}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className={picker.addressCardAction}
+                                                            icon={<Icon.SendIcon />}
+                                                            aria-label={`Send to ${network} address`}
+                                                            onClick={() => onSend?.({ chainId, address: e.address })}
+                                                            disabled={!onSend || !chainId}
+                                                        >
+                                                            Send
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            className={picker.addressCardAction}
+                                                            icon={<Icon.TrashIcon />}
+                                                            aria-label={`Remove ${network} address`}
+                                                            onClick={() => handleDeleteAddress(i)}
+                                                            disabled={deleting !== null}
+                                                            aria-busy={deleting === `address:${i}`}
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                ) : null}
+                                {/* The standard add row (an action list row with
+                                    its one-line description). */}
+                                <ActionList label="Add an address">
+                                    <ActionListItem
+                                        icon={<Icon.PlusIcon />}
+                                        title="Add address"
+                                        description="Save another address for this contact"
+                                        onClick={startAddAddress}
+                                    />
+                                </ActionList>
+                            </div>
+                        ),
+                    }}
+                    actions={(
+                        <div className={picker.actionsWrap} ref={actionsRef}>
+                            {/* G101: one action list, a row per action, Delete in red. */}
+                            <ActionList label="Contact actions">
+                                <ActionListItem
+                                    icon={<Icon.SendIcon />}
+                                    title="Send"
+                                    description={multiAddress ? 'Choose an address and send to it' : 'Send coins or tokens to this contact'}
+                                    onClick={() => startAction('send')}
+                                    disabled={!onSend || !primary}
+                                    aria-haspopup={multiAddress ? 'menu' : undefined}
+                                    aria-expanded={multiAddress ? (addrPicker === 'send') : undefined}
+                                />
+                                <ActionListItem
+                                    icon={<Icon.MessageIcon />}
+                                    title="Message"
+                                    description={multiAddress ? 'Choose an address and message it' : 'Send this contact an on-chain message'}
+                                    onClick={() => startAction('message')}
+                                    disabled={!onSendMessage || !primary}
+                                    aria-haspopup={multiAddress ? 'menu' : undefined}
+                                    aria-expanded={multiAddress ? (addrPicker === 'message') : undefined}
+                                />
+                                <ActionListItem
+                                    icon={<Icon.PencilIcon />}
+                                    title="Edit"
+                                    description="Change the name, icon or notes"
+                                    onClick={() => startEdit(active)}
+                                />
+                                <ActionListItem
+                                    icon={<Icon.UploadIcon />}
+                                    title="Share"
+                                    description="Share the name and every address"
+                                    onClick={handleShareContact}
+                                />
+                                <ActionListItem
+                                    icon={<Icon.TrashIcon />}
+                                    title={deleting === `contact:${active.id}` ? 'Deleting…' : 'Delete'}
+                                    description="Remove this contact from the wallet"
+                                    tone="danger"
+                                    onClick={() => handleDelete(active.id)}
+                                    disabled={deleting !== null}
+                                    aria-busy={deleting === `contact:${active.id}`}
+                                />
+                            </ActionList>
+                            {addrPicker ? (
+                                <ul className={picker.addrMenu} role="menu" aria-label="Choose an address">
+                                    <li className={picker.addrMenuHead}>
+                                        {addrPicker === 'send' ? 'Send to' : 'Message to'}
+                                    </li>
+                                    {active.entries.map((e, i) => (
+                                        <li key={i}>
+                                            <Button
+                                                type="button"
+                                                role="menuitem"
+                                                className={picker.addrMenuItem}
+                                                onClick={() => runAction(addrPicker, e)}
+                                            >
+                                                <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
+                                                <AddressText address={e.address} className={picker.addressText} />
+                                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : null}
+                        </div>
+                    )}
+                    details={(
+                        // G14: the facts card, then the notes (moved here out
+                        // of the header, operator 2026-11-15).
+                        <div className={picker.panelStack}>
+                            <dl className={facts.list} data-contact-facts="">
+                                <dt className={facts.label}>Name</dt>
+                                <dd className={facts.value}>{active.name}</dd>
+                                <dt className={facts.label}>Networks</dt>
+                                <dd className={facts.value}>{contactNetworks(active) || 'None'}</dd>
+                                <dt className={facts.label}>Addresses</dt>
+                                <dd className={facts.value}>{active.entries.length.toLocaleString('en-US')}</dd>
+                                <dt className={facts.label}>Added</dt>
+                                <dd className={facts.value}>{addedOn(active.createdAt)}</dd>
+                            </dl>
+                            {active.notes ? (
+                                <section className={`${picker.infoCard} ${picker.addressCardRow}`} aria-label="Notes" data-contact-notes="">
+                                    <span className={picker.factLabel}>Notes</span>
+                                    <p className={picker.notesText}>{active.notes}</p>
+                                </section>
+                            ) : null}
+                        </div>
                     )}
                 />
-
-                <ul className={picker.tabPanel} style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0 0' }}>
-                    {active.entries.map((e, i) => {
-                        return (
-                            <li key={i} className={picker.addressCard}>
-                                <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                <AddressText address={e.address} className={picker.addressText} />
-                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                <Button
-                                    type="button"
-                                    className={picker.addressDeleteBtn}
-                                    onClick={() => handleDeleteAddress(i)}
-                                    disabled={deleting !== null}
-                                    aria-busy={deleting === `address:${i}`}
-                                    aria-label="Delete address"
-                                    title="Delete address"
-                                >
-                                    <Icon.XIcon />
-                                </Button>
-                            </li>
-                        );
-                    })}
-                </ul>
-
-                {addAddrOpen ? (
-                    <div
-                        ref={addAddrRef}
-                        className={picker.modalOverlay}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="xc-contact-add-address-title"
-                        onMouseDown={(ev) => { if (ev.target === ev.currentTarget) setAddAddrOpen(false); }}
-                    >
-                        <div className={picker.modalCard}>
-                            <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
-                            <AddressField
-                                label="Address"
-                                value={addAddrValue}
-                                onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
-                                error={addAddrError}
-                                placeholder=""
-                                autoFocus
-                                autoComplete="off"
-                            />
-                            <NetworkReadout
-                                address={addAddrValue}
-                                chain={chainFor(addAddrValue, addAddrChain)}
-                                onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
-                                style={{ marginBottom: 'var(--xc-space-2)' }}
-                            />
-                            <div className={picker.modalActions}>
-                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
-                                <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
-                            </div>
-                        </div>
-                    </div>
-                ) : null}
-            </ListPage>,
+            </ListPage>
         );
-    }
+    })() : null;
 
-    // mode === 'list'
-    return wrap(
+    if (mode === 'detail' && active && !twoPanel) return wrap(contactDetail);
+
+    const contactsList = (
         <ListPage
             notices={(
                 <>
@@ -1009,7 +1337,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             {typeof onOpenBackup === 'function' ? (
                                 <>
                                     {' '}
-                                    <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
+                                    <Button type="button" variant="link" size="sm" onClick={() => setNudgeDismissed(true)}>
                                         Not now
                                     </Button>
                                 </>
@@ -1018,51 +1346,25 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     ) : null}
                 </>
             )}
-            actions={listActions(contacts.length === 0)}
-            toolbar={(
-                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search contacts">
-                    <NetworkFilterDropdown
-                        value={networkFilter}
-                        onChange={setNetworkFilter}
-                        announceNetworkCount
-                    />
-                    <Select
-                        value={sortBy}
-                        onChange={(e) => {
-                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                            setSortBy(value);
-                            persistContactsSort(walletId, value);
-                        }}
-                        aria-label="Sort contacts"
-                    >
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="name">A to Z</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="newest">Newest</option>
-                    </Select>
-                </ListToolbar>
-            )}
         >
+            {/* Text only: Add contact is the title bar plus, offered once. */}
             {contacts.length === 0 ? (
                 <EmptyState
                     title="No contacts yet"
                     body="Saved contacts label addresses across the inbox and history."
-                    actionLabel="Create first contact"
-                    onAction={() => { setActiveId(null); startEdit(null); }}
-                    actionIcon={<Icon.PlusIcon />}
                 />
             ) : filteredContacts.length === 0 ? (
                 <EmptyState
                     title="No results for these filters"
                     body="Reset the filters to see all contacts."
-                    actionLabel="Reset filters"
+                    actionLabel="Reset Filters"
                     onAction={() => {
                         setQuery('');
                         setNetworkFilter('all');
                     }}
                 />
             ) : (
-                <ul className={picker.list} aria-label="Contacts">
+                <ul className={picker.list} aria-label="Contacts" data-xc-split-list={twoPanel ? '' : undefined}>
                     {filteredContacts.map((c, index) => {
                         const uniqueChains = [...new Map((c.entries || []).map((entry) => [
                             `${resolvedChain(entry)}:${chainIdFor(resolvedChain(entry), entry.address) || ''}`,
@@ -1071,20 +1373,18 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         return (
                             <li
                                 key={c.id}
+                                data-selected={twoPanel && activeId === c.id ? 'true' : undefined}
                                 style={{ borderTop: index === 0 ? 'none' : '1px solid var(--xc-border)' }}
                             >
                                 <ListRow
                                     type="button"
                                     className={picker.row}
-                                    onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                    data-xc-split-row={twoPanel ? '' : undefined}
+                                    onClick={() => openContact(c)}
                                     aria-label={c.name}
-                                    leading={(
-                                        <IdentityAvatar
-                                            name={c.name}
-                                            seed={c.avatarSeed || c.id}
-                                            context="list"
-                                        />
-                                    )}
+                                    aria-current={twoPanel && activeId === c.id ? 'true' : undefined}
+                                    chevron
+                                    leading={<ContactAvatar contact={c} context="list" />}
                                     title={<span className={picker.rowName}>{c.name}</span>}
                                     trailing={(
                                         <span className={picker.rowChains}>
@@ -1103,8 +1403,36 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     })}
                 </ul>
             )}
-        </ListPage>,
+        </ListPage>
     );
+
+    if (twoPanel && contactDetail) {
+        return (
+            <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="contacts"
+                    resizeLabel="Resize the contacts list"
+                    resizeHint="Drag to resize the contacts list, or press Enter to reset."
+                    layoutName="two-panel"
+                    list={contactsList}
+                    listLabel="Contacts"
+                    detail={contactDetail}
+                    detailLabel={active.name}
+                />
+                {confirmDialog.request ? (
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                ) : null}
+                {leaveGuard.confirmation}
+            </Screen>
+        );
+    }
+
+    return wrap(contactsList);
 }
 
 // Find an existing contact that already holds `address`. Bech32 comparison is
@@ -1197,21 +1525,29 @@ function NetworkReadout({ address, chain, onPick, style }) {
             </div>
         );
     }
-    const choices = NETWORK_OPTIONS.filter((n) => decoded.candidates.includes(n.value));
+    // U59: the standard Network field opens the network picker, offering only
+    // the networks this address could belong to. It stays empty until the
+    // user picks; the pick is stored as the coin family.
+    const choices = NETWORK_OPTIONS
+        .filter((n) => decoded.candidates.includes(n.value))
+        .map((n) => chainIdFor(n.value, trimmed))
+        .filter(Boolean);
     return (
-        <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
-            <label htmlFor="contact-network-pick">Network: cannot be read from this address. Which is it?</label>
-            <Select
-                id="contact-network-pick"
-                aria-label="Network for this address"
+        <div style={{ ...style, display: 'grid', gap: 'var(--xc-space-2)' }}>
+            <StatusMessage title="Choose a Network">
+                The network cannot be read from this address. Which is it?
+            </StatusMessage>
+            <NetworkField
+                label="Network"
+                help="The blockchain this contact's address belongs to. The contact is saved on that network, and payments to it go there."
                 value=""
-                onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
-            >
-                {/* A native option remains because Select renders a native listbox. */}
-                <option value="">Choose a network</option>
-                {/* Native options remain because Select renders a native listbox. */}
-                {choices.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-            </Select>
+                chainIds={choices}
+                chainRegistry={chainRegistry}
+                onChange={(chainId) => {
+                    const family = coinFamilyFromChainId(chainId);
+                    if (family) onPick(family);
+                }}
+            />
         </div>
     );
 }

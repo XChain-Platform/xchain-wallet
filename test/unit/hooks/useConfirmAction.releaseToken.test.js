@@ -242,7 +242,8 @@ describe('useConfirmAction releases a wire-shaped compose through its token', ()
         const LIVENESS = /checkInputs: \(psbtHex\) => messaging\.checkInputLiveness\(/g;
         const RELEASE = /releaseEncoderInputs: \(token\) => messaging\.releaseEncoderInputs\(\{ token \}\)/g;
         const sites = sources.filter(({ src }) => count(src, LIVENESS) > 0);
-        expect(sites.length).toBeGreaterThanOrEqual(10);
+        // Nine since U75 retired ResumeConfirm, which was the tenth call site.
+        expect(sites.length).toBeGreaterThanOrEqual(9);
         const unwired = sites
             .filter(({ src }) => count(src, RELEASE) !== count(src, LIVENESS))
             .map(({ rel }) => rel);

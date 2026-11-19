@@ -105,7 +105,7 @@ describe('extension approval accessibility', () => {
                 action: 'SEND',
                 payload: { TICK: 'TEST', QUANTITY: '25', DESTINATION: 'bcrt1qrecipient' },
             },
-            'Send 25 TEST to the recipient.',
+            /Send 25 TEST to the recipient for app\.example/,
         );
     });
 
@@ -113,7 +113,7 @@ describe('extension approval accessibility', () => {
         await scanSignApproval(
             'signPsbt',
             { payload: { psbtHex: '70736274ff' } },
-            'Ordinary payment: this transaction carries no XChain action.',
+            'Sign this transaction',
         );
     });
 
@@ -124,7 +124,7 @@ describe('extension approval accessibility', () => {
                 action: 'EXECUTE',
                 payload: { CONTRACT: 'escrow.test', METHOD: 'release' },
             },
-            'Call the escrow contract.',
+            /Call the escrow contract for app\.example/,
         );
     });
 });

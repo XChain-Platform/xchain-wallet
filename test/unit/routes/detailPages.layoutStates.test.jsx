@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -13,14 +14,20 @@ import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
+import { readFileSync } from 'node:fs';
+import betFeedStyles from '../../../packages/core/src/shared/routes/BetFeedDetail.module.css';
 import detailStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
 import tableStyles from '../../../packages/core/src/shared/components/DataTable.module.css';
 import pollStyles from '../../../packages/core/src/shared/routes/PollDetail.module.css';
+import outcomeStyles from '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css';
+import outcomeListStyles from '../../../packages/core/src/shared/routes/OutcomeList.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import formPageStyles from '../../../packages/core/src/ui/FormPage.module.css';
 import screenStyles from '../../../packages/core/src/ui/Screen.module.css';
 import sectionHeaderStyles from '../../../packages/core/src/ui/SectionHeader.module.css';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import stakeStyles from '../../../packages/core/src/shared/routes/StakeDetail.module.css';
+import listDetailStyles from '../../../packages/core/src/shared/routes/ListDetail.module.css';
+import heroStyles from '../../../packages/core/src/shared/components/TotalBalanceHero.module.css';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => (
@@ -100,16 +107,24 @@ function expectWrappingValue(element, text) {
     expect(element.style.overflowWrap === 'anywhere'
         || element.classList.contains(detailStyles.detailsValue)
         || element.classList.contains(detailStyles.choiceText)
-        || element.classList.contains(detailStyles.splitValue)
         || element.classList.contains(tableStyles.cell)
-        || element.classList.contains(pollStyles.resultOption)
-        || element.classList.contains(pollStyles.resultValues)
         || element.classList.contains(pollStyles.optionLabel)
+        // The shared outcome page (bet market and poll): the hero question,
+        // a pick row's name, a result row's name and figures, a fact value,
+        // and an approval checkbox, whose overflow-wrap the label inherits.
+        || element.classList.contains(outcomeStyles.question)
+        || element.classList.contains(outcomeStyles.identityTitle)
+        || element.classList.contains(outcomeStyles.pickName)
+        || element.classList.contains(outcomeStyles.resultName)
+        || element.classList.contains(outcomeStyles.resultSub)
+        || element.classList.contains(outcomeStyles.factValue)
+        || Boolean(element.closest(`.${outcomeStyles.pickCheck}`))
         || element.classList.contains(sectionHeaderStyles.title)).toBe(true);
 }
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -168,9 +183,11 @@ describe('detail page loading and empty states', () => {
         });
         mount(<ContractDetail chainId={CHAIN} contractActionIndex="7" onBack={() => {}} />, messaging);
 
+        // The calls are the Activity tab's list.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
         const executionLoading = await screen.findByText('Loading execution history…');
         expect(executionLoading.closest('[role="status"]')).toBeTruthy();
-        expect(screen.queryByText('No contract calls recorded against this contract yet.')).toBeNull();
+        expect(screen.queryByText('No contract activity yet')).toBeNull();
     });
 
     it('does not report empty dispenser activity while dispenses are loading', async () => {
@@ -190,13 +207,11 @@ describe('detail page loading and empty states', () => {
         });
         mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
 
-        const dispensesLoading = await screen.findByText('Loading dispenses…');
-        expect(dispensesLoading.closest('[role="status"]')).toBeTruthy();
-        expect(screen.queryByText('No dispenses yet.')).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
-        const lifecycleLoading = await screen.findByText('Loading lifecycle…');
-        expect(lifecycleLoading.closest('[role="status"]')).toBeTruthy();
-        expect(screen.queryByText('No lifecycle events yet.')).toBeNull();
+        // Fills and lifecycle events sit in one list on the Activity tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+        const activityLoading = await screen.findByText('Loading activity…');
+        expect(activityLoading.closest('[role="status"]')).toBeTruthy();
+        expect(screen.queryByText('No activity yet')).toBeNull();
     });
 
     it('shows empty dispenser activity as a bare empty state, not inside the list card', async () => {
@@ -216,12 +231,10 @@ describe('detail page loading and empty states', () => {
         });
         mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
 
-        const dispenses = await screen.findByText('No dispenses yet');
-        expect(dispenses.closest('ul')).toBeNull();
-        expect(screen.queryByRole('list', { name: 'Dispenses' })).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
-        const lifecycle = await screen.findByText('No lifecycle events yet');
-        expect(lifecycle.closest('ul')).toBeNull();
+        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+        const activity = await screen.findByText('No activity yet');
+        expect(activity.closest('ul')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Dispenser activity' })).toBeNull();
     });
 
     it.each([
@@ -291,15 +304,23 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Actions' })).toBeTruthy();
+        // The actions are the Actions tab's action list (G101, G102).
+        expect(await screen.findByRole('list', { name: 'Contract actions' })).toBeTruthy();
         expectCompactCanvas(view.container);
         expectWrappingValue(screen.getByRole('heading', { name: new RegExp(LONG_NAME) }), LONG_NAME);
-        const address = screen.getByLabelText(contractAddress);
+        expect(screen.getByRole('button', { name: /^Call by name/ }).getAttribute('aria-disabled')).toBeNull();
+        // The identity card names the address too (a fitting AddressText,
+        // G99); the Details tab's facts hold it whole in a wrapping value.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const address = (await screen.findAllByLabelText(contractAddress)).find((el) => el.closest('dl'));
         expect(address.textContent).toBe(contractAddress);
-        expect(address.closest('dl').style.overflowWrap).toBe('anywhere');
-        expect(screen.getByText(LONG_KEY, { selector: 'code' })).toBeTruthy();
-        expectWrappingValue(screen.getByText(LARGE_AMOUNT), LARGE_AMOUNT);
-        expect(screen.getByRole('button', { name: 'Call method' }).disabled).toBe(false);
+        expect(address.closest('dd')).toHaveClass(betFeedStyles.factValue);
+        const holding = screen.getByText(`${LARGE_AMOUNT} ${LONG_TICK}`);
+        expect(holding.closest('dd')).toHaveClass(betFeedStyles.factValue);
+        // The code hash is on the View code page, an Actions row.
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        fireEvent.click(screen.getByRole('button', { name: /^View code/ }));
+        expect(await screen.findByText(LONG_KEY, { selector: 'code' })).toBeTruthy();
     });
 
     it('keeps the list name, index, members, and actions visible', async () => {
@@ -325,16 +346,21 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        expect(await screen.findByText(LONG_NAME)).toBeTruthy();
-        expect(screen.getByRole('heading', { level: 1, name: 'Address list' })).toBeTruthy();
+        // The name heads the identity card and wraps; the actions open first,
+        // the members sit on the List tab and the facts on Details.
+        const name = await screen.findByRole('heading', { level: 2, name: LONG_NAME });
+        expect(screen.getByRole('heading', { level: 1, name: 'List' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'List details' })).toBeNull();
         expectCompactCanvas(view.container);
-        expectWrappingValue(detailValue('Name'), LONG_NAME);
-        expectWrappingValue(detailValue('Block'), LARGE_AMOUNT);
-        expect(screen.getByRole('heading', { name: 'Actions' })).toBeTruthy();
-        expect(screen.getByLabelText(OTHER_LONG_ADDRESS).textContent).toBe(OTHER_LONG_ADDRESS);
-        expect(screen.getByRole('button', { name: 'Fork & edit' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Share list' })).toBeTruthy();
+        expect(name).toHaveClass(listDetailStyles.identityName);
+        const actions = screen.getByRole('list', { name: 'List actions' });
+        expect(within(actions).getByRole('button', { name: /^Fork\b/ })).toBeTruthy();
+        expect(within(actions).getByRole('button', { name: /^Share\b/ })).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const block = within(screen.getByText('Block').closest('li')).getByText(LARGE_AMOUNT);
+        expect(block).toHaveClass(listDetailStyles.detailValue);
+        fireEvent.click(screen.getByRole('tab', { name: 'List' }));
+        expect(screen.getByLabelText(OTHER_LONG_ADDRESS)).toBeTruthy();
     });
 
     it('keeps stake names, amounts, activity, and every action visible', async () => {
@@ -362,19 +388,27 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        await waitFor(() => expect(detailValue('Role')).toHaveTextContent(LONG_NAME));
-        expect(screen.getByRole('heading', { level: 1, name: 'Validator stake' })).toBeTruthy();
-        expect(screen.queryByRole('heading', { name: 'Position details' })).toBeNull();
+        const tiles = await screen.findByRole('list', { name: 'Stake actions' });
+        expect(screen.getByRole('heading', { level: 1, name: 'Validator Stake' })).toBeTruthy();
         expectCompactCanvas(view.container);
-        expectWrappingValue(detailValue('Role'), LONG_NAME);
-        expectWrappingValue(detailValue('Staked'), LARGE_AMOUNT);
-        expect(screen.getByRole('heading', { name: 'Actions' })).toBeTruthy();
-        expect(screen.getByRole('heading', { name: 'Position activity' })).toBeTruthy();
-        expect(screen.getByText(LONG_KEY, { selector: 'code' })).toBeTruthy();
-        expect(screen.getByText(LONG_KEY, { selector: 'code' }).closest('dd').style.overflowWrap).toBe('anywhere');
-        for (const label of ['Claim', 'Unstake', 'Delegate', 'More']) {
-            expect(screen.getByRole('button', { name: label })).toHaveClass(buttonStyles.btn);
+        // The huge staked amount wraps inside the hero instead of clipping.
+        const heroAmount = screen.getByText((_, node) => node?.classList?.contains(heroStyles.amountValue));
+        expect(heroAmount.textContent.replaceAll(',', '')).toContain(LARGE_AMOUNT);
+        // So does each bubble's amount (the Earned bubble holds the reward).
+        const bubbles = screen.getByRole('group', { name: 'Rewards summary' });
+        const earned = [...bubbles.querySelectorAll(`.${stakeStyles.bubbleAmount}`)].pop();
+        expect(earned.textContent.replaceAll(',', '')).toContain(LARGE_AMOUNT);
+        // Each action is a row of the shared action list, its title shown.
+        for (const label of ['Claim', 'Unstake', 'Delegate']) {
+            const row = within(tiles).getByRole('button', { name: new RegExp(`^${label}\\b`) });
+            expect(within(row).getByText(label)).toBeTruthy();
         }
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const role = within(screen.getByText('Validator').closest('li')).getByText(LONG_NAME);
+        expect(role).toHaveClass(stakeStyles.detailValue);
+        // The delegated key is cut in the middle with the whole key in its title.
+        expect(screen.getByTitle(LONG_KEY)).toBeTruthy();
     });
 
     it('keeps dispenser tickers, amounts, addresses, and actions visible', async () => {
@@ -407,17 +441,22 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
+        // The page opens on Actions (G102); the facts are on the Details tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /^Details$/ }));
         await waitFor(() => expect(detailValue('Dispensing')).toBeTruthy());
-        expect(screen.getByRole('heading', { level: 1, name: 'Dispenser detail' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Dispenser Detail' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Dispenser details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Dispensing'), LARGE_AMOUNT);
         expectWrappingValue(detailValue('Payment'), LARGE_AMOUNT);
-        expect(screen.getByRole('heading', { name: 'Actions' })).toBeTruthy();
-        expect(screen.getByRole('heading', { name: 'Activity' })).toBeTruthy();
+        // The page is a Home-style card with Actions, Details and Activity tabs for every reader.
+        for (const name of ['Actions', 'Details', 'Activity']) {
+            expect(screen.getByRole('tab', { name })).toBeTruthy();
+        }
         await waitFor(() => expect(screen.getByLabelText(OTHER_LONG_ADDRESS).textContent).toBe(OTHER_LONG_ADDRESS));
         expect(screen.getByLabelText(OTHER_LONG_ADDRESS).closest('dd').style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'More' })).toHaveClass(buttonStyles.btn);
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        expect(await screen.findByRole('list', { name: 'Dispenser activity' })).toBeTruthy();
     });
 
     it('keeps a long poll question, option, amount, and vote action visible', async () => {
@@ -444,10 +483,17 @@ describe('412px protocol detail layouts', () => {
 
         expect(await screen.findByText(LONG_NAME.repeat(2))).toBeTruthy();
         expectCompactCanvas(view.container);
-        expectWrappingValue(detailValue('Question'), LONG_NAME.repeat(2));
+        // The question heads the hero as its own wrapping line, not a details row.
+        expectWrappingValue(screen.getByText(LONG_NAME.repeat(2)), LONG_NAME.repeat(2));
+        // The choice row is the bet market's outcome row and its own Vote
+        // button: a long name stays on one line, cut with an ellipsis by the
+        // shared stylesheet, and the row's accessible name carries it whole.
+        const choiceAction = screen.getByRole('button', { name: `Vote for ${option}` });
+        expect(choiceAction).toHaveClass(outcomeListStyles.row);
+        expect(choiceAction.textContent).toContain(option);
+        // The close block is a poll fact, under the Details option.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         expectWrappingValue(detailValue('Closes at block'), LARGE_AMOUNT);
-        expectWrappingValue(screen.getByText(`0: ${option}`), option);
-        expect(screen.getByRole('button', { name: 'Vote' })).toBeTruthy();
     });
 
     it('keeps finalized poll result names and large totals visible', async () => {
@@ -469,13 +515,15 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
+        // Result's final results row: the option's name and its figures
+        // each wrap through the shared outcome page's rules.
         const optionCell = await screen.findByText(`0: ${option}`);
         expectCompactCanvas(view.container);
-        expect(optionCell).toHaveClass(pollStyles.resultOption);
+        expect(optionCell).toHaveClass(outcomeStyles.resultName);
         const item = optionCell.closest('li');
-        expect(item).toHaveClass(pollStyles.resultItem);
-        expect(item).toHaveTextContent(`${LARGE_AMOUNT} weight`);
-        expect(item.querySelector(`.${pollStyles.resultValues}`)).toHaveTextContent(LARGE_AMOUNT);
+        expect(item).toHaveClass(outcomeStyles.resultRow);
+        expect(item).toHaveTextContent(`${LARGE_AMOUNT.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} weight`);
+        expectWrappingValue(item.querySelector(`.${outcomeStyles.resultSub}`), LARGE_AMOUNT);
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeTruthy();
     });
 
@@ -505,12 +553,18 @@ describe('412px protocol detail layouts', () => {
 
         expect(await screen.findByRole('heading', { name: LONG_NAME.repeat(2) })).toBeTruthy();
         expectCompactCanvas(view.container);
-        expectWrappingValue(screen.getByText(`0: ${outcome}`), outcome);
-        expectWrappingValue(screen.getByText(new RegExp(`^${LARGE_AMOUNT}`)), LARGE_AMOUNT);
-        const outcomeAction = screen.getByRole('button', { name: outcome });
-        expect(outcomeAction.style.whiteSpace).toBe('normal');
-        expect(outcomeAction.style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'Review bet' })).toBeTruthy();
+        // The market opens on Bet: each outcome is a list row. A long name
+        // stays on one line, cut with an ellipsis by the shared stylesheet
+        // (not inline styles), and the row's accessible name carries it whole.
+        const outcomeAction = screen.getByRole('button', { name: new RegExp(`^Buy ${outcome}, `) });
+        expect(outcomeAction).toHaveClass(outcomeListStyles.row);
+        expect(outcomeAction.textContent).toContain(outcome);
+        const outcomeCss = readFileSync('packages/core/src/shared/routes/OutcomeList.module.css', 'utf8');
+        expect(outcomeCss).toMatch(/\.content > :first-child\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+        expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
+        // The pool is a Details fact, its value wrapping.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expectWrappingValue(detailValue('Pool'), LARGE_AMOUNT);
     });
 
     it('keeps long swap terms, large amounts, and review actions visible', async () => {
@@ -522,9 +576,11 @@ describe('412px protocol detail layouts', () => {
             source: 'hd',
             signerId: 'signer',
         };
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' });
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [address] }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet', name: 'W', walletMode: 'watcher' }]),
             getWalletBalances: vi.fn().mockResolvedValue({}),
             getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 18 }),
         });
@@ -534,16 +590,17 @@ describe('412px protocol detail layouts', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', { name: /Get token:/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         fireEvent.change(screen.getByLabelText(`Give amount (${LONG_TICK})`), { target: { value: LARGE_AMOUNT } });
         fireEvent.change(screen.getByLabelText(`Get amount (${LONG_GET_TICK})`), { target: { value: LARGE_AMOUNT } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
-        expect(await screen.findByRole('form', { name: 'Review swap' })).toBeTruthy();
-        expectCompactCanvas(view.container);
-        expectWrappingValue(detailValue('Give amount'), `${LARGE_AMOUNT} ${LONG_TICK}`);
-        expectWrappingValue(detailValue('Get amount'), `${LARGE_AMOUNT} ${LONG_GET_TICK}`);
-        expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        const sentence = await screen.findByTestId('confirm-sentence');
+        expect(view.container.querySelector('main')).toContainElement(screen.getByTestId('confirm-modal'));
+        const groupedAmount = LARGE_AMOUNT.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        expect(sentence).toHaveTextContent(`${groupedAmount} ${LONG_TICK}`);
+        expect(sentence).toHaveTextContent(`${groupedAmount} ${LONG_GET_TICK}`);
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
     });
 });

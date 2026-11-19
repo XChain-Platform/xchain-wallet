@@ -12,6 +12,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -34,6 +35,10 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
+// The standard's action labels are Title Case.
+const ADMIN_ACTION_PATTERN = /^(Lock Token|Update Description|Transfer Ownership|Update Mint Settings|Update Callback Settings|Update Access Lists|Update Bridge Settings)$/;
+const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
+
 function deferred() {
     let resolve;
     let reject;
@@ -42,10 +47,13 @@ function deferred() {
 }
 
 function mount(mode, overrides = {}, { initialTick = 'TOKEN', lockedTokenProps = true } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: initialTick, creator: SOURCE.address, locks: {},
         }),
@@ -76,20 +84,37 @@ function mount(mode, overrides = {}, { initialTick = 'TOKEN', lockedTokenProps =
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
 describe('TokenAdminForm token record read faults', () => {
+    it('explains a failed owner lookup and retries it from the notice', async () => {
+        const getTokenInfo = vi.fn()
+            .mockRejectedValueOnce(new Error('explorer unreachable'))
+            .mockResolvedValueOnce({
+                chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {},
+            });
+        mount('description', { getTokenInfo });
+
+        expect(await screen.findByText(/issuer could not be confirmed/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.queryByText(/issuer could not be confirmed/i)).toBeNull());
+        expect(adminAction()).not.toHaveAttribute('aria-disabled');
+    });
+
     for (const mode of ['lock', 'access-lists']) {
         it(`keeps ${mode} closed and composes nothing when the token read fails`, async () => {
             const target = mount(mode, {
                 getTokenInfo: vi.fn().mockRejectedValue(new Error('explorer unreachable')),
             });
-            const preview = await screen.findByRole('button', { name: 'Preview' });
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await act(async () => { await Promise.resolve(); });
-            expect(preview).toBeDisabled();
+            expect(preview).toBeEnabled();
             fireEvent.click(preview);
-            expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
         });
 
@@ -97,10 +122,10 @@ describe('TokenAdminForm token record read faults', () => {
             const target = mount(mode, {
                 getTokenInfo: vi.fn(() => new Promise(() => {})),
             });
-            const preview = await screen.findByRole('button', { name: 'Preview' });
-            expect(preview).toBeDisabled();
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
+            expect(preview).toBeEnabled();
             fireEvent.submit(preview.closest('form'));
-            expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
         });
     }
@@ -137,11 +162,14 @@ describe('TokenAdminForm access lists across a token switch', () => {
             await betaRead.promise;
         });
 
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         if (!preview.disabled) {
             fireEvent.click(preview);
-            const review = await screen.findByRole('form', { name: /Review/ }).catch(() => null);
-            if (review) fireEvent.submit(review);
+            const approve = await screen.findByTestId('confirm-approve').catch(() => null);
+            if (approve) {
+                await waitFor(() => expect(approve).toBeEnabled());
+                fireEvent.click(approve);
+            }
             await act(async () => { await Promise.resolve(); });
         }
         const composedLists = target.buildActionPsbtRequest.mock.calls
@@ -177,7 +205,7 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // The owner picks a block-list for the first token, which marks the
         // block-list field as edited.
-        fireEvent.click(screen.getByRole('button', { name: /(Choose|Change) block-list/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Block list:/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
         expect(await screen.findByText(/List #55/)).toBeInTheDocument();
 
@@ -192,23 +220,29 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // The second token's own bindings show, and nothing from the first.
         expect(await screen.findByText(/Policy 9 \(List #9\)/)).toBeInTheDocument();
-        expect(screen.getByText('None (anyone may interact)')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeInTheDocument();
         expect(screen.queryByText(/List #5\b/)).toBeNull();
         expect(screen.queryByText(/List #7\b/)).toBeNull();
         expect(screen.queryByText(/List #55/)).toBeNull();
 
-        // Unchanged against the second token's record, so Preview stays closed.
-        const preview = screen.getByRole('button', { name: 'Preview' });
-        expect(preview).toBeDisabled();
+        // Unchanged against the second token's record: the action stays
+        // enabled (G22) and a press says nothing changed instead of composing.
+        const preview = adminAction();
+        expect(preview).not.toBeDisabled();
+        fireEvent.click(preview);
+        expect((await screen.findAllByText(/Leaving both unchanged does nothing/)).length).toBeGreaterThan(0);
+        expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
 
         // A new allow-list composes only that change; the block-list matches
         // the second token's record and is left out.
-        fireEvent.click(screen.getByRole('button', { name: /Choose allow-list/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Allow list: None set/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
-        const openPreview = await screen.findByRole('button', { name: 'Preview' });
+        const openPreview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
         await waitFor(() => expect(openPreview).toBeEnabled());
         fireEvent.click(openPreview);
-        fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
         await waitFor(() => expect(target.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
         const params = target.buildActionPsbtRequest.mock.calls[0][0].actionData.params;
         expect(params.TICK).toBe('BETA');
@@ -222,10 +256,10 @@ describe('TokenAdminForm lock matrix from a bare token record', () => {
         const target = mount('lock', {
             getTokenInfo: vi.fn().mockResolvedValue({ creator: SOURCE.address, locks: { max_supply: true } }),
         });
-        const maxSupply = await screen.findByRole('checkbox', { name: /Max supply \(already locked\)/ });
+        const maxSupply = await screen.findByRole('switch', { name: /Max supply \(already locked\)/ });
         expect(maxSupply).toBeChecked();
         expect(maxSupply).toBeDisabled();
-        const maxMint = screen.getByRole('checkbox', { name: /^Max mint per transaction/ });
+        const maxMint = screen.getByRole('switch', { name: /^Max mint per transaction/ });
         expect(maxMint).not.toBeChecked();
         expect(maxMint).toBeEnabled();
         expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -251,12 +285,14 @@ describe('TokenAdminForm list detail read faults', () => {
             await act(async () => { await Promise.resolve(); await Promise.resolve(); });
             expect(screen.queryByText(/0 members/)).toBeNull();
 
-            fireEvent.click(screen.getByRole('button', { name: /Choose block-list/ }));
+            fireEvent.click(screen.getByRole('button', { name: /^Block list: None set/ }));
             fireEvent.click(await screen.findByText(/Address list #55/));
-            const preview = await screen.findByRole('button', { name: 'Preview' });
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await waitFor(() => expect(preview).toBeEnabled());
             fireEvent.click(preview);
-            fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
+            const approve = await screen.findByTestId('confirm-approve');
+            await waitFor(() => expect(approve).toBeEnabled());
+            fireEvent.click(approve);
             await waitFor(() => expect(target.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
             const params = target.buildActionPsbtRequest.mock.calls[0][0].actionData.params;
             expect(params.BLOCK_LIST).toBe('55');
@@ -271,7 +307,7 @@ describe('TokenAdminForm address read fault', () => {
             getAddressesByChain: vi.fn().mockRejectedValue(new Error('Vault read failed.')),
         });
         expect(await screen.findByText('Vault read failed.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+        expect(screen.queryByRole('button', { name: ADMIN_ACTION_PATTERN })).toBeNull();
         expect(screen.queryByText(SOURCE.address)).toBeNull();
         expect(screen.queryByDisplayValue(SOURCE.address)).toBeNull();
         expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -284,15 +320,16 @@ describe('TokenAdminForm double press', () => {
         const target = mount('description', {
             buildActionPsbtRequest: vi.fn(() => compose.promise),
         });
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
-        const review = await screen.findByRole('form', { name: /Review/ });
-        fireEvent.submit(review);
-        fireEvent.submit(review);
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
+        fireEvent.click(approve);
         await act(async () => {
             compose.resolve({ psbtHex: '70736274ff00', chainId: CHAIN });
             await compose.promise;
@@ -306,10 +343,10 @@ describe('TokenAdminForm double press', () => {
             ? fresh.promise
             : Promise.resolve({ chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {} })));
         mount('description', { getTokenInfo });
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.click(preview);
@@ -318,6 +355,6 @@ describe('TokenAdminForm double press', () => {
             await fresh.promise;
         });
         expect(getTokenInfo.mock.calls.filter(([req]) => req?.fresh)).toHaveLength(1);
-        expect(await screen.findByRole('form', { name: /Review/ })).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
     });
 });

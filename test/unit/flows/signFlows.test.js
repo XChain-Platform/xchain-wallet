@@ -58,6 +58,7 @@ describe('signMessageFlow', () => {
             chainId,
             path: "m/84'/0'/0'/0/0",
             addressId: undefined,
+            addressType: undefined,
         });
         expect(signer.lock).not.toHaveBeenCalled();
     });
@@ -96,6 +97,26 @@ describe('signMessageFlow', () => {
             vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0", message: 'a\tb\nc 🚀', signer, ...registries,
         });
         expect(signer.signMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards the address record type to the signer', async () => {
+        const signer = mockSigner();
+
+        await signMessageFlow({
+            vault,
+            walletId: 'wallet-1',
+            chainId,
+            path: "m/0'/0/1",
+            addressType: 'p2wpkh',
+            message: 'hello',
+            signer,
+            ...registries,
+        });
+
+        expect(signer.signMessage).toHaveBeenCalledWith(expect.objectContaining({
+            path: "m/0'/0/1",
+            addressType: 'p2wpkh',
+        }));
     });
 
     it('refuses to sign in panic mode without calling the signer', async () => {

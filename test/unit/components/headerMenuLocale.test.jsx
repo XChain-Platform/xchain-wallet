@@ -8,17 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The header menu's site links and the network filter's summary are
-// copy like any other: under the pseudo-rtl locale every one of them must
-// arrive wrapped, so a string that skipped the dictionary shows as plain English.
+// Header controls and network filters follow the active locale just like route copy.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
-import { platformLinkLabel } from '../../../packages/core/src/shared/platformLinkLabel.js';
-import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
 import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
 import pseudoRtl from '../../../packages/core/src/i18n/locales/pseudo-rtl/index.js';
 
@@ -40,30 +36,15 @@ afterEach(async () => {
 });
 
 describe('header menu copy follows the active locale', () => {
-    it('renders Search and every other platform site name wrapped in pseudo-rtl', () => {
-        render(<HeaderActionMenu onCommandPalette={() => {}} platformCurrent="wallet" />);
-        fireEvent.click(screen.getByRole('button', { name: WRAPPED }));
+    it('wraps the wallet menu trigger and delegates opening to the shell', () => {
+        const onMenuToggle = vi.fn();
+        render(<HeaderActionMenu onMenuToggle={onMenuToggle} />);
+        const trigger = screen.getByRole('button', { name: WRAPPED });
 
-        const search = screen.getAllByRole('menuitem').find((item) => item.textContent.includes('Search'));
-        expect(search.querySelector('span:nth-child(2)').textContent).toMatch(WRAPPED);
+        fireEvent.click(trigger);
 
-        const others = PLATFORM_LINKS.links.filter((site) => site.key !== 'wallet');
-        expect(others.length).toBeGreaterThan(0);
-        for (const site of others) {
-            const link = screen.getAllByRole('menuitem').find((item) => item.getAttribute('href') === site.href);
-            expect(link, site.key).toBeTruthy();
-            expect(link.textContent, site.key).toMatch(WRAPPED);
-        }
-    });
-
-    it('resolves every generated site key through the dictionary', () => {
-        for (const site of PLATFORM_LINKS.links) {
-            expect(platformLinkLabel(site), site.key).toMatch(WRAPPED);
-        }
-    });
-
-    it('keeps the generated label for a site key it does not know', () => {
-        expect(platformLinkLabel({ key: 'newsite', label: 'New site' })).toBe('New site');
+        expect(onMenuToggle).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('menu')).toBeNull();
     });
 });
 

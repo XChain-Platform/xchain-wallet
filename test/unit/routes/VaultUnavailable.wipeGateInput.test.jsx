@@ -37,19 +37,29 @@ function renderScreen(props = {}) {
 
 function openGate(props) {
     renderScreen(props);
-    fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
+    fireEvent.click(screen.getByText('Restore from recovery phrase or backup'));
     return {
-        field: screen.getByLabelText(/type wipe to confirm/i),
+        field: screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }),
         confirm: screen.getByRole('button', { name: /remove damaged data/i }),
     };
 }
 
 describe('type-WIPE gate input', () => {
+    it('explains an empty confirmation without wiping', () => {
+        const wipe = vi.fn().mockResolvedValue(undefined);
+        const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
+        expect(confirm).toBeEnabled();
+        fireEvent.click(confirm);
+        expect(wipe).not.toHaveBeenCalled();
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getAllByText('Type WIPE exactly to continue.').length).toBeGreaterThan(0);
+    });
+
     it('stays shut for a non-ASCII capital I', () => {
         const wipe = vi.fn().mockResolvedValue(undefined);
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         fireEvent.change(field, { target: { value: 'WİPE' } });
-        expect(confirm.disabled).toBe(true);
+        expect(confirm).toBeEnabled();
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
     });
@@ -59,10 +69,10 @@ describe('type-WIPE gate input', () => {
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         for (const value of ['wipe', ' WIPE', 'WIPE ', 'Wipe', 'WIPEX']) {
             fireEvent.change(field, { target: { value } });
-            expect(confirm.disabled).toBe(true);
+            expect(confirm).toBeEnabled();
         }
         fireEvent.change(field, { target: { value: 'WIPE' } });
-        expect(confirm.disabled).toBe(false);
+        expect(confirm).toBeEnabled();
         fireEvent.click(confirm);
         await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
     });
@@ -72,7 +82,7 @@ describe('type-WIPE gate input', () => {
         const wipe = vi.fn().mockResolvedValue(undefined);
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         fireEvent.change(field, { target: { value: 'wipe' } });
-        expect(confirm.disabled).toBe(true);
+        expect(confirm).toBeEnabled();
         document.documentElement.lang = 'en';
     });
 
@@ -81,12 +91,12 @@ describe('type-WIPE gate input', () => {
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         fireEvent.compositionStart(field);
         fireEvent.change(field, { target: { value: 'WI' } });
-        expect(confirm.disabled).toBe(true);
+        expect(confirm).toBeEnabled();
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
         fireEvent.change(field, { target: { value: 'WIPE' } });
         fireEvent.compositionEnd(field);
-        await waitFor(() => expect(confirm.disabled).toBe(false));
+        await waitFor(() => expect(confirm).toBeEnabled());
     });
 
     it('stays shut for full-width and look-alike letters', () => {
@@ -94,7 +104,7 @@ describe('type-WIPE gate input', () => {
         const { field, confirm } = openGate({ wipe });
         for (const value of ['ＷＩＰＥ', 'WІPE', 'WIP E']) {
             fireEvent.change(field, { target: { value } });
-            expect(confirm.disabled).toBe(true);
+            expect(confirm).toBeEnabled();
         }
         expect(wipe).not.toHaveBeenCalled();
     });

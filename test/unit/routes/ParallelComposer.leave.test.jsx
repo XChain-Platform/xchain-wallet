@@ -67,8 +67,8 @@ function mount({ initialRows, onBack = () => {}, messagingOverrides = {} } = {})
 }
 
 async function broadcastFirstRow() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+    await screen.findByRole('button', { name: 'Sign all' });
     fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
     fireEvent.click(await screen.findByTestId('confirm-approve'));
@@ -81,7 +81,7 @@ describe('ParallelComposer leave guard', () => {
     it('leaves at once while nothing was broadcast', async () => {
         const onBack = vi.fn();
         mount({ initialRows: THREE_ROWS, onBack });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Sign and Send Queue' });
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
@@ -140,8 +140,8 @@ describe('ParallelComposer leave guard', () => {
         const messaging = mount();
         await screen.findByText(/stopped part-way/);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign and Send Queue' }));
+        await screen.findByRole('button', { name: 'Sign all' });
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));

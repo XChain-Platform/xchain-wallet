@@ -12,12 +12,11 @@ import { ListToolbar } from '@xchain-wallet/core/shared/components/ListToolbar.j
 import { OfflineEmptyState } from '@xchain-wallet/core/shared/components/OfflineEmptyState.jsx';
 import { BalancesUncheckedState } from '@xchain-wallet/core/shared/components/BalancesUncheckedState.jsx';
 import { RelativeTime } from '@xchain-wallet/core/shared/components/RelativeTime.jsx';
-import { ActivityRow } from '@xchain-wallet/core/shared/components/ActivityRow.jsx';
+import { ActivityRow, actionIconForAction } from '@xchain-wallet/core/shared/components/ActivityRow.jsx';
 import { EntryRow } from '@xchain-wallet/core/shared/routes/HistoryEntryRow.jsx';
 import { HomeTabs } from '@xchain-wallet/core/shared/components/HomeTabs.jsx';
 import { LeftNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
-import { HeaderActionMenu } from '@xchain-wallet/core/shared/components/HeaderActionMenu.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 import { RAW_BALANCES } from './sharedComponentExamples.jsx';
 import {
@@ -56,7 +55,7 @@ export function PickerScreensSection() {
                 supersedes={<>Source: <code>OwnAddressPickerScreen.jsx</code>, <code>ListPickerScreen.jsx</code> in <code>shared/components</code>.</>}
             />
             <Markup>
-{`<OwnAddressPickerScreen walletId={walletId} accountId={accountId} chainId={chainId} onPick={pick} onBack={back} />
+{`<OwnAddressPickerScreen walletId={walletId} accountId={accountId} chainId={chainId} onChainChange={setChainId} onPick={pick} onBack={back} />
 <ListPickerScreen variant="small" messaging={messaging} chainId={chainId} addresses={addresses} filterType={1} onSelect={pick} onBack={back} />`}
             </Markup>
             <LiveExample label="OwnAddressPickerScreen" minHeight={420} padded={false}>
@@ -65,6 +64,7 @@ export function PickerScreensSection() {
                         walletId={PART_WALLET_ID}
                         accountId={PART_ACCOUNT_ID}
                         chainId={PART_CHAIN_ID}
+                        onChainChange={noop}
                         onPick={noop}
                         onBack={noop}
                     />
@@ -162,10 +162,10 @@ export function ActivityRowsSection() {
             id="activity-rows"
             title="Activity rows"
             tag="CANONICAL · ActivityRow / HistoryEntryRow / RelativeTime"
-            kicker="One row for one thing that happened: the asset mark, what it was, the amount, its status and how long ago. History and the Home activity tab draw it from the same component."
+            kicker="One row for one thing that happened: the asset mark, action and status, amount, block and time. History and the Home activity tab draw it from the same component."
         >
             <Guidance
-                what={<><code>ActivityRow</code> is a full-width button of asset mark, label with optional context, amount, status chip and relative time. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
+                what={<><code>ActivityRow</code> is a full-width button with three lines: action and status, amount, then block and relative time. Pending rows omit the block. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
                 when={<>Any list of past activity.</>}
                 whenNot={<>Balances (BalanceList) · people and addresses (ListRow).</>}
                 doRule={<>✓ Map every status to its label through <code>statusLabels</code></>}
@@ -173,12 +173,12 @@ export function ActivityRowsSection() {
                 supersedes={<>Source: <code>ActivityRow.jsx</code>, <code>RelativeTime.jsx</code>, <code>routes/HistoryEntryRow.jsx</code>.</>}
             />
             <Markup>
-{`<ActivityRow chainId="bitcoin-mainnet" tick="BTC" isNative label="Sent" amount="-0.01 BTC" status="confirmed" timestamp={ts} onClick={open} />`}
+{`<ActivityRow chainId="bitcoin-mainnet" tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={ts} onClick={open} />`}
             </Markup>
             <LiveExample label="ActivityRow: confirmed and pending">
                 <PartsExampleProvider>
-                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" context="To Savings" amount="-0.01 BTC" status="confirmed" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
-                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Received" amount="+0.002 BTC" status="pending" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
+                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} subtitle="To Savings" amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
+                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Received" actionIcon={actionIconForAction('receive')} amount="+0.002 BTC" status="pending" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
                 </PartsExampleProvider>
             </LiveExample>
             <LiveExample label="HistoryEntryRow (EntryRow)">
@@ -191,6 +191,7 @@ export function ActivityRowsSection() {
                                 action: 'send',
                                 txHash: 'ab'.repeat(32),
                                 source: PART_ADDRESS,
+                                blockIndex: 123456,
                                 timestamp: FIVE_MINUTES_AGO(),
                                 status: 'confirmed',
                                 raw: {},
@@ -220,38 +221,32 @@ export function ShellNavigationSection() {
             id="shell-navigation"
             title="Navigation"
             tag="CANONICAL · shell"
-            kicker="The three ways the shell reaches every screen: the left rail on wide windows, the tab bar with its More sheet on phones, and the header menu that collects the actions a narrow header cannot hold."
+            kicker="The shell uses a catalogue-backed left rail on wide layouts, a five-tab bar on phones, and the wallet menu for the complete destination list."
         >
             <Guidance
-                what={<><code>LeftNav</code> and <code>BottomTabBar</code> take the same <code>currentView</code>, <code>onSelect</code> and capability flags (<code>hasDexSurface</code>, <code>hasVmAddress</code>, <code>isSignerMode</code>), so a destination is present in both or neither. <code>HeaderActionMenu</code> is the overflow menu in the app header.</>}
+                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The expanded side menu groups Wallet, Trade, Build and Social destinations; its icon rail uses dividers between those groups. The tab bar exposes Home, Send, Receive, History and Settings.</>}
                 when={<>Mounted once by the shell layout, never by a route.</>}
                 whenNot={<>In-page navigation: Tabs and SegmentedControl.</>}
                 doRule={<>✓ Remove a destination the build lacks instead of disabling it</>}
-                dontRule={<>✗ Add a destination to one component and not the other</>}
-                supersedes={<>Source: <code>LeftNav.jsx</code>, <code>BottomTabBar.jsx</code>, <code>HeaderActionMenu.jsx</code> in <code>shared/components</code>.</>}
+                dontRule={<>✗ Put Scan, Lists or Payments due in the side menu; they stay in the complete wallet menu. ✗ Put a Search row in the side menu; the header menu button and Cmd/Ctrl+K open the wallet menu and its search (U99)</>}
+                supersedes={<>Source: <code>walletMenu.js</code>, <code>LeftNav.jsx</code> and <code>BottomTabBar.jsx</code> in <code>shared</code>.</>}
             />
             <Markup>
-{`<LeftNav currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} onCommandPalette={openPalette} />
-<BottomTabBar currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} />
-<HeaderActionMenu onScan={scan} onCommandPalette={openPalette} onMore={more} />`}
+{`<LeftNav currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} />
+<BottomTabBar currentView={view} onSelect={setView} onOpenSettings={openSettings} isSignerMode={isSignerMode} />`}
             </Markup>
             <LiveExample label="LeftNav" minHeight={420} padded={false}>
                 <PartsExampleProvider>
                     <div style={{ ...frame, width: 'max-content', maxWidth: '100%' }}>
-                        <LeftNav currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} onCommandPalette={noop} />
+                        <LeftNav currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} />
                     </div>
                 </PartsExampleProvider>
             </LiveExample>
             <LiveExample label="BottomTabBar" padded={false}>
                 <PartsExampleProvider>
                     <div style={{ ...frame, height: 96 }}>
-                        <BottomTabBar currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} onOpenWalletPicker={noop} onCommandPalette={noop} />
+                        <BottomTabBar currentView={view} onSelect={setView} onOpenSettings={noop} />
                     </div>
-                </PartsExampleProvider>
-            </LiveExample>
-            <LiveExample label="HeaderActionMenu" minHeight={220}>
-                <PartsExampleProvider>
-                    <HeaderActionMenu onCommandPalette={noop} onScan={noop} onManageAddresses={noop} onViewAddress={noop} onMore={noop} />
                 </PartsExampleProvider>
             </LiveExample>
         </Section>

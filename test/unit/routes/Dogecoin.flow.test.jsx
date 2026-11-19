@@ -101,7 +101,8 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             <Receive walletId={WALLET_ID} prefill={{ chainId: CHAIN_ID, tick: 'DOGE' }} />,
         ));
 
-        expect(await screen.findByText(OUR_ADDRESS)).toBeInTheDocument();
+        // The address now sits in a read-only field, not plain text.
+        expect(await screen.findByDisplayValue(OUR_ADDRESS)).toBeInTheDocument();
         expect(screen.getByRole('textbox', { name: 'Amount (DOGE)' })).toBeInTheDocument();
         fireEvent.change(screen.getByRole('textbox', { name: 'Amount (DOGE)' }), {
             target: { value: '12.5' },
@@ -176,6 +177,8 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         fireEvent.change(amount, { target: { value: '0.001' } });
         await waitFor(() => expect(screen.queryByText(/too small to send/i)).toBeNull());
         expect(screen.queryByRole('switch', { name: /fee bumping/i })).toBeNull();
+        // The Fees section starts closed; open it to reach the selector.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
         expect(screen.getByRole('slider', { name: 'Network fee' }))
             .toHaveAttribute('aria-valuetext', expect.stringContaining('0.25'));
 
@@ -187,22 +190,17 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             feePerKb: 100_000_000,
             rbf: false,
         })));
-        expect(await screen.findByTestId('confirm-fee')).toHaveTextContent('0.25 DOGE');
+        expect(await screen.findByTestId('confirm-fee-network')).toHaveTextContent('0.25 DOGE');
     });
 
-    it('shows and preserves the mandatory DOGE protocol-fee output for a mint', async () => {
+    it('composes a Dogecoin mint without a protocol fee flag or fee control', async () => {
         const composeForConfirm = vi.fn().mockResolvedValue({
             psbt: PSBT,
             encoding: 'psbt',
             actionString: 'MINT|0|BARK|10',
             version: 0,
             chainId: CHAIN_ID,
-            networkFeeSats: 25_000_000,
-            quote: {
-                requiredFeeSats: 100_000,
-                requiredFeeNative: '0.00100000',
-                feeDestination: OTHER_ADDRESS,
-            },
+            networkFeeSats: 500_000,
             decoded: {
                 summary: 'Mint 10 BARK',
                 details: [
@@ -245,28 +243,27 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             />,
         ));
 
-        expect(await screen.findByText('Protocol fees are paid in DOGE')).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '10' } });
+        // MINT is free (U81): even on Dogecoin, where the native output is the
+        // protocol fee for paid actions, a mint never asks for one.
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '10' } });
+        expect(screen.queryByText('Protocol fees are paid in DOGE')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /^Mint$/ }));
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN_ID,
-            encoderOpts: {
-                payFeeInNativeCoin: true,
-                feePerKb: 100_000_000,
-            },
+            encoderOpts: { feePerKb: 2_000_000 },
         })));
-        expect(await screen.findByTestId('confirm-native-protocol-fee'))
-            .toHaveTextContent('Protocol fee: 0.001 DOGE');
+        await screen.findByTestId('confirm-approve');
+        expect(screen.queryByTestId('confirm-fee-protocol')).toBeNull();
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
         fireEvent.click(screen.getByTestId('confirm-approve'));
         await waitFor(() => expect(mintToken).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN_ID,
-            payFeeInNativeCoin: true,
-            feePerKb: 100_000_000,
+            feePerKb: 2_000_000,
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         })));
+        expect(mintToken.mock.calls[0][0]).not.toHaveProperty('payFeeInNativeCoin');
     });
 
     it('renders a settled outgoing DOGE payment from SDK history', async () => {

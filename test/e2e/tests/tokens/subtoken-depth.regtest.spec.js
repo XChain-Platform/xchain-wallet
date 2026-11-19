@@ -58,7 +58,7 @@
 // two reads is that, not this spec - restart the indexer and re-run.
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssueParent, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -68,13 +68,17 @@ import {
     fundAddress,
     minerRpc,
     payProtocolFeeInCoin,
+    issuePlainToken,
+    readIssueSource,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Three ISSUEs plus a refused one, each paying a real coin fee. */
@@ -211,9 +215,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -224,24 +226,21 @@ async function approveAndGetTxid(page) {
 
 /** The composed PSBT's own network fee, in satoshis, off the confirm screen. */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(/([\d.]+)\s*[A-Z]{3,5}/)?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 /**
- * The protocol-fee row inside the balance projection, in satoshis, or null.
- *
- * Read out of the deltas panel because that is where that fix put it.
+ * The protocol-fee fact in the Confirm Standard card, in satoshis, or null.
  */
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    // The row reads "Protocol fee 0.00001 BTC": amount first, then the coin
-    // ticker. An XCHAIN fee does not match, since it is not a coin amount.
-    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    // A 3-5 letter coin ticker matches; XCHAIN does not.
+    const coin = text.match(/^([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
     return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
@@ -260,10 +259,8 @@ async function onboardAndIssueParent(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From').inputValue();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -274,16 +271,12 @@ async function onboardAndIssueParent(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(PARENT);
-    await form.getByLabel('Supply', { exact: true }).fill(String(PARENT_SUPPLY));
     // The coin lane, the one this spec measures the fee on (no XCHAIN needed).
-    await payProtocolFeeInCoin(form);
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: PARENT, supply: PARENT_SUPPLY, feeInCoin: true });
 
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -296,7 +289,7 @@ async function onboardAndIssueParent(page, walletName) {
 }
 
 /**
- * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
+ * Fills the Issue Token form's Subtoken preset and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen at all (the
  * parent lookup or native-fee pre-flight answers in the wizard), so the caller
  * waits for whichever of the two outcomes it is asserting.
@@ -308,7 +301,9 @@ async function fillSubtoken(page, { parent, child, supply }) {
     await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Subtoken/ }).click();
+    await pickIssuePreset(main, /Subtoken/);
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
 
     // POLLED, not read once: the signer resolves in an effect that re-runs when
@@ -316,19 +311,16 @@ async function fillSubtoken(page, { parent, child, supply }) {
     // catches the render before it and returns "" (§3.5, Session 39).
     let feePaidBy = '';
     await expect.poll(async () => {
-        feePaidBy = await main.getByLabel('Fee paid by').inputValue().catch(() => '');
+        feePaidBy = await fieldByLabel(main, 'From address').inputValue().catch(() => '');
         return feePaidBy;
     }, {
         timeout: 30_000,
-        message: 'the wizard\'s chain step names no signing address at all',
+        message: 'the Issue Token form\'s From section names no signing address at all',
     }).toMatch(REGTEST_ADDRESS_RE);
 
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
-
-    await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Parent ticker').fill(parent);
-    await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    await pickIssueParent(main, parent);
+    await fieldByLabel(main, 'Subtoken name').fill(child);
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);
@@ -470,20 +462,25 @@ test.describe(`subtoken depth on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toMatch(/parent unknown/i);
 
             const satsBefore = await coinBalanceSats(owner);
-            await fillSubtoken(page, {
-                parent: absentParent, child: GRAND, supply: GRAND_SUPPLY,
-            });
 
-            // Refused on the Details form by the wallet's fail-closed parent
-            // lookup, so no confirm screen opens and no fee is attached.
-            const alert = page.getByRole('alert')
-                .filter({ hasText: /could not be confirmed as a token this wallet owns/i });
-            await expect(alert,
-                'the wizard neither refused a grandchild under a non-existent middle level nor '
-                + 'explained it, which is what truncating the parent to its first segment would '
-                + 'look like from here')
+            // The Parent token is a picker of tokens this wallet owns (no
+            // typed ticker), so an absent middle level cannot be chosen at
+            // all: the picker offers the real parent and never the absent one.
+            await reloadToHome(page);
+            await openPaletteCommand(page, 'Create a token');
+            const main = page.getByRole('main');
+            await pickIssuePreset(main, /Subtoken/);
+            const parentField = main.getByRole('button', { name: /^Parent token:/ });
+            await expect(parentField).toBeVisible({ timeout: 30_000 });
+            await parentField.click();
+            const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            await expect(page.getByRole('button', { name: new RegExp(`^Select ${esc(PARENT)} on `) }),
+                'the Parent token picker does not list the real top-level parent, so its absence '
+                + 'check below would prove nothing')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Check the ticker and your connection, then try again/i);
+            await expect(page.getByRole('button', { name: new RegExp(`^Select ${esc(absentParent)} on `) }),
+                'the Parent token picker offers a middle level that was never issued')
+                .toHaveCount(0);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an ISSUE the network has already refused reached the confirm screen')
                 .toBe(0);

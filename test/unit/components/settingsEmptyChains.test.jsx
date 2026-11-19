@@ -19,9 +19,12 @@ const { AdsSection } = await import(
     '../../../packages/core/src/shared/components/settings/AdsSection.jsx'
 );
 
-const sections = [
+const chainListSections = [
     ['Fees', FeesSection, 'No network fee profiles yet'],
-    ['Automatic Donation System', AdsSection, 'No networks set up for donations yet'],
+];
+const sections = [
+    ...chainListSections,
+    ['Automatic Donations', AdsSection, null],
 ];
 
 beforeEach(() => {
@@ -36,13 +39,21 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('settings chain-list states', () => {
-    it.each(sections)('%s renders an EmptyState when it has zero chains', (_name, Section, copy) => {
+    it.each(chainListSections)('%s renders an EmptyState when it has zero chains', (_name, Section, copy) => {
         const { container } = render(<Section />);
 
         const emptyState = container.querySelector('[data-empty-state]');
         expect(emptyState).not.toBeNull();
         expect(emptyState).toHaveTextContent(copy);
         expect(container.querySelector('[data-variant]')).toBeNull();
+    });
+
+    // Donations are one wallet-wide setting (ruling 2026-11-14), so the page
+    // is whole before any network is set up.
+    it('Automatic Donations needs no chains', () => {
+        const { container, getByTestId } = render(<AdsSection />);
+        expect(container.querySelector('[data-empty-state]')).toBeNull();
+        expect(getByTestId('ads-hero')).toHaveTextContent('$0.05 per transaction');
     });
 
     it.each(sections)('%s keeps a failed read as a status notice', (_name, Section) => {

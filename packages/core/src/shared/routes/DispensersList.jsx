@@ -8,24 +8,34 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SegmentedControl, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { ListToolbar } from '../components/ListToolbar.jsx';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import { dispenserFillPriceLabel } from '../utils/dispenserPricing.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { TickerIcon } from '../components/TickerIcon.jsx';
+import { GiveGetQuick } from '../components/giveGet/index.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
 import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
+import { dispenserStock } from '../utils/dispenserStock.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
+import {
+    LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent,
+} from '../components/PanelSplit.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
@@ -33,7 +43,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const DISPENSER_REFRESH_MS = 20000;
 
 /**
- * "My dispensers": §40.7.1 / §40.7.2 owner-facing list view.
+ * Dispensers marketplace and owner-facing list view.
  *
  * Loads every dispenser this wallet's addresses have opened, grouped by
  * chain. Each entry links to DispenserDetail for management (cancel /
@@ -56,15 +66,45 @@ const DISPENSER_REFRESH_MS = 20000;
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenDispenser
  * @param {() => void} [props.onCreateDispenser]  opens the Create dispenser form
  * @param {() => void} props.onBack
+ * @param {{ chainId: string, actionIndex: string } | null} [props.selectedDispenser]
+ * @param {(ref: { chainId: string, actionIndex: string } | null) => void} [props.onSelectDispenser]
+ * @param {(ref: { chainId: string, actionIndex: string }) => import('react').ReactNode} [props.renderDispenser]
+ * @param {(ref: { chainId: string, actionIndex: string }, page: { measureRef: (el: HTMLElement | null) => void }) => import('react').ReactNode} [props.renderDispenserPage]
+ * @param {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} [props.marketAsset]
+ * @param {() => void} [props.onChangeMarket]
  */
-export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
-    const { messaging, shell } = useMessaging();
+export function DispensersList({
+    walletId,
+    activeAccountId,
+    onOpenDispenser,
+    onCreateDispenser,
+    onBack,
+    selectedDispenser = null,
+    onSelectDispenser,
+    renderDispenser,
+    renderDispenserPage,
+    marketAsset = null,
+    onChangeMarket,
+}) {
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
-    const isDemo = flowsLib.isDemoWallet(walletId);
     const { offline, recheck } = useNetworkOffline({ walletId });
     const { settings } = useSettings();
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
+    const canSplit = typeof renderDispenser === 'function';
+    const [layoutRef, wideContent, measured] = useWideContent(LIST_DETAIL_MIN_WIDTH, canSplit);
+    const twoPanel = canSplit && wideContent;
+    const detailRoute = typeof renderDispenserPage === 'function' && Boolean(selectedDispenser);
+    const listShown = !detailRoute || (measured && twoPanel);
+    const marketReadSupported = typeof messaging.getDispensersForToken === 'function';
+    const [view, setView] = useState(detailRoute || !marketReadSupported || !marketAsset ? 'mine' : 'all');
+    const [marketSide, setMarketSide] = useState('buy');
+    const [localPick, setLocalPick] = useState(
+        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -77,10 +117,19 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
     const [addressesReload, setAddressesReload] = useState(0);
     const [dispensersReload, setDispensersReload] = useState(0);
+    const [marketReload, setMarketReload] = useState(0);
+    const [marketState, setMarketState] = useState(
+        /** @type {{ key: string, loading: boolean, rows: any[], error: string | null }} */ (
+            { key: '', loading: false, rows: [], error: null }
+        ),
+    );
     // In-page filters: free-text search + network dropdown, mirroring the
     // contacts / messaging toolbars.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Status and Sort live in the title-line filter panel.
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
     // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
     const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
     const [nowMs, setNowMs] = useState(() => Date.now());
@@ -94,14 +143,18 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // standard wallet cadence lets an open row become closing or terminal as
     // soon as the explorer indexes the owner transaction.
     useEffect(() => {
-        if (!addressesByChain || flowsLib.isDemoWallet(walletId) || offline) return undefined;
+        if (!source.live || offline || !listShown) return undefined;
         return startVisibleInterval(
-            () => setDispensersReload((value) => value + 1),
+            () => {
+                if (view === 'all') setMarketReload((value) => value + 1);
+                else if (addressesByChain) setDispensersReload((value) => value + 1);
+            },
             DISPENSER_REFRESH_MS,
         );
-    }, [addressesByChain, walletId, offline]);
+    }, [addressesByChain, source.live, offline, listShown, view]);
 
     useEffect(() => {
+        if (!listShown || view !== 'mine') return undefined;
         let cancelled = false;
         setAddressesByChain(null);
         setAddressesError(null);
@@ -114,7 +167,42 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 if (!cancelled) setAddressesError('Could not load addresses. Try again.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId, addressesReload]);
+    }, [walletId, messaging, activeAccountId, addressesReload, listShown, view]);
+
+    const marketKey = marketAsset?.chainId && marketAsset?.tick
+        ? `${marketAsset.chainId}:${String(marketAsset.tick).toUpperCase()}:${marketSide}`
+        : '';
+    const nativeMarketUnsupported = view === 'all' && marketAsset?.kind === 'native';
+    useEffect(() => {
+        if (!listShown || view !== 'all' || !marketKey || nativeMarketUnsupported || offline) return undefined;
+        let cancelled = false;
+        setMarketState({ key: marketKey, loading: true, rows: [], error: null });
+        messaging.getDispensersForToken({
+            chainId: marketAsset.chainId,
+            token: String(marketAsset.tick).toUpperCase(),
+        }).then((response) => {
+            if (cancelled) return;
+            setMarketState({
+                key: marketKey,
+                loading: false,
+                rows: extractRows(response)
+                    .filter((row) => (marketSide === 'buy' ? giveAsset(row) : getAsset(row))
+                        === String(marketAsset.tick).toUpperCase())
+                    .map((row) => ({ ...row, chainId: marketAsset.chainId })),
+                error: null,
+            });
+        }).catch(() => {
+            if (!cancelled) {
+                setMarketState({
+                    key: marketKey,
+                    loading: false,
+                    rows: [],
+                    error: 'Could not load market dispensers. Try again.',
+                });
+            }
+        });
+        return () => { cancelled = true; };
+    }, [listShown, view, marketKey, marketSide, nativeMarketUnsupported, offline, marketReload, messaging, marketAsset?.chainId, marketAsset?.tick]);
 
     // Local labels for this account's dispenser sub-addresses (role=2
     // branch), keyed by address. A dispenser row whose on-chain dispenser
@@ -164,23 +252,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
         let cancelled = false;
 
-        // Demo wallet: no explorer to query; serve the fabricated dispensers
-        // owned by the first address on each chain.
-        if (isDemo) {
-            const demo = {};
-            for (const cid of chains) {
-                const first = (addressesByChain[cid] || [])
-                    .find((row) => typeof row?.address === 'string' && row.address.length > 0)
-                    ?.address;
-                demo[cid] = {
-                    loading: false,
-                    rows: first ? flowsLib.synthesizeDemoDispensers(cid, first) : [],
-                    error: null,
-                };
-            }
-            setDispensersByChain(demo);
-            return undefined;
-        }
         for (const cid of chains) {
             const addrs = (addressesByChain[cid] || [])
                 .map((a) => a.address)
@@ -198,7 +269,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             Promise.all(addrs.map((addr) =>
                 messaging.getDispensersForSource({ chainId: cid, address: addr })
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
-                    .catch((err) => ({ addr, error: err?.message || String(err) }))
+                    .catch((err) => ({ addr, error: userFacingMessage(err, 'Failed to load dispensers.') }))
             )).then((results) => {
                 if (cancelled) return;
                 /** @type {any[]} */
@@ -250,7 +321,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload, offline]);
+    }, [addressesByChain, chainsWithAddresses, messaging, dispensersReload, offline]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -258,7 +329,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const countdownChains = [...new Set(Object.keys(cancelTimes)
         .map((key) => key.slice(0, key.lastIndexOf(':'))))].sort().join(',');
     useEffect(() => {
-        if (!countdownChains) return undefined;
+        if (!countdownChains || !source.live) return undefined;
         let stopped = false;
         let lastReadMs = -Infinity;
         const chains = countdownChains.split(',');
@@ -282,7 +353,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         tick();
         const timer = setInterval(tick, 60000);
         return () => { stopped = true; clearInterval(timer); };
-    }, [countdownChains, messaging]);
+    }, [countdownChains, messaging, source.live]);
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -294,186 +365,453 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         out.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
         return out;
     }, [dispensersByChain]);
+    const marketRows = marketState.key === marketKey ? marketState.rows : [];
+    const rowsForView = view === 'all' ? marketRows : allRows;
 
     // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
     // its price comes from the oracle's own feeds.
     const oracleEntries = useMemo(
-        () => isDemo ? [] : allRows.map((row) => ({ chainId: row.chainId, row })),
-        [allRows, isDemo],
+        () => source.live && view === 'mine'
+            ? rowsForView.map((row) => ({ chainId: row.chainId, row }))
+            : [],
+        [rowsForView, source.live, view],
     );
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     const anyLoading = useMemo(() => {
         const states = Object.values(dispensersByChain);
-        if (states.length === 0) return true;
+        if (states.length === 0) return chainsWithAddresses.length > 0;
         return states.some((s) => s.loading);
-    }, [dispensersByChain]);
+    }, [dispensersByChain, chainsWithAddresses]);
 
     const hasLoadErrors = useMemo(
         () => Object.values(dispensersByChain).some((state) => state.error),
         [dispensersByChain],
     );
+    const activeLoading = view === 'all'
+        ? Boolean(marketKey && !nativeMarketUnsupported
+            && (marketState.key !== marketKey || marketState.loading))
+        : anyLoading;
+    const activeError = view === 'all'
+        ? (marketState.key === marketKey ? marketState.error : null)
+        : (hasLoadErrors ? "Couldn't load some dispensers. Try again." : null);
+    const selectedAsset = String(marketAsset?.tick || '').toUpperCase();
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return allRows.filter((row) => {
+        return rowsForView.filter((row) => {
+            if (view === 'all') {
+                const sideAsset = marketSide === 'buy' ? giveAsset(row) : getAsset(row);
+                if (sideAsset !== selectedAsset) return false;
+            }
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
+            // Status narrows by the lifecycle state the row badge shows.
+            if (statusFilter !== 'all' && statusGroup(row) !== statusFilter) return false;
             if (!q) return true;
             const label = row.address ? dispenserLabels[row.address] : undefined;
             return [
-                row.give_tick, row.get_tick, row.get_coin, row.status,
+                row.give_tick, row.give_coin, row.get_tick, row.get_coin, row.status,
                 row.current_status, row.memo, row.address, row.source, label,
                 String(row.action_index ?? ''),
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
-    }, [allRows, query, network, dispenserLabels]);
+    }, [rowsForView, view, marketSide, selectedAsset, query, network, statusFilter, dispenserLabels]);
 
-        const header = (
+    // Sort orders the filtered rows (Newest first is the default).
+    const sortedRows = useMemo(() => {
+        const rows = [...visibleRows];
+        const at = (row) => Number(row.block_index || 0);
+        if (sortBy === 'oldest') rows.sort((a, b) => at(a) - at(b));
+        else if (sortBy === 'token') rows.sort((a, b) => giveAsset(a).localeCompare(giveAsset(b)) || (at(b) - at(a)));
+        else rows.sort((a, b) => at(b) - at(a));
+        return rows;
+    }, [visibleRows, sortBy]);
+    const coinFamilies = useMemo(
+        () => [...new Set((view === 'all' && marketAsset?.chainId
+            ? [marketAsset.chainId]
+            : chainsWithAddresses).map((cid) => coinFromChainId(cid)))],
+        [chainsWithAddresses, view, marketAsset?.chainId],
+    );
+
+    const requestedDispenser = selectedDispenser ?? localPick;
+    const shownDispenser = useMemo(() => {
+        if (!twoPanel) return null;
+        if (requestedDispenser) return requestedDispenser;
+        const ready = view === 'all'
+            ? marketState.key === marketKey && !marketState.loading
+            : Boolean(addressesByChain);
+        if (!ready) return null;
+        const maySeedDefault = (view === 'all' && marketSide === 'buy')
+            || (!marketReadSupported || !marketAsset);
+        if (!maySeedDefault || activeLoading) return null;
+        const first = sortedRows[0];
+        return first ? dispenserRef(first) : null;
+    }, [twoPanel, view, marketSide, marketReadSupported, marketAsset, marketState.key, marketState.loading, marketKey, addressesByChain, requestedDispenser, activeLoading, sortedRows]);
+    const shownRow = shownDispenser
+        ? sortedRows.find((row) => sameDispenser(row, shownDispenser))
+        : null;
+    const dataPending = view === 'all'
+        ? marketState.key !== marketKey || marketState.loading
+        : !addressesByChain || anyLoading;
+    const showPanel = twoPanel && listShown;
+    useEffect(() => {
+        if (showPanel && shownDispenser && !requestedDispenser) setLocalPick(shownDispenser);
+        if (showPanel && shownDispenser && !sameDispenser(shownDispenser, selectedDispenser)) {
+            onSelectDispenser?.(shownDispenser);
+        }
+    }, [showPanel, shownDispenser, requestedDispenser, selectedDispenser, onSelectDispenser]);
+    // A row picked on the wide layout hands focus to the detail's heading, as
+    // opening the detail page does on a phone; the first dispenser shown by
+    // default takes no focus. The detail may still be loading its code, so
+    // the heading is awaited.
+    const [focusPick, setFocusPick] = useState(0);
+    const pickDispenser = (ref) => {
+        setLocalPick(ref);
+        setFocusPick((n) => n + 1);
+        onSelectDispenser?.(ref);
+    };
+    useEffect(() => {
+        const root = layoutRef.current;
+        if (!focusPick || !root) return undefined;
+        const heading = () => /** @type {HTMLElement | null} */ (root.querySelector('[data-panel-detail-heading]'));
+        const found = heading();
+        if (found) {
+            found.focus({ preventScroll: true });
+            return undefined;
+        }
+        const observer = new MutationObserver(() => {
+            const late = heading();
+            if (!late) return;
+            observer.disconnect();
+            late.focus({ preventScroll: true });
+        });
+        observer.observe(root, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, [focusPick, layoutRef]);
+
+    // The title bar holds the filter and New dispenser icons. The fixed list
+    // header holds the marketplace controls above the scrolling rows.
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all' || sortBy !== 'newest'}
+            label="Filter dispensers"
+            searchPlaceholder="Search"
+            searchLabel="Search dispensers"
+            chainRegistry={chainRegistry}
+            coinFamilies={coinFamilies}
+            networkFilter={network}
+            onNetworkFilterChange={setNetwork}
+        >
+            <Select
+                label="Status"
+                help="Shows only dispensers in the status you pick, such as open or sold out."
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <Select.Option value="all" icon={<Icon.ListIcon />}>All statuses</Select.Option>
+                <Select.Option value="open" icon={<Icon.PlayIcon />}>Open</Select.Option>
+                <Select.Option value="closing" icon={<Icon.ClockIcon />}>Closing</Select.Option>
+                <Select.Option value="soldout" icon={<Icon.CheckIcon />}>Sold out</Select.Option>
+                <Select.Option value="limit" icon={<Icon.MaxIcon />}>Limit reached</Select.Option>
+                <Select.Option value="closed" icon={<Icon.LockIcon />}>Closed</Select.Option>
+                <Select.Option value="expired" icon={<Icon.HistoryIcon />}>Expired</Select.Option>
+            </Select>
+            <Select
+                label="Sort"
+                help="The order your dispensers are listed in: newest, oldest, or by token name."
+                size="md"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+            >
+                <Select.Option value="newest" icon={<Icon.HistoryIcon />}>Newest first</Select.Option>
+                <Select.Option value="oldest" icon={<Icon.ClockIcon />}>Oldest first</Select.Option>
+                <Select.Option value="token" icon={<Icon.TokenIcon />}>Token A to Z</Select.Option>
+            </Select>
+        </ListFilterMenu>
+    );
+    const viewToggle = (
+        <SegmentedControl
+            aria-label="Dispenser views"
+            value={view}
+            onChange={(next) => {
+                setView(next);
+            }}
+            items={[
+                { id: 'all', disabled: !marketReadSupported, label: <><Icon.GridIcon aria-hidden="true" /><span>All</span></> },
+                { id: 'mine', label: <><Icon.WalletIcon aria-hidden="true" /><span>{t('routes.dispensersList.myDispensers')}</span></> },
+            ]}
+        />
+    );
+    const marketTick = marketAsset?.displayName || marketAsset?.tick || 'an asset';
+    const marketCardLabel = marketSide === 'buy' ? 'You get' : 'You pay with';
+    const marketCardHelp = marketSide === 'buy'
+        ? `Dispensers that give ${marketTick}`
+        : `Dispensers that take ${marketTick} as payment`;
+    const marketCardSide = {
+        label: marketCardLabel,
+        asset: marketAsset,
+        assetLabel: 'Market asset',
+        assetPlaceholder: 'Select an asset',
+        onOpenAsset: onChangeMarket,
+        amount: '',
+        onAmountChange: () => {},
+        amountLabel: 'Market amount',
+        footNote: marketCardHelp,
+    };
+    const marketSelector = view === 'all' ? (
+        <div className={local.marketChoiceCard} data-market-side={marketSide}>
+            <GiveGetQuick
+                give={marketCardSide}
+                get={marketCardSide}
+                singleSide
+                onFlip={() => {
+                    setMarketSide((current) => current === 'buy' ? 'sell' : 'buy');
+                }}
+                flipLabel={`Flip to ${marketSide === 'buy' ? 'You pay with' : 'You get'} ${marketTick}`}
+            />
+        </div>
+    ) : null;
+    const listToolbar = (
+        <div className={local.toolbarStack}>
+            {viewToggle}
+            {marketSelector}
+        </div>
+    );
+    const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My dispensers"
+            title="Dispensers"
+            trailing={(
+                <>
+                    {filterMenu}
+                    {onCreateDispenser ? (
+                        <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New dispenser" title="New dispenser" onClick={() => onCreateDispenser()}>
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
+            )}
         />
     );
-    // The page header holds only the title and Back, so Create dispenser
-    // sits in the content's actions row. An empty list offers it from its
-    // EmptyState instead, so the screen never shows it twice.
-    const actionsFor = (emptyOffersCreate = false) => (onCreateDispenser && !emptyOffersCreate ? (
-        <Button
-            type="button"
-            variant="secondary"
-            icon={<Icon.PlusIcon />}
-            onClick={() => onCreateDispenser()}
-        >
-            Create dispenser
-        </Button>
-    ) : null);
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {children}
-        </Screen>
-    );
-
-    if (addressesError) {
-        return wrap(
-            <ListPage actions={actionsFor()}>
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setAddressesError(null);
-                            setAddressesByChain(null);
-                            setAddressesReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    {addressesError}
-                </StatusMessage>
-            </ListPage>,
+    const wrap = (body, notices = null) => {
+        if (!showPanel) {
+            return (
+                <Screen variant={variant} header={header}>
+                    <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                        <ListPage notices={notices} toolbar={listToolbar}>{body}</ListPage>
+                    </div>
+                </Screen>
+            );
+        }
+        const detailSkeleton = <div aria-hidden="true"><Skeleton height={190} /></div>;
+        const detailEmpty = (
+            <EmptyState
+                title="Select a dispenser"
+                body="Choose a dispenser from the list to see its details."
+            />
         );
-    }
-    if (!addressesByChain) {
-        return wrap(
-            <ListPage actions={actionsFor()}>
-                <div role="status" aria-label="Loading dispensers">
-                    <Skeleton.List rows={5} />
-                </div>
-            </ListPage>,
-        );
-    }
-    if (chainsWithAddresses.length === 0) {
-        return wrap(
-            <ListPage actions={actionsFor()}>
-                <EmptyState
-                    title="No supported address"
-                    body="A supported address is required before dispensers can be created or viewed."
+        const detailPlaceholder = dataPending && !offline ? detailSkeleton : detailEmpty;
+        return (
+            <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="dispensers"
+                    resizeLabel="Resize the dispensers list"
+                    resizeHint="Drag to resize the dispensers list, or press Enter to reset."
+                    layoutName="two-panel"
+                    listMax={420}
+                    listHeader={<ListPage notices={notices} toolbar={listToolbar} />}
+                    list={<ListPage>{body}</ListPage>}
+                    listLabel="Dispensers"
+                    detailLabel={shownRow
+                        ? `${giveAsset(shownRow) || 'Asset'} dispenser #${shownRow.action_index}`
+                        : shownDispenser ? `Dispenser #${shownDispenser.actionIndex}` : 'Dispenser'}
+                    detailBusy={!shownDispenser && dataPending && !offline}
+                    detailFallback={detailSkeleton}
+                    detail={shownDispenser ? (
+                        <Fragment key={`${shownDispenser.chainId}:${shownDispenser.actionIndex}`}>
+                            {renderDispenser(shownDispenser)}
+                        </Fragment>
+                    ) : detailPlaceholder}
                 />
-            </ListPage>,
+            </Screen>
         );
+    };
+
+    if (detailRoute && !(measured && twoPanel)) {
+        if (!measured) {
+            return (
+                <Screen variant={variant} header={header}>
+                    <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="measuring" />
+                </Screen>
+            );
+        }
+        return renderDispenserPage(selectedDispenser, { measureRef: layoutRef });
     }
 
-    const emptyOffersCreate = !anyLoading && !hasLoadErrors && allRows.length === 0;
-    return wrap(
-        <ListPage
-            // Offline, the screen's one message is its offline state below.
-            notices={hasLoadErrors && !offline ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setDispensersByChain({});
-                            setDispensersReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    Couldn't load some dispensers. Try again.
-                </StatusMessage>
-            ) : null}
-            actions={actionsFor(emptyOffersCreate)}
-            toolbar={(
-                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search dispensers">
-                    <NetworkFilterDropdown
-                        value={network}
-                        onChange={setNetwork}
-                        announceNetworkCount
-                    />
-                </ListToolbar>
-            )}
+    if (view === 'mine' && addressesError) {
+        return wrap(
+            null,
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{
+                    label: 'Try Again',
+                    onAction: () => {
+                        setAddressesError(null);
+                        setAddressesByChain(null);
+                        setAddressesReload((value) => value + 1);
+                    },
+                }}
+            >
+                {addressesError}
+            </StatusMessage>,
+        );
+    }
+    if (view === 'mine' && !addressesByChain) {
+        return wrap(
+            <div role="status" aria-label="Loading dispensers">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
+    }
+    if (view === 'mine' && chainsWithAddresses.length === 0) {
+        return wrap(
+            <EmptyState
+                title="No supported address"
+                body="A supported address is required before dispensers can be created or viewed."
+            />,
+        );
+    }
+    const retryActive = () => {
+        if (view === 'all') setMarketReload((value) => value + 1);
+        else {
+            setDispensersByChain({});
+            setDispensersReload((value) => value + 1);
+        }
+    };
+    const notice = activeError && !offline ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{ label: 'Try Again', onAction: retryActive }}
         >
-            {offline && allRows.length === 0 ? (
-                <OfflineEmptyState body="Your dispensers load when the connection returns." onRetry={recheck} />
-            ) : anyLoading && visibleRows.length === 0 ? (
+            {activeError}
+        </StatusMessage>
+    ) : null;
+    const body = nativeMarketUnsupported ? (
+        <EmptyState
+            title="Market unavailable"
+            body="Choose a token market because explorer discovery is not available for native coin dispensers yet."
+        />
+    ) : !marketAsset && view === 'all' ? (
+        <EmptyState title="No market selected" body="Choose a token to view its dispensers." />
+    ) : offline && rowsForView.length === 0 ? (
+        <OfflineEmptyState
+            body={view === 'mine'
+                ? 'Your dispensers load when the connection returns.'
+                : 'Dispensers load when the connection returns.'}
+            onRetry={recheck}
+        />
+    ) : activeLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
-            ) : hasLoadErrors && allRows.length === 0 ? (
+    ) : activeError && rowsForView.length === 0 ? (
                 null
-            ) : visibleRows.length === 0 ? (
-                allRows.length === 0 ? (
+    ) : visibleRows.length === 0 ? (
+                rowsForView.length === 0 ? (
                     <EmptyState
-                        title="No dispensers yet"
-                        body="A dispenser sells a token for coin at a fixed price."
-                        actionLabel={onCreateDispenser ? 'Create dispenser' : undefined}
-                        onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
+                        title={view === 'all' ? `No ${marketSide} dispensers` : 'No dispensers yet'}
+                        body={view === 'all'
+                            ? `No dispensers ${marketSide === 'buy' ? 'give' : 'accept'} ${selectedAsset}.`
+                            : 'A dispenser sells an asset at a fixed price.'}
                     />
                 ) : (
                     <EmptyState
-                        title="No results for these filters"
-                        body="Reset the filters to see all dispensers."
-                        actionLabel="Reset filters"
-                        onAction={() => {
-                            setQuery('');
-                            setNetwork('all');
-                        }}
+                        title="No matching dispensers"
+                        body="Change or clear the filter to see more."
                     />
                 )
-            ) : (
+    ) : (
                 <ul className={local.list}>
-                    {visibleRows.map((row) => (
-                        <li className={local.listItem} key={`${row.chainId}:${row.action_index}`}>
-                            <DispenserRow
-                                row={row}
-                                label={row.address ? dispenserLabels[row.address] : undefined}
-                                oracleFeeds={oracleFeedsFor(row.chainId, row)}
-                                cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
-                                nowMs={nowMs}
-                                chainClock={chainClocks[row.chainId] || null}
-                                onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
-                                allowRemoteImages={allowRemoteImages}
-                            />
+                    {sortedRows.map((row) => (
+                        <li
+                            className={local.listItem}
+                            key={`${row.chainId}:${row.action_index}`}
+                            data-selected={showPanel && sameDispenser(row, shownDispenser) ? 'true' : undefined}
+                        >
+                            {view === 'all' ? (
+                                <MarketDispenserRow
+                                    row={row}
+                                    split={showPanel}
+                                    selected={showPanel && sameDispenser(row, shownDispenser)}
+                                    onSelect={() => {
+                                        const ref = dispenserRef(row);
+                                        if (twoPanel) pickDispenser(ref);
+                                        else onOpenDispenser(ref.chainId, ref.actionIndex);
+                                    }}
+                                />
+                            ) : (
+                                <DispenserRow
+                                    row={row}
+                                    split={showPanel}
+                                    label={row.address ? dispenserLabels[row.address] : undefined}
+                                    oracleFeeds={oracleFeedsFor(row.chainId, row)}
+                                    cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
+                                    nowMs={nowMs}
+                                    chainClock={chainClocks[row.chainId] || null}
+                                    selected={showPanel && sameDispenser(row, shownDispenser)}
+                                    onSelect={() => {
+                                        const ref = dispenserRef(row);
+                                        if (twoPanel) pickDispenser(ref);
+                                        else onOpenDispenser(ref.chainId, ref.actionIndex);
+                                    }}
+                                    allowRemoteImages={allowRemoteImages}
+                                />
+                            )}
                         </li>
                     ))}
                 </ul>
-            )}
-        </ListPage>,
+    );
+    return wrap(body, notice);
+}
+
+// The Status filter's group for a row, from the lifecycle status its badge shows.
+function statusGroup(row) {
+    const status = String(flowsLib.dispenserLiveState(row).status || '');
+    if (status === 'cancelling') return 'closing';
+    if (status === 'empty' || status === 'complete') return 'soldout';
+    if (status === 'max_dispenses_reached') return 'limit';
+    if (status === 'cancelled' || status === 'closed') return 'closed';
+    if (status === 'expired') return 'expired';
+    return status === 'open' ? 'open' : 'other';
+}
+
+function MarketDispenserRow({ row, onSelect, selected = false, split = false }) {
+    const give = giveAsset(row) || '?';
+    const get = getAsset(row) || '?';
+    const stock = stockForRow(row);
+    return (
+        <ListRow
+            type="button"
+            className={local.marketRow}
+            data-xc-split-row={split ? '' : undefined}
+            onClick={onSelect}
+            aria-current={selected ? 'true' : undefined}
+            aria-label={`Open ${give} dispenser #${row.action_index ?? '?'}`}
+            chevron
+            leading={<TickerIcon chainId={row.chainId} tick={give} />}
+            title={<DispenserRowSummary row={row} stock={stock} give={give} get={get} />}
+        />
     );
 }
 
-function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect, allowRemoteImages }) {
+function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect, allowRemoteImages, selected = false, split = false }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
@@ -485,24 +823,26 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
     // list lane's `current_status`, demo fixtures' `status`, and falls back
     // to validity against an explorer that predates the lifecycle column.
     const status = String(flowsLib.dispenserLiveState(row).status || '?');
-    // A terminal dispenser's escrow went back to its owner with the closing
-    // action; saying "in escrow" on such a row misstates where the tokens
-    // are, so the line only renders while the figure still means something.
-    const isTerminal = ['cancelled', 'expired', 'complete', 'closed'].includes(status);
     // A cancelling dispenser is in its close window: say "Closing", with the
     // countdown when the cancel time is known.
     const closeEta = status === 'cancelling' && cancelTimestamp != null
         ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
         : null;
     const badge = status === 'cancelling'
-        ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
+        ? (closeEta ? `Closing, ${closeEta.shortCountdown}` : 'Closing')
         : dispenserStatusLabel(status);
+    const give = giveAsset(row) || '?';
+    const get = getAsset(row) || '?';
+    const stock = stockForRow(row);
     return (
         <ListRow
             type="button"
             className={local.row}
+            data-xc-split-row={split ? '' : undefined}
             onClick={onSelect}
+            aria-current={selected ? 'true' : undefined}
             aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
+            chevron
             leading={<span className={local.iconWrap}>
                 <span
                     className={local.iconLetter}
@@ -534,34 +874,89 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     />
                 ) : null}
             </span>}
-            title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
-            subtitle={(
-                <span className={local.body}>
-                    <span className={local.subtitle}><bdi dir="ltr">{dispenserRateLabel(row, oracleFeeds)}</bdi></span>
-                {/* Escrow is only stated when it is known. The explorer's
-                    dispenser LIST lane carries no escrow column (remaining is
-                    derived per action, in the detail read path), so on real
-                    dispensers this is absent - and the old 'Escrow pending'
-                    fallback then told every owner their fully-escrowed
-                    dispenser had not funded yet (D-40). Open the dispenser to
-                    see its live balance. */}
-                {row.escrow_remaining != null && !isTerminal ? (
-                    <span className={local.subtitle}>
-                        <bdi dir="ltr">{`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}</bdi>
-                    </span>
-                ) : null}
-                </span>
+            title={(
+                <DispenserRowSummary
+                    row={row}
+                    stock={stock}
+                    give={give}
+                    get={get}
+                    status={status}
+                    badge={badge}
+                    badgeTitle={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
+                    label={label}
+                    oracleFeeds={oracleFeeds}
+                />
             )}
-            trailing={<span className={local.trailing}>
-                <span
-                    className={`${local.status} ${local[`status_${status}`] || ''}`}
-                    title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
-                >
-                    {badge}
-                </span>
-            </span>}
         />
     );
+}
+
+function DispenserRowSummary({ row, stock, give, get, status, badge, badgeTitle, oracleFeeds }) {
+    const mine = status != null;
+    const payText = mine ? dispenserFillPriceLabel(row, oracleFeeds) : `${formatNum(row.get_amount)} ${get}`;
+    return (
+        <span className={local.rowSummary}>
+            <span className={local.primaryLine}>
+                <strong className={local.rowAmount}>
+                    <bdi dir="ltr">{`${formatNum(row.give_amount)} ${give}`}</bdi>
+                </strong>
+                {mine ? (
+                    <span
+                        className={`${local.status} ${local[`status_${status}`] || ''}`}
+                        title={badgeTitle}
+                    >
+                        {badge}
+                    </span>
+                ) : <span className={local.stockCount}>{stock.label}</span>}
+            </span>
+            <span className={local.secondaryLine}>
+                <span className={local.priceText}>
+                    <span>for </span>
+                    <strong><bdi dir="ltr">{payText}</bdi></strong>
+                </span>
+                {mine ? <span className={local.stockCount}>{stock.label}</span> : null}
+            </span>
+            <span
+                className={local.stockTrack}
+                role="progressbar"
+                aria-label={`${give} stock`}
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={stock.percent}
+                aria-valuetext={stock.label}
+            >
+                <span className={local.stockFill} style={{ width: `${stock.percent}%` }} />
+            </span>
+        </span>
+    );
+}
+
+function stockForRow(row) {
+    return dispenserStock({
+        remainingEscrow: flowsLib.dispenserLiveState(row).giveRemaining,
+        giveAmount: row.give_amount,
+        originalEscrow: row.original_give_escrow ?? row.give_escrow,
+        totalDispenses: row.total_dispenses ?? row.dispense_total,
+        dispenseCount: row.dispense_count,
+    });
+}
+
+function giveAsset(row) {
+    return String(row?.give_tick || row?.give_coin || '').toUpperCase();
+}
+
+function getAsset(row) {
+    return String(row?.get_tick || row?.get_coin || '').toUpperCase();
+}
+
+function dispenserRef(row) {
+    return { chainId: row.chainId, actionIndex: String(row.action_index) };
+}
+
+function sameDispenser(a, b) {
+    return Boolean(a && b)
+        && String(a.chainId) === String(b.chainId)
+        && String(a.actionIndex ?? a.action_index) === String(b.actionIndex ?? b.action_index);
 }
 
 // Thousands separators on the integer part of a decimal string, exact

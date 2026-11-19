@@ -59,7 +59,11 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
+    FROM_ADDRESS_LABEL,
+    openMyDispensers,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Seven fee-bearing broadcasts ride on this address (coin fees). */
@@ -143,7 +147,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -156,9 +160,9 @@ async function approveAndGetTxid(page) {
  */
 async function signedTxid(page) {
     await expectConfirmModal(page);
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
-    await expect(main.getByRole('heading', { name: 'Refill submitted' }),
+    await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Refill submitted' }),
         'the refill never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 60_000 });
@@ -173,8 +177,7 @@ async function signedTxid(page) {
  * doing this five times actually does.
  */
 async function openDispenserDetail(page, index) {
-    await openPaletteCommand(page, 'Dispensers');
-    const main = page.getByRole('main');
+    const main = await openMyDispensers(page);
     // The owner's list labels a row rather than printing the index in its text:
     // "Open XCHAIN dispenser #1699". Filtering on the visible text finds nothing
     // (campaign §"Dispensers", Session 31's harness note about the same list).
@@ -203,9 +206,9 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            owner = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -218,15 +221,15 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.status), 'the chain rejected the dispenser create').toBe('valid');
@@ -250,8 +253,8 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                     + 'are already gone')
                     .toContainText(/of 5 refills used/, { timeout: 60_000 });
 
-                await main.getByLabel('Refill amount').fill(String(REFILL));
-                await main.getByRole('button', { name: 'Refill dispenser' }).click();
+                await fieldByLabel(main, 'Refill amount').fill(String(REFILL));
+                await main.getByRole('button', { name: 'Refill Dispenser' }).click();
 
                 const done = await waitForIndexedAction(await signedTxid(page));
                 expect(String(done.status),
@@ -282,7 +285,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'owner has no way to know they are on their sixth')
                 .toContainText(/used all 5 of its refills|5 of 5 refills used/, { timeout: 60_000 });
 
-            const signButton = main.getByRole('button', { name: 'Refill dispenser' });
+            const signButton = main.getByRole('button', { name: 'Refill Dispenser' });
             if (!(await signButton.isEnabled())) {
                 // The venue serves per-edit give_escrow, so the count is exact and
                 // the wallet refuses outright. Nothing is signed, nothing is spent.
@@ -302,14 +305,16 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             console.log('[note] this venue serves no per-edit give_escrow, so the refill count is '
                 + 'inferred and the sixth is warned about rather than blocked; the confirm page dry run '
                 + 'is asked for the verdict instead');
-            await main.getByLabel('Refill amount').fill(String(REFILL));
+            await fieldByLabel(main, 'Refill amount').fill(String(REFILL));
             await signButton.click();
 
-            await expect(page.getByTestId('preflight-chip'),
+            await expect(page.getByTestId('confirm-status'),
                 'the confirm page dry run did not refuse a sixth refill')
-                .toHaveText('Will likely fail', { timeout: 120_000 });
-            await expect(page.getByTestId('confirm-approve'),
-                'Approve is offered on a refill the network refuses').toBeDisabled();
+                .toHaveAttribute('data-state', 'fail', { timeout: 120_000 });
+            // G130: Approve keeps its colour; a tap says why and sends nothing.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-blocked'),
+                'Approve went ahead on a refill the network refuses').toBeVisible();
 
             // The money half: nothing was signed, so nothing moved and no fee was paid.
             expect(await giveRemaining(dispenserIndex),

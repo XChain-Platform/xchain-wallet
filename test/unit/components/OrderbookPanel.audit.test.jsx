@@ -112,7 +112,7 @@ describe('OrderbookPanel market display', () => {
         expect(screen.queryByText('Loading order book…')).toBeNull();
         expect(screen.queryByText('Price (BTC)')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByTitle('0.01')).toHaveTextContent('0.01');
         expect(getOrderbook).toHaveBeenCalledTimes(2);
@@ -178,6 +178,20 @@ describe('market data table semantics', () => {
         expect(css).toMatch(/\.table:not\(\.keepColumns\) \.cell\s*\{[\s\S]*display: grid/);
         expect(css).toMatch(/\.keepColumns \.cell,[\s\S]*white-space: nowrap/);
         expect(css).toMatch(/content: attr\(data-label\)/);
+    });
+
+    it('uses the standard row hover fill for every clickable price cell', () => {
+        const tableCss = readFileSync(
+            'packages/core/src/shared/components/DataTable.module.css',
+            'utf8',
+        );
+        const marketCss = readFileSync(
+            'packages/core/src/shared/components/MarketTrading.module.css',
+            'utf8',
+        );
+
+        expect(tableCss).toMatch(/\.cellButton:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+        expect(marketCss).toMatch(/\.splitPick\.splitPick:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
     });
 
     it('labels and aligns recent-trade columns', async () => {

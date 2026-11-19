@@ -12,7 +12,7 @@ import { cachedSourceFiles } from '../../helpers/sourceScan.js';
 
 const root = join(process.cwd(), 'packages', 'core', 'src');
 const guide = readFileSync(join(process.cwd(), 'STYLE_GUIDE.md'), 'utf8');
-const documented = ['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '1024px'];
+const documented = ['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '834px', '1024px'];
 const MEDIA_QUERY_PATTERN = /@media\s+([^\{]+)/g;
 const WIDTH_PATTERNS = [
     /(?:min-|max-)?width\s*:\s*([\d.]+(?:px|rem|em))\b/g,
@@ -37,7 +37,6 @@ describe('core CSS module media breakpoints', () => {
     it('uses only the documented viewport width scale', () => {
         const widths = new Set([...modules.values()].flatMap(widthValues));
         expect([...widths].sort()).toEqual([
-            '1024px',
             '360px',
             '400px',
             '420px',
@@ -45,6 +44,7 @@ describe('core CSS module media breakpoints', () => {
             '48rem',
             '600px',
             '640px',
+            '834px',
         ]);
         for (const width of documented) expect(guide).toContain(`| \`${width}\` |`);
     });
@@ -52,14 +52,16 @@ describe('core CSS module media breakpoints', () => {
     it('names lower-side boundaries without one-pixel aliases', () => {
         const combined = [...modules.values()].join('\n');
 
-        expect(combined).not.toMatch(/\b(?:359|399|599|601|639|1023)px\b/);
+        expect(combined).not.toMatch(/\b(?:359|399|599|601|639|833|1023)px\b/);
         expect(modules.get('shared/commandPalette/CommandPalette.module.css'))
             .toContain('@media not all and (min-width: 640px)');
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media not all and (min-width: 400px)');
-        expect(modules.get('shared/routes/ManageToken.module.css').match(
-            /@media not all and \(min-width: 600px\)/g,
-        )).toHaveLength(2);
+        expect(modules.get('shared/routes/ManageToken.module.css')).not.toContain('@media');
+        // The shared details rows are label-left value-right at every width,
+        // so IssueTokenForm no longer switches them at 834px.
+        expect(modules.get('shared/routes/IssueTokenForm.module.css'))
+            .not.toContain('@media (min-width: 834px)');
     });
 
     it('keeps 600px on the wide side of the form rule', () => {
@@ -67,7 +69,7 @@ describe('core CSS module media breakpoints', () => {
         const locked = modules.get('shared/routes/Locked.module.css');
 
         expect(formPage).toContain('@media (min-width: 600px)');
-        expect(locked).toContain('@media (min-width: 600px)');
+        expect(locked).not.toContain('@media (min-width: 600px)');
         // The short-viewport rule keys on landscape height, not on width.
         expect(locked).toContain('@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2)');
     });

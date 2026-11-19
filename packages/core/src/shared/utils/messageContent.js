@@ -3,9 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// The protocol's MESSAGE has no attachment field, so the wallet sends plain
+// text only. Older wallet builds appended an envelope after the text; a
+// received message that carries a well-formed one still shows its text, with
+// the envelope (and its base64) hidden and never offered as a file.
 const ATTACHMENT_MARKER = '\n\n[[xchain-attachment:v1]]\n';
 
-export const MESSAGE_ATTACHMENT_TYPES = Object.freeze([
+const LEGACY_ENVELOPE_TYPES = Object.freeze([
     'image/png',
     'image/jpeg',
     'image/gif',
@@ -14,38 +18,20 @@ export const MESSAGE_ATTACHMENT_TYPES = Object.freeze([
     'text/plain',
 ]);
 
-export const MAX_MESSAGE_ATTACHMENT_BYTES = 256 * 1024;
+const LEGACY_ENVELOPE_MAX_BYTES = 256 * 1024;
 
 /**
- * Adds one compact attachment envelope to a MESSAGE body. Clients that do not
- * recognize the envelope still retain the human-readable message before it.
- *
- * @param {string} text
- * @param {{ name: string, type: string, dataUrl: string, size: number } | null} attachment
- * @returns {string}
- */
-export function serializeMessageContent(text, attachment) {
-    if (!attachment) return text;
-    return `${text}${ATTACHMENT_MARKER}${JSON.stringify({
-        name: attachment.name,
-        type: attachment.type,
-        dataUrl: attachment.dataUrl,
-        size: attachment.size,
-    })}`;
-}
-
-/**
- * Separates a wallet attachment envelope from its visible message text.
- * Malformed or unsupported envelopes remain ordinary text and never become a
- * clickable attachment.
+ * Splits a legacy attachment envelope off a message body and returns only the
+ * visible text. Only a well-formed envelope is stripped; a malformed or
+ * unsupported one stays in the text as ordinary characters.
  *
  * @param {unknown} value
- * @returns {{ text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null }}
+ * @returns {{ text: string }}
  */
 export function parseMessageContent(value) {
     const original = typeof value === 'string' ? value : '';
     const markerAt = original.lastIndexOf(ATTACHMENT_MARKER);
-    if (markerAt < 0) return { text: original, attachment: null };
+    if (markerAt < 0) return { text: original };
     try {
         const parsed = JSON.parse(original.slice(markerAt + ATTACHMENT_MARKER.length));
         const type = typeof parsed?.type === 'string' ? parsed.type.toLowerCase() : '';
@@ -60,18 +46,15 @@ export function parseMessageContent(value) {
         const decodedSize = payload.length % 4 === 0
             ? ((payload.length / 4) * 3) - padding
             : -1;
-        if (!MESSAGE_ATTACHMENT_TYPES.includes(type)
+        if (!LEGACY_ENVELOPE_TYPES.includes(type)
             || !name || name.length > 255
             || !/^[A-Za-z0-9+/]*={0,2}$/.test(payload)
-            || !Number.isSafeInteger(size) || size < 1 || size > MAX_MESSAGE_ATTACHMENT_BYTES) {
-            return { text: original, attachment: null };
+            || !Number.isSafeInteger(size) || size < 1 || size > LEGACY_ENVELOPE_MAX_BYTES
+            || decodedSize !== size) {
+            return { text: original };
         }
-        if (decodedSize !== size) return { text: original, attachment: null };
-        return {
-            text: original.slice(0, markerAt),
-            attachment: { name, type, dataUrl, size },
-        };
+        return { text: original.slice(0, markerAt) };
     } catch {
-        return { text: original, attachment: null };
+        return { text: original };
     }
 }

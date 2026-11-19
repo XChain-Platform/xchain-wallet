@@ -8,10 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PC-51: MINT joins the native-coin fee-payment path. The flow must forward
-// a truthy payFeeInNativeCoin into submitAction's encoderOpts (where the
-// submit-time preflight prices it or forfeit-refuses), and must NOT emit the
-// key when the toggle is off - so the default XCHAIN-fee path is unchanged.
+// U81: MINT carries no protocol fee in xchain-indexer (ruled with 3a1160b68),
+// so the flow never forwards payFeeInNativeCoin and no chain gets a native fee
+// output, whatever a caller passes.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -36,17 +35,17 @@ function base(extra = {}) {
     };
 }
 
-describe('mintToken native-fee threading (PC-51)', () => {
+describe('mintToken sends no native protocol fee (U81)', () => {
     beforeEach(() => submitAction.mockClear());
 
-    it('forwards payFeeInNativeCoin: true into encoderOpts', async () => {
+    it('drops payFeeInNativeCoin even when a caller passes true', async () => {
         await mintToken(base({ payFeeInNativeCoin: true }));
         const arg = submitAction.mock.calls[0][0];
         expect(arg.actionData).toEqual({ action: 'MINT', params: { TICK: 'PEPE', AMOUNT: '10' } });
-        expect(arg.encoderOpts.payFeeInNativeCoin).toBe(true);
+        expect('payFeeInNativeCoin' in arg.encoderOpts).toBe(false);
     });
 
-    it('omits payFeeInNativeCoin when unset (XCHAIN-fee path unchanged)', async () => {
+    it('omits payFeeInNativeCoin when unset', async () => {
         await mintToken(base());
         const arg = submitAction.mock.calls[0][0];
         expect('payFeeInNativeCoin' in arg.encoderOpts).toBe(false);

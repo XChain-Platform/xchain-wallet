@@ -1,0 +1,17 @@
+/* A group of on/off options (G118): one flush card of switch rows, each row
+   carrying its own padding so the dividers run edge to edge. */
+.list {
+    composes: flush from './Card.module.css';
+    overflow: hidden;
+}
+
+.row {
+    --xc-switch-label-size: var(--xc-text-md);
+    --xc-switch-description-size: var(--xc-text-sm);
+    padding: var(--xc-space-2) var(--xc-card-pad);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.row:last-child {
+    border-bottom: 0;
+}

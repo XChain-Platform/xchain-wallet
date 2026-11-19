@@ -52,7 +52,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
@@ -92,6 +92,12 @@ if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
     process.exit(argv.length === 0 ? 2 : 0);
 }
 
+// The writer and the audit use one JS implementation. sign.sh keeps an
+// independent bash gate, bound to this implementation by the parity test.
+const { deriveExtensionVersion } = await import(pathToFileURL(
+    join(ROOT, 'packages', 'core', 'scripts', 'derive-extension-version.js'),
+).href);
+
 let target = null;
 let date = new Date().toISOString().slice(0, 10);
 let dryRun = false;
@@ -108,33 +114,6 @@ function fail(msg, ...detail) {
     process.stderr.write(`bump-version.mjs: ${msg}\n`);
     for (const line of detail) process.stderr.write(`  ${line}\n`);
     process.exit(1);
-}
-
-function deriveManifestVersion(walletVersion) {
-    const release = /^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta|respin)\.(\d+))?$/.exec(walletVersion);
-    if (!release) {
-        fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
-            'Expected M.m.p, M.m.p-rc.N, M.m.p-beta.N or M.m.p-respin.N.');
-    }
-    const [, major, minor, patch, lane, laneNumberText] = release;
-    const base = [Number(major), Number(minor), Number(patch)];
-    const labels = ['major', 'minor', 'patch'];
-    for (let i = 0; i < base.length; i += 1) {
-        if (!Number.isInteger(base[i]) || base[i] < 0 || base[i] > 65535) {
-            fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
-                `${labels[i]} must be an integer from 0 through 65535.`);
-        }
-    }
-    if (!lane) return base.join('.');
-
-    const laneNumber = Number(laneNumberText);
-    if (!Number.isInteger(laneNumber) || laneNumber < 1 || laneNumber > 65535) {
-        fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
-            `${lane} number must be an integer from 1 through 65535.`);
-    }
-    return lane === 'respin'
-        ? [...base, laneNumber].join('.')
-        : [0, base[0], base[1], laneNumber].join('.');
 }
 
 if (!target) fail('no version given', 'usage: bump-version.mjs <version>');
@@ -162,7 +141,14 @@ function escapeRegExp(s) {
 }
 
 const current = JSON.parse(read('package.json')).version;
-const manifestTarget = deriveManifestVersion(target);
+let manifestTarget;
+try {
+    manifestTarget = deriveExtensionVersion(target);
+} catch (err) {
+    fail(`"${target}" cannot be represented as a Chrome extension version`,
+        err instanceof Error ? err.message : String(err),
+        'Expected M.m.p, M.m.p-rc.N, M.m.p-beta.N or M.m.p-respin.N.');
+}
 if (current === target) {
     fail(`the tree already declares ${target}`,
         'Nothing to do. If a previous bump was interrupted, run',

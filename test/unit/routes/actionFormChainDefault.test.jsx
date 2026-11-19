@@ -29,6 +29,7 @@ import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTo
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { pickOrderAsset } from '../../helpers/orderAssetPicker.js';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -104,6 +105,12 @@ async function probe({ options = {}, messaging = messagingWith() } = {}) {
 
 afterEach(() => cleanup());
 
+// From starts closed on every transaction form; its Network and address fields
+// are queryable by role only once the header is opened.
+async function openFrom() {
+    fireEvent.click(await screen.findByRole('button', { name: /^From/, expanded: false }));
+}
+
 describe('useActionForm chain default follows the last-used chain', () => {
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
         const { last } = await probe();
@@ -120,6 +127,7 @@ describe('useActionForm chain default follows the last-used chain', () => {
                 React.createElement(CreateOrderForm, { walletId: 'w', onBack() {} }),
             ),
         );
+        await openFrom();
         expect(await screen.findByRole('button', { name: /^Network: Dogecoin/ })).toBeInTheDocument();
         const from = await screen.findByLabelText('From address');
         await waitFor(() => expect(from.value).toBe(ADDR_DOGE.address));
@@ -144,29 +152,36 @@ describe('useActionForm chain default follows the last-used chain', () => {
             </MessagingProvider>,
         );
 
-        const ticker = await screen.findByLabelText('Ticker');
-        ticker.focus();
+        // The Quick view: each side is a card of asset, amount and help tip.
+        const giveAmount = await screen.findByLabelText('Give amount');
+        giveAmount.focus();
         await user.tab();
-        expect(document.activeElement).toHaveAccessibleName('Trade ownership of this ticker (not a balance)');
+        expect(document.activeElement).toHaveAccessibleName(/^Give asset: /);
         await user.tab();
-        const giveAmount = screen.getByLabelText('Amount');
-        expect(document.activeElement).toBe(giveAmount);
+        expect(document.activeElement).toHaveAccessibleName('Flip give and get');
+        await user.tab();
+        // The get card's help tip sits on its label row, ahead of the input.
+        expect(document.activeElement).toHaveAccessibleName('About You get');
+        await user.tab();
+        const getAmount = screen.getByLabelText('Get amount (DOGE)');
+        expect(document.activeElement).toBe(getAmount);
 
         await user.keyboard('{Enter}');
         expect(await screen.findByRole('alert')).toHaveTextContent('Enter the ticker to give.');
         expect(composeForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(ticker, { target: { value: 'KEYS' } });
-        fireEvent.change(giveAmount, { target: { value: '10' } });
-        const getAmount = screen.getByLabelText('Amount (DOGE)');
-        fireEvent.change(getAmount, { target: { value: '1' } });
-        getAmount.focus();
+        await pickOrderAsset('give', 'KEYS');
+        fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
+        // The picker page remounts the form, so the get field is read again.
+        const getAmountAgain = screen.getByLabelText('Get amount (DOGE)');
+        fireEvent.change(getAmountAgain, { target: { value: '1' } });
+        getAmountAgain.focus();
         await user.keyboard('{Enter}');
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
         await user.keyboard('{Escape}');
-        expect(await screen.findByLabelText('Ticker')).toHaveValue('KEYS');
+        expect(await screen.findByLabelText(/^Give amount/)).toHaveValue('10');
         expect(screen.queryByTestId('confirm-modal')).toBeNull();
     });
 
@@ -246,6 +261,7 @@ describe('the non-hook Token Actions forms also open on the last-used chain', ()
                 React.createElement(Form, { walletId: 'w', onBack() {}, ...props }),
             ),
         );
+        await openFrom();
         await waitFor(async () => expect(await chainName()).toMatch(/^Network: Dogecoin/));
         expect(messaging.getSettings).toHaveBeenCalled();
     });

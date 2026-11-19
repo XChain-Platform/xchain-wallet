@@ -22,11 +22,14 @@ import {
     deriveMasterKeyAsync,
     encrypt,
     decrypt,
+    decryptWalletSeed,
     bytesToBase64,
     base64ToBytes,
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
+import { VaultConflictError } from '../storage/backend.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { RAW_HEX_KEY, isRawHexPrivateKey, wifFailureMessage } from './_wifFailureMessage.js';
 import { importedKeyAddressType } from './_importedKeyAddressType.js';
 
@@ -65,6 +68,13 @@ export class DuplicateImportError extends Error {
         super(`This private key is already in this wallet (${address}).`);
         this.name = 'DuplicateImportError';
         this.address = address;
+    }
+}
+
+export class ImportConflictError extends Error {
+    constructor() {
+        super('Your wallet changed while the key was being imported. Nothing was imported; try again.');
+        this.name = 'ImportConflictError';
     }
 }
 
@@ -111,7 +121,10 @@ export async function importWif({
     // vault master key directly (SoftwareSigner.getMasterKey()) instead
     // of the password. One of the two is required.
     const hasSessionKey = sessionMasterKey instanceof Uint8Array && sessionMasterKey.length > 0;
+    // A hardware wallet holds no keys at all (the schema refuses importedKeys
+    // on one), so a private key cannot join it; no password would change that.
     if (!hasSessionKey && (typeof password !== 'string' || password.length === 0)) {
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'importing a private key');
         throw new Error('importWif: password or masterKey is required');
     }
     if (!chainRegistry) throw new Error('importWif: chainRegistry is required');
@@ -133,6 +146,7 @@ export async function importWif({
 
     const walletRecord = await vault.wallets.get(walletId);
     if (!walletRecord) throw new WalletNotFoundError(walletId);
+    refuseHardwareWallet(walletRecord, 'importing a private key');
 
     // Validate WIF via SDK (checksum + network match) and derive the address
     // before any expensive work; fast failure on bad input.
@@ -162,7 +176,8 @@ export async function importWif({
         type,
     });
 
-    // Reject a re-import BEFORE the Argon2id master-key derivation below:
+    // Reject a re-import BEFORE the Argon2id master-key derivation below.
+    // The guarded write repeats this check against the current document.
     // D-50's lesson is that a rejection the user can cause by hand must not
     // cost them a 6-8s freeze first.
     await assertNotAlreadyImported(vault, walletRecord, descriptor, derivedAddress);
@@ -175,14 +190,20 @@ export async function importWif({
     const masterKey = hasSessionKey
         ? sessionMasterKey
         : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
-    const probeCiphertext = walletRecord.format === 'wif-only'
-        ? walletRecord.importedKeys?.[0]?.encryptedWif
-        : walletRecord.encryptedSeed;
     let encryptedWif;
     try {
         let seedBytes;
         try {
-            seedBytes = await decrypt(masterKey, base64ToBytes(probeCiphertext ?? ''));
+            seedBytes = walletRecord.format === 'wif-only'
+                ? await decrypt(
+                    masterKey,
+                    base64ToBytes(walletRecord.importedKeys?.[0]?.encryptedWif ?? ''),
+                )
+                : await decryptWalletSeed({
+                    encryptedSeed: walletRecord.encryptedSeed,
+                    kdfParams: walletRecord.kdfParams,
+                    masterKey,
+                });
         } catch (err) {
             // Only a GCM tag mismatch is a wrong password (crypto/aead.js); a
             // damaged seal or a malformed session key propagates as itself.
@@ -220,47 +241,55 @@ export async function importWif({
         throw new Error(`importWif: address id collision "${addressRecord.id}"`);
     }
 
-    // Append to Wallet.importedKeys. The record is read again here: the key
-    // derivation above takes seconds, and a rename or another key import that
-    // landed meanwhile would be overwritten by the copy read before it.
-    const currentWallet = (await vault.wallets.get(walletRecord.id)) ?? walletRecord;
-    const updatedWallet = {
-        ...currentWallet,
-        importedKeys: [
-            ...currentWallet.importedKeys,
-            {
-                addressId: addressRecord.id,
-                encryptedWif,
-                importedAt: new Date().toISOString(),
-            },
-        ],
-    };
-    let addressPutAttempted = false;
-    let walletPutAttempted = false;
+    let updatedWallet;
     try {
-        addressPutAttempted = true;
-        await vault.addresses.put(addressRecord);
-        walletPutAttempted = true;
-        await vault.wallets.put(updatedWallet);
+        await vault.putManyGuarded((document) => {
+            const currentWallet = document.wallets.find((record) => record.id === walletRecord.id);
+            if (!currentWallet) throw new WalletNotFoundError(walletRecord.id);
+            if (!walletSealMatches(currentWallet, walletRecord)) throw new ImportConflictError();
+            if (hasImportedDuplicate(
+                currentWallet.importedKeys,
+                document.addresses,
+                descriptor,
+                derivedAddress,
+            )) {
+                throw new DuplicateImportError(derivedAddress);
+            }
+            if (document.addresses.some((record) => record.id === addressRecord.id)) {
+                throw new Error(`importWif: address id collision "${addressRecord.id}"`);
+            }
+            updatedWallet = {
+                ...currentWallet,
+                importedKeys: [
+                    ...currentWallet.importedKeys,
+                    {
+                        addressId: addressRecord.id,
+                        encryptedWif,
+                        importedAt: new Date().toISOString(),
+                    },
+                ],
+            };
+            return [
+                { store: vault.addresses, record: addressRecord },
+                { store: vault.wallets, record: updatedWallet },
+            ];
+        });
     } catch (error) {
-        const rollbackErrors = [];
-        if (walletPutAttempted) {
-            try { await vault.wallets.put(currentWallet); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (addressPutAttempted) {
-            try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (rollbackErrors.length > 0) {
-            throw new AggregateError(
-                [error, ...rollbackErrors],
-                'importWif: persistence and rollback failed',
-                { cause: error },
-            );
+        if (error instanceof VaultConflictError || error?.name === 'VaultConflictError') {
+            throw new ImportConflictError();
         }
         throw error;
     }
 
     return { wallet: updatedWallet, address: addressRecord };
+}
+
+function walletSealMatches(stored, read) {
+    if (stored.format !== read.format) return false;
+    if (read.format === 'wif-only') {
+        return stored.importedKeys?.[0]?.encryptedWif === read.importedKeys?.[0]?.encryptedWif;
+    }
+    return stored.encryptedSeed === read.encryptedSeed;
 }
 
 /**
@@ -283,12 +312,24 @@ async function assertNotAlreadyImported(vault, walletRecord, descriptor, address
         if (typeof k?.addressId !== 'string') continue;
         const existing = await vault.addresses.get(k.addressId);
         if (!existing) continue;
-        if (
-            existing.address === address
-            && existing.chain === descriptor.coin
-            && existing.network === descriptor.networkKind
-        ) {
+        if (matchesImportedAddress(existing, descriptor, address)) {
             throw new DuplicateImportError(address);
         }
     }
+}
+
+function hasImportedDuplicate(importedKeys, addresses, descriptor, address) {
+    const keys = Array.isArray(importedKeys) ? importedKeys : [];
+    for (const key of keys) {
+        if (typeof key?.addressId !== 'string') continue;
+        const existing = addresses.find((record) => record.id === key.addressId);
+        if (existing && matchesImportedAddress(existing, descriptor, address)) return true;
+    }
+    return false;
+}
+
+function matchesImportedAddress(existing, descriptor, address) {
+    return existing.address === address
+        && existing.chain === descriptor.coin
+        && existing.network === descriptor.networkKind;
 }

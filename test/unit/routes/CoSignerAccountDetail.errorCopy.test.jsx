@@ -131,8 +131,11 @@ describe('CoSignerAccountDetail clipboard control', () => {
     it('names the funding address copied by the button', async () => {
         mountAccount();
 
-        expect(await screen.findByRole('button', { name: 'Copy funding address' })).toBeTruthy();
-        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
+        // The Details tab shows the address to fund with its copy button; the
+        // Fund page's own copy button is driven in CoSignerAccountDetail.subpages.test.jsx.
+        fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
+        expect(screen.getByRole('button', { name: 'Copy Funding Address' })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/not mainnet/i);
     });
 });
 
@@ -152,8 +155,8 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit rules/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Policy' }));
 
         expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
@@ -195,8 +198,8 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit rules/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Policy' }));
 
         expect(await screen.findByText(/changed after you opened the editor/i)).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
@@ -216,9 +219,9 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit rules/ }));
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Renamed agent' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Policy' }));
 
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledWith({
             id: 'acct-1',
@@ -258,7 +261,7 @@ describe('CoSignerAccountDetail async state', () => {
         );
 
         await screen.findByText('First account');
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Turn on/ }));
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledTimes(1));
 
         view.rerender(
@@ -271,7 +274,9 @@ describe('CoSignerAccountDetail async state', () => {
 
         await act(async () => secondLoad.resolve(second));
         expect(await screen.findByText('Second account')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Disable' })).not.toBeDisabled();
+        // An action row that is off says so with aria-disabled (G101), so the
+        // stale busy state shows there, not as a native disabled attribute.
+        expect(screen.getByRole('button', { name: /^Turn off/ })).not.toHaveAttribute('aria-disabled');
 
         await act(async () => oldUpdate.resolve({ ...first, enabled: true }));
         expect(screen.getByText('Second account')).toBeTruthy();
@@ -291,7 +296,7 @@ describe('CoSignerAccountDetail update failure', () => {
         );
 
         await screen.findByText('Treasury agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Turn on/ }));
 
         const notice = await screen.findByText('The vault is locked.');
         const title = screen.getByText('Treasury agent');

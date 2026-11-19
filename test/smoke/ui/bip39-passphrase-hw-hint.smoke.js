@@ -27,32 +27,27 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const createSrc = read('packages/core/src/shared/routes/CreateWallet.jsx');
+const createSrc = withEnglishCopy(read('packages/core/src/shared/routes/CreateWallet.jsx'));
 const importSrc = withEnglishCopy(read('packages/core/src/shared/routes/ImportWallet.jsx'));
 
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
 //    mention the HW-on-device caveat alongside the entropy /
 //    forget-warning text the v0.210.0 copy already surfaced.
-assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(createSrc),
-    'CreateWallet keeps its BIP39 passphrase InfoTip aria');
-assert.ok(/Hardware wallets handle it/.test(createSrc),
-    'CreateWallet InfoTip mentions hardware wallets handle passphrases on-device');
+//    2026-11-14: the passphrase Switch carries the tip through its own
+//    `help` prop (the kit InfoTip, named "About <label>", U57) in the Extra
+//    Passphrase form section, so the check reads the Switch's help.
+assert.ok(/<Switch[\s\S]{0,200}?help="[^"]*Hardware wallets handle it/.test(createSrc),
+    'CreateWallet passphrase Switch help mentions hardware wallets handle passphrases on-device');
 
-// 2. ImportWallet imports the InfoTip primitive (it didn't before
-//    this FOLLOWUP) and uses it on its own BIP39 passphrase
-//    toggle.
-assert.ok(/InfoTip/.test(importSrc),
-    'ImportWallet imports InfoTip from core/ui');
-assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(importSrc),
-    'ImportWallet ships a BIP39 passphrase InfoTip');
-assert.ok(/hardware wallets|enter it on the device/i.test(importSrc),
-    'ImportWallet InfoTip mentions HW devices handle passphrases on-device');
-assert.ok(/Add Account/.test(importSrc),
-    'ImportWallet InfoTip points users to the correct HW pairing lane');
-
-// 3. The ImportWallet InfoTip lives beside the passphrase Switch so it
-//    stays adjacent to the trigger rather than floating elsewhere in the form.
-assert.ok(/<Switch[\s\S]{0,400}label="This wallet uses a BIP39 passphrase"[\s\S]{0,400}<InfoTip/.test(importSrc),
-    'ImportWallet places the InfoTip immediately after the toggle label');
+// 2. ImportWallet's passphrase Switch carries the same tip through its own
+//    `help` prop (the kit InfoTip, "About <label>", U57; 2026-11-14), so the
+//    tip sits on the toggle's own label row.
+const importSwitch = importSrc.match(/<Switch\b[\s\S]{0,1500}?\/>/g)
+    ?.find((tag) => /label="This wallet uses an extra passphrase"/.test(tag)) ?? '';
+assert.ok(importSwitch, 'ImportWallet has the extra-passphrase Switch');
+assert.ok(/help="[^"]*(?:hardware wallets|enter it on the device)/i.test(importSwitch),
+    'ImportWallet passphrase help mentions HW devices handle passphrases on-device');
+assert.ok(/help="[^"]*connect through Pair Hardware Wallet/.test(importSwitch),
+    'ImportWallet passphrase help points users to the correct HW pairing lane');
 
 console.log('OK: BIP39 passphrase HW-hint sweep (CreateWallet + ImportWallet)');

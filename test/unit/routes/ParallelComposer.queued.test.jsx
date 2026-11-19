@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
 
 const CHAIN_ID = 'bitcoin-regtest';
@@ -27,14 +28,17 @@ const COMPOSED = {
     expectedOutputs: { addressed: [], encoding: 'OP_RETURN' },
     tamperVerified: true,
 };
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 function mount({ walletMode = 'full', messagingOverrides = {}, initialRows, onBack = () => {} } = {}) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const messaging = {
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [FROM] })),
         getActiveAddresses: vi.fn(async () => ({ [CHAIN_ID]: FROM })),
         listActions: vi.fn(async () => ['SEND']),
-        getSettings: vi.fn(async () => ({ walletMode })),
+        getSettings: vi.fn(async () => ({})),
+        listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: vi.fn(async () => ({ ready: true })),
         validateAction: vi.fn(async () => ({ valid: true, errors: [] })),
         composeForConfirm: vi.fn(async () => COMPOSED),
@@ -69,8 +73,8 @@ describe('ParallelComposer queued rows', () => {
         const advancedAction = vi.fn().mockRejectedValue(queuedError);
         mount({ messagingOverrides: { advancedAction } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('checkbox'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+        await screen.findByRole('button', { name: 'Sign all' });
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));

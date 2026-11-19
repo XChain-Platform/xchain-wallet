@@ -22,10 +22,11 @@ test.use({ viewport: { width: 360, height: 800 } });
 test('the plain-text confirmation keeps its safe button readable offline', async ({ page }, info) => {
     await createWallet(page);
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await dialog.getByRole('combobox').first().fill('Messaging');
     await page.getByRole('option', { name: /^Messaging\b/ }).first().click();
-    await page.getByRole('main').getByRole('button', { name: /^(New conversation|New message)$/ }).first().click();
+    // The new message button sits in the page header.
+    await page.getByRole('button', { name: /^(New conversation|New message)$/ }).first().click();
     await goOffline(page);
     await page.getByRole('button', { name: /^Encryption:/ }).click();
     await page.getByRole('option', { name: /^Plain text/ }).click();

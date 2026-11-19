@@ -10,7 +10,7 @@
 
 import { BIDI_CONTROLS, CONTROLS, ZERO_WIDTH } from './textHardening.js';
 
-export const MAX_MEMO_BYTES = 250;
+export const MAX_MEMO_LENGTH = 250;
 
 const ACTION_TEXT_FIELDS = Object.freeze({
     MEMO: 'Memo',
@@ -102,9 +102,9 @@ export function actionParamsTextError(actionData) {
                     const error = actionTextSafetyError(item, label);
                     if (error) { firstError = error; return; }
                     if (field === 'MEMO') {
-                        const bytes = new TextEncoder().encode(String(item ?? '')).byteLength;
-                        if (bytes > MAX_MEMO_BYTES) {
-                            firstError = `Memo is ${bytes} bytes; the network accepts at most ${MAX_MEMO_BYTES} bytes.`;
+                        const length = String(item ?? '').length;
+                        if (length > MAX_MEMO_LENGTH) {
+                            firstError = `Memo is ${length} characters; the network accepts at most ${MAX_MEMO_LENGTH} characters.`;
                             return;
                         }
                     }

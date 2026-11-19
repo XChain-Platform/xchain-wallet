@@ -8,16 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wizard's Custom template is the second place a token is issued with an
-// ownership field, so it carries the same pair the standalone form does
-// (IssueTokenForm.transferSupply.test.jsx): TRANSFER for the issuer rights,
+// The Create a token route issues through the one Issue Token form, which
+// carries both ISSUE destinations: TRANSFER for the issuer rights,
 // TRANSFER_SUPPLY for where the minted units land, never one implying the
-// other.
+// other. This drives them through the route as the app mounts it
+// (IssueTokenForm.transferSupply.test.jsx drives the form directly).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const OWNER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -60,20 +61,18 @@ function mountWizard() {
     );
 }
 
+// The two address fields sit in the closed Transfer ownership and Initial
+// mint sections; their fields stay mounted, so they are filled by label.
 async function openCustom({ owner, holder }) {
-    fireEvent.click(await screen.findByText('Custom'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(screen.getByLabelText('Token name (ticker)')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'Charlie_Lee' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '84000000' } });
+    fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'Charlie_Lee' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '84000000' } });
     if (owner !== undefined) {
-        fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), { target: { value: owner } });
+        fireEvent.change(screen.getByLabelText('New owner address'), { target: { value: owner } });
     }
     if (holder !== undefined) {
-        fireEvent.change(screen.getByLabelText('Send the initial mint to (optional)'), { target: { value: holder } });
+        fireEvent.change(screen.getByLabelText('Send initial mint to'), { target: { value: holder } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -85,7 +84,7 @@ async function composedParams() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard custom template: ownership versus minted supply', () => {
+describe('TokenWizard route: ownership versus minted supply', () => {
     it('an ownership transfer alone leaves the minted supply with the issuer', async () => {
         mountWizard();
         await openCustom({ owner: OWNER });

@@ -3,13 +3,25 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressText, truncateAddress } from '../../../packages/core/src/ui/AddressText.jsx';
 
 const ADDRESS = 'bc1q1234567890abcdefghijklmnopqrstuvwxyz';
 const SHORT_ADDRESS = 'bc1qabcdefghijklmnopqrstuv';
+
+afterEach(() => vi.restoreAllMocks());
+
+function mockAddressMeasurements() {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+        return Number(this.dataset.fitWidth || 0);
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+        const width = this.hasAttribute('data-address-measure') ? this.textContent.length * 10 : 0;
+        return { width, height: 0, top: 0, right: width, bottom: 0, left: 0, x: 0, y: 0, toJSON() {} };
+    });
+}
 
 describe('truncateAddress', () => {
     it('keeps short values intact', () => {
@@ -40,6 +52,257 @@ describe('<AddressText>', () => {
 
         fireEvent.blur(address);
         expect(address).toHaveTextContent('bc1q12…uvwxyz');
+    });
+
+    it('shows the whole address when the containing box is wide enough', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+
+    it('keeps the longest equal ends that fit a narrow box', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="130"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 6)}…${ADDRESS.slice(-6)}`);
+    });
+
+    it('uses the standard truncation when the containing box has no width', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="0"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(truncateAddress(ADDRESS));
+    });
+
+    it('in a row flex box, takes the other items and the gap off the room first', () => {
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            return Number(this.dataset.fitWidth || 0);
+        });
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+            const width = this.hasAttribute('data-address-measure')
+                ? this.textContent.length * 10
+                : Number(this.dataset.siblingWidth || 0);
+            return { width, height: 0, top: 0, right: width, bottom: 0, left: 0, x: 0, y: 0, toJSON() {} };
+        });
+        // 400px row: the whole 40-character address (400px) would fit alone,
+        // but a 100px copy icon and an 8px gap leave 292px, so 14 + … + 14.
+        render(
+            <div data-fit-width="400" style={{ display: 'flex', columnGap: '8px' }}>
+                <AddressText address={ADDRESS} fit />
+                <span data-sibling-width="100">copy</span>
+            </div>,
+        );
+
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 14)}…${ADDRESS.slice(-14)}`);
+    });
+
+    it('in a block box, gives nothing up to the box\'s other children', () => {
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            return Number(this.dataset.fitWidth || 0);
+        });
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+            const width = this.hasAttribute('data-address-measure')
+                ? this.textContent.length * 10
+                : Number(this.dataset.siblingWidth || 0);
+            return { width, height: 0, top: 0, right: width, bottom: 0, left: 0, x: 0, y: 0, toJSON() {} };
+        });
+        render(
+            <div data-fit-width="400">
+                <AddressText address={ADDRESS} fit />
+                <span data-sibling-width="100">note</span>
+            </div>,
+        );
+
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+});
+
+// G99: fit is the default, so an address with room shows whole with no prop.
+describe('<AddressText> default fit (G99)', () => {
+    // Text measures 10px a character wherever it sits; a box's width comes from
+    // its data-fit-width; Range rects come from the test's line model.
+    function mockLayout({ lineRects } = {}) {
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            return Number(this.dataset.fitWidth || 0);
+        });
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+            let width = Number(this.dataset.siblingWidth || 0);
+            let left = Number(this.dataset.left || 0);
+            if (this.hasAttribute('data-address-measure')) width = this.textContent.length * 10;
+            else if (this.hasAttribute('aria-label')) {
+                width = this.firstChild?.nodeType === 3 ? this.firstChild.data.length * 10 : this.textContent.length * 10;
+                left = Number(this.parentElement?.closest('[data-address-left]')?.dataset.addressLeft || 0);
+                // A browser holds an inline-block address to its box width, however long the text.
+                const clamp = this.parentElement?.closest('[data-address-clamp]')?.dataset.addressClamp;
+                if (clamp) width = Math.min(width, Number(clamp));
+            }
+            return { width, height: 20, top: 0, right: left + width, bottom: 20, left, x: left, y: 0, toJSON() {} };
+        });
+        // jsdom has no Range.getClientRects; the test lends one.
+        if (lineRects) Range.prototype.getClientRects = lineRects;
+    }
+
+    afterEach(() => { delete Range.prototype.getClientRects; });
+
+    it('shows the whole address with no fit prop when the box has room', () => {
+        mockLayout();
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} /></div>);
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+
+    it('keeps the fixed six-and-six form with fit={false}', () => {
+        mockLayout();
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} fit={false} /></div>);
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(truncateAddress(ADDRESS));
+    });
+
+    it('looks through an inline parent to the box that has a width', () => {
+        mockLayout();
+        render(<div data-fit-width="1000"><strong><span><AddressText address={ADDRESS} /></span></strong></div>);
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+
+    it('takes the box\'s inline padding off the room', () => {
+        mockLayout();
+        // 400px box with 10px padding each side leaves 380px: the 400px whole
+        // address does not fit, 18 + … + 18 (370px) does.
+        render(
+            <div data-fit-width="400" style={{ paddingLeft: '10px', paddingRight: '10px' }}>
+                <AddressText address={ADDRESS} />
+            </div>,
+        );
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 18)}…${ADDRESS.slice(-18)}`);
+    });
+
+    it('in a block box, takes the other text on the address\'s line off the room', () => {
+        // "Owner: " sits 0..70px on the address's line; the box is 400px.
+        mockLayout({
+            lineRects: () => [
+                { left: 0, right: 70, width: 70, top: 0, bottom: 20 },
+                // A note on the next line does not count.
+                { left: 0, right: 390, width: 390, top: 30, bottom: 50 },
+            ],
+        });
+        render(
+            <div data-fit-width="400" data-address-left="70">
+                Owner: <AddressText address={ADDRESS} />
+            </div>,
+        );
+        // 330px of room: 16 + … + 16 is 330px.
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 16)}…${ADDRESS.slice(-16)}`);
+    });
+
+    it('in a one-line summary beside a chevron, keeps the prefix off the room when the whole value is read', () => {
+        // "Bitcoin, " sits 0..90px; the summary is a 380px flex item, so it is
+        // read again with the whole (400px) value, which must still lose the prefix.
+        mockLayout({
+            lineRects: () => [{ left: 0, right: 90, width: 90, top: 0, bottom: 20 }],
+        });
+        render(
+            <div style={{ display: 'flex' }}>
+                <span style={{ display: 'block' }} data-fit-width="380" data-address-left="90">
+                    Bitcoin, <AddressText address={ADDRESS} />
+                </span>
+                <span data-testid="chevron" />
+            </div>,
+        );
+        // 290px of room: 14 + … + 14.
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 14)}…${ADDRESS.slice(-14)}`);
+    });
+
+    it('keeps the prefix off the room when the whole value is held to the summary width', () => {
+        // The whole value reads as the summary's full width less a rounding sliver
+        // (Send's From at 360), not wider, and the prefix must still come off the room.
+        mockLayout({
+            lineRects: () => [{ left: 0, right: 90, width: 90, top: 0, bottom: 20 }],
+        });
+        render(
+            <div style={{ display: 'flex' }}>
+                <span style={{ display: 'block' }} data-fit-width="380" data-address-left="90" data-address-clamp="379.98">
+                    Bitcoin, <AddressText address={ADDRESS} />
+                </span>
+                <span data-testid="chevron" />
+            </div>,
+        );
+        // 290px of room: 14 + … + 14.
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 14)}…${ADDRESS.slice(-14)}`);
+    });
+
+    it('fits a highlighted address, keeping the accented six-and-six ends', () => {
+        mockLayout();
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} highlight /></div>);
+        const value = screen.getByLabelText(ADDRESS);
+        expect(value.children[0]).toHaveTextContent(ADDRESS.slice(0, 6));
+        expect(value.children[1]).toHaveTextContent(ADDRESS.slice(6, -6));
+        expect(value.children[2]).toHaveTextContent(ADDRESS.slice(-6));
+    });
+
+    it('cuts a highlighted address inside its muted middle when the box is narrow', () => {
+        mockLayout();
+        render(<div data-fit-width="290"><AddressText address={ADDRESS} highlight /></div>);
+        const value = screen.getByLabelText(ADDRESS);
+        // 290px holds 14 + … + 14: head 6, middle 8 + … + 8, tail 6.
+        expect(value.children[0]).toHaveTextContent(ADDRESS.slice(0, 6));
+        expect(value.children[1]).toHaveTextContent(`${ADDRESS.slice(6, 14)}…${ADDRESS.slice(-14, -6)}`);
+        expect(value.children[2]).toHaveTextContent(ADDRESS.slice(-6));
+    });
+
+    // A box that sizes to its content (an inline-flex address-and-copy pair, a
+    // list row's trailing value) is as wide as whatever the address shows, so
+    // it is read again with the whole value in place.
+    function mockContentSizedBox({ parentOverflows }) {
+        mockLayout();
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            if (this.dataset.wholeWidth) {
+                const shown = this.querySelector('[aria-label]').firstChild.data;
+                return shown === ADDRESS ? Number(this.dataset.wholeWidth) : shown.length * 10;
+            }
+            return Number(this.dataset.fitWidth || 0);
+        });
+        vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function width() {
+            return parentOverflows && this.dataset.fitWidth ? Number(this.dataset.fitWidth) + 50 : 0;
+        });
+    }
+
+    it('reads a content-sized box again with the whole value and fits that room', () => {
+        mockContentSizedBox({ parentOverflows: false });
+        render(
+            <div data-fit-width="600">
+                <span style={{ display: 'inline-flex' }} data-whole-width="400"><AddressText address={ADDRESS} /></span>
+            </div>,
+        );
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+
+    it('keeps the short form when the whole value would push a content-sized box out of its parent', () => {
+        mockContentSizedBox({ parentOverflows: true });
+        render(
+            <div data-fit-width="600">
+                <span style={{ display: 'inline-flex' }} data-whole-width="400"><AddressText address={ADDRESS} /></span>
+            </div>,
+        );
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(truncateAddress(ADDRESS));
+    });
+
+    it('measures its room with the short form in place, then shows the fitted form', () => {
+        mockLayout();
+        const seen = [];
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            const label = this.querySelector?.('[aria-label]');
+            if (label && this.dataset.fitWidth) seen.push(label.firstChild.data);
+            return Number(this.dataset.fitWidth || 0);
+        });
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} /></div>);
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((shown) => shown === truncateAddress(ADDRESS))).toBe(true);
+        expect(screen.getByLabelText(ADDRESS).firstChild.data).toBe(ADDRESS);
     });
 });
 
@@ -94,7 +357,8 @@ describe('<AddressText> rendering', () => {
     it('splits highlighted addresses into head, middle, and tail without changing their name', () => {
         const { container } = render(<AddressText address={SHORT_ADDRESS} highlight />);
         const value = screen.getByLabelText(SHORT_ADDRESS);
-        expect(value.children).toHaveLength(3);
+        // The fourth child is the hidden, empty measuring span the fit uses.
+        expect(Array.from(value.children).filter((el) => !el.hasAttribute('data-address-measure'))).toHaveLength(3);
         expect(value.children[0]).toHaveTextContent(SHORT_ADDRESS.slice(0, 6));
         expect(value.children[1]).toHaveTextContent('…');
         expect(value.children[2]).toHaveTextContent(SHORT_ADDRESS.slice(-6));

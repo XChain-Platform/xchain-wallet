@@ -27,8 +27,8 @@
 //   5. `hasAnyNewLock` / `allLocksSet` gate both the review-step
 //      validation and the submit button, and the "everything already
 //      locked" empty state renders when all seven are set.
-//   6. Typed "LOCK" confirmation gate is reused unchanged (same
-//      mechanism as the former coarse lock).
+//   6. Typed "LOCK" confirmation remains a safety gate on both the
+//      single-encode and watcher review paths.
 //   7. Reuses messaging.issueToken / issueTokenHw / buildActionPsbtRequest
 //      (no new handler) through the shared HW / watcher / actionConfirm
 //      signing path, same as every other TokenAdminForm mode.
@@ -90,7 +90,7 @@ for (const [key, field] of EXPECTED_FLAGS) {
         `LOCK_FLAGS entry for ${key} maps to ${field}`,
     );
     assert.ok(
-        new RegExp(`key:\\s*'${key}'[\\s\\S]{0,200}hint:\\s*'[^']+'`).test(lockFlags),
+        new RegExp(`key:\\s*'${key}'[\\s\\S]{0,200}hint:\\s*(?:'[^']+'|\x22[^\x22]+\x22)`).test(lockFlags),
         `LOCK_FLAGS entry for ${key} carries a permanence hint`,
     );
 }
@@ -106,8 +106,9 @@ const lockComposer = lockComposerBlock[0];
 assert.ok(/VERSION:\s*'3',\s*TICK\s*\}/.test(lockComposer), 'lock composer sets ISSUE VERSION=3');
 assert.ok(/form\.lockChecks\s*\|\|\s*\{\}/.test(lockComposer), 'lock composer reads form.lockChecks');
 assert.ok(
-    /for\s*\(const f of LOCK_FLAGS\)/.test(lockComposer) && /if\s*\(checks\[f\.key\]\)\s*p\[f\.field\]\s*=\s*'1'/.test(lockComposer),
-    'lock composer sets one LOCK_* field per checked flag, driven by LOCK_FLAGS (not a hardcoded pair)',
+    /for\s*\(const f of LOCK_FLAGS\)/.test(lockComposer)
+        && /if\s*\(checks\[f\.key\]\s*&&\s*!form\.currentLocks\?\.\[f\.key\]\)\s*p\[f\.field\]\s*=\s*'1'/.test(lockComposer),
+    'lock composer sets one LOCK_* field per newly checked flag (a lock already on the token is not resent), driven by LOCK_FLAGS (not a hardcoded pair)',
 );
 
 // --- 3. Current lock and owner state via useTokenInfo -------------------
@@ -124,10 +125,24 @@ assert.ok(/const hasAnyNewLock = LOCK_FLAGS\.some/.test(src), 'hasAnyNewLock der
 assert.ok(/const allLocksSet = LOCK_FLAGS\.every/.test(src), 'allLocksSet derived from LOCK_FLAGS');
 assert.ok(/const isLocked = !!tokenLocks\[f\.key\]/.test(src), 'per-row isLocked reads the current on-chain flag');
 assert.ok(
-    /checked=\{isLocked \|\| !!lockChecks\[f\.key\]\}/.test(src),
-    'checkbox is checked when already locked OR newly checked this session',
+    /const checked = isLocked \|\| !!lockChecks\[f\.key\]/.test(src) && /checked=\{checked\}/.test(src),
+    'lock switch is on when already locked OR newly switched on this session',
 );
-assert.ok(/disabled=\{isLocked\}/.test(src), 'checkbox is disabled once the flag is already locked (cannot re-lock or unlock)');
+// It also holds still while the token's lock state is unread or failed to read.
+assert.ok(/disabled=\{isLocked(?: \|\| lockStateUnknown)?\}/.test(src), 'lock switch is disabled once the flag is already locked (cannot re-lock or unlock)');
+// Each lock row shows its item's own icon from the shared lockIcons map; the
+// icon does not flip with the switch state.
+assert.ok(
+    /import \{ lockIconFor \} from '\.\/lockIcons\.js'/.test(src)
+        && /const ItemIcon = lockIconFor\(f\.field\)/.test(src)
+        && /icon=\{<ItemIcon \/>\}/.test(src),
+    'each lock row shows its item icon from lockIcons.js (lockIconFor(f.field))',
+);
+assert.ok(
+    !/checked \? Icon\.LockIcon : Icon\.UnlockIcon/.test(src),
+    'the lock row icon no longer flips between lock and unlock with the switch state',
+);
+assert.ok(existsSync(join(core, 'src', 'shared', 'routes', 'lockIcons.js')), 'lockIcons.js exists');
 
 // --- 5. Gating: review validation + submit button + empty state --------
 
@@ -135,45 +150,60 @@ assert.ok(
     /mode === 'lock' && !hasAnyNewLock/.test(src),
     'handleReview rejects submitting the lock form with nothing newly checked',
 );
+// G22: the button stays enabled when nothing new is checked (the press
+// says what to change, asserted above); it disables only once every flag
+// is already locked and there is nothing left to do (or while the token's
+// lock state is still unread, since no switch can move until it is).
 assert.ok(
-    /mode === 'lock' && \(allLocksSet \|\| !hasAnyNewLock\)/.test(src),
-    'submit button disables when everything is already locked or nothing new is checked',
+    /\|\| \(mode === 'lock' && \(?allLocksSet(?: \|\| lockStateUnknown\))?\)/.test(src)
+        && !/mode === 'lock' && \(allLocksSet \|\| !hasAnyNewLock\)/.test(src),
+    'submit button disables when everything is already locked, and a press with nothing new checked is refused instead',
 );
 assert.ok(
-    /allLocksSet \?[\s\S]{0,200}nothing left to lock/.test(src),
+    /allLocksSet \?[\s\S]{0,200}(?:nothing left to lock|Everything is already locked)/.test(src),
     'renders an all-locked empty state once every flag is set',
 );
 
-// --- 6. Typed LOCK confirmation reused unchanged ------------------------
+// --- 6. Typed LOCK confirmation remains on both signing paths ------------
 
 assert.ok(/mode === 'lock' \? \(\s*<Input\s*\n\s*label="Type LOCK to confirm"/.test(src), 'reuses the typed "Type LOCK to confirm" gate');
 assert.ok(
     /typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'LOCK'\)/.test(src),
     'typed confirm uses the shared exact-match gate with the literal word LOCK',
 );
-assert.ok(/\(mode === 'lock' && !typedConfirmOk\)/.test(src), 'submit stays disabled until the typed LOCK confirm matches');
+assert.ok(
+    /mode === 'lock' && singleEncode && !typedConfirmOk/.test(src),
+    'single-encode submit stays disabled until the typed LOCK confirm matches',
+);
+assert.ok(
+    /credentialsReady=\{mode !== 'lock' \|\| typedConfirmOk\}/.test(src),
+    'watcher review keeps Approve gated on the typed LOCK confirmation',
+);
 
 // --- 7. Reuses the shared signing path (no new handler) -----------------
 
 assert.ok(/messaging\.issueToken\s*\(/.test(src), 'TokenAdminForm reuses messaging.issueToken');
 assert.ok(/messaging\.issueTokenHw\s*\(/.test(src), 'reuses the HW signing path (messaging.issueTokenHw)');
 assert.ok(/buildActionPsbtRequest/.test(src), 'reuses the watcher-mode encode-only path');
+// U63: Lock token is the main action, so it is green like every other one;
+// the typed LOCK confirmation carries the permanence warning.
 assert.ok(
-    /variant=\{isWatcherMode \? 'primary' : \(mode === 'lock' \? 'danger' : 'primary'\)\}/.test(src),
-    'lock mode still signs with the danger button variant (non-watcher)',
+    !/mode === 'lock' \? 'danger'/.test(src),
+    'lock mode signs with the main (green) action, not the danger variant',
 );
 
 // --- 8. ManageToken: hidden only once ALL seven flags are set -----------
 
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
 assert.ok(
     /const LOCK_FLAG_KEYS = \[[^\]]*'max_supply'[^\]]*'callback'[^\]]*\]/.test(manageSrc),
     'ManageToken.jsx mirrors the seven lock-flag keys',
 );
 assert.ok(/const allLocksSet = LOCK_FLAG_KEYS\.every/.test(manageSrc), 'ManageToken derives allLocksSet from every flag');
 assert.ok(
-    /id:\s*'lock'[\s\S]{0,80}onSelect:\s*\(allLocksSet \|\| blockIssuerActions\)\s*\?\s*undefined\s*:\s*onLock/.test(manageSrc),
-    'ManageToken gates the Lock action on allLocksSet (not the coarse four-flag `locked`), same owner gate as before',
+    /id:\s*'lock-settings'[\s\S]{0,180}?\.\.\.ownerAction\(options\.onLock\)[\s\S]{0,180}?disabled:\s*allLocksSet \|\| typeof options\.onLock !== 'function'/.test(manageSrc),
+    'ManageToken gates the Lock action on allLocksSet (not the coarse four-flag `locked`)',
 );
 
 // --- 9. Actions-menu copy updated across all three shells ---------------

@@ -9,12 +9,12 @@
 // contact legal@dankest.llc.
 
 // Every notice is the first item of the page content. The market page drew the
-// place-bet error, and in a demo wallet the demo note, in the middle of the page
-// under the market's terms and pool split, where a phone tapping Review bet
-// from the bottom of the form never saw them.
+// place-bet error in the middle of the page under the market's terms and pool
+// split, where a phone tapping Place bet from the bottom of the form never saw
+// it. A demo wallet gets no standing notice at all (ruling 2026-11-13).
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, act as domAct } from '@testing-library/react';
+import { render, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -85,27 +85,38 @@ afterEach(() => {
 });
 
 describe('Market page notices', () => {
-    it('shows the place-bet error before the market terms', async () => {
+    it('asks for no outcome: the status slot sits under the outcome list, empty', async () => {
         const utils = await openMarket('w');
-        const review = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /Review bet/.test(b.textContent || ''));
+        // The outcome rows are on the Bet tab.
         await domAct(async () => {
-            review.click();
+            Array.from(utils.container.querySelectorAll('[role="tab"]'))
+                .find((tab) => /^Buy$/.test((tab.textContent || '').trim()))
+                .click();
             await drain();
         });
-        const alert = utils.container.querySelector('[role="alert"]');
-        const heading = utils.container.querySelector('h2');
-        expect(alert).toBeTruthy();
-        expect(alert.textContent).toContain('Choose an outcome');
-        expect(precedes(alert, heading)).toBe(true);
+        const position = utils.getByRole('region', { name: 'Your position' });
+        expect(within(position).getByRole('button', { name: 'Buy' })).toBeTruthy();
+        expect(within(utils.getByRole('tabpanel', { name: 'Buy' })).queryByRole('button', { name: 'Buy' })).toBeNull();
+        expect(utils.container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+        expect(utils.container.textContent).not.toMatch(/Choose an outcome/);
+        const slot = utils.container.querySelector('[data-form-status]');
+        expect(slot).not.toBeNull();
+        expect(precedes(utils.getByRole('list', { name: 'Outcome to back' }), slot)).toBe(true);
     });
 
-    it('shows the demo note once, before the market terms', async () => {
+    it('shows no demo notice and keeps Bet enabled in a demo wallet', async () => {
         markDemoWallet('demo-wallet');
         const utils = await openMarket('demo-wallet');
-        const notes = utils.container.querySelectorAll('[data-variant]');
-        expect(notes.length).toBe(1);
-        expect(precedes(notes[0], utils.container.querySelector('h2'))).toBe(true);
-        expect(notes[0].textContent).toMatch(/demo/i);
+        expect(utils.container.querySelectorAll('[data-variant]')).toHaveLength(0);
+        expect(utils.container.textContent).not.toMatch(/Demo wallets can.t move funds/);
+        await domAct(async () => {
+            Array.from(utils.container.querySelectorAll('[role="tab"]'))
+                .find((tab) => /^Buy$/.test((tab.textContent || '').trim()))
+                .click();
+            await drain();
+        });
+        // Place Bet refuses the submit; nothing disables an outcome for the demo alone.
+        within(utils.getByRole('list', { name: 'Outcome to back' })).getAllByRole('button')
+            .forEach((side) => expect(side).toBeEnabled());
     });
 });

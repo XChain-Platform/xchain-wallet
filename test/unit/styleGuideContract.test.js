@@ -31,13 +31,17 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(source).toContain("size = 'md'");
         for (const size of ['sm', 'md', 'lg']) {
             expect(source).toContain(`'${size}'`);
-            expect(css).toMatch(new RegExp(
-                `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
-                's',
-            ));
+            if (size === 'sm') {
+                expect(css).toMatch(/\.sm\s*\{[^}]*--xc-button-height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/s);
+            } else {
+                expect(css).toMatch(new RegExp(
+                    `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                    's',
+                ));
+            }
             expect(guide).toContain(`\`--xc-control-h-${size}\``);
         }
-        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 28px (36px on touch)');
+        expect(guide).toContain('`sm` | 28px painted, with a 44px hit area on touch');
         expect(guide).toContain('`md` | `--xc-control-h-md`, 36px (44px on touch)');
         expect(guide).toContain('`lg` | `--xc-control-h-lg`, 44px (48px on touch)');
         // Every badge geometry token in tokens.css has a row in the guide.
@@ -52,30 +56,20 @@ describe('STYLE_GUIDE component contracts', () => {
 
     it('uses shared Button variants for shared call-to-action controls', () => {
         const amountField = read('packages/core/src/shared/components/AmountField.jsx');
-        const alertsOverlay = read('packages/core/src/shared/components/AlertsOverlay.jsx');
         const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
-        const menuRoute = read('packages/core/src/shared/routes/MenuRoute.jsx');
         const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
-        const alertsCss = read('packages/core/src/shared/components/AlertsOverlay.module.css');
-        const menuCss = read('packages/core/src/shared/components/HeaderActionMenu.module.css');
 
-        expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
-        expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
-        expect(alertsRoute).toMatch(/<Button[\s\S]*?a\.action\.label/);
-        expect(menuRoute).toMatch(/<Button[\s\S]*?variant="danger"[\s\S]*?Lock wallet/);
+        // Max is an in-field icon: the shared FieldIconButton, not a Button.
+        expect(amountField).toMatch(/<FieldIconButton[\s\S]*?label="Use max available amount"/);
+        expect(alertsRoute).toMatch(/<Button[\s\S]*?variant="rowAction"[\s\S]*?openAlert\(alert\)/);
         expect(amountField).not.toContain('className={styles.amountMaxInline}');
-        expect(alertsOverlay).not.toContain('className={styles.alertAction}');
         expect(alertsRoute).not.toContain('className={styles.alertAction}');
-        expect(menuRoute).not.toContain('className={menuStyles.lockBtn}');
         expect(amountFieldCss).not.toMatch(/\.amountMaxInline\s*\{/);
-        expect(alertsCss).not.toMatch(/\.alertAction\s*\{/);
-        expect(menuCss).not.toMatch(/\.lockBtn\s*\{/);
     });
 
     it('uses shared controls on the adopted advanced, list, signing, and staking routes', () => {
         const routeNames = [
             'AdvancedActionsForm.jsx',
-            'MenuRoute.jsx',
             'MultisigSigningSession.jsx',
             'MyLists.jsx',
             'PsbtSignForm.jsx',
@@ -93,12 +87,13 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Select[\s\S]*label="Action"/);
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Textarea[\s\S]*list values/);
         expect(routes['MultisigSigningSession.jsx']).toMatch(/<Textarea[\s\S]*aria-label="Cosigner reply chunks"/);
-        expect(routes['MyLists.jsx']).toMatch(/<ListToolbar[\s\S]*searchLabel="Search lists"/);
-        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*>\s*Create list\s*<\/Button>/);
-        expect(routes['PsbtSignForm.jsx']).toMatch(/<Select[\s\S]*label="Signing address"/);
+        expect(routes['MyLists.jsx']).toMatch(/<ListFilterMenu[\s\S]*searchLabel="Search lists"/);
+        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*icon=\{<Icon\.PlusIcon \/>\}[\s\S]*aria-label="Create list"/);
+        // The standard FromSection draws the read-only signing address field.
+        expect(routes['PsbtSignForm.jsx']).toMatch(/<FromSection[\s\S]*addressLabel="Signing address"/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);
-        expect(routes['StakingList.jsx']).toMatch(/<Input[\s\S]*aria-label="Search staking positions"/);
-        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*>\s*New stake\s*<\/Button>/);
+        expect(routes['StakingList.jsx']).toMatch(/<ListFilterMenu[\s\S]*searchLabel="Search staking positions"/);
+        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*<Icon\.PlusIcon[\s\S]*aria-label="New Stake"/);
     });
 
     it('documents the shared Input size prop instead of inline big-field values', () => {
@@ -116,7 +111,7 @@ describe('STYLE_GUIDE component contracts', () => {
             ));
             expect(tokens).toContain(`--xc-control-h-${size}: ${height};`);
         }
-        expect(guide).toContain('Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px');
+        expect(guide).toContain('Its `size` prop is `sm` (28px painted with a 44px hit area on touch)');
         expect(guide).toContain('<Input label="Amount" size="lg" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
     });

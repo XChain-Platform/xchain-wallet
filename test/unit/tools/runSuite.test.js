@@ -20,13 +20,29 @@ function fixture() {
     const root = mkdtempSync(path.join(tmpdir(), 'run-suite-'));
     const toolDir = path.join(root, 'tools', 'sweep');
     const webDir = path.join(root, 'packages', 'web');
+    const coreSourceDir = path.join(root, 'packages', 'core', 'src');
     const smokeDir = path.join(root, 'test', 'smoke');
     mkdirSync(toolDir, { recursive: true });
     mkdirSync(webDir, { recursive: true });
+    mkdirSync(coreSourceDir, { recursive: true });
     mkdirSync(smokeDir, { recursive: true });
     for (const name of ['lane-pid.mjs', 'run-suite.mjs', 'wait-for.mjs']) {
         copyFileSync(path.join(SOURCE_DIR, name), path.join(toolDir, name));
     }
+    copyFileSync('test/smoke/_smoke-launch.js', path.join(smokeDir, '_smoke-launch.js'));
+    writeFileSync(path.join(smokeDir, '_english-source.mjs'), `
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+if (!process.env.XC_SMOKE_RAW_SOURCE) {
+    const read = fs.readFileSync;
+    fs.readFileSync = function readFileSync(file, options) {
+        const out = read.apply(this, arguments);
+        return typeof out === 'string' ? out.replace("{t('home.title')}", 'Home') : out;
+    };
+    syncBuiltinESMExports();
+}
+`);
+    writeFileSync(path.join(coreSourceDir, 'Home.jsx'), "<h1>{t('home.title')}</h1>\n");
     writeFileSync(path.join(root, 'unit.mjs'), `
 console.log(JSON.stringify(process.argv.slice(2)));
 console.log(' Tests  2 passed | 1 skipped (3)');
@@ -41,6 +57,8 @@ require('node:fs').writeFileSync('alpha-smoke-ran', 'yes');
 process.exitCode = 1;
 `);
     writeFileSync(path.join(smokeDir, 'beta.smoke.js'), `
+const source = require('node:fs').readFileSync('packages/core/src/Home.jsx', 'utf8');
+require('node:assert').match(source, /<h1>Home<\\/h1>/);
 require('node:fs').writeFileSync('beta-smoke-ran', 'yes');
 `);
     writeFileSync(path.join(root, 'e2e.mjs'), `

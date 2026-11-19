@@ -1,28 +1,3 @@
-.assetCard {
-    display: block;
-    align-items: center;
-    width: 48px;
-    height: 48px;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: 50%;
-    margin: 0 auto var(--xc-space-3);
-    color: var(--xc-text);
-    cursor: pointer;
-    appearance: none;
-    transition: filter 120ms ease;
-}
-
-.assetCard:hover {
-    filter: brightness(0.96);
-}
-
-.assetCard:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: calc(var(--xc-space-1) * 0.5);
-}
-
 /* The multisig address card flattens inside the wide form card like any card. */
 .multisigCard {
     composes: card from '../../ui/Card.module.css';
@@ -107,72 +82,14 @@
     margin: var(--xc-space-4) 0;
 }
 
-/* The field keeps a readable width: when large text or a narrow screen leaves
-   less than that beside the button, the button moves to its own line. */
-.labelEditor {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-3);
-}
-
-.labelEditor > * {
-    margin-bottom: 0;
-}
-
-.labelEditor > :first-child {
-    flex: 1 1 12rem;
-    min-width: 0;
-}
-
-.labelEditor > :last-child {
-    flex: 0 0 auto;
-}
-
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
-/* Four equal secondary buttons, two to a row while both labels fit and one to a
-   row when large text makes a pair wider than the form: one height, one-line
-   labels, both outer edges on the form's edges. */
+/* Copy, Share, the explorer and New address are one ActionList under the
+   QR (G101), full width; the stack's own gap spaces it from the fields. */
 .qrActions {
-    display: flex;
-    flex-wrap: wrap;
     margin-top: 0;
-    align-items: stretch;
-}
-
-.qrActions > * {
-    flex: 1 1 calc(50% - var(--xc-space-2) / 2);
-    min-width: max-content;
-    box-sizing: border-box;
-    height: var(--xc-control-h-md);
-    min-height: var(--xc-control-h-md);
-    justify-content: center;
-    white-space: nowrap;
-}
-
-.qrActions > * > span {
-    white-space: nowrap;
-}
-
-.explorerLink {
-    composes: btn secondary md from '../../ui/Button.module.css';
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: var(--xc-tap-min);
-    cursor: pointer;
-}
-
-.amountEditor button {
-    --xc-button-height: var(--xc-control-h-md);
-    --xc-button-font-size: var(--xc-control-font-md, 14px);
-    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
-    --xc-icon-size: var(--xc-control-icon-md, 20px);
-
-    min-height: var(--xc-control-h-md);
+    min-width: 0;
 }
 
 .generateAddressAction {

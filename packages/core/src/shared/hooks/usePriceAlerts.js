@@ -14,6 +14,7 @@
 // surface `supported: false` so the UI degrades to a "not available" note
 // rather than throwing.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { PRICE_ALERTS_CHANGED_EVENT } from '../../flows/priceAlerts.js';
@@ -24,10 +25,11 @@ import { PRICE_ALERTS_CHANGED_EVENT } from '../../flows/priceAlerts.js';
  * @property {boolean} loading
  * @property {boolean} supported     false when the shell lacks the routes
  * @property {string | null} error
- * @property {(input: { chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} addAlert
- * @property {(id: string, input: { chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} updateAlert
+ * @property {(input: { chainId: string, tick?: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} addAlert
+ * @property {(id: string, input: { chainId: string, tick?: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} updateAlert
  * @property {(id: string) => Promise<void>} removeAlert
- * @property {(id: string) => Promise<void>} rearm
+ * @property {(id: string) => Promise<void>} rearm      re-arms a fired alert or resumes a paused one
+ * @property {(id: string) => Promise<void>} pause
  * @property {() => Promise<void>} reload
  */
 
@@ -66,7 +68,7 @@ export function usePriceAlerts(walletId) {
             setError(null);
         } catch (err) {
             if (!isCurrent()) return;
-            setError(err?.message || 'Could not load price alerts');
+            setError(userFacingMessage(err, 'Could not load price alerts'));
             setAlerts([]);
         } finally {
             if (isCurrent()) setLoading(false);
@@ -90,15 +92,30 @@ export function usePriceAlerts(walletId) {
         return () => window.removeEventListener(PRICE_ALERTS_CHANGED_EVENT, onChanged);
     }, [reload]);
 
-    const addAlert = useCallback(async ({ chainId, direction, targetFiat, fiatCurrency }) => {
+    const addAlert = useCallback(async ({ chainId, tick, direction, targetFiat, fiatCurrency }) => {
         if (!walletId || !supported) return;
-        await messaging.savePriceAlert({ walletId, chainId, direction, targetFiat, fiatCurrency });
+        await messaging.savePriceAlert({
+            walletId,
+            chainId,
+            ...(tick ? { tick: String(tick).toUpperCase() } : {}),
+            direction,
+            targetFiat,
+            fiatCurrency,
+        });
         await reload();
     }, [walletId, supported, messaging, reload]);
 
-    const updateAlert = useCallback(async (id, { chainId, direction, targetFiat, fiatCurrency }) => {
+    const updateAlert = useCallback(async (id, { chainId, tick, direction, targetFiat, fiatCurrency }) => {
         if (!walletId || !supported) return;
-        await messaging.savePriceAlert({ id, walletId, chainId, direction, targetFiat, fiatCurrency });
+        await messaging.savePriceAlert({
+            id,
+            walletId,
+            chainId,
+            ...(tick ? { tick: String(tick).toUpperCase() } : {}),
+            direction,
+            targetFiat,
+            fiatCurrency,
+        });
         await reload();
     }, [walletId, supported, messaging, reload]);
 
@@ -108,11 +125,30 @@ export function usePriceAlerts(walletId) {
         await reload();
     }, [walletId, supported, messaging, reload]);
 
+    // Pause keeps the alert and its terms but stops the watcher checking it;
+    // it rides the save route with status 'paused', and Resume is rearm.
+    const pause = useCallback(async (id) => {
+        if (!walletId || !supported) return;
+        const current = alerts.find((alert) => alert.id === id);
+        if (!current) return;
+        await messaging.savePriceAlert({
+            id,
+            walletId,
+            chainId: current.chainId,
+            ...(current.tick ? { tick: current.tick } : {}),
+            direction: current.direction,
+            targetFiat: current.targetFiat,
+            fiatCurrency: current.fiatCurrency,
+            status: 'paused',
+        });
+        await reload();
+    }, [walletId, supported, messaging, reload, alerts]);
+
     const rearm = useCallback(async (id) => {
         if (!walletId || !supported || typeof messaging?.rearmPriceAlert !== 'function') return;
         await messaging.rearmPriceAlert({ id, walletId });
         await reload();
     }, [walletId, supported, messaging, reload]);
 
-    return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, reload };
+    return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, pause, reload };
 }

@@ -41,6 +41,7 @@ import {
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 import { createAddress } from '../../../packages/core/src/schemas/address.js';
+import { deriveMasterKeyAsync } from '../../../packages/core/src/crypto/kdf.js';
 
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(async () => ({ txid: 'txid-1' })),
@@ -243,6 +244,41 @@ describe('publishLabelsNow: stored passphrase (§15.6) drives the commitment key
         const correctName = await discoveryNameForPassphrase(mnemonic, storedPassphrase);
         const call = vi.mocked(submitAction).mock.calls[0][0];
         expect(call.actionData.params.NAME).toBe(correctName);
+    });
+});
+
+// Operator preference 2026-11-14: an unlocked session (the host's pooled
+// SoftwareSigner) publishes without the password. Its master key opens the
+// seed for the commitment key, and the signer signs.
+describe('publishLabelsNow with the unlocked session', () => {
+    it('publishes under the right name with the session master key and signer, no password', async () => {
+        const vault = await openVault();
+        const { wallet, mnemonic } = await makeWallet(vault, { passphraseEnabled: false });
+        const masterKey = await deriveMasterKeyAsync(PASSWORD, wallet.kdfParams);
+        const signer = { kind: 'software', id: 'pooled' };
+
+        const result = await publish(vault, wallet.id, { password: undefined, masterKey, signer });
+
+        expect(result.discoveryName).toBe(await discoveryNameForPassphrase(mnemonic, ''));
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        expect(call.signer).toBe(signer);
+        expect(call.password).toBeUndefined();
+        // The key is the pooled signer's own buffer: the flow copies it.
+        expect(masterKey.some((b) => b !== 0)).toBe(true);
+    });
+
+    it('still needs the password when the session has no master key', async () => {
+        const vault = await openVault();
+        const { wallet } = await makeWallet(vault, { passphraseEnabled: false });
+        await expect(publish(vault, wallet.id, { password: undefined })).rejects.toThrow('password is required');
+        expect(submitAction).not.toHaveBeenCalled();
+    });
+
+    it('refuses a master key that does not open this wallet', async () => {
+        const vault = await openVault();
+        const { wallet } = await makeWallet(vault, { passphraseEnabled: false });
+        await expect(publish(vault, wallet.id, { password: undefined, masterKey: new Uint8Array(32).fill(9) })).rejects.toThrow();
+        expect(submitAction).not.toHaveBeenCalled();
     });
 });
 

@@ -49,10 +49,10 @@ describe('RawPsbtViewer copy lifecycle', () => {
         mocks.copyText.mockRejectedValueOnce(new Error('platform clipboard rejected'));
         render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' }));
 
         expect(await screen.findByRole('button', {
-            name: 'Copy failed: clipboard unavailable',
+            name: 'Copy Failed: Clipboard Unavailable',
         })).toBeTruthy();
         expect(mocks.error).toHaveBeenCalledOnce();
         expect(mocks.announce).toHaveBeenCalledWith('Copy failed: clipboard unavailable');
@@ -63,11 +63,11 @@ describe('RawPsbtViewer copy lifecycle', () => {
         mocks.copyText.mockReturnValueOnce(pending.promise);
         const view = render(<RawPsbtViewer developerMode psbtHex="old-payload" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' }));
         view.rerender(<RawPsbtViewer developerMode psbtHex="new-payload" />);
         await act(async () => pending.resolve({ ok: true }));
 
-        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' })).toBeTruthy();
         expect(mocks.announce).not.toHaveBeenCalled();
         expect(mocks.tap).not.toHaveBeenCalled();
     });
@@ -77,7 +77,7 @@ describe('RawPsbtViewer copy lifecycle', () => {
         mocks.copyText.mockReturnValueOnce(pending.promise);
         const view = render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' }));
         view.unmount();
         await act(async () => pending.resolve({ ok: true }));
 
@@ -89,7 +89,7 @@ describe('RawPsbtViewer copy lifecycle', () => {
         vi.useFakeTimers();
         mocks.copyText.mockResolvedValue({ ok: true });
         const view = render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
-        const button = screen.getByRole('button', { name: 'Copy unsigned transaction code' });
+        const button = screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' });
 
         fireEvent.click(button);
         await act(async () => {});

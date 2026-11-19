@@ -91,8 +91,8 @@ assert.ok(
     'HomeTabs accepts the onReceive prop',
 );
 assert.ok(
-    /onReceive=\{networkFilter === 'all' \? onReceive : undefined\}/.test(homeTabsSrc),
-    'HomeTabs only forwards onReceive when the filter is "all"; network-filtered empty states avoid the misleading CTA',
+    /onReceive=\{networkFilter === 'all' && !tokenQueryTrim \? onReceive : undefined\}/.test(homeTabsSrc),
+    'HomeTabs only forwards onReceive when the filter is "all" and no search is typed; network-filtered and searched empty states avoid the misleading CTA',
 );
 
 // --- 4. Home.jsx threads onReceive into HomeTabs --------------------------
@@ -151,9 +151,13 @@ for (const [shell, appPath] of [
     // AddressList
     const addrIdx = app.indexOf("unlockedView === 'addresses'");
     assert.ok(addrIdx >= 0, `${shell} App.jsx tracks the addresses sub-route`);
-    const addrBlock = app.slice(addrIdx, addrIdx + 700);
+    // Wide enough for the route's props ahead of onReceive (they grew with
+    // the account-grouped list).
+    const addrBlock = app.slice(addrIdx, addrIdx + 2000);
+    // The Address detail's Receive tile hands back its address; the empty
+    // state's nudge passes none and still opens Receive with no prefill.
     assert.ok(
-        /onReceive=\{\(\)\s*=>\s*\{\s*setReceivePrefill\(null\);\s*setUnlockedView\('receive'\);\s*\}\}/.test(addrBlock),
+        /onReceive=\{\(sel\)\s*=>\s*\{[\s\S]*?setReceivePrefill\(sel && typeof sel\.address === 'string' && sel\.chainId\s*\?\s*\{ chainId: sel\.chainId, address: sel\.address \}\s*:\s*null\);\s*setUnlockedView\('receive'\);\s*\}\}/.test(addrBlock),
         `${shell} App.jsx wires onReceive into <AddressList>`,
     );
 }

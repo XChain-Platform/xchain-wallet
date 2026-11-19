@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 const updateSpy = vi.fn();
 const setActiveNetworkSpy = vi.fn();
@@ -39,9 +40,28 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('NetworkSection', () => {
+    it('switches through the shell active-network handler after confirmation', async () => {
+        const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
+        const reload = vi.fn();
+        render(
+            <NetworkSection
+                activeWallet={{ id: 'wallet-1' }}
+                onActiveNetworkChange={onActiveNetworkChange}
+                reload={reload}
+            />,
+        );
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('testnet'));
+        expect(setActiveNetworkSpy).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+    });
+
     it('does not switch networks until the user confirms', async () => {
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
 
         expect(screen.getByRole('dialog', { name: 'Switch to Testnet?' })).toBeInTheDocument();
         expect(screen.getByText(/Mainnet balances and network settings stay unchanged/)).toBeInTheDocument();
@@ -56,7 +76,7 @@ describe('NetworkSection', () => {
     it('switches through the wallet-aware route after confirmation', async () => {
         setActiveNetworkSpy.mockReturnValueOnce(new Promise(() => {}));
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'regtest' } });
+        selectOption(screen.getByLabelText('Active network'), 'regtest');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(setActiveNetworkSpy).toHaveBeenCalledWith({
@@ -70,7 +90,7 @@ describe('NetworkSection', () => {
         setActiveNetworkSpy.mockReturnValueOnce(new Promise(() => {}));
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
         expect(screen.queryByText(/Switching networks/)).not.toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'regtest' } });
+        selectOption(screen.getByLabelText('Active network'), 'regtest');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         expect(await screen.findByText(/Switching networks/)).toBeInTheDocument();
@@ -80,7 +100,7 @@ describe('NetworkSection', () => {
     it('shows a failed switch without reloading the selected network', async () => {
         setActiveNetworkSpy.mockRejectedValueOnce(new Error('Wallet is locked.'));
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Wallet is locked.');
@@ -91,7 +111,7 @@ describe('NetworkSection', () => {
         const reload = vi.fn();
         setActiveNetworkSpy.mockResolvedValueOnce({ settings: { activeNetwork: 'testnet' } });
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={reload} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(reload).toHaveBeenCalledOnce());
@@ -102,7 +122,7 @@ describe('NetworkSection', () => {
         const reload = vi.fn();
         updateSpy.mockResolvedValueOnce({ activeNetwork: 'testnet' });
         render(<NetworkSection reload={reload} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(reload).toHaveBeenCalledOnce());
@@ -117,7 +137,7 @@ describe('NetworkSection', () => {
             render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={() => {}} />);
             const select = screen.getByLabelText('Active network');
             expect(select).toHaveValue(activeNetwork);
-            expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
+            expect(selectOptionValues(select)).toEqual(['mainnet', 'testnet']);
         },
     );
 
@@ -126,7 +146,7 @@ describe('NetworkSection', () => {
         settingsRecord = { activeNetwork: 'mainnet', developerMode: false };
         setActiveNetworkSpy.mockResolvedValueOnce({ settings: { activeNetwork: 'testnet' } });
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={reload} />);
-        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        selectOption(screen.getByLabelText('Active network'), 'testnet');
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(reload).toHaveBeenCalledOnce());
@@ -138,6 +158,6 @@ describe('NetworkSection', () => {
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={() => {}} />);
         const select = screen.getByLabelText('Active network');
         expect(select).toHaveValue('regtest');
-        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet', 'regtest']);
+        expect(selectOptionValues(select)).toEqual(['mainnet', 'testnet', 'regtest']);
     });
 });

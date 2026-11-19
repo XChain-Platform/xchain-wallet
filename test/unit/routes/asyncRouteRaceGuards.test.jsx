@@ -6,9 +6,10 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
 import { MultisigSigningSession } from '../../../packages/core/src/shared/routes/MultisigSigningSession.jsx';
@@ -40,6 +41,12 @@ function route(Component, messaging, props) {
 
 afterEach(() => cleanup());
 
+// Show (Popular, All, Watchlist) lives in the title-bar filter panel.
+function showWatchlist() {
+    fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
+    selectOption(screen.getByRole('combobox', { name: 'Show markets' }), 'watchlist');
+}
+
 describe('async route parameter races', () => {
     it('keeps the new wallet watchlist when the old wallet resolves last', async () => {
         const oldRequest = deferred();
@@ -64,7 +71,7 @@ describe('async route parameter races', () => {
             newRequest.resolve([{ id: 'new', chainId: CHAIN, tick1: 'BTC', tick2: 'NEW' }]);
             await newRequest.promise;
         });
-        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
+        showWatchlist();
         expect(await screen.findByText('NEW')).toBeInTheDocument();
 
         await act(async () => {
@@ -91,7 +98,7 @@ describe('async route parameter races', () => {
             onOpenMarket() {},
         };
         const view = render(route(MarketsList, messaging, { ...props, walletId: 'old-wallet' }));
-        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
+        showWatchlist();
         expect(await screen.findByText('OLD')).toBeInTheDocument();
 
         view.rerender(route(MarketsList, messaging, { ...props, walletId: 'new-wallet' }));
@@ -101,8 +108,39 @@ describe('async route parameter races', () => {
         await act(async () => newRequest.resolve([]));
     });
 
+    // My bets is a tab of Prediction markets; its bet reads follow the page's
+    // address read, so an old wallet's late addresses must start none.
+    it('does not let an old wallet start stale bets reads on the My bets tab', async () => {
+        const oldRequest = deferred();
+        const addresses = vi.fn((walletId) => (
+            walletId === 'old-wallet'
+                ? oldRequest.promise
+                : Promise.resolve({ 'bitcoin-mainnet': [{ address: 'new-address' }] })
+        ));
+        const bets = vi.fn().mockResolvedValue([]);
+        const messaging = messagingWith({
+            getAddressesByChain: addresses,
+            // A market nobody here bet in: My bets shows its own empty state.
+            betFeeds: vi.fn().mockResolvedValue({ data: [{ action_index: '1', label: 'Q', outcomes: 'Yes,No', source: 'other' }] }),
+            bets,
+        });
+        const props = { view: 'bets', onOpenMarket() {}, onBack() {} };
+        const view = render(route(BetFeedsList, messaging, { ...props, walletId: 'old-wallet' }));
+        await waitFor(() => expect(addresses).toHaveBeenCalledWith('old-wallet'));
+        view.rerender(route(BetFeedsList, messaging, { ...props, walletId: 'new-wallet' }));
+        await waitFor(() => expect(addresses).toHaveBeenCalledWith('new-wallet'));
+
+        await waitFor(() => expect(screen.getByText('No predictions yet')).toBeInTheDocument());
+        await act(async () => {
+            oldRequest.resolve({ 'bitcoin-mainnet': [{ address: 'old-address' }] });
+            await oldRequest.promise;
+        });
+
+        expect(bets).not.toHaveBeenCalledWith(expect.objectContaining({ query: 'old-address' }));
+        expect(screen.getByText('No predictions yet')).toBeInTheDocument();
+    });
+
     it.each([
-        ['bets', MyBets, 'bets'],
         ['orders', MyOrdersView, 'getOrdersForAddress'],
         ['swaps', MySwapsView, 'getSwapsForAddress'],
     ])('does not let an old wallet start stale %s reads', async (_label, Component, readMethod) => {
@@ -152,7 +190,7 @@ describe('async route parameter races', () => {
             newRequest.resolve([]);
             await newRequest.promise;
         });
-        expect(await screen.findByText('No signing sessions')).toBeInTheDocument();
+        expect(await screen.findByText('No Signing Sessions')).toBeInTheDocument();
 
         await act(async () => {
             oldRequest.resolve([{
@@ -164,7 +202,7 @@ describe('async route parameter races', () => {
             }]);
             await oldRequest.promise;
         });
-        expect(screen.getByText('No signing sessions')).toBeInTheDocument();
+        expect(screen.getByText('No Signing Sessions')).toBeInTheDocument();
         expect(screen.queryByRole('list', { name: 'Multisig sessions' })).toBeNull();
     });
 });

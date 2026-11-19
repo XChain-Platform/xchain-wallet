@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Screen,
     PageHeader,
-    Input,
+    IconSelect,
     Skeleton,
     Icon,
     ListPage,
@@ -21,12 +21,25 @@ import {
     StatusMessage,
     ListRow,
 } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoOwnedTokens } from '../../flows/demoFixtures.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
+import { ownedTokensAddressKey, readFreshOwnedTokens, writeOwnedTokensCache } from '../utils/ownedTokensCache.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import {
+    LIST_DETAIL_MIN_WIDTH,
+    ListDetailSplit,
+    listDetailStyles,
+    useWideContent,
+} from '../components/PanelSplit.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import styles from './MyTokens.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
+export const MY_TOKENS_PANEL_STORAGE_KEY = 'my-tokens';
 
 /**
  * §40.5: "My Tokens". Lists every token one of the active wallet's
@@ -35,7 +48,7 @@ import styles from './MyTokens.module.css';
  * handed on drops off the list, and a token someone transferred in shows
  * up here even though this wallet never issued anything (D-82,
  * where every string on the page claimed issuance). Hosts the
- * Issue-new-token affordance, and each row drills into TokenDetail, which
+ * Create-token affordance, and each row drills into TokenDetail, which
  * carries the owner-only actions (Mint, Destroy, Lock supply, …).
  *
  * Data source: messaging.getOwnedTokens({ chainId, address }), wraps
@@ -46,12 +59,17 @@ import styles from './MyTokens.module.css';
  * @param {string} props.walletId
  * @param {string} [props.accountId]                       active BIP44 account; when set, only that account's addresses are queried
  * @param {() => void} props.onBack
- * @param {() => void} props.onIssue                       open the Issue-token form
+ * @param {() => void} props.onIssue                       open token creation
  * @param {(tick: string, chainId: string, row: { divisibility: number | null, locked: boolean }) => void} props.onSelectTick    drill into TokenDetail for a row
+ * @param {(row: object) => import('react').ReactNode} [props.renderToken] render the embedded manage-token page on wide content
  */
-export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick }) {
+export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, renderToken }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const canSplit = typeof renderToken === 'function';
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, canSplit);
+    const twoPanel = canSplit && wideContent;
+    const [selectedTokenKey, setSelectedTokenKey] = useState(null);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -63,11 +81,16 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
     const [addressesReload, setAddressesReload] = useState(0);
     const [tokensReload, setTokensReload] = useState(0);
+    // Try again reads past a fresh saved list; an open or a remount does not.
+    const lastTokensReloadRef = useRef(tokensReload);
     const [query, setQuery] = useState('');
-    // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
-    // it also still holds supply of (row.youOwn is a balance check, not an
-    // ownership one, so the chip is labelled "Holding").
-    const [mode, setMode] = useState(/** @type {'all' | 'owned'} */ ('all'));
+    // "Holding" narrows ownership to tokens whose supply the wallet still
+    // holds; row.youOwn is a balance check, not an ownership check.
+    const [mode, setMode] = useState(
+        /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ ('all'),
+    );
+    // 'all' or a coin family (bitcoin, litecoin, dogecoin), as on Home.
+    const [networkFilter, setNetworkFilter] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
@@ -94,10 +117,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         if (!addressesByChain) return undefined;
         setTokens(null);
         setTokensError(null);
-        // A demo wallet issued nothing, and a demo wallet's addresses never go
-        // to an explorer (issue #82).
+        // A demo wallet's addresses never go to an explorer (issue #82), so its
+        // issued tokens come from the fixtures.
         if (isDemoWallet(walletId)) {
-            setTokens([]);
+            const owned = [];
+            for (const [chainId, addrs] of Object.entries(addressesByChain)) {
+                const ownerAddress = Array.isArray(addrs) && typeof addrs[0]?.address === 'string' ? addrs[0].address : '';
+                for (const row of synthesizeDemoOwnedTokens(chainId)) owned.push({ ...row, chainId, ownerAddress });
+            }
+            setTokens(owned);
             return undefined;
         }
         if (typeof messaging?.getOwnedTokens !== 'function') {
@@ -105,6 +133,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             setTokens([]);
             return undefined;
         }
+        const addressKey = ownedTokensAddressKey(addressesByChain);
+        const retry = lastTokensReloadRef.current !== tokensReload;
+        lastTokensReloadRef.current = tokensReload;
+        const saved = retry ? null : readFreshOwnedTokens(walletId, addressKey);
+        if (saved) {
+            setTokens(saved);
+            return undefined;
+        }
+        const requestedAt = Date.now();
         let cancelled = false;
         const calls = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
@@ -152,6 +189,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 setTokensError(failedCount === batches.length
                     ? 'Could not load your owned tokens. Try again.'
                     : 'Some owned token lists could not be loaded. Results may be incomplete.');
+            } else {
+                writeOwnedTokensCache(walletId, addressKey, merged, requestedAt);
             }
             setTokens(merged);
         });
@@ -162,41 +201,97 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         if (!tokens) return null;
         const q = query.trim().toLowerCase();
         return tokens.filter((row) => {
-            if (mode === 'owned' && !row.youOwn) return false;
+            if (networkFilter !== 'all' && coinFromChainId(row.chainId) !== networkFilter) return false;
+            if (mode === 'holding' && !row.youOwn) return false;
+            if (mode === 'locked' && row.locked !== true) return false;
+            if (mode === 'unlocked' && row.locked !== false) return false;
             if (!q) return true;
             return (
                 row.tick.toLowerCase().includes(q)
                 || (row.description || '').toLowerCase().includes(q)
             );
         });
-    }, [tokens, query, mode]);
+    }, [tokens, query, mode, networkFilter]);
+    // The networks the wallet has addresses on, for Home's network picker in
+    // the filter panel (G04: search, then network, then the page's pickers).
+    const coinFamilies = useMemo(
+        () => [...new Set(Object.keys(addressesByChain || {}).map((chainId) => coinFromChainId(chainId)).filter(Boolean))],
+        [addressesByChain],
+    );
 
     const isLoading = tokens === null && loadError === null;
     const isEmpty = tokens !== null && tokens.length === 0 && tokensError === null;
     const isFilteredEmpty = tokens !== null && tokens.length > 0
         && filteredTokens !== null && filteredTokens.length === 0;
+    const shownToken = filteredTokens?.find(
+        (row) => `${row.chainId}:${row.tick}` === selectedTokenKey,
+    ) || filteredTokens?.[0] || null;
+
+    const openToken = (row) => {
+        if (twoPanel) {
+            setSelectedTokenKey(`${row.chainId}:${row.tick}`);
+            return;
+        }
+        onSelectTick(row.tick, row.chainId, row);
+    };
 
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My tokens"
+            title="My Tokens"
+            trailing={(
+                <>
+                {/* The standard filter (search, then network, then type) on the
+                    title line, left of Create token. */}
+                <ListFilterMenu
+                    query={query}
+                    onQueryChange={setQuery}
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    networkFilter={networkFilter}
+                    onNetworkFilterChange={setNetworkFilter}
+                    active={mode !== 'all'}
+                    label="Filter tokens"
+                    searchPlaceholder="Search tokens..."
+                    searchLabel="Search your tokens by ticker or description"
+                >
+                    <IconSelect
+                        size="md"
+                        aria-label="Filter tokens by type"
+                        value={mode}
+                        onChange={(value) => setMode(
+                            /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ (value),
+                        )}
+                        options={[
+                            { value: 'all', label: 'All tokens', icon: <Icon.TokenListIcon /> },
+                            { value: 'holding', label: 'Holding', icon: <Icon.CoinsIcon /> },
+                            { value: 'locked', label: 'Locked', icon: <Icon.LockIcon /> },
+                            { value: 'unlocked', label: 'Unlocked', icon: <Icon.UnlockIcon /> },
+                        ]}
+                    />
+                </ListFilterMenu>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onIssue}
+                    aria-label="Create Token"
+                    title="Create Token"
+                />
+                </>
+            )}
         />
     );
 
-    return (
-        <Screen variant={variant} header={header}>
-            {/* The page header holds only the title and Back, so Issue new token
-                sits in the content's actions row. An empty list offers Issue
-                token from its EmptyState instead, so the screen never shows
-                it twice. */}
-            <ListPage notices={loadError || tokensError ? (
+    const listPage = (
+        <ListPage className={styles.page} notices={loadError || tokensError ? (
                 <>
                     {loadError ? (
                         <StatusMessage
                             variant="error"
                             recovery={{
-                                label: 'Try again',
+                                label: 'Try Again',
                                 onAction: () => setAddressesReload((value) => value + 1),
                             }}
                         >
@@ -207,7 +302,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         <StatusMessage
                             variant="error"
                             recovery={{
-                                label: 'Try again',
+                                label: 'Try Again',
                                 onAction: () => setTokensReload((value) => value + 1),
                             }}
                         >
@@ -215,48 +310,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         </StatusMessage>
                     ) : null}
                 </>
-            ) : null} actions={isEmpty ? null : (
-                <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onIssue}>
-                    Issue new token
-                </Button>
-            )} toolbar={(
-                <>
-                    <div className={styles.search}>
-                        <Input
-                            type="search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search tokens"
-                            aria-label="Search your tokens by ticker or description"
-                        />
-                    </div>
-                    <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
-                        {/* Raw buttons preserve the segmented radio control semantics. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={mode === 'all'}
-                            className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
-                            onClick={() => setMode('all')}
-                        >
-                            All
-                        </button>
-                        {/* Raw buttons preserve the segmented radio control semantics. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={mode === 'owned'}
-                            className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
-                            onClick={() => setMode('owned')}
-                        >
-                            Holding
-                        </button>
-                    </div>
-                </>
-            )}>
+            ) : null}>
 
                 {isLoading ? (
-                    <div className={styles.list} role="status" aria-label="Loading owned tokens">
+                    <div className={styles.loading} role="status" aria-label="Loading owned tokens">
                         <Skeleton.List rows={3} />
                     </div>
                 ) : null}
@@ -265,7 +322,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <EmptyState
                         title="No owned tokens yet"
                         body="Tokens this wallet owns appear here."
-                        actionLabel="Issue token"
+                        actionLabel="Create Token"
+                        actionIcon={<Icon.PlusIcon />}
                         onAction={onIssue}
                     />
                 ) : null}
@@ -274,25 +332,28 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <EmptyState
                         title="No results for these filters"
                         body="Reset the filters to see all tokens."
-                        actionLabel="Reset filters"
+                        actionLabel="Reset Filters"
+                        actionIcon={<Icon.RefreshIcon />}
                         onAction={() => {
                             setQuery('');
                             setMode('all');
+                            setNetworkFilter('all');
                         }}
                     />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (
                     /* Safari needs an explicit list role because this class removes list styling. */
-                    <ul className={styles.list} role="list">
+                    <ul className={styles.list} role="list" data-xc-split-list={twoPanel ? '' : undefined}>
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
                                 <ListRow
-                                    className={styles.row}
-                                    onClick={() => onSelectTick(row.tick, row.chainId, row)}
+                                    onClick={() => openToken(row)}
+                                    data-xc-split-row={twoPanel ? '' : undefined}
+                                    aria-current={twoPanel && row === shownToken ? 'true' : undefined}
                                     aria-label={`Open ${row.tick} token details`}
                                     leading={<span className={styles.rowChain} aria-hidden="true">
-                                        <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />
+                                        <TickerIcon chainId={row.chainId} tick={row.tick} size={40} imageUrl={row.imageUrl || null} />
                                     </span>}
                                     title={(
                                         <span className={styles.rowTick}>
@@ -305,11 +366,14 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                                     localCoin={coinFromChainId(row.chainId)}
                                                 />
                                             </span>
-                                            {row.locked ? (
-                                                <span className={styles.lockedBadge} title="Supply locked">
-                                                    <Icon.LockIcon />
-                                                </span>
-                                            ) : null}
+                                            <span
+                                                className={styles.supplyStatus}
+                                                role="img"
+                                                aria-label={row.locked ? 'Supply locked' : 'Supply unlocked'}
+                                                title={row.locked ? 'Supply locked' : 'Supply unlocked'}
+                                            >
+                                                {row.locked ? <Icon.LockIcon /> : <Icon.UnlockIcon />}
+                                            </span>
                                         </span>
                                     )}
                                     subtitle={row.description ? (
@@ -317,13 +381,49 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                             {row.description}
                                         </span>
                                     ) : undefined}
-                                    chevron={<Icon.ForwardIcon />}
+                                    chevron
                                 />
                             </li>
                         ))}
                     </ul>
                 ) : null}
-            </ListPage>
+        </ListPage>
+    );
+
+    const detailKey = shownToken ? `${shownToken.chainId}:${shownToken.tick}` : 'loading';
+    const detailFallback = (
+        <div className={styles.loading} aria-hidden="true">
+            <Skeleton height={190} />
+        </div>
+    );
+
+    return (
+        <Screen
+            variant={variant}
+            header={header}
+            bodyClassName={twoPanel ? listDetailStyles.twoPanelBody : undefined}
+        >
+            {twoPanel ? (
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey={MY_TOKENS_PANEL_STORAGE_KEY}
+                    resizeLabel="Resize the token list"
+                    resizeHint="Drag, use Left and Right, or press Enter to reset"
+                    layoutName="my-tokens-two-panel"
+                    list={listPage}
+                    listLabel="My tokens"
+                    detail={shownToken ? (
+                        <Fragment key={detailKey}>{renderToken(shownToken)}</Fragment>
+                    ) : detailFallback}
+                    detailLabel={shownToken ? `${shownToken.tick} token management` : 'Token management'}
+                    detailBusy={!shownToken}
+                    detailFallback={detailFallback}
+                />
+            ) : (
+                <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="my-tokens-list">
+                    {listPage}
+                </div>
+            )}
         </Screen>
     );
 }

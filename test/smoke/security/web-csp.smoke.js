@@ -179,7 +179,16 @@ assert.match(
     'the built dist carries its profile, since packages/mobile copies it verbatim',
 );
 assert.match(viteSrc, /name: 'xchain-csp'/, 'defines the csp plugin');
-assert.match(viteSrc, /apply: 'build'/, 'csp plugin is build-only (dev HMR untouched)');
+// Read from the cspPlugin literal alone: the style-guide plugin above it also
+// says `apply: 'build'`, so a whole-file match passes with this one deleted.
+const cspPluginStart = viteSrc.indexOf('const cspPlugin = {');
+const cspPluginEnd = viteSrc.indexOf('\n};', cspPluginStart);
+assert.ok(cspPluginStart >= 0 && cspPluginEnd > cspPluginStart, 'the cspPlugin literal is present');
+assert.match(
+    viteSrc.slice(cspPluginStart, cspPluginEnd),
+    /^    apply: 'build',$/m,
+    'csp plugin is build-only (dev HMR untouched)',
+);
 assert.match(viteSrc, /transformIndexHtml\(\)/, 'csp plugin injects via transformIndexHtml');
 assert.match(viteSrc, /'http-equiv': 'Content-Security-Policy'/, 'injects the CSP meta tag');
 

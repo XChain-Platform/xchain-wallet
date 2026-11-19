@@ -410,15 +410,23 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
             '664',
             'fixture sanity: the tree really carries the umask-002 mode',
         );
+        const sandboxMode = lstatSync(join(root, 'chrome-sandbox')).mode & 0o7777;
+        if (process.platform === 'linux') {
+            assert.equal(sandboxMode, 0o4755, 'Linux fixture preserves the setuid bit');
+        } else {
+            assert.ok([0o755, 0o4755].includes(sandboxMode),
+                'the host either preserves or strips the fixture setuid bit');
+        }
+        return sandboxMode;
     }
-    function assertCanonical(root, label) {
+    function assertCanonical(root, label, sandboxMode) {
         for (const [rel, wanted] of [
             ['.', 0o755],
             ['icons', 0o755],
             ['icon.png', 0o644],
             [join('icons', '512x512.png'), 0o644],
             ['run.sh', 0o755],
-            ['chrome-sandbox', 0o4755],
+            ['chrome-sandbox', sandboxMode],
         ]) {
             assert.equal(
                 (lstatSync(join(root, rel)).mode & 0o7777).toString(8),
@@ -430,22 +438,22 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
     }
 
     const direct = join(work, 'modes-direct');
-    makeUmask002Tree(direct);
+    const directSandboxMode = makeUmask002Tree(direct);
     assert.ok(normalizeTreeModes(direct) > 0, 'normalizeTreeModes reports what it changed');
-    assertCanonical(direct, 'normalizeTreeModes');
+    assertCanonical(direct, 'normalizeTreeModes', directSandboxMode);
     assert.equal(normalizeTreeModes(direct), 0, 'a second pass changes nothing (idempotent)');
 
     // The config's linux afterPack over a stand-in packed app.
     const appOut = join(work, 'linux-unpacked');
-    makeUmask002Tree(appOut);
+    const appOutSandboxMode = makeUmask002Tree(appOut);
     await config.afterPack({ electronPlatformName: 'linux', appOutDir: appOut });
-    assertCanonical(appOut, 'afterPack (linux)');
+    assertCanonical(appOut, 'afterPack (linux)', appOutSandboxMode);
 
     // The config's linux beforePack over stand-in build resources. It also
     // materializes the AppImage shim, so it is pointed at the fixture
     // toolset: nothing here may reach the network.
     const resources = join(work, 'build-resources');
-    makeUmask002Tree(resources);
+    const resourcesSandboxMode = makeUmask002Tree(resources);
     const savedTools = process.env.APPIMAGE_TOOLS_PATH;
     process.env.APPIMAGE_TOOLS_PATH = goodFixture;
     try {
@@ -458,7 +466,7 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
         if (savedTools === undefined) delete process.env.APPIMAGE_TOOLS_PATH;
         else process.env.APPIMAGE_TOOLS_PATH = savedTools;
     }
-    assertCanonical(resources, 'beforePack (linux) build resources');
+    assertCanonical(resources, 'beforePack (linux) build resources', resourcesSandboxMode);
 
     console.log(
         'OK: AppImage determinism smoke (DD7: electron-builder config declares a linux-only'

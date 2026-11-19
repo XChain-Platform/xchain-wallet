@@ -50,10 +50,10 @@ function setup({ liveness = () => Promise.resolve(LIVE), sign } = {}) {
 }
 
 async function pasteAndWaitForReview() {
-    await screen.findByRole('button', { name: /Network: Bitcoin/ });
-    fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT } });
+    await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // In the closed "Signing with" section.
+    fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT } });
     await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));
-    return screen.getByRole('button', { name: 'Sign transaction' });
+    return screen.getByRole('button', { name: /^Sign transaction$/i });
 }
 
 afterEach(cleanup);
@@ -68,7 +68,7 @@ describe('PSBT sign repeat presses', () => {
         });
         await screen.findByTestId('confirm-approve');
         fireEvent.click(screen.getByTestId('confirm-reject'));
-        await screen.findByRole('button', { name: 'Sign transaction' });
+        await screen.findByRole('button', { name: /^Sign transaction$/i });
         expect(screen.queryByText(/already in progress/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
     });

@@ -35,11 +35,16 @@
 
 .header {
     flex: 0 0 auto;
-    padding-block: var(--xc-space-3);
+    /* The page gutter on every side, the same space the app bar above leaves
+       around its buttons. */
+    padding-block: calc(var(--xc-page-gutter) - 2px);
     padding-inline: var(--xc-page-gutter);
     /* The sibling body owns the scrollbar. Match its usable inline-end edge
        without clipping header menus or popovers. */
-    padding-inline-end: calc(var(--xc-page-gutter) + var(--xc-frame-scrollbar, 0rem));
+    /* The header ends one page gutter from the window edge, on the app bar's
+       line; the body below takes its scrollbar lane out of its own end
+       padding, so all three rows end on one line. */
+    padding-inline-end: calc(var(--xc-page-gutter) - 2px);
     border-bottom: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }
@@ -49,9 +54,11 @@
    No standard scrollbar-width / scrollbar-color here, since Chromium 121+
    ignores these ::-webkit-scrollbar rules wherever those are set. */
 @media (hover: hover) and (pointer: fine) {
+    /* A 6px lane, so the scrollbar fits inside the 6px end gutter and rows
+       still end on the header buttons' line. */
     .scrollArea::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
+        width: 6px;
+        height: 6px;
     }
 
     .scrollArea::-webkit-scrollbar-track {
@@ -60,8 +67,8 @@
 
     .scrollArea::-webkit-scrollbar-thumb {
         background: var(--xc-border-strong);
-        border: 2px solid transparent;
-        border-radius: 5px;
+        border: 1px solid transparent;
+        border-radius: 3px;
         background-clip: padding-box;
     }
 
@@ -79,8 +86,16 @@
     flex: 1 1 auto;
     min-height: 0;
     padding: var(--xc-page-top) var(--xc-page-gutter);
+    /* A classic scrollbar's lane comes out of the end padding, so rows end on
+       the header buttons' line (the gutter less the same 2px optical step).
+       Overlay scrollbars measure zero. */
+    padding-inline-end: max(0px, calc(var(--xc-page-gutter) - 2px - var(--xc-frame-scrollbar, 0px)));
     overflow-y: auto;
     overflow-x: hidden;
+    /* A press could make native anchoring move a phone list under the pointer.
+       Screen.jsx and keyboardViewport.js restore scroll and reveal focus
+       explicitly, so route scrolling does not rely on native anchoring. */
+    overflow-anchor: none;
     scroll-padding-block: var(--xc-space-3);
 }
 

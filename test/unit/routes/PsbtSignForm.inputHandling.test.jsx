@@ -154,7 +154,7 @@ describe('PSBT review validation', () => {
         })).toBeNull();
     });
 
-    it('shows a plain parser-output error and keeps signing disabled', async () => {
+    it('shows a plain parser-output error and keeps signing available to explain the refusal', async () => {
         mount(messagingFor({
             parsePsbtRequest: vi.fn().mockResolvedValue({
                 decomposed: {
@@ -165,27 +165,49 @@ describe('PSBT review validation', () => {
                 actionDecodeReason: 'NO_OP_RETURN',
             }),
         }));
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This transaction spends more than its inputs contain.',
         );
-        expect(screen.getByRole('button', { name: 'Sign transaction' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).not.toBeDisabled();
     });
 });
 
 describe('PSBT form input controls', () => {
+    it('reports an empty transaction code on the field and does not sign', async () => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true });
+
+        const submit = screen.getByRole('button', { name: /^Sign transaction$/i });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+
+        await waitFor(() => expect(document.querySelector('[data-form-errors]'))
+            .toHaveTextContent('Paste the transaction code or choose a .psbt file.'));
+        expect(screen.getByLabelText('Unsigned transaction code')).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it('shows help for the transaction network', async () => {
+        mount();
+
+        // The network help sits in the closed "Signing with" section.
+        fireEvent.click(await screen.findByRole('button', { name: /^Signing with/, expanded: false }));
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+    });
+
     it.each([
         [`${PSBT_HEX}0`, /complete byte pairs/i],
         ['cHNidP8!', /base64 is incomplete or malformed/i],
     ])('shows one plain error for malformed pasted input %s and never signs', async (value, copy) => {
         const messaging = mount();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
 
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value } });
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value } });
 
         const alerts = screen.getAllByRole('alert');
         expect(alerts).toHaveLength(1);
@@ -199,7 +221,7 @@ describe('PSBT form input controls', () => {
         ['cHNidP8!', /base64 is incomplete or malformed/i],
     ])('shows one plain error for malformed PSBT-like QR input %s and never signs', async (value, copy) => {
         const messaging = mount();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
         fireEvent.click(screen.getByRole('button', { name: 'Scan transaction' }));
         globalThis.__PSBT_SCAN_FRAME__ = value;
 
@@ -217,8 +239,8 @@ describe('PSBT form input controls', () => {
         ['cHNidP8!', 'bad-base64.psbt'],
     ])('shows one plain error for malformed transaction file %s and never signs', async (value, name) => {
         const messaging = mount();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const input = screen.getByLabelText(/Unsigned transaction/);
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        const input = screen.getByLabelText('Unsigned transaction code');
 
         fireEvent.drop(input, {
             dataTransfer: {
@@ -233,8 +255,8 @@ describe('PSBT form input controls', () => {
 
     it('rejects an oversized transaction file before reading or signing it', async () => {
         const messaging = mount();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const input = screen.getByLabelText(/Unsigned transaction/);
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        const input = screen.getByLabelText('Unsigned transaction code');
         fireEvent.change(input, { target: { value: PSBT_HEX } });
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/this transaction has no inputs/i));
 
@@ -252,10 +274,12 @@ describe('PSBT form input controls', () => {
 
     it('lets the user change the network and parses the paste for that network', async () => {
         const messaging = mount();
+        // Open the closed "Signing with" section to reach the network.
+        fireEvent.click(await screen.findByRole('button', { name: /^Signing with/, expanded: false }));
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_BASE64 },
         });
 
@@ -274,16 +298,18 @@ describe('PSBT form input controls', () => {
                 actionDecodeReason: 'NO_OP_RETURN',
             }),
         }));
+        // Open the closed "Signing with" section to reach the network.
+        fireEvent.click(await screen.findByRole('button', { name: /^Signing with/, expanded: false }));
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
@@ -295,14 +321,14 @@ describe('PSBT form input controls', () => {
                 actionDecodeReason: 'NO_OP_RETURN',
             }),
         }));
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
@@ -314,20 +340,20 @@ describe('PSBT form input controls', () => {
                 actionDecodeReason: 'NO_OP_RETURN',
             }),
         }));
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: FINALIZED_PSBT_HEX },
         });
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/already finalized/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
     it('counts unique BBQr frames and closes the scanner after assembly', async () => {
         mount();
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
         fireEvent.click(screen.getByRole('button', { name: 'Scan transaction' }));
         const frames = encodeBbqrPsbtFrames(PSBT_HEX, { payloadBytes: 3 });
 
@@ -344,7 +370,7 @@ describe('PSBT form input controls', () => {
         }
 
         await waitFor(() => expect(screen.queryByTestId('fake-psbt-scan')).toBe(null));
-        expect(screen.getByLabelText(/Unsigned transaction/).value).toBe(PSBT_HEX);
+        expect(screen.getByLabelText('Unsigned transaction code').value).toBe(PSBT_HEX);
     });
 });
 
@@ -369,7 +395,7 @@ describe('PSBT signature type review', () => {
         expect(psbtSighashError({ inputs: [inputWith(2, { address: 'someone-else' })] }, OWN)).toBeNull();
     });
 
-    it('refuses before the password step and keeps signing disabled', async () => {
+    it('refuses before the password step while keeping signing available', async () => {
         const messaging = mount(messagingFor({
             parsePsbtRequest: vi.fn().mockResolvedValue({
                 decomposed: {
@@ -380,13 +406,13 @@ describe('PSBT signature type review', () => {
                 actionDecodeReason: 'NO_OP_RETURN',
             }),
         }));
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT_HEX } });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_HEX } });
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Input 1 asks for a signature that leaves part of the transaction open to change after you sign.',
         );
-        expect(screen.getByRole('button', { name: 'Sign transaction' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).not.toBeDisabled();
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 });

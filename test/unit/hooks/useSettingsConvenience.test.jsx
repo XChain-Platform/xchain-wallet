@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 
 const { settingsState } = vi.hoisted(() => ({
     settingsState: { settings: null, loading: true, error: null },
@@ -15,7 +15,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
 const { useDeveloperMode } = await import(
     '../../../packages/core/src/shared/hooks/useDeveloperMode.js'
 );
-const { useWalletMode } = await import(
+const { publishWalletModes, useWalletMode } = await import(
     '../../../packages/core/src/shared/hooks/useWalletMode.js'
 );
 
@@ -37,17 +37,22 @@ describe('settings convenience hooks', () => {
         expect(result.current).toEqual({ developerMode: true, ready: true, error: null });
     });
 
+    // §20: the mode is the active wallet's own; a legacy settings value
+    // never reaches the flags.
     it('returns the default wallet mode and exhaustive mode flags', () => {
         const { result, rerender } = renderHook(() => useWalletMode());
 
         expect(result.current).toEqual({
-            walletMode: 'full', isFullMode: true, isWatcherMode: false, isSignerMode: false,
+            walletMode: 'full', isFullMode: true, isWatcherMode: false, isSignerMode: false, walletModeKnown: true,
         });
 
-        settingsState.settings = { walletMode: 'signer' };
+        settingsState.settings = { walletMode: 'watcher' };
         rerender();
+        expect(result.current.walletMode).toBe('full');
+
+        act(() => { publishWalletModes({ wallets: [{ id: 'w', walletMode: 'signer' }], activeWalletId: 'w' }); });
         expect(result.current).toEqual({
-            walletMode: 'signer', isFullMode: false, isWatcherMode: false, isSignerMode: true,
+            walletMode: 'signer', isFullMode: false, isWatcherMode: false, isSignerMode: true, walletModeKnown: true,
         });
     });
 });

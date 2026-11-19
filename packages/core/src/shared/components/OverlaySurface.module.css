@@ -168,6 +168,12 @@
     padding-bottom: calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px));
 }
 
+@media (pointer: coarse) {
+    .sheet .body {
+        padding-inline-end: var(--xc-space-2);
+    }
+}
+
 .popover .body {
     display: flex;
     flex-direction: column;

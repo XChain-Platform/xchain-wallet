@@ -563,12 +563,16 @@ assert.ok(
     'createBackgroundHost imports resolveSigner + buildRemoteSigner from core flows',
 );
 assert.ok(
-    /signerBridge\.getTransport\(/.test(bgSrc),
+    /signerBridge\.requireTransport\(/.test(bgSrc),
     'action.send.hw looks up the transport via signerBridge',
 );
-assert.ok(
-    /Hardware signer is not connected\./.test(bgSrc),
-    'action.send.hw has a clear "not connected" error message',
+// A missing transport is a typed refusal the renderer can branch on.
+assert.throws(
+    () => signerBridge.requireTransport('sig-never-registered'),
+    (err) => err.code === signerBridge.HW_NOT_CONNECTED
+        && err.code === 'HW_NOT_CONNECTED'
+        && /Hardware wallet is not connected\./.test(err.message),
+    'action.send.hw has a clear "not connected" error with code HW_NOT_CONNECTED',
 );
 
 // ---------------------------------------------------------------
@@ -619,10 +623,8 @@ assert.ok(
     'Send.jsx polls signer status via messaging.getSignerStatus',
 );
 assert.ok(
-    /t\('send\.review\.signOn'/.test(sendSrc)
-        && /t\('send\.device\.trezor'\)/.test(sendSrc)
-        && /t\('send\.device\.ledger'\)/.test(sendSrc),
-    'Send.jsx shows "Sign on Trezor" / "Sign on Ledger" button copy',
+    !/send\.review\.signOn/.test(sendSrc),
+    'Send.jsx review button carries no "Sign on <device>" suffix',
 );
 assert.ok(
     /hwStatus !== 'available'/.test(sendSrc),
@@ -712,9 +714,11 @@ assert.ok(
     /setLiveSigner\(signer\)/.test(pairSrc),
     'PairSignerForm captures the live signer from the pair factory',
 );
+// The live signer goes over inside a session signer built from the saved
+// record, so the bridge holds the Ledger's per-chain identities at once.
 assert.ok(
-    /onSignerPaired\(record\.id, liveSigner\)/.test(pairSrc),
-    'PairSignerForm calls onSignerPaired after the SignerRecord is persisted',
+    /onSignerPaired\(signerId, pairedSessionSigner\(result\.signer, liveSigner\)\)/.test(pairSrc),
+    'PairSignerForm calls onSignerPaired after the hardware wallet and its signer record are saved',
 );
 
 // 12f. Popup App.jsx wires the signer bridge as onSignerPaired.
@@ -790,8 +794,9 @@ assert.ok(
     'AirdropForm AIRDROP sign calls messaging.airdropActionHw in HW branch',
 );
 assert.ok(
-    /confirm on your hardware device twice/.test(airdropFormSrc),
-    'AirdropForm explains two-sign cadence to HW users',
+    /notice: `This is the first of two transactions\.[^`]+you will approve the airdrop\.`/.test(airdropFormSrc)
+        && /<ActionConfirmScreen[\s\S]*?hwSource=\{hw \? fromAddress : null\}/.test(airdropFormSrc),
+    'AirdropForm explains its two confirmations and keeps hardware signer information on each confirm',
 );
 
 // ---------------------------------------------------------------
@@ -872,5 +877,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner to TrezorSigner to sdk.decomposePsbt to trezorFormat to Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC: renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
+    'OK: hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner to TrezorSigner to sdk.decomposePsbt to trezorFormat to Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with a bare "Sign" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC: renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
 );

@@ -71,31 +71,39 @@ assert.match(
 );
 assert.match(aboutSrc, /export function AboutSection\(/, 'AboutSection is a named export');
 
-for (const label of [
-    'Version',
-    'Update channel',
-    'License',
-    'Notice',
-    'Reproducible build',
-    'Release signatures',
-    'Disclosure policy',
+for (const [label, message] of [
+    ['Version', 'settings.about.version'],
+    ['Update channel', 'settings.about.updateChannel'],
+    ['License', 'settings.about.license'],
+    ['Notice', 'settings.about.notice'],
+    ['Reproducible build', 'settings.about.reproducibleBuild'],
+    ['Release signatures', 'settings.about.releaseSignatures'],
+    ['Disclosure policy', 'settings.about.disclosurePolicy'],
 ]) {
     assert.ok(
-        aboutSrc.includes(`label="${label}"`),
+        // Titled Sections: facts are Fact rows (label) and links are action rows (title).
+        aboutSrc.includes(`label={t('${message}')}`) || aboutSrc.includes(`label="${label}"`)
+            || aboutSrc.includes(`title={t('${message}')}`) || aboutSrc.includes(`title="${label}"`),
         `AboutSection renders a row labelled "${label}"`,
     );
 }
-
-// Items whose underlying artifact isn't published render a muted
-// fallback rather than an inert link. Two such items exist: release
-// signatures and disclosure policy.
-assert.match(aboutSrc, /not yet published/, 'AboutSection has unpublished-fallback copy');
-assert.match(aboutSrc, /SECURITY_PUBLISHED \?/, 'disclosure policy gates on SECURITY_PUBLISHED');
 assert.match(
     aboutSrc,
-    /RELEASE_SIGNATURES_PUBLISHED \?/,
-    'release signatures gates on RELEASE_SIGNATURES_PUBLISHED',
+    /title=(?:\{t\('settings\.about\.license'\)\}|"License")[\s\S]*?docLinkProps\(LICENSE_FILE\)/,
+    'the License row links to the license file',
 );
+
+assert.match(
+    aboutSrc,
+    /title=(?:\{t\('settings\.about\.releaseSignatures'\)\}|"Release signatures")[\s\S]*?docLinkProps\(RELEASE_SIGNATURES_DOC\)/,
+    'release signatures opens the external resource',
+);
+assert.match(
+    aboutSrc,
+    /title=(?:\{t\('settings\.about\.disclosurePolicy'\)\}|"Disclosure policy")[\s\S]*?docLinkProps\(SECURITY_FILE\)/,
+    'disclosure policy opens the repository document',
+);
+assert.doesNotMatch(aboutSrc, /AboutLicensePage|AboutUnpublishedPage|onOpenLicense/, 'About has no document child pages');
 
 // ─── 4. Settings.jsx wires AboutSection as the `about` panel ────────
 
@@ -104,6 +112,11 @@ assert.match(
     settingsSrc,
     /import \{ AboutSection \} from '\.\.\/components\/settings\/AboutSection\.jsx'/,
     'Settings.jsx imports AboutSection',
+);
+assert.doesNotMatch(
+    settingsSrc,
+    /about-license|about-release-signatures|about-disclosure-policy/,
+    'Settings has no About document child routes',
 );
 
 // The about section block should now declare `kind: 'panel'` and

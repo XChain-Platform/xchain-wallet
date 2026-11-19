@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { setActiveVariant, clearVariantOverride, THRESHOLD_PX } from './devVariant.js';
 import styles from './DevVariantBadge.module.css';
 import { t } from '../../core/src/i18n/index.js';
@@ -31,12 +31,41 @@ function writePos(p) {
     try { window.localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
 }
 
+// The room the shell navigation takes at the badge's default corner: the
+// inline size of a full-height rail on the inline-start edge and the block
+// size of a full-width bar on the bottom edge. Every nav landmark counts, so
+// the badge clears Lock and the tabs in every shell and locale.
+function navClearance(el) {
+    if (typeof window === 'undefined' || !el) return { inline: 0, block: 0, rtl: false };
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+    const rtl = window.getComputedStyle(el).direction === 'rtl';
+    let inline = 0;
+    let block = 0;
+    for (const nav of document.querySelectorAll('nav')) {
+        if (el.contains(nav)) continue;
+        const r = nav.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        if (r.height > viewH / 2) {
+            if (!rtl && r.left <= 1) inline = Math.max(inline, r.right);
+            if (rtl && r.right >= viewW - 1) inline = Math.max(inline, viewW - r.left);
+        } else if (r.width > viewW / 2 && r.bottom >= viewH - 1) {
+            block = Math.max(block, viewH - r.top);
+        }
+    }
+    return { inline: Math.round(inline), block: Math.round(block), rtl };
+}
+
+// Keeps a saved or dragged position inside the viewport and off the shell
+// navigation, so the badge never covers Lock, the rail or a bottom tab.
 function clampToViewport(p, el) {
     if (typeof window === 'undefined' || !el) return p;
     const rect = el.getBoundingClientRect();
-    const maxX = Math.max(0, window.innerWidth - rect.width - 4);
-    const maxY = Math.max(0, window.innerHeight - rect.height - 4);
-    return { x: Math.min(Math.max(0, p.x), maxX), y: Math.min(Math.max(0, p.y), maxY) };
+    const clear = navClearance(el);
+    const minX = clear.rtl ? 0 : clear.inline;
+    const maxX = Math.max(minX, window.innerWidth - rect.width - 4 - (clear.rtl ? clear.inline : 0));
+    const maxY = Math.max(0, window.innerHeight - clear.block - rect.height - 4);
+    return { x: Math.min(Math.max(minX, p.x), maxX), y: Math.min(Math.max(0, p.y), maxY) };
 }
 
 /**
@@ -73,19 +102,54 @@ export function DevVariantBadge({ state }) {
     const posRef = useRef(pos);
     useEffect(() => { posRef.current = pos; }, [pos]);
 
+    const [clear, setClear] = useState({ inline: 0, block: 0 });
+
+    // Pulls the saved position back on screen and off the navigation.
+    function reclamp() {
+        const cur = posRef.current;
+        if (!cur || !badgeRef.current) return;
+        const clamped = clampToViewport(cur, badgeRef.current);
+        if (clamped.x !== cur.x || clamped.y !== cur.y) {
+            posRef.current = clamped;
+            setPos(clamped);
+            writePos(clamped);
+        }
+    }
+
+    // Clamp a saved position before the first paint, so a seed left off
+    // screen by a larger window or a hand edit never renders out of reach.
+    useLayoutEffect(() => { reclamp(); }, []);
+
+    // Keep the badge clear of the navigation as the shell mounts, swaps the
+    // rail for the bottom bar, or changes direction.
+    useLayoutEffect(() => {
+        let frame = 0;
+        function measure() {
+            frame = 0;
+            const next = navClearance(badgeRef.current);
+            setClear((prev) => (prev.inline === next.inline && prev.block === next.block ? prev : next));
+            reclamp();
+        }
+        function schedule() {
+            if (!frame) frame = window.requestAnimationFrame(measure);
+        }
+        measure();
+        const observer = new MutationObserver(schedule);
+        observer.observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true, attributeFilter: ['dir'],
+        });
+        window.addEventListener('resize', schedule);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', schedule);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, []);
+
     // Re-clamp if the viewport shrinks past a saved off-screen position.
     useEffect(() => {
-        function onResize() {
-            const cur = posRef.current;
-            if (!cur || !badgeRef.current) return;
-            const clamped = clampToViewport(cur, badgeRef.current);
-            if (clamped.x !== cur.x || clamped.y !== cur.y) {
-                setPos(clamped);
-                writePos(clamped);
-            }
-        }
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
+        window.addEventListener('resize', reclamp);
+        return () => window.removeEventListener('resize', reclamp);
     }, []);
 
     function onGripDown(e) {
@@ -123,7 +187,7 @@ export function DevVariantBadge({ state }) {
 
     const styleOverride = pos
         ? { left: `${pos.x}px`, top: `${pos.y}px`, right: 'auto', bottom: 'auto' }
-        : undefined;
+        : { '--xc-badge-clear-inline': `${clear.inline}px`, '--xc-badge-clear-block': `${clear.block}px` };
 
     return (
         <div

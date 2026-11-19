@@ -70,7 +70,6 @@ function popupMessaging(overrides = {}) {
         }),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         listContacts: vi.fn().mockResolvedValue([]),
-        listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [] }),
         listPendingAirdropsForWallet: vi.fn().mockResolvedValue([]),
         getMultisigReceiveAddress: vi.fn().mockResolvedValue(null),
         getCoinpayObligationsForAddress: vi.fn().mockResolvedValue([]),
@@ -182,7 +181,8 @@ describe('extension popup main-screen accessibility', () => {
                 onLockWallet={() => {}}
             />,
         );
-        await screen.findByRole('region', { name: 'Active address balance' });
+        // The balance hero is named for the wallet whose balance it shows.
+        await screen.findByRole('region', { name: WALLET.name });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -205,8 +205,8 @@ describe('extension popup main-screen accessibility', () => {
     it('scans a Chrome-delivered approval request at popup size', async () => {
         window.history.replaceState(null, '', '/approval.html?id=approval-1');
         const { container } = render(<Router />);
-        await screen.findByText('Connect to XChain Wallet?');
-        await screen.findByLabelText('Share Main');
+        await screen.findByRole('heading', { level: 1, name: 'Connect Wallet' });
+        await screen.findByRole('button', { name: 'Accounts it can see Main' });
         await expectNoSeriousAxeViolations(container);
     });
 });

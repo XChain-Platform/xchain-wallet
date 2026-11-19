@@ -65,7 +65,7 @@ assert.ok(/if \(!walletId \|\| typeof messaging\?\.listSigners !== 'function'\) 
 
 // --- 4. Adopters: Send + BroadcastForm + DividendForm + DestroyForm
 //        + TokenAdminForm all import the hook + thread signerInfo
-//        through SignCredentials. Each form's lookup uses the same
+//        through ActionConfirmScreen. Each form's lookup uses the same
 //        `isHwSource ? fromAddress?.signerId : null` shape.
 
 const routes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
@@ -73,7 +73,7 @@ const routes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
 // Two adoption shapes:
 //   A) `isHwSource` boolean: Send / BroadcastForm / DividendForm /
 //      DestroyForm / TokenAdminForm / ExecuteContractForm /
-//      StakingActionForm: gate via `isHwSource ? fromAddress?.signerId : null`.
+//      StakingForm (Unstake and Claim): gate via `isHwSource ? fromAddress?.signerId : null`.
 //   B) `hw` from `isHwSource(fromAddress)` helper: SwapForm / ComposeMessage.
 const adoptersA = [
     ['Send.jsx', sendPath],
@@ -82,8 +82,22 @@ const adoptersA = [
     ['DestroyForm.jsx', join(routes, 'DestroyForm.jsx')],
     ['TokenAdminForm.jsx', join(routes, 'TokenAdminForm.jsx')],
     ['ExecuteContractForm.jsx', join(routes, 'ExecuteContractForm.jsx')],
-    ['StakingActionForm.jsx', join(routes, 'StakingActionForm.jsx')],
 ];
+// The one Staking form reads the signer record only for Unstake and Claim
+// (the old StakingActionForm's actions), so both arguments carry that gate.
+{
+    const src = readFileSync(join(routes, 'StakingForm.jsx'), 'utf8');
+    assert.ok(
+        /import\s*\{\s*useSignerInfo\s*\}\s*from\s*'\.\.\/hooks\/useSignerInfo\.js'/.test(src),
+        'StakingForm.jsx imports useSignerInfo',
+    );
+    assert.ok(
+        /useSignerInfo\(\{[\s\S]*?walletId: isPosition \? walletId : null,[\s\S]*?signerId: isPosition && isHwSource \? fromAddress\?\.signerId : null,?[\s\S]*?\}\)/.test(src),
+        'StakingForm.jsx calls useSignerInfo with an isHwSource-gated signerId on Unstake and Claim',
+    );
+    assert.ok(/<ActionConfirmScreen\b[\s\S]*?hwSignerInfo=\{hwSignerInfo\}/.test(src),
+        'StakingForm.jsx passes signerInfo into ActionConfirmScreen');
+}
 const adoptersB = [
     ['SwapForm.jsx', join(routes, 'SwapForm.jsx')],
     ['ComposeMessage.jsx', join(routes, 'ComposeMessage.jsx')],
@@ -99,10 +113,8 @@ for (const [label, path] of adoptersA) {
         /useSignerInfo\(\{[\s\S]*?walletId,[\s\S]*?signerId:\s*isHwSource \? fromAddress\?\.signerId : null,?[\s\S]*?\}\)/.test(src),
         `${label} calls useSignerInfo with isHwSource-gated signerId`,
     );
-    if (label !== 'Send.jsx') {
-        assert.ok(/<SignCredentials\b[\s\S]*?signerInfo=\{hwSignerInfo\}/.test(src),
-            `${label} passes signerInfo into <SignCredentials>`);
-    }
+    assert.ok(/<ActionConfirmScreen\b[\s\S]*?hwSignerInfo=\{hwSignerInfo\}/.test(src),
+        `${label} passes signerInfo into ActionConfirmScreen`);
 }
 
 for (const [label, path] of adoptersB) {
@@ -115,8 +127,8 @@ for (const [label, path] of adoptersB) {
         /useSignerInfo\(\{[\s\S]*?walletId,[\s\S]*?signerId:\s*hw \? fromAddress\?\.signerId : null,?[\s\S]*?\}\)/.test(src),
         `${label} calls useSignerInfo with hw-gated signerId (helper-style adoption)`,
     );
-    assert.ok(/<SignCredentials\b[\s\S]*?signerInfo=\{hwSignerInfo\}/.test(src),
-        `${label} passes signerInfo into <SignCredentials>`);
+    assert.ok(/<ActionConfirmScreen\b[\s\S]*?hwSignerInfo=\{hwSignerInfo\}/.test(src),
+        `${label} passes signerInfo into ActionConfirmScreen`);
 }
 
 assert.ok(
@@ -125,5 +137,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2: useSignerInfo hook + walletId-keyed cache + Send.jsx canonical adopter; sweep continues with BroadcastForm + DividendForm + DestroyForm + TokenAdminForm threading signerInfo through SignCredentials; each form uses the same isHwSource-gated lookup shape)',
+    'OK: use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2: useSignerInfo hook + walletId-keyed cache + Send.jsx canonical adopter; ActionConfirmScreen receives signer info across action forms; each form uses the same isHwSource-gated lookup shape)',
 );

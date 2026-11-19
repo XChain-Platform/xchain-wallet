@@ -12,7 +12,10 @@ vi.mock('../../../packages/core/src/flows/unlockWallet.js', async (importOrigina
     unlockWalletRecord,
 }));
 
-import { createAccount } from '../../../packages/core/src/flows/createAccount.js';
+import {
+    createAccount,
+    LegacySingleAccountError,
+} from '../../../packages/core/src/flows/createAccount.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
 
 const DESCRIPTORS = {
@@ -195,6 +198,19 @@ describe('createAccount', () => {
         expect(signer.lock).toHaveBeenCalledOnce();
     });
 
+    it('locks a password-owned signer when its kind has no address source', async () => {
+        const vault = makeVault();
+        const signer = makeSigner('airgap');
+        unlockWalletRecord.mockResolvedValue(signer);
+
+        await expect(createAccount(opts(vault, undefined, {
+            password: 'secret',
+            activeChainIds: ['bitcoin-mainnet'],
+        }))).rejects.toThrow(/no Address\.source mapping/);
+        expect(signer.getAddresses).not.toHaveBeenCalled();
+        expect(signer.lock).toHaveBeenCalledOnce();
+    });
+
     it('refuses unknown chains before reading or writing the vault', async () => {
         const vault = makeVault();
 
@@ -212,5 +228,45 @@ describe('createAccount', () => {
             .rejects.toBeInstanceOf(WalletNotFoundError);
         expect(vault.accounts.put).not.toHaveBeenCalled();
         expect(vault.addresses.put).not.toHaveBeenCalled();
+    });
+
+    it('explains why a legacy software wallet cannot add a second account', async () => {
+        const vault = makeVault({
+            wallet: { id: 'wallet-1', format: 'counterwallet-legacy' },
+            accounts: [{ walletId: 'wallet-1', index: 0 }],
+        });
+        const signer = makeSigner();
+
+        await expect(createAccount(opts(vault, signer)))
+            .rejects.toBeInstanceOf(LegacySingleAccountError);
+        expect(signer.getAddresses).not.toHaveBeenCalled();
+        expect(vault.accounts.put).not.toHaveBeenCalled();
+        expect(vault.addresses.put).not.toHaveBeenCalled();
+    });
+
+    it('refuses a second legacy account before unlocking the wallet seed', async () => {
+        const vault = makeVault({
+            wallet: { id: 'wallet-1', format: 'counterwallet-legacy' },
+            accounts: [{ walletId: 'wallet-1', index: 0 }],
+        });
+
+        await expect(createAccount(opts(vault, undefined, { password: 'secret' })))
+            .rejects.toBeInstanceOf(LegacySingleAccountError);
+        expect(unlockWalletRecord).not.toHaveBeenCalled();
+    });
+
+    it('keeps hardware-backed accounts available for a legacy wallet', async () => {
+        const vault = makeVault({
+            wallet: { id: 'wallet-1', format: 'counterwallet-legacy' },
+            accounts: [{ walletId: 'wallet-1', index: 0 }],
+        });
+        const signer = makeSigner('trezor');
+
+        await expect(createAccount(opts(vault, signer, {
+            activeChainIds: ['bitcoin-mainnet'],
+        }))).resolves.toEqual(expect.objectContaining({
+            account: expect.objectContaining({ index: 1 }),
+        }));
+        expect(signer.getAddresses).toHaveBeenCalledOnce();
     });
 });

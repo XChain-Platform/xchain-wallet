@@ -1,0 +1,93 @@
+/* The choose-file field: a read-only Input whose whole box opens the file
+   dialog, and which marks itself as a drop target while a file is dragged
+   over it. */
+
+.root {
+    min-width: 0;
+}
+
+.display {
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
+.display:disabled {
+    cursor: not-allowed;
+}
+
+.root[data-drop-active='true'] .display {
+    border-style: dashed;
+    border-color: var(--xc-accent-primary);
+}
+
+/* The area variant: a large dashed drop target for a screen whose first step
+   is choosing one file. Tall enough to aim a drag at on a desktop, and the
+   whole box takes a click; the green button inside is the keyboard control. */
+.areaRoot {
+    min-width: 0;
+}
+
+.area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    min-height: calc(var(--xc-space-8) * 6);
+    padding: var(--xc-space-6) var(--xc-space-4);
+    border: 1px dashed var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.area[data-drop-active='true'] {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, var(--xc-surface));
+}
+
+.area[data-invalid='true'] {
+    border-color: var(--xc-danger-fg);
+}
+
+.area[data-disabled='true'] {
+    cursor: not-allowed;
+}
+
+/* The upload mark sits on a soft accent circle, as the picture draws it. */
+.areaTile {
+    display: inline-grid;
+    place-items: center;
+    width: calc(var(--xc-space-8) + var(--xc-space-4));
+    height: calc(var(--xc-space-8) + var(--xc-space-4));
+    border-radius: var(--xc-radius-pill);
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, var(--xc-surface));
+    color: var(--xc-accent-primary);
+}
+
+.areaTitle {
+    max-width: none;
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+.areaHint {
+    max-width: none;
+    margin: calc(var(--xc-space-2) * -1 + var(--xc-space-1) / 2) 0 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+/* One red sentence under the area, set like an Input's error line. */
+.areaError {
+    max-width: none;
+    margin: var(--xc-help-gap) 0 0;
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+    color: var(--xc-danger-fg);
+    overflow-wrap: anywhere;
+}

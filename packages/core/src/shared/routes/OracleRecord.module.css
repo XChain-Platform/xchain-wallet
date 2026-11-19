@@ -1,0 +1,177 @@
+/* Styles this screen owns. The fact rows come from BetFeedDetail.module.css
+   so the two betting pages match. */
+
+/* The identity card (G16): an outlined white card, the oracle's mark
+   centred at 64px with its network badge, the name in bold, the address and
+   the type line muted. No chart and no blue card. */
+.identityCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+/* The broadcast glyph in a soft circle. */
+.identityMark {
+    --xc-icon-size: 32px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+}
+
+/* The network badge in the mark's lower corner. */
+.networkPip {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--xc-surface-raised);
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+    display: block;
+}
+
+.identityName {
+    /* Each line spans the card, so an AddressText in it measures the
+       card's width, not its own, and shows whole when it fits (G99). */
+    align-self: stretch;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.identityAddress,
+.identityLine {
+    align-self: stretch;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* The oracle's AddressText under its name, or as the title when it has no
+   name: the line's own colour (and the title's size and weight), ahead of
+   the kit's AddressText look. It fits its line (G99). */
+.identityAddress > [aria-label] {
+    color: inherit;
+}
+
+.identityAddressTitle[aria-label] {
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+/* One market per row inside a single framed list. */
+.marketList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    list-style: none;
+    overflow: hidden;
+}
+
+.marketItem + .marketItem {
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+}
+
+.marketRow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-card-pad);
+    border: 0;
+    background: transparent;
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+}
+
+button.marketRow {
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    button.marketRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+button.marketRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.marketTitle {
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.marketMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--xc-space-2);
+    border-radius: 999px;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.chipOpen { background: var(--xc-success-bg); color: var(--xc-success); }
+.chipPending { background: var(--xc-warning-bg); color: var(--xc-warning-text); }
+.chipSettled { background: var(--xc-info-bg); color: var(--xc-info-text); }
+.chipRefunded { background: var(--xc-bg-muted); color: var(--xc-text-muted); }
+
+/* A plain-language note on the shared card (the not-a-guarantee caveat). */
+.note {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    font-size: var(--xc-text-sm);
+}
+
+.note p {
+    margin: 0;
+    color: var(--xc-text-muted);
+}
+
+.factHint {
+    display: block;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}

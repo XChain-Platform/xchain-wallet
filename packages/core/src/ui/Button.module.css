@@ -67,21 +67,47 @@
     display: block;
 }
 
+.edgePinnedIcon {
+    display: grid;
+    grid-template-columns: var(--xc-icon-size) minmax(0, 1fr) var(--xc-icon-size);
+    gap: 0;
+}
+
+.edgePinnedIcon .label {
+    grid-column: 2;
+    justify-self: center;
+}
+
+.edgeIconSlot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-icon-size);
+    min-width: 0;
+}
+
 .btn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-.btn:disabled {
-    opacity: var(--xc-disabled-opacity);
-    cursor: not-allowed;
+/* A button can be a form control, such as a picker or reveal gate. Its invalid
+   state follows the same red border and focus ring as the other shared fields. */
+.btn[aria-invalid='true'] {
+    --xc-button-hover-border: var(--xc-danger);
+    border-color: var(--xc-danger);
 }
 
-.btn:disabled:not(.link) {
-    background: var(--xc-control-disabled-bg);
-    border-color: var(--xc-control-disabled-border);
-    color: var(--xc-control-disabled-text);
+.btn[aria-invalid='true']:focus-visible {
+    border-color: var(--xc-danger);
+    box-shadow: var(--xc-shadow-danger-focus-ring);
 }
+
+/* G130 (operator 2026-11-16): a button never looks disabled. A disabled or
+   busy button keeps its variant's colours, full opacity and pointer; only its
+   press and hover feedback stop. An action that cannot go ahead yet stays
+   enabled and answers the tap with the form's error notice (G129). The guard
+   is test/unit/ui/buttonNeverDisabledLook.test.js. */
 
 .btn:active:not(:disabled) {
     background: var(--xc-button-hover-bg);
@@ -104,11 +130,13 @@
 }
 
 .sm {
-    --xc-button-height: var(--xc-control-h-sm);
-    --xc-button-font-size: var(--xc-control-font-sm, 13px);
+    /* Small controls stay visibly compact on touch shells. The transparent
+       coarse-pointer layer below, not the painted button, grows to 44px. */
+    --xc-button-height: calc(var(--xc-space-6) + var(--xc-space-1));
+    --xc-button-font-size: var(--xc-text-xs);
     --xc-button-padding-x: var(--xc-button-pad-x-sm, 12px);
     --xc-icon-size: var(--xc-control-icon-sm, 16px);
-    min-height: var(--xc-control-h-sm, 28px);
+    min-height: calc(var(--xc-space-6) + var(--xc-space-1));
 }
 
 .lg {
@@ -162,6 +190,20 @@
     border-color: var(--xc-border-strong);
 }
 
+/* A compact action inside a flush list row, such as pin or hide. The glyph
+   carries its state, so the row does not contain another bordered box. */
+.rowAction {
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: transparent;
+    background: transparent;
+    color: var(--xc-accent-text);
+    border-color: transparent;
+}
+
+.rowAction[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
+}
+
 .link {
     --xc-button-height: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
@@ -201,6 +243,7 @@
     border-color: var(--xc-on-danger);
 }
 
+/* Main forward actions use the success fill in every state (U63, G130). */
 .success {
     --xc-button-hover-bg: var(--xc-success-fill);
     --xc-button-hover-border: var(--xc-success-fill);

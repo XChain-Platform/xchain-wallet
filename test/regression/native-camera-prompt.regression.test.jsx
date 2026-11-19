@@ -118,7 +118,7 @@ describe('regression/native-camera-prompt', () => {
         installCameraApi(getUserMedia);
         render(<QrScanner onFrame={vi.fn()} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Camera' }));
         await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
         expect(isCameraRequestPending()).toBe(true);
 
@@ -133,7 +133,7 @@ describe('regression/native-camera-prompt', () => {
         const getUserMedia = vi.fn(() => new Promise((_resolve, reject) => { deny = reject; }));
         installCameraApi(getUserMedia);
         const first = render(<QrScanner onFrame={vi.fn()} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Camera' }));
         await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
 
         first.unmount();
@@ -149,7 +149,7 @@ describe('regression/native-camera-prompt', () => {
         const getUserMedia = vi.fn(() => new Promise(() => {}));
         installCameraApi(getUserMedia);
         render(<QrScanner onFrame={vi.fn()} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to Camera' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(0); });
         expect(getUserMedia).toHaveBeenCalledOnce();
         expect(screen.getByText('Starting camera…')).toBeInTheDocument();
@@ -166,6 +166,6 @@ describe('regression/native-camera-prompt', () => {
         // Not remembered: the next scanner asks again.
         cleanup();
         render(<QrScanner onFrame={vi.fn()} />);
-        expect(screen.getByRole('button', { name: 'Continue to camera' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Continue to Camera' })).toBeInTheDocument();
     });
 });

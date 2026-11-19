@@ -2,11 +2,17 @@
 // Based on XChain Platform by Dankest, LLC - https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -38,6 +44,8 @@ async function flush() {
 }
 
 function mount(abiReply) {
+    // A wallet's mode is published by the shell from the wallet list, not read from settings.
+    walletModes.publishWalletModes?.({ wallets: [{ id: 'wallet-1', walletMode: 'watcher' }], activeWalletId: 'wallet-1' });
     const messaging = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -57,46 +65,29 @@ function mount(abiReply) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    walletModes.resetWalletModes?.();
+});
 
-describe('a contract abi that answers after the user typed a call', () => {
-    it('keeps the typed method and arguments in the manual lane', async () => {
+describe('a contract abi that answers after the form opens', () => {
+    it('offers no method field and keeps Call Contract disabled until the list arrives', async () => {
         const reply = deferred();
         mount(reply);
-        fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'alice|7' } });
-
-        reply.resolve({ data: { abi: ABI } });
-        await flush();
-
-        expect(screen.getByLabelText('Method')).toHaveValue('transfer');
-        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue('alice|7');
-        expect(screen.getByRole('button', { name: 'Use declared methods' })).toBeInTheDocument();
+        expect(await screen.findByText(/Loading the contract/)).toBeInTheDocument();
+        expect(screen.queryByLabelText('Method')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeDisabled();
     });
 
-    it('leaves the call under review untouched', async () => {
+    it('selects the first declared method once the list arrives', async () => {
         const reply = deferred();
         mount(reply);
-        fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'alice|7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        await screen.findByRole('heading', { name: 'Review contract call' });
-
-        reply.resolve({ data: { abi: ABI } });
-        await flush();
-
-        expect(screen.getByText('transfer')).toBeInTheDocument();
-        expect(screen.queryByText('zzz')).toBeNull();
-        expect(screen.getByText('alice')).toBeInTheDocument();
-    });
-
-    it('still selects the first declared method on an untouched form', async () => {
-        const reply = deferred();
-        mount(reply);
-        await screen.findByLabelText('Method');
+        await screen.findByText(/Loading the contract/);
         reply.resolve({ data: { abi: ABI } });
         await flush();
 
         expect(screen.getByLabelText('Method')).toHaveValue('zzz');
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeEnabled();
     });
 });

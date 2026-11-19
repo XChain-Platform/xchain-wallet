@@ -23,22 +23,11 @@ describe('shared control overrides', () => {
         expect(css).not.toMatch(/\.activeDateRange\s+button/);
     });
 
-    it('Send rows holding a Switch do not set a cursor over the disabled look', () => {
+    it('Send keeps no Switch row of its own (its per-recipient token Switch left with the old rows)', () => {
         const css = read('packages/core/src/shared/routes/Send.module.css');
 
-        expect(rule(css, '.rbfRow')).not.toMatch(/cursor\s*:/);
+        expect(rule(css, '.rbfRow')).toBe('');
+        expect(css).not.toMatch(/\.rbfRow\b/);
     });
 
-    it('the wallet row menu button keeps the control radius', () => {
-        const css = read('packages/core/src/shared/routes/WalletPicker.module.css');
-
-        expect(rule(css, '.rowWrap .rowMenuBtn')).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
-    });
-
-    it('the resume card actions are kit Buttons', () => {
-        const source = read('packages/core/src/shared/components/ResumeConfirmCard.jsx');
-
-        expect(source).toMatch(/<Button\b/);
-        expect(source).not.toMatch(/<button\b/);
-    });
 });

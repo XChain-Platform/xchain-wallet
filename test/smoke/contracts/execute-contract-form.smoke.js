@@ -119,16 +119,20 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ExecuteContractForm`);
     assert.ok(app.includes("'contract-execute'"),
         `${shell} tracks the contract-execute sub-route`);
-    assert.ok(/onExecute=\{\(\)\s*=>\s*setUnlockedView\('contract-execute'\)\}/.test(app),
-        `${shell} wires ContractDetail.onExecute → contract-execute`);
-    assert.ok(/onBack=\{\(\)\s*=>\s*setUnlockedView\('contract-detail'\)\}/.test(app),
-        `${shell} ExecuteContractForm back returns to contract-detail`);
+    // A function row passes its method, which rides the same prefill a deep
+    // link uses; Call by name passes none and clears it.
+    assert.ok(/onExecute=\{\(next\)\s*=>\s*\{\s*setContractRef\(ref\);\s*setExecutePrefill\(next\?\.method \? \{ method: next\.method \} : null\);\s*setUnlockedView\('contract-execute'\);\s*\}\}/.test(app),
+        `${shell} preserves the selected contract and opens contract-execute with the row's method`);
+    // Back pops the shell's history, so the form returns to the contract
+    // detail page it was opened from rather than naming that page.
+    assert.ok(/onBack=\{\(\) => \{ setExecutePrefill\(null\); goBack\(\); \}\}/.test(app),
+        `${shell} ExecuteContractForm Back clears its prefill and returns to the page it came from`);
 }
 
 // --- Deep-link prefill props + ABI lane (Contract_ABI.md FOLLOWUP 2) ----
 
 assert.ok(
-    /initialMethod, initialParamsText/.test(formSrc),
+    /initialMethod,\s*initialParamsText/.test(formSrc),
     'ExecuteContractForm accepts the deep-link prefill props',
 );
 assert.ok(
@@ -148,8 +152,9 @@ assert.ok(
 );
 assert.ok(
     /const \[contractAbi, setContractAbi\] = useState/.test(formSrc)
-        && /const \[manualMode, setManualMode\] = useState/.test(formSrc),
-    'ABI lane state: contractAbi + explicit manualMode escape hatch',
+        && /const \[abiStatus, setAbiStatus\] = useState/.test(formSrc)
+        && !/manualMode|setManualMode/.test(formSrc),
+    'ABI lane state: contractAbi + load status, and no manual-method escape hatch',
 );
 assert.ok(
     /<Select[\s\S]*?selectAbiMethod\(e\.target\.value\)/.test(formSrc),
@@ -157,12 +162,15 @@ assert.ok(
 );
 assert.ok(
     /abiArgumentErrors\.find\(Boolean\)/.test(formSrc)
-        && /disabled=\{actionConfirm\.composing\}/.test(formSrc),
-    'Preview stays available so declared-param validation can show plain copy before compose',
+        && /disabled=\{actionConfirm\.composing \|\| !abiActive\}/.test(formSrc),
+    'Call contract is disabled until the method list loads; declared-param validation still shows plain copy before compose',
 );
+assert.ok(/\bCall contract\b/.test(formSrc),
+    'ExecuteContractForm labels the primary action Call contract in every wallet mode');
 assert.ok(
-    /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),
-    'both lane-toggle affordances exist (abi is self-declared; manual stays available)',
+    !/Enter Method Manually|Use Declared Methods/.test(formSrc)
+        && /Try Again/.test(formSrc),
+    'no manual-method toggles; a failed method-list load offers Try Again',
 );
 assert.ok(
     !/2026-04-24_phase4-monaco-editor\.md/.test(formSrc),
@@ -170,5 +178,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through + deep-link prefill props + ABI lane with manual fallback)',
+    'OK: execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through + deep-link prefill props + ABI-only method list with Try Again on load failure)',
 );

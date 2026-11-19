@@ -75,7 +75,10 @@ describe('control surfaces', () => {
         };
 
         expect(body(menuCss, '\\.entry')).toMatch(/composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/);
-        expect(menuJsx).toMatch(/styles\.listPopup\}\s*data-xc-menu-list="cards"/);
+        // The Actions page itself now draws the shared ActionList (G101), a
+        // flush list card, so its rows are no longer cards in a card list.
+        expect(menuJsx).toMatch(/<ActionList\b/);
+        expect(menuJsx).not.toMatch(/data-xc-menu-list="cards"/);
 
         const flattener = cardCss.search(/\.card \.card,\s*\.card \.flush,\s*\.flush \.card,\s*\.flush \.flush\s*\{/);
         const keep = /\[data-xc-menu-list="cards"\] \.card\s*\{([^}]*)\}/.exec(cardCss);
@@ -86,7 +89,8 @@ describe('control surfaces', () => {
         expect(keep[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
         expect(keep[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
 
-        // The hover edge outranks the redrawn card surface, (0,3,0) over (0,2,0).
-        expect(menuCss).toMatch(/\.entry:hover:not\(\[aria-disabled="true"\]\)\s*\{[^}]*border-color:\s*var\(--xc-control-border-hover\)/);
+        expect(menuCss).toMatch(/\.entry:hover:not\(\[aria-disabled="true"\]\)\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/);
+        expect(menuCss).toMatch(/\.entry\[aria-current='page'\]\s*\{[^}]*background:\s*var\(--xc-row-active-bg\)/);
+        expect(menuCss).not.toMatch(/\.entry[^,{]*\{[^}]*border-color:/);
     });
 });

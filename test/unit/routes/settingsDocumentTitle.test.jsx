@@ -57,11 +57,12 @@ describe('Settings window title', () => {
     });
 
     it.each([
-        ['display', 'Display'],
+        // The old Display page opens Appearance (2026-11-13); Tokens is its one page.
+        ['display-tokens', 'Tokens'],
         ['keyboard', 'Keyboard'],
         ['backup', 'Backup'],
         ['fees', 'Fees'],
-        ['network-endpoints', 'Network & endpoints'],
+        ['network-endpoints', 'Network & Endpoints'],
         ['about', 'About'],
     ])('titles the %s sub-screen with the heading it shows', (id, heading) => {
         render(<Shell initialSubpageId={id} />);
@@ -70,8 +71,8 @@ describe('Settings window title', () => {
     });
 
     it('goes back to Settings when the sub-screen closes', () => {
-        render(<Shell initialSubpageId="display" />);
-        expect(document.title).toBe('XChain Wallet - Display');
+        render(<Shell initialSubpageId="fees" />);
+        expect(document.title).toBe('XChain Wallet - Fees');
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
         expect(document.title).toBe('XChain Wallet - Settings');
     });

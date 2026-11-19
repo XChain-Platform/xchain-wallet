@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 
@@ -36,19 +37,30 @@ describe('BetFeedsList states', () => {
     it('shows the initial loading state while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
-        expect(screen.getByRole('heading', { name: 'Betting' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Prediction Markets' })).toBeInTheDocument();
         expect(screen.getByText(/Loading/)).toBeInTheDocument();
         expect(screen.queryByText('No markets')).toBeNull();
     });
 
     it('shows the empty state after an empty market response', async () => {
+        const betFeeds = vi.fn().mockResolvedValue({ data: [] });
         mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            betFeeds,
         });
 
         expect(await screen.findByRole('heading', { name: 'No markets' })).toBeInTheDocument();
-        expect(screen.getByText(/No markets are taking bets/)).toBeInTheDocument();
+        expect(screen.getByText(/No markets offer positions/)).toBeInTheDocument();
+        // The Status choice now lives in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter prediction markets' }));
+        expect(screen.getByRole('searchbox', { name: 'Search prediction markets' })).toBeInTheDocument();
+        const status = screen.getByRole('combobox', { name: 'Status' });
+        expect(status).toHaveValue('open');
+
+        selectOption(status, 'all');
+        expect(status).toHaveValue('all');
+        expect(await screen.findByText(/Markets created on this network/)).toBeInTheDocument();
+        expect(betFeeds).toHaveBeenLastCalledWith({ chainId: CHAIN, opts: { limit: 50 } });
     });
 
     it('shows address-loading failures without an empty-state claim', async () => {
@@ -56,6 +68,13 @@ describe('BetFeedsList states', () => {
 
         expect(await screen.findByText('Wallet unavailable')).toBeInTheDocument();
         expect(screen.queryByText('No markets')).toBeNull();
+    });
+
+    it('names the unsupported-address state for prediction markets', async () => {
+        mount({ getAddressesByChain: vi.fn().mockResolvedValue({}) });
+
+        expect(await screen.findByRole('heading', { name: 'No prediction market address' })).toBeInTheDocument();
+        expect(screen.getByText('Prediction markets require an address on a supported network.')).toBeInTheDocument();
     });
 
     it('renders a market and opens it from the main state', async () => {

@@ -53,21 +53,21 @@ describe('Onboarding route accessibility', () => {
     it('scans every explainer step and the welcome choice', async () => {
         acceptLicense();
         const { container } = renderOnboarding();
-        await screen.findByText('Your keys, your wallet');
+        await screen.findByText('Your Wallet');
         await expectNoSeriousAxeViolations(container);
 
         for (const title of [
-            'Protect your recovery phrase',
-            'Review before you send',
-            'Built for the XChain Platform',
+            'Recovery Phrase',
+            'Review First',
+            'Supported Networks',
         ]) {
             fireEvent.click(screen.getByRole('button', { name: 'Next' }));
             await screen.findByText(title);
             await expectNoSeriousAxeViolations(container);
         }
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
-        await screen.findByRole('button', { name: 'Create new wallet' });
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        await screen.findByRole('button', { name: 'Create New Wallet' });
         await expectNoSeriousAxeViolations(container);
     });
 });

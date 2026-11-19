@@ -114,7 +114,7 @@ describe('PanicModeRow keyboard use', () => {
         expect(screen.getByRole('button', { name: 'Activate' })).toHaveFocus();
 
         activate(screen.getByRole('button', { name: 'Activate' }));
-        activate(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
+        activate(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' }));
         expect(screen.getByRole('button', { name: 'Deactivate' }), 'the cursor follows the swap').toHaveFocus();
 
         // Deactivate waits for the cleared state to be saved before the row swaps.

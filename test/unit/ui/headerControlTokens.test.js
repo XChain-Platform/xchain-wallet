@@ -15,21 +15,17 @@ const withoutComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 describe('header control sizing tokens', () => {
     const css = Object.fromEntries([
         'AppHeader',
-        'HeaderSettingsButton',
-        'PlatformSwitcher',
         'NetworkStatusIndicator',
-        'HeaderActionMenu',
         'TotalBalanceHero',
-        'HomeTabs',
+        'HomeListFilterMenu',
     ].map((name) => [name, readCss(name)]));
 
     it('uses the medium control scale for header actions and select triggers', () => {
         for (const name of [
             'AppHeader',
-            'HeaderSettingsButton',
-            'PlatformSwitcher',
             'NetworkStatusIndicator',
-            'HomeTabs',
+            // U72: the Home list's sort select became the filter-menu trigger.
+            'HomeListFilterMenu',
         ]) {
             expect(css[name], name).toContain('var(--xc-control-h-md)');
             expect(css[name], name).toContain('var(--xc-control-radius)');
@@ -37,8 +33,6 @@ describe('header control sizing tokens', () => {
 
         for (const name of [
             'AppHeader',
-            'HeaderSettingsButton',
-            'PlatformSwitcher',
             'NetworkStatusIndicator',
         ]) {
             expect(css[name], name).toContain('var(--xc-control-icon-md, var(--xc-icon-md))');
@@ -46,7 +40,7 @@ describe('header control sizing tokens', () => {
     });
 
     it('uses the small control scale for hero eye buttons and the menu close button', () => {
-        for (const name of ['HeaderActionMenu', 'TotalBalanceHero']) {
+        for (const name of ['TotalBalanceHero']) {
             expect(css[name], name).toContain('width: var(--xc-control-h-sm);');
             expect(css[name], name).toContain('height: var(--xc-control-h-sm);');
             expect(css[name], name).toContain('border-radius: var(--xc-control-radius);');

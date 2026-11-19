@@ -18,10 +18,20 @@ export {
 // the query AddressList actually reads, so it needs the imported-WIF rule
 // as much as any flow does. Exporting it here is what keeps that host from
 // growing a sixth private copy of the rule.
-export { importedAddressIdsFor } from './_importedAddressIds.js';
+export { importedAddressIdsFor, importedAddressIdsForStrict } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
-export { createAccount } from './createAccount.js';
+export { createAccount, LegacySingleAccountError } from './createAccount.js';
 export { activateChain } from './activateChain.js';
+// A seedless wallet whose keys live on a Trezor or Ledger.
+export {
+    addHardwareWallet,
+    isHardwareWallet,
+    hardwareNetworkSupport,
+    refuseHardwareWallet,
+    HARDWARE_NETWORK_SUPPORT,
+    HardwareWalletHasNoSeedError,
+    HardwareWalletAlreadyLinkedError,
+} from './hardwareWallet.js';
 export { fundBtcFromMiner } from './regtestFaucet.js';
 export { renameWallet } from './renameWallet.js';
 export { renameAccount } from './renameAccount.js';
@@ -259,6 +269,7 @@ export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
 } from './coinpayQueries.js';
+export { getCoinpayMatchSides, matchSideKey } from './coinpayMatchSides.js';
 export {
     dispensersForSource,
     dispensersForAddress,
@@ -326,6 +337,7 @@ export {
     pollDetail,
     pollResults,
     votesForQuery,
+    voteDelegationsForAddress,
 } from './voteQueries.js';
 export {
     createMarketAction,
@@ -360,6 +372,17 @@ export { createMultisigConfig } from './createMultisigConfig.js';
 export { getMultisigCosignerInfo, deriveCosignerKeys } from './multisigCosignerInfo.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
+    InsufficientMultisigSignaturesError,
+    assembleMultisigTx,
+    buildUnsignedMultisigSpend,
+    decodeMultisigSpend,
+    multisigSighash,
+} from './multisigSpend.js';
+export {
+    estimateMultisigSpendVsize,
+    startMultisigSend,
+} from './multisigSend.js';
+export {
     startMultisigSigningSession,
     getMultisigSigningSession,
     listMultisigSigningSessions,
@@ -373,11 +396,14 @@ export {
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
 export { signMultisigLocally } from './multisigSignLocally.js';
+export { importMultisigSigningRequest } from './multisigImportRequest.js';
 export { passiveCoSign } from './passiveCoSign.js';
 export { passiveCoSignForAccount, CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 export { provisionCoSignerAccount } from './provisionCoSignerAccount.js';
 export { previewCoSignRequest } from './previewCoSignRequest.js';
 export { listCoSignerAccounts, findCoSignerAccountByAddress, getCoSignerAccount } from './coSignerAccountQueries.js';
+export { coSignerAccountBalances } from './coSignerAccountBalances.js';
+export { resolveCoSignerTokenIds } from '../cosigner/tickIdResolver.js';
 export { updateCoSignerAccount, CoSignerAccountNotFoundError as CoSignerAccountUpdateNotFoundError } from './updateCoSignerAccount.js';
 export {
     contractValidate,
@@ -486,7 +512,9 @@ export {
     chainTipBlockTime,
     indexerWatermark,
     walletBalances,
-    BALANCE_POLL_INTERVAL_MS,
+    BALANCE_MAX_AGE_MS,
+    BALANCE_CHECK_INTERVAL_MS,
+    PENDING_POLL_INTERVAL_MS,
 } from './balances.js';
 export { createPollThrottle } from './pollThrottle.js';
 export { livePendingTxs, dismissFailedPendingTx } from './pendingTxFeed.js';
@@ -529,6 +557,7 @@ export {
     importBackupFile,
     restoreFromBackupPointer,
     rekeyWalletRecord,
+    verifyBackupFileForRestore,
     BackupConflictError,
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
@@ -545,6 +574,7 @@ export {
     RESTORE_PASSWORD_HINTS,
     restoreDeviceHint,
     restoreDeviceLabel,
+    restoreFailureKind,
     restoreFailureMessage,
     restorePasswordRequiredMessage,
 } from './restorePasswordCopy.js';
@@ -571,10 +601,20 @@ export {
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
-    resolveAdsForNextTx,
-    resolveAdsPlanForNextTx,
-    stepAdsAccumulator,
+    adsSettingsOf,
+    isAdsOn,
+    isAdsDue,
+    resolveAdsPayout,
+    stepAdsQueue,
     commitAdsStep,
+    isAdsCountedSend,
+    adsReservationOf,
+    reserveAdsPayout,
+    releaseAdsReservation,
+    settleAdsReservation,
+    reconcileAdsReservation,
+    returnAdsReservationToReview,
+    ADS_RECIPIENT_ROLE,
 } from './ads.js';
 export { checkReachability } from './reachability.js';
 export {
@@ -589,6 +629,37 @@ export {
     applyExternalLockoutState,
     LOCKOUT_STORAGE_KEY,
 } from './lockoutTracking.js';
+export {
+    readPhraseRecovery,
+    phraseResetAvailable,
+    vaultWalletIds,
+    withPhraseRecovery,
+    dropPhraseRecoveryWallet,
+    dropPhraseRecoveryWalletInMeta,
+    reconcilePhraseRecovery,
+    reconcilePhraseRecoveryInMeta,
+    reconcilePhraseRecoveryDetached,
+    resetPasswordWithRecoveryPhrase,
+    RecoveryPhraseMismatchError,
+    PhraseResetUnavailableError,
+    PhraseResetStaleError,
+} from './phraseRecovery.js';
+export {
+    ERASE_HOLD_MS,
+    ERASE_SCHEDULE_STORAGE_KEY,
+    configureEraseSchedulePersistence,
+    getEraseSchedule,
+    scheduleErase,
+    cancelEraseSchedule,
+    eraseRemainingMs,
+    isEraseDue,
+    shouldRunDueErase,
+    runDueErase,
+    markEraseGuardUnavailable,
+    EraseCancelError,
+    ERASE_CANCELLED_STORAGE_KEY,
+    VAULT_SESSION_LOCK_NAME,
+} from './eraseSchedule.js';
 export {
     isBiometricSupported,
     isBiometricRegistered,
@@ -704,20 +775,8 @@ export {
 } from './nativeFeeRequote.js';
 // Host routes run signature guards and retried pre-flights with fresh explorer reads.
 export { explorerFreshScope, retryRateLimitedPreflight } from '../sdk/explorerRateLimit.js';
-// Finishing a stored confirm away from the form that made it.
-export {
-    RESUMABLE_DISPATCH_METHODS,
-    RESUMABLE_AFTER_METHODS,
-    RESUME_TTL_MS,
-    RESUME_EXPIRED,
-    RESUME_UNAVAILABLE,
-    assertNoCredentials,
-    isResumable,
-    resumeDispatch,
-    resumeAfter,
-    describeResumeSession,
-    resumableSessions,
-} from './confirmResume.js';
+// The host settles the newer amount rule on its own action's pre-flight report.
+export { amountRulesFromSdk, settleAmountRepresentability } from './amountRepresentability.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
     markBackupVerified,
@@ -777,7 +836,11 @@ export {
     synthesizeDemoMessages,
     synthesizeDemoContacts,
     synthesizeDemoDispensers,
+    synthesizeDemoMarketDispensers,
     synthesizeDemoDispenses,
+    synthesizeDemoOrders,
+    synthesizeDemoSwaps,
+    demoMessaging,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

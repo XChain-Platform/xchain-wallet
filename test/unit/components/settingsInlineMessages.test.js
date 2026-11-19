@@ -35,16 +35,16 @@ describe('settings inline messages', () => {
 
     it('keeps action results out of the muted hint style', () => {
         const display = readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8');
-        for (const name of ['watchMessage', 'resetMessage', 'displayMessage']) {
+        for (const name of ['resetMessage', 'displayMessage']) {
             expect(display).not.toMatch(new RegExp(`style=\\{ROW_HINT\\}>\\{${name}`));
             expect(display).toMatch(new RegExp(`\\{${name} \\? (\\(\\s*)?<StatusMessage`));
         }
         const about = readFileSync(join(settingsDir, 'AboutSection.jsx'), 'utf8');
         expect(about).toMatch(/\{status \? <StatusMessage variant="success">/);
+        expect(about).toMatch(/<StatusMessage variant="success" title=\{t\('settings\.about\.upToDate'\)\}>/);
+        expect(about).toMatch(/variant="info"\s+title=\{t\('settings\.about\.updateAvailable'\)\}/);
         const settings = readFileSync(files.at(-1), 'utf8');
-        // The update check result is a page notice drawn by StatusMessage.
-        expect(settings).toMatch(/variant: UPDATE_CHECK_VARIANT\[state\]/);
-        expect(settings).toMatch(/<StatusMessage variant=\{desktopUpdate\.variant\}>\{desktopUpdate\.message\}<\/StatusMessage>/);
+        expect(settings).not.toMatch(/UPDATE_CHECK_VARIANT|desktopUpdate/);
     });
 
     it('puts a row result under the row at full width, not in its label column', () => {
@@ -52,7 +52,9 @@ describe('settings inline messages', () => {
         expect(display).toMatch(/Saved network filters<\/span>\s*<\/div>/);
         expect(display).toMatch(/saved filters too\.<\/span>\s*<\/div>/);
         const region = withEnglishCopy(readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8'));
-        expect(region).toMatch(/not asset balances\.<\/span>\s*<\/div>/);
+        // U57: the fiat currency explanation moved into the label tip, so no static line sits under it.
+        expect(region).not.toMatch(/not asset balances/);
+        expect(region.match(/<InfoTip\b/g)).toHaveLength(2);
     });
 
     it('shows a settings load failure as the shared load error, not a bare paragraph', () => {

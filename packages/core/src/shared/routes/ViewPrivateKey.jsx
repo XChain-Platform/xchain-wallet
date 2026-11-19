@@ -9,14 +9,18 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, CopyButton, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, FormPage, Icon, Input, ListPage, Notice, PageHeader, Screen, SectionHeader, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
 import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './ViewPrivateKey.module.css';
+// The key page reuses Receive's QR layout.
+import receiveStyles from './Receive.module.css';
+import qrStyles from '../../ui/QrDisplay.module.css';
 
 const REVEAL_TIMEOUT_MS = 30_000;
 
@@ -52,12 +56,13 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const [stage, setStage] = useState(
-        /** @type {'warning' | 'password' | 'submitting' | 'revealed'} */ ('warning'),
+        /** @type {'warning' | 'submitting' | 'revealed'} */ ('warning'),
     );
     const [password, setPassword] = useState('');
-    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [revealed, setRevealed] = useState(false);
     const [wif, setWif] = useState(/** @type {{ addressId: string, value: string } | null} */ (null));
+    const formErrors = useFormErrors();
+    const resetFormErrors = formErrors.reset;
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const exportRequestRef = useRef(0);
     const clipboardAutoClearSeconds = configureClipboardAutoClear(
@@ -71,52 +76,58 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         exportRequestRef.current += 1;
         setStage('warning');
         setPassword('');
-        setSubmitError(null);
+        resetFormErrors();
         setRevealed(false);
         setWif(null);
-    }, []);
+    }, [resetFormErrors]);
 
     const leaveScreen = useCallback(() => {
         clearSensitiveState();
         onBack();
     }, [clearSensitiveState, onBack]);
 
-    useBackHandler(stage === 'warning' ? undefined : clearSensitiveState);
-
-    useEffect(() => {
-        if (stage !== 'password') return undefined;
-        const id = setTimeout(() => passwordRef.current?.focus(), 0);
-        return () => clearTimeout(id);
-    }, [stage]);
+    // Back from the key page leaves the screen (and wipes the key). While an
+    // export is in flight or a password is typed, Back (and a native pause,
+    // which runs every overlay handler) wipes the password and drops the
+    // pending export, so a key that resolves after the app is hidden never
+    // shows.
+    const holdsSecret = stage === 'submitting' || password.length > 0;
+    useBackHandler(stage === 'revealed' ? leaveScreen : (holdsSecret ? clearSensitiveState : undefined));
 
     // Window blur covers accidental exposure during screen sharing. Desktop
     // also reports native minimize and hide because Electron does not emit a
     // reliable DOM blur or visibility transition for those paths.
+    // The key page has no Hide, so blur and the timeout wipe the key and
+    // return to the warning form instead of covering the key.
     useEffect(() => {
-        const handler = () => setRevealed(false);
+        if (!revealed) return undefined;
+        const handler = () => clearSensitiveState();
         window.addEventListener('blur', handler);
         window.addEventListener('xc:window-hidden', handler);
         return () => {
             window.removeEventListener('blur', handler);
             window.removeEventListener('xc:window-hidden', handler);
         };
-    }, []);
+    }, [revealed, clearSensitiveState]);
 
     // A reveal expires even when the window remains focused.
     useEffect(() => {
         if (!revealed) return undefined;
-        const id = setTimeout(() => setRevealed(false), REVEAL_TIMEOUT_MS);
+        const id = setTimeout(() => clearSensitiveState(), REVEAL_TIMEOUT_MS);
         return () => clearTimeout(id);
-    }, [revealed]);
+    }, [revealed, clearSensitiveState]);
 
     useEffect(() => {
         clearSensitiveState();
     }, [walletId, address.id, clearSensitiveState]);
 
     useEffect(() => {
-        // The shell emits this event as an unlocked session becomes active.
-        // Clearing before that session paints prevents a key exported by the
-        // previous session from becoming revealable after a lock cycle.
+        // Every xc:session-changed wipes the shown key, a plain status
+        // refresh of the same unlocked session included: the event cannot
+        // tell a refresh from a new session, and showing the key again only
+        // costs the password. This also stops a key exported by an earlier
+        // session from staying on screen after a lock cycle, and drops any
+        // export still in flight.
         window.addEventListener('xc:session-changed', clearSensitiveState);
         return () => {
             window.removeEventListener('xc:session-changed', clearSensitiveState);
@@ -126,10 +137,16 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+        if (stage === 'submitting') return;
+        // An empty password marks the field rather than disabling the button.
+        if (password.length === 0) {
+            formErrors.validate({ 'view-key-password': 'Enter your wallet password.' });
+            passwordRef.current?.focus();
+            return;
+        }
         const requestId = ++exportRequestRef.current;
         setStage('submitting');
-        setSubmitError(null);
+        formErrors.reset();
         try {
             const res = await messaging.exportPrivateKey({
                 walletId,
@@ -139,27 +156,42 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             if (exportRequestRef.current !== requestId) return;
             setPassword('');
             setWif({ addressId: address.id, value: res.wif });
-            setRevealed(false);
+            // The key shows at once; the warning and the password are the
+            // confirmation, so there is no second tap to reveal.
+            setRevealed(true);
             setStage('revealed');
         } catch (err) {
             if (exportRequestRef.current !== requestId) return;
             const name = err?.name;
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError'
                 || name === 'AeadAuthError') {
-                setSubmitError('Incorrect password. Try again.');
+                formErrors.validate({ 'view-key-password': 'The wallet password is not right.' });
             } else if (name === 'NoKeyForAddressError') {
-                setSubmitError('This address has no exportable private key.');
+                formErrors.fail('This address has no exportable private key.');
             } else {
-                setSubmitError('Could not confirm the password or load this private key.');
+                formErrors.fail('Could not confirm the password or load this private key.');
             }
-            setStage('password');
+            setStage('warning');
+            setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }
+
+    // The key's QR fills its white box: a one-module quiet zone and a thin
+    // pad instead of the four-module margin inside a padded frame.
+    const [keyQr, setKeyQr] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (!currentWif) { setKeyQr(null); return undefined; }
+        let cancelled = false;
+        QRCode.toDataURL(currentWif, { errorCorrectionLevel: 'M', margin: 1, width: 512, color: { dark: '#000000', light: '#FFFFFF' } })
+            .then((url) => { if (!cancelled) setKeyQr(url); })
+            .catch(() => { if (!cancelled) setKeyQr(null); });
+        return () => { cancelled = true; };
+    }, [currentWif]);
 
     const header = (
         <PageHeader
             onBack={leaveScreen}
-            title="Show private key"
+            title="Show Private Key"
         />
     );
     const wrap = (children) => (
@@ -188,7 +220,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     </dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -202,153 +234,68 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     private key is stored here and nothing can be signed from it.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
     }
 
-    if (stage === 'warning') {
-        return wrap(
-            <>
-                <h2 className={styles.warningTitle}>Before you continue</h2>
-                <ul className={styles.warningList}>
-                    <li>
-                        This is the private key for
-                        {' '}<AddressText address={address.address} />.
-                    </li>
-                    <li>{PRIVATE_KEY_WARNING}</li>
-                    <li>
-                        If you are screen-sharing or recording, <strong>stop now</strong>{' '}
-                        before you reveal the key.
-                    </li>
-                    {sourceInfo.kind === 'hd' ? (
-                        <li>
-                            This key is derived from your recovery phrase. If you have your
-                            recovery phrase backed up, you don't need to back up this key
-                            separately.
-                        </li>
-                    ) : (
-                        <li>
-                            This key was imported separately. It is included in encrypted
-                            backups but is <strong>not</strong> recoverable from your recovery phrase.
-                        </li>
-                    )}
-                </ul>
-                <div className={styles.actions}>
-                    <Button
-                        variant="primary"
-                        onClick={() => setStage('password')}
-                    >
-                        I understand, continue
-                    </Button>
-                </div>
-            </>,
-        );
-    }
-
-    // The password step is a form, so it lays out through FormPage: bare on a
-    // phone, one card when wide, the submit button closing the form. A refused
-    // password or a failed load is the form notice, the first item on the page.
-    if (stage === 'password' || stage === 'submitting') {
-        return (
-            <Screen variant={variant} header={header}>
-                <FormPage
-                    onSubmit={handleSubmit}
-                    status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-                    intro="Confirm your wallet password. The key stays hidden until you tap to reveal it."
-                    actions={(
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={stage === 'submitting'}
-                            disabled={stage === 'submitting' || password.length === 0}
-                        >
-                            Confirm password
-                        </Button>
-                    )}
+    // One form stays mounted through password confirmation and reveal. The
+    // private key and its QR have no DOM representation until export succeeds.
+    return wrap(
+        <FormPage
+            label="Before you continue"
+            onSubmit={handleSubmit}
+            errors={formErrors}
+            actions={stage !== 'revealed' ? (
+                <Button
+                    type="submit"
+                    variant="success"
+                    icon={<Icon.ThumbsUpIcon />}
+                    loading={stage === 'submitting'}
+                    disabled={stage === 'submitting'}
                 >
+                    I Understand
+                </Button>
+            ) : null}
+        >
+            <div className={`${qrStyles.stack} ${receiveStyles.receiveQrDisplay} ${styles.keyStack}`}>
+                {/* The security notice always leads the page. */}
+                <Notice tone="danger" role="note" data-warning-line="critical">
+                    <p>{PRIVATE_KEY_WARNING}</p>
+                </Notice>
+                {/* A successful export adds the QR directly below the notice. */}
+                {stage === 'revealed' && keyQr ? (
+                    <div className={qrStyles.frame} style={{ '--xc-qr-frame-size': '224px', padding: 'var(--xc-space-1)' }}>
+                        <img src={keyQr} alt="Private key QR code" width={512} height={512} style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '1 / 1' }} />
+                    </div>
+                ) : null}
+                {/* The same read-only address field remains in place in both states. */}
+                <Input label="Address" help="The address this key controls. Anyone holding the key can spend what this address holds." value={address.address} readOnly autoComplete="off" onChange={() => {}} fieldAction={<CopyButton value={address.address} label="Copy Address" ariaLabel="Copy Address" iconOnly />} />
+                {stage === 'revealed' ? (
+                    <>
+                        <Textarea label="Private key" value={currentWif ?? ''} rows={2} readOnly autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} onChange={() => {}} style={{ resize: 'none' }} fieldAction={currentWif ? <CopyButton value={currentWif} label="Copy Private Key" ariaLabel="Copy Private Key" sensitive iconOnly onCopied={() => {}} /> : null} />
+                        <span className={styles.clipboardNote}>
+                            {clipboardAutoClearSeconds === 0
+                                ? 'Sensitive clipboard copies remain until replaced.'
+                                : `Sensitive clipboard copies expire after ${clipboardAutoClearSeconds} seconds.`}
+                        </span>
+                    </>
+                ) : (
                     <Input
+                        id="view-key-password"
                         ref={passwordRef}
                         type="password"
                         label="Wallet password"
-                        hint="Required every time you view a private key."
+                        help="The password that unlocks this wallet on this device. The private key shows only after it is confirmed."
                         value={password}
-                        onChange={(event) => {
-                            setPassword(event.target.value);
-                            if (submitError) setSubmitError(null);
-                        }}
+                        onChange={(event) => setPassword(event.target.value)}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}
                     />
-                </FormPage>
-            </Screen>
-        );
-    }
-
-    // stage === 'revealed'
-    return wrap(
-        <>
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Address</dt>
-                <dd className={styles.detailsValue}>
-                    <AddressText address={address.address} />
-                </dd>
-                {address.derivationPath ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Path</dt>
-                        <dd className={styles.detailsValue}>
-                            <code className={styles.code}>{address.derivationPath}</code>
-                        </dd>
-                    </>
-                ) : null}
-            </dl>
-            <div className={styles.revealRow}>
-                {revealed ? (
-                    <code className={styles.wif}>{currentWif}</code>
-                ) : (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        icon={null}
-                        style={{ flex: 1 }}
-                        onClick={() => setRevealed(true)}
-                    >
-                        Tap to reveal private key
-                    </Button>
                 )}
-                <Button
-                    variant="ghost"
-                    onClick={() => setRevealed(false)}
-                    disabled={!revealed}
-                >
-                    Hide
-                </Button>
             </div>
-            {revealed && renderQR && currentWif ? (
-                <div className={styles.qrRow}>
-                    {renderQR({ value: currentWif })}
-                </div>
-            ) : null}
-            <div className={styles.copyRow}>
-                {revealed && currentWif ? (
-                    <CopyButton
-                        value={currentWif}
-                        label="Copy private key"
-                        sensitive
-                        onCopied={() => {}}
-                    />
-                ) : null}
-                <span className={styles.clipboardNote}>
-                    {clipboardAutoClearSeconds === 0
-                        ? 'Sensitive clipboard copies remain until replaced.'
-                        : `Sensitive clipboard copies expire after ${clipboardAutoClearSeconds} seconds.`}
-                </span>
-            </div>
-            <div className={styles.actions}>
-                <Button variant="primary" onClick={leaveScreen}>Done</Button>
-            </div>
-        </>,
+        </FormPage>,
     );
 }
 

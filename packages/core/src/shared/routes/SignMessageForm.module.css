@@ -1,0 +1,55 @@
+.signatureField {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.signatureLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
+    min-width: 0;
+    margin-block-end: var(--xc-label-gap);
+}
+
+.signatureLabel {
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+}
+
+.signatureBox {
+    position: relative;
+    min-height: 5rem;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
+}
+
+.signatureText,
+.signaturePlaceholder {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-control-font-md, 14px);
+    line-height: var(--xc-control-line, 1.25);
+}
+
+.signatureText {
+    padding-inline-end: calc(var(--xc-tap-min) + var(--xc-space-3));
+}
+
+.signaturePlaceholder {
+    color: var(--xc-text-muted);
+}
+
+.signatureCopy {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+}

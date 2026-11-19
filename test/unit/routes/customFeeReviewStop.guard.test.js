@@ -18,6 +18,7 @@ const sources = import.meta.glob(
     [
         '../../../packages/*/src/**/*.jsx',
         '!../../../packages/core/src/ui/FeeSelector.jsx',
+        '!../../../packages/core/src/shared/components/formStandard/FeeSection.jsx',
         '!../../../packages/web/src/style-guide/**',
     ],
     { query: '?raw', import: 'default', eager: true },
@@ -28,9 +29,16 @@ function rel(path) {
 }
 
 // A form offers Custom unless every fee control it renders passes allowCustom={false}.
+// The Network fee section renders the selector itself, so its opening tag counts as
+// a fee control; it spans lines with nested props, so the tag ends at the line that
+// closes it. A section with a fixed fee, or with no tiers, renders no selector and
+// so offers no Custom rate.
 function offersCustomFee(source) {
-    const tags = source.match(/<FeeSelector\b[\s\S]*?\/>/g) || [];
-    return tags.some((tag) => !/allowCustom=\{false\}/.test(tag));
+    const selectors = (source.match(/<FeeSelector\b[\s\S]*?\/>/g) || [])
+        .filter((tag) => !/allowCustom=\{false\}/.test(tag));
+    const sections = (source.match(/<FeeSection\b[\s\S]*?\n\s*\/?>/g) || [])
+        .filter((tag) => !/allowCustom=\{false\}/.test(tag) && !/\bfixedFee=/.test(tag) && !/\btiers=\{null\}/.test(tag));
+    return selectors.length + sections.length > 0;
 }
 
 const feeForms = Object.entries(sources)

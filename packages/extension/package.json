@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/extension",
-    "version": "0.342.1",
+    "version": "0.343.0",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "Chrome MV3 extension shell for XChain Wallet - popup, full-screen, background service worker, content script, injected provider",
@@ -10,13 +10,13 @@
         "build": "vite build",
         "dev": "vite build --watch --mode development",
         "reproduce": "bash scripts/reproduce.sh",
-    "audit:remote-code": "node scripts/remote-code-audit.mjs dist"
+        "audit:remote-code": "node scripts/remote-code-audit.mjs dist"
     },
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
         "@xchain-wallet/core": "workspace:*",
-        "bitcoinjs-lib": "6.1.7",
+        "bitcoinjs-lib": "6.1.8",
         "lightweight-charts": "^4.2.0",
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
@@ -25,7 +25,7 @@
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
-        "sharp": "^0.35.4",
+        "sharp": "^0.35.5",
         "vite": "^6.4.3",
         "vite-plugin-node-polyfills": "^0.22.0"
     }

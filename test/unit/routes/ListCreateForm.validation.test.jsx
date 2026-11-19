@@ -63,7 +63,7 @@ describe('ListCreateForm validation recovery', () => {
         vi.stubGlobal('FileReader', FailingFileReader);
         mount();
 
-        const input = await screen.findByLabelText('Upload CSV of addresses');
+        const input = await screen.findByLabelText('Upload addresses file');
         fireEvent.change(input, {
             target: { files: [new File(['address\nrow'], 'members.csv', { type: 'text/csv' })] },
         });
@@ -73,8 +73,8 @@ describe('ListCreateForm validation recovery', () => {
 
     it('clears stale validation when token members are added or removed', async () => {
         mount('1');
-        const members = await screen.findByLabelText('Tokens (one per line)');
-        const publish = screen.getByRole('button', { name: 'Publish list' });
+        const members = await screen.findByLabelText('Tokens');
+        const publish = screen.getByRole('button', { name: /^Publish List$/ });
 
         fireEvent.click(publish);
         expect(await screen.findByText('Add at least one token.')).toBeTruthy();
@@ -82,7 +82,7 @@ describe('ListCreateForm validation recovery', () => {
         fireEvent.change(members, { target: { value: 'XCHAIN' } });
         await waitFor(() => expect(screen.queryByText('Add at least one token.')).toBeNull());
 
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad|memo' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad|memo' } });
         fireEvent.click(publish);
         expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeTruthy();
 

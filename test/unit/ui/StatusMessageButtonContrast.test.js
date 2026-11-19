@@ -59,7 +59,8 @@ function ratio(a, b) {
     return (hi + 0.05) / (lo + 0.05);
 }
 
-const fills = { status: '--xc-info-bg', info: '--xc-info-bg', warning: '--xc-warning-bg', success: '--xc-success-bg', error: '--xc-danger' };
+// Notice Standard (2026-11-15): warning and error share the danger tint.
+const fills = { status: '--xc-info-bg', info: '--xc-info-bg', warning: '--xc-danger-bg', success: '--xc-success-bg', error: '--xc-danger-bg' };
 
 describe('StatusMessage secondary Button contrast', () => {
     for (const [themeName, theme] of [['light', light], ['dark', dark]]) {

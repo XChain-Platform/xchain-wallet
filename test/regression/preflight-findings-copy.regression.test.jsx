@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { warningText } from '../../packages/core/src/shared/utils/preflightFindingCopy.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -111,18 +112,30 @@ describe('regression/preflight-findings-copy', () => {
         );
 
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'REGCOPY' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
-        await waitFor(() => expect(screen.getByTestId('preflight-panel'))
-            .toHaveAttribute('data-verdict', 'fail'));
-        const panel = screen.getByTestId('preflight-panel');
-        expect(screen.getAllByTestId('preflight-panel')).toHaveLength(1);
-        expect(within(panel).getAllByRole('listitem')).toHaveLength(FINDINGS.length);
-        expect(within(panel).getAllByText(/TICK \(reserved\)/i)).toHaveLength(1);
-        expect(within(panel).getAllByText('Ticker format needs review before signing.')).toHaveLength(1);
-        expect(within(panel).getAllByText('The dry-run service did not return a second verdict.')).toHaveLength(1);
+        // Confirm Standard (G127): the warning slot's one danger notice holds
+        // every finding, each said once: the blocking reason, the warning, and
+        // that the network check went unanswered.
+        await waitFor(() => expect(screen.getByTestId('confirm-status'))
+            .toHaveAttribute('data-state', 'fail'));
+        const page = screen.getByTestId('confirm-modal');
+        const notice = screen.getByTestId('confirm-status');
+        expect(screen.getAllByTestId('confirm-status')).toHaveLength(1);
+        expect(within(notice).getAllByText(/TICK \(reserved\)/i)).toHaveLength(1);
+        expect(within(page).getAllByText(/TICK \(reserved\)/i)).toHaveLength(1);
+        expect(within(page).getAllByText(warningText(FINDINGS[1]).headline)).toHaveLength(1);
+        // The producer's own words ride under each line, once.
+        expect(within(page).getAllByText('Ticker format needs review before signing.')).toHaveLength(1);
+        expect(within(notice).getAllByText(/verdict was not reached/i)).toHaveLength(1);
+        expect(within(page).getAllByText('The dry-run service did not return a second verdict.')).toHaveLength(1);
+        // G130 keeps Approve enabled; pressing it re-checks and focuses the
+        // blocking status instead of hiding the reason behind a disabled action.
+        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
         expect(messaging.issueToken).not.toHaveBeenCalled();
-        expect(within(panel).queryByText(/the network refused/i)).toBeNull();
+        // Nothing was broadcast, so the review says what the network would do,
+        // never that it refused.
+        expect(page.textContent).not.toMatch(/the network refused|was refused|has been refused/i);
     });
 });

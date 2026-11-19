@@ -48,6 +48,7 @@ import { realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 import { isUpdateInfoContent } from './update-info.mjs';
+import { classifyPinnedSignature } from './gpg-signature-status.mjs';
 
 // THE ANDROID LANE IS HERE BECAUSE IT IS THE ONLY ONE THAT HAS PUBLISHED.
 // This list read ['desktop', 'extension', 'web'] from the day it was written
@@ -82,7 +83,7 @@ export const FINDINGS = {
     'POINTER-NO-HASH': "a yml pointer names a file with no sha512 the desktop client can read, which every desktop client refuses",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
-    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
+    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced; desktop clients refuse it and direct APK installs have no client-side gate",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
     'MANIFEST-TAG-MISMATCH': 'a manifest file name does not name the release in its signed tag header',
@@ -385,8 +386,9 @@ export function verifyManifestSignature(manifestBytes, signaturePath, keyFingerp
     // Read the machine-readable status, never the human text: gpg exits 0
     // for a good signature from an UNTRUSTED key, which is precisely the
     // case an attacker with their own key produces. VALIDSIG carries the
-    // fingerprint that actually signed, so it is the only line that
-    // answers "was this K1".
+    // fingerprint that actually signed, but revoked and expired keys still
+    // receive VALIDSIG. The shared classifier also requires a matching
+    // GOODSIG and refuses the per-signature failure statuses.
     //
     // MATCH THE PRIMARY KEY AS WELL AS THE SIGNING ONE, because they are
     // different fingerprints and the world only ever sees one of them. K1
@@ -401,24 +403,7 @@ export function verifyManifestSignature(manifestBytes, signaturePath, keyFingerp
     // normal operations get muted" failure, aimed at the one operator who
     // followed the instructions. GnuPG's last VALIDSIG field is the primary
     // key fingerprint precisely so a caller can do this.
-    const validsig = /^\[GNUPG:\] VALIDSIG (.+)$/m.exec(result.stdout);
-    if (!validsig) return 'bad';
-    const fields = validsig[1].trim().split(/\s+/);
-    const signing = fields[0] || '';
-    const primary = fields.length > 1 ? fields[fields.length - 1] : '';
-    const want = keyFingerprint.replace(/\s+/g, '').toUpperCase();
-    // FULL-FINGERPRINT EQUALITY, never a suffix. Matching by suffix meant a
-    // configured 8- or 16-hex key id (the value gpg prints most often)
-    // accepted ANY key whose fingerprint happened to end in those
-    // characters, and short-id collisions are cheaply minted. The manifest
-    // this decides on is what enters the union baseline the whole feed is
-    // judged against, so a collision key would have laundered its own
-    // payload clean. cws-upload.mjs's attributeSignature and verify.sh's
-    // --key gate both demand 40 hex with strict equality; this is the same
-    // rule, and the three must not drift apart again.
-    const matches = (fpr) => /^[0-9A-F]{40}$/.test(fpr.toUpperCase())
-        && fpr.toUpperCase() === want;
-    return matches(signing) || matches(primary) ? 'ok' : 'bad';
+    return classifyPinnedSignature(result.stdout, keyFingerprint) === 'ok' ? 'ok' : 'bad';
 }
 
 /**
@@ -602,6 +587,11 @@ export function sweep(root, options = {}) {
                 add('POINTER-NO-MANIFEST', rel,
                     `names version ${version}, no RELEASE_HASHES/v${version}.txt`);
             }
+            const ownGate = gateByFile.get(`v${version}.txt`);
+            if (ownGate !== undefined && ownGate !== 'enforced') {
+                add('POINTER-UNGATED', rel,
+                    `the v${version} manifest records the dev-mock gate as '${ownGate || 'unrecorded'}', not 'enforced'`);
+            }
             continue;
         }
 
@@ -646,11 +636,14 @@ export function sweep(root, options = {}) {
             // release's manifest. With no such manifest POINTER-NO-MANIFEST has
             // fired, and the union test still reports a planted file.
             const own = byManifestFile.get(`v${info.version}.txt`);
-            if (own && !own.has(entry.url)) {
+            // The client strips a leading `./` and nothing else, so a url
+            // with a path never matches a manifest key.
+            const covered = entry.url.replace(/^\.\//, '').trim();
+            if (own && !own.has(covered)) {
                 add('POINTER-UNCOVERED', rel,
                     `names ${dir}/${entry.url}, which the v${info.version} manifest does not cover`
-                    + (union.has(entry.url) ? ' (another release\'s manifest does)' : ''));
-            } else if (!own && !union.has(entry.url)) {
+                    + (union.has(covered) ? ' (another release\'s manifest does)' : ''));
+            } else if (!own && !union.has(covered)) {
                 add('POINTER-UNCOVERED', rel,
                     `names ${dir}/${entry.url}, which no signed manifest covers`);
             }

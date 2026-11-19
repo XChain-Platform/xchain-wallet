@@ -62,15 +62,17 @@ assert.ok(/try \{[\s\S]*localStorage\.setItem\(probe, '1'\)/.test(hookSrc),
 // 7. Send.jsx wires the hook + restore banner + clear-on-success.
 assert.ok(/from '\.\.\/hooks\/useFormDraft\.js'/.test(sendSrc),
     'Send.jsx imports useFormDraft');
-assert.ok(/useFormDraft\(\{ view: 'send', walletId\b/.test(sendSrc),
-    'Send.jsx initialises useFormDraft with view=send and walletId');
-const sendDraftFields = sendSrc.match(/const values = \{([\s\S]*?)\};\s*if \(hasMeaningfulSendDraft\(values\)\) draft\.save\(values\);/)?.[1] || '';
+// A page hosting the form (an agent's Fund page) passes its own draft slot;
+// the plain Send page keeps view=send.
+assert.ok(/draftView = 'send'/.test(sendSrc) && /useFormDraft\(\{ view: draftView, walletId\b/.test(sendSrc),
+    'Send.jsx initialises useFormDraft with view=send (by default) and walletId');
+const sendDraftFields = sendSrc.match(/const values = \{([\s\S]*?)\};(?:\s*\/\/[^\n]*)*\s*if \(hasMeaningfulSendDraft\(\{ \.\.\.values, toAddress: typedToAddress \}\)\) draft\.save\(values\);/)?.[1] || '';
 assert.ok(sendDraftFields.length > 0,
     'Send.jsx auto-saves its composition fields only when they hold a meaningful draft');
 for (const field of [
     'chainId', 'fromAddressId', 'pickedSourceChain', 'toAddress', 'tick',
     'amount', 'memo', 'amountInputMode', 'fiatAmount', 'extraLegs',
-    'perRecipientToken',
+    'perRecipientToken', 'sendMode', 'multiRecipients', 'advancedText',
 ]) {
     assert.match(sendDraftFields, new RegExp(`\\b${field}\\b`),
         `Send.jsx auto-saves the non-secret composition field "${field}"`);

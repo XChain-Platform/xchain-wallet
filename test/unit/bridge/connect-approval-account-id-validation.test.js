@@ -33,8 +33,8 @@ import { registerBridgeHandlers } from '../../../packages/extension/src/bridge/h
 const ORIGIN = 'https://dapp.example';
 
 const chainRegistry = {
-    get: () => null,
-    supportedChains: () => [],
+    get: (id) => (id === 'bitcoin-regtest' ? { id } : null),
+    supportedChains: () => [{ id: 'bitcoin-regtest' }],
 };
 
 function fakeVault() {
@@ -99,7 +99,7 @@ describe('bridge.connect: a foreign account id cannot survive into the stored gr
         const vault = fakeVault();
         const approvals = fakeApprovals({
             approved: true,
-            chains: [],
+            chains: ['bitcoin-regtest'],
             accounts: ['not-a-real-account', 'also-not-real'],
             canSignMessage: false,
             canSignAction: {},
@@ -119,7 +119,7 @@ describe('bridge.connect: a foreign account id cannot survive into the stored gr
         const vault = fakeVault();
         const approvals = fakeApprovals({
             approved: true,
-            chains: [],
+            chains: ['bitcoin-regtest'],
             accounts: ['acct-second', 'forged-id'],
             canSignMessage: false,
             canSignAction: {},

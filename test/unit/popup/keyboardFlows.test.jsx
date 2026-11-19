@@ -192,8 +192,10 @@ describe('extension popup keyboard flows', () => {
             messaging,
         ));
 
-        const tabs = screen.getAllByRole('tab', { name: /^(Coins|Tokens|NFTs|DeFi|Activity)$/ });
-        expect(tabs.map((tab) => tab.textContent)).toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
+        // Activity is not a Home tab; History holds that list. Coins and
+        // Tokens are the Balances tab's Type (operator 2026-11-15).
+        const tabs = screen.getAllByRole('tab', { name: /^(Balances|NFTs|DeFi)$/ });
+        expect(tabs.map((tab) => tab.textContent)).toEqual(['Balances', 'NFTs', 'DeFi']);
         tabs[0].focus();
         expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 
@@ -214,11 +216,17 @@ describe('extension popup keyboard flows', () => {
         ));
 
         const destination = await screen.findByLabelText(/^To$/);
+        const contacts = screen.getByRole('button', { name: 'Open address book' });
         destination.focus();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
+        expect(document.activeElement).toBe(contacts);
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Asset' }));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Asset: / }));
+        await user.tab();
+        // The Amount label's help tip comes before the field.
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
         await user.tab();
         const amount = screen.getByLabelText(/^Amount \(/);
         expect(document.activeElement).toBe(amount);
@@ -242,16 +250,26 @@ describe('extension popup keyboard flows', () => {
             routeMessaging(),
         ));
 
-        const token = await screen.findByRole('button', { name: /^Change asset/ });
+        const token = await screen.findByRole('button', { name: /^Asset: / });
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         token.focus();
+        await user.tab();
+        // The Amount label's help tip comes before the field.
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
         await user.tab();
         expect(document.activeElement).toBe(amount);
         fireEvent.change(amount, { target: { value: '1.25' } });
         await user.keyboard('{Enter}');
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
-        await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to home' }));
+        // The explorer link now follows the amount field, so Tab passes it
+        // and any other trailing control before it wraps to the header.
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
+        let wrapped = false;
+        for (let step = 0; step < 6 && !wrapped; step += 1) {
+            await user.tab();
+            wrapped = document.activeElement === back;
+        }
+        expect(wrapped).toBe(true);
     });
 });
 
@@ -326,13 +344,14 @@ describe('extension approval keyboard flows', () => {
         });
 
         render(<Router />);
-        const chain = await screen.findByRole('checkbox', { name: /Allow Bitcoin mainnet/ });
+        const networksHelp = await screen.findByRole('button', { name: 'About Networks it can see' });
         // The approval window opens on Reject; start this walk from no focus so
         // Tab reaches the first control in document order.
         await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reject' })));
         document.activeElement.blur();
+        // Read-only headers have no help control, so the first request control follows.
         await user.tab();
-        expect(document.activeElement).toBe(chain);
+        expect(document.activeElement).toBe(networksHelp);
         await user.keyboard('{Escape}');
 
         await waitFor(() => expect(decisions).toEqual([{ approved: false }]));

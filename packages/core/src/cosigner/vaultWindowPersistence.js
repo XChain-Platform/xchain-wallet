@@ -55,6 +55,9 @@ export function createVaultWindowPersistence(vault, accountId, expectedScope = {
     }
 
     return {
+        // True when write() queues for the account lock itself. A caller already
+        // holding that lock must not pair this port with a second lock of its own.
+        locksAccount: !accountLocked,
         async read() {
             const acct = requireAccountScope(await vault.coSignerAccounts.get(accountId));
             return acct.window ?? null;

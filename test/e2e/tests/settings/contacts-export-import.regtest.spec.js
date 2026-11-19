@@ -46,10 +46,11 @@
 //      role, so they carry no accessible name at all. `getByRole('listitem',
 //      { name })` matches nothing however plainly the name is rendered; match
 //      by TEXT (`contactRow` below).
-//   2. The Contacts panel is INLINE on Settings, not a collapsible row like
-//      Privacy or Backup, so there is nothing to click to open it. Clicking
-//      `/^Contacts/` unscoped hits the primary navigation and leaves Settings
-//      entirely; scoping to `main` then matches nothing.
+//   2. Export and Import are rows on Settings, Backup and Recovery (since the
+//      grouped Settings list of 2026-11-13): Export contacts opens its own
+//      page, Import contacts opens the file picker. Clicking `/^Contacts/`
+//      unscoped hits the primary navigation and leaves Settings entirely, so
+//      every Settings click here is scoped to `main`.
 //   3. **AN UNMATCHED CLICK IS A HANG, NOT AN ERROR.** Playwright has no
 //      default action timeout, so the miss in (2) waited out the whole 600s
 //      test budget instead of failing. When diagnosing, pass `--timeout` so a
@@ -68,8 +69,11 @@
 
 import { readFile } from 'node:fs/promises';
 
-import { createWallet, expect, openPaletteCommand, openSettings, test } from '../../fixtures/wallet.js';
+import {
+    backToSettingsList, createWallet, expect, openPaletteCommand, openSettings, test,
+} from '../../fixtures/wallet.js';
 import { REGTEST_DESTINATION } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -83,19 +87,32 @@ const CONTACT_NAME = 'E2E Round Trip';
 // re-encoded for whichever chain `XC_REGTEST_COIN` names.
 const CONTACT_ADDRESS = REGTEST_DESTINATION;
 
-/** Opens Settings and scrolls the Contacts panel into reach. */
-async function gotoContactsSettings(page) {
+/**
+ * Opens Settings, Backup and Recovery: the group page that holds the Export
+ * contacts and Import contacts rows (the grouped Settings list since
+ * 2026-11-13; Contacts is no longer a panel of its own).
+ *
+ * Every click is scoped to `main` and its target asserted visible first: the
+ * primary navigation has a Contacts destination of its own, and a Playwright
+ * click has NO default action timeout, so a miss waits out the whole test
+ * budget instead of failing. An unmatched click is a hang, not an error.
+ */
+async function openBackupAndRecovery(page) {
     await openSettings(page);
-    // NOTHING IS CLICKED, and that cost two runs to learn. Settings is a list
-    // of collapsible rows ("Privacy", "Safety", "Backup", …) but Contacts is
-    // NOT one of them: its panel is rendered inline and is already on screen.
-    // The first attempt clicked `/^Contacts/` and hit the primary navigation's
-    // own Contacts destination, leaving Settings entirely; scoping that click
-    // to `main` then matched nothing at all, and a Playwright click has NO
-    // default action timeout, so it waited out the entire 600s test budget
-    // instead of failing. An unmatched click is a hang, not an error.
-    await expect(page.getByRole('button', { name: 'Export…' }),
-        'the Contacts settings panel has no Export control').toBeVisible({ timeout: 30_000 });
+    await backToSettingsList(page);
+    const group = page.getByRole('main').getByRole('button', { name: /^Backup and Recovery\b/ }).first();
+    await expect(group, 'Settings has no Backup and Recovery row').toBeVisible({ timeout: 30_000 });
+    await group.click();
+    await expect(page.getByRole('main').getByRole('button', { name: /^Export contacts\b/ }),
+        'Backup and Recovery has no Export contacts row').toBeVisible({ timeout: 30_000 });
+}
+
+/** Opens the Export contacts page; it lands on JSON, the format this spec reads back. */
+async function openExportContacts(page) {
+    await openBackupAndRecovery(page);
+    await page.getByRole('main').getByRole('button', { name: /^Export contacts\b/ }).click();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Export', exact: true }),
+        'the Export contacts page has no Export button').toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -130,7 +147,7 @@ test.describe('Settings: contacts export / import', () => {
                 // violation rather than a fill.
                 await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
                 await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
-                await page.getByRole('button', { name: 'Save', exact: true }).click();
+                await page.getByRole('button', { name: 'Create contact', exact: true }).click();
 
                 await expect(contactRow(page, CONTACT_NAME),
                     'the contact was never created, so there is nothing to export')
@@ -139,10 +156,10 @@ test.describe('Settings: contacts export / import', () => {
 
             let exported;
             await test.step('Export writes a file that actually holds the contact', async () => {
-                await gotoContactsSettings(page);
+                await openExportContacts(page);
                 const [download] = await Promise.all([
                     page.waitForEvent('download', { timeout: 60_000 }),
-                    page.getByRole('button', { name: 'Export…' }).click(),
+                    page.getByRole('main').getByRole('button', { name: 'Export', exact: true }).click(),
                 ]);
                 exported = testInfo.outputPath('contacts.json');
                 await download.saveAs(exported);
@@ -167,7 +184,8 @@ test.describe('Settings: contacts export / import', () => {
                 // nothing at all.
                 await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
-                await page.getByRole('button', { name: 'Delete', exact: true }).click();
+                await page.getByRole('list', { name: 'Contact actions' })
+                    .getByRole('button', { name: /^Delete\b/ }).click();
                 // Deleting a contact goes through `useConfirmModal`, whose
                 // panel is a `role="dialog"` named by its title. Scoped to the
                 // dialog rather than picked off the page by label, because the
@@ -185,8 +203,10 @@ test.describe('Settings: contacts export / import', () => {
             });
 
             await test.step('Import restores it, with the address intact', async () => {
-                await gotoContactsSettings(page);
-                await page.getByLabel('Import contacts JSON').setInputFiles(exported);
+                // The Import contacts row opens a hidden file input; a file
+                // picker reaches that input, so the spec hands the file to it.
+                await openBackupAndRecovery(page);
+                await fieldByLabel(page, 'Contacts file to import').setInputFiles(exported);
                 // Every import asks first, because records with a matching id
                 // are overwritten.
                 const ask = page.getByRole('dialog', { name: 'Import contacts?' });
@@ -199,9 +219,14 @@ test.describe('Settings: contacts export / import', () => {
 
                 await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
-                // The contact page draws the address truncated, with the full
-                // address as that element's accessible name.
-                await expect(page.getByRole('main').locator(`[aria-label="${CONTACT_ADDRESS}"]`),
+                // The contact page opens on its Actions tab; the addresses are
+                // cards on the Addresses tab, each drawing the address with the
+                // full value as that element's accessible name.
+                const main = page.getByRole('main');
+                await main.getByRole('tablist', { name: 'Contact sections' })
+                    .getByRole('tab', { name: 'Addresses', exact: true }).click();
+                await expect(main.getByRole('list', { name: 'Addresses', exact: true })
+                    .locator(`[aria-label="${CONTACT_ADDRESS}"]`),
                     'the contact came back by NAME but not by ADDRESS - a restored address book that '
                     + 'shows a familiar name against a missing or wrong address is worse than one '
                     + 'that failed outright, because the user pays a stranger from a form that looks '

@@ -24,7 +24,9 @@
 
 // Workspace alias rather than a relative path: Vite, electron-builder and
 // the Node-level smoke tests all resolve it the same way.
+import { createFileRefResolver } from '@xchain-wallet/core/flows/fileRefSource.js';
 import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
+import { createPathFileRefKind } from './pathFileRefKind.js';
 
 /**
  * @typedef {Object} DesktopHostDeps
@@ -42,10 +44,16 @@ import { createBackgroundHost } from '@xchain-wallet/extension/src/background/cr
 
 /**
  * Build the main-process MessageHost. Returns the host plus a
- * `handle(message)` wrapper that IPC registration calls directly:
+ * `handle(message)` wrapper that IPC registration calls after it has
+ * vetted the sender and the envelope. `handle` checks neither, so the
+ * registration owns both checks and runs them before dispatching:
  *
  *     const { host, handle } = createDesktopMessageHost({ vault, … });
- *     ipcMain.handle('xchain-wallet:message', (_event, message) => handle(message));
+ *     ipcMain.handle(IPC_CHANNEL, async (event, message, ...extra) => {
+ *         if (!isTrustedSender(event)) return FORBIDDEN_SENDER_RESPONSE;
+ *         if (extra.length > 0 || !isValidDesktopIpcMessage(message)) return INVALID_RESPONSE;
+ *         return handle(message);
+ *     });
  *
  * @param {DesktopHostDeps} deps
  * @returns {{ host: import('@xchain-wallet/extension/src/background/MessageHost.js').MessageHost, handle: (message: IpcMessage) => Promise<IpcResponse> }}
@@ -54,7 +62,17 @@ export function createDesktopMessageHost(deps) {
     if (!deps?.vault) throw new Error('createDesktopMessageHost: vault is required');
     if (!deps?.chainRegistry) throw new Error('createDesktopMessageHost: chainRegistry is required');
     if (!deps?.sdkRegistry) throw new Error('createDesktopMessageHost: sdkRegistry is required');
-    const host = createBackgroundHost(deps);
+    const resolveFileRef = createFileRefResolver({
+        kinds: { path: createPathFileRefKind() },
+    });
+    const desktopDeps = new Proxy(deps, {
+        get(target, property, receiver) {
+            if (property === 'fileBlobs') return null;
+            if (property === 'resolveFileRef') return resolveFileRef;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const host = createBackgroundHost(desktopDeps);
     return {
         host,
         async handle(message) {

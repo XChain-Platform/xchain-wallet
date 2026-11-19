@@ -15,21 +15,22 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'alerts.title': 'Alerts',
-    'alerts.close': 'Close alerts',
-    'alerts.empty': 'No alerts. Wallet activity, security, and price changes appear here.',
+    'alerts.title': 'Notifications',
 
     // --- alerts --------------------------------------------------
-    'alerts.empty.title': 'No alerts',
+    'alerts.empty.title': 'No notifications',
     'alerts.empty.body': 'Wallet activity, security, and price changes appear here.',
-    'alerts.empty.action': 'Manage notifications',
-    'alerts.unreadCount': '{count} unread',
     'alerts.markAllRead': 'Mark all read',
-    'alerts.clear': 'Clear alerts',
     'alerts.unread': 'Unread',
-    'alerts.read': 'Read',
-    'alerts.markRead': 'Mark read',
-    'alerts.markReadLabel': 'Mark {title} read',
+    'alerts.search': 'Search notifications',
+    'alerts.filter': 'Filter notifications',
+    'alerts.filterType': 'Notification type',
+    'alerts.filterTypeHelp': 'Shows only the notifications you tick: unread ones, or one or more kinds such as payments or security.',
+    'alerts.matches': '{count} notifications match',
+    'alerts.type.all': 'All types',
+    'alerts.type.payments': 'Payments',
+    'alerts.type.messages': 'Messages',
+    'alerts.type.security': 'Security',
 };
 
 addEnglish(messages);

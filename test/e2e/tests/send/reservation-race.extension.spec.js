@@ -44,6 +44,7 @@ import {
     REGTEST_DESTINATION, fundAddress, minerRpc, mintXchain, readReceiveAddress,
     switchToRegtest, unlockAfterReload, waitForTokenBalance,
 } from '../../fixtures/regtest.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'extpassword1234';
 const FUNDING_BTC = 1;
@@ -62,7 +63,7 @@ const SEND_XCHAIN = '600';
 async function composeTokenSend(page) {
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAIN');
+    await searchTokenPicker(page, 'XCHAIN');
     await page.getByLabel(/Open XCHAIN details/i).click();
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_XCHAIN);
@@ -149,12 +150,10 @@ test.describe('two-window same-balance race (extension)', () => {
         await unlockAfterReload(second, PASSWORD);
         await composeTokenSend(second);
 
-        // The protection may present as a pre-flight warning, a fail
-        // verdict, or a blocked Approve; what must NOT happen is a clean
-        // "Looks good" on a payment the balance can no longer cover.
-        const chip = second.getByTestId('preflight-chip');
-        await expect(chip).toBeVisible();
-        await expect(chip, 'second window must not report a clean pass on an already-spent balance')
-            .not.toHaveText(/Looks good/i);
+        // The protection may present as a warning, a fail, an unchecked
+        // report, or a partial report. It must not disappear as a clean pass.
+        const warning = second.getByTestId('confirm-status');
+        await expect(warning, 'second window must not report a clean pass on an already-spent balance')
+            .toHaveAttribute('data-state', /^(warn|fail|notChecked|partial)$/);
     });
 });

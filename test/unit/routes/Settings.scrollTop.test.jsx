@@ -69,7 +69,7 @@ describe('Settings scroll position', () => {
         fireEvent.scroll(main());
 
         fireEvent.click(opener);
-        expect(screen.getByRole('heading', { level: 1, name: 'Privacy' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Privacy and Sites' })).toBeInTheDocument();
         expect(main().scrollTop).toBe(0);
 
         fireEvent.click(screen.getByRole('button', { name: /^Back/ }));

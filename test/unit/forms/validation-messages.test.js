@@ -10,9 +10,12 @@ import {
     fireEvent,
     render,
     screen,
+    waitFor,
+    within,
 } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
@@ -193,7 +196,9 @@ describe('Send field validation', () => {
         fireEvent.change(to, { target: { value: recipient } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        const message = await screen.findByText('Enter a recipient address.');
+        // The form error notice lists it and the To field says it under
+        // itself (the form error standard), so the copy shows twice.
+        const [message] = await screen.findAllByText('Enter a recipient address.');
         expectPlainCopy(message);
     });
 
@@ -231,40 +236,63 @@ describe('Send field validation', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2' } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        const message = await screen.findByText('Amount exceeds the available balance.');
+        // G130: Send is enabled, so the press runs validation and the message
+        // shows on the field and in the error summary at the top (G129).
+        const [message] = await screen.findAllByText('Amount exceeds the available balance.');
         expectPlainCopy(message);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('offers Use Max on the form error notice for an amount refusal', async () => {
+        // The Notice Standard's one action: the error notice carries the
+        // one-click fix the old summary offered, and it leaves with the entry.
+        mountSend({ quantity: '100000000' });
+        fireEvent.change(await screen.findByLabelText(/^To$/), {
+            target: { value: BITCOIN_TO },
+        });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        const notice = await screen.findByRole('alert', { name: 'Form errors' });
+        fireEvent.click(within(notice).getByRole('button', { name: 'Use Max' }));
+        await waitFor(() => expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull());
     });
 });
 
 describe('Create token field validation', () => {
     it('rejects whitespace, negative supply, and excessive decimals with plain copy', async () => {
         const messaging = mountWizard();
-        fireEvent.click(await screen.findByText('Utility token'));
-        await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-        await screen.findByText('Step 3 of 4: Details');
+        // The Create a token route opens straight on the one Issue Token form.
+        const form = await screen.findByRole('form', { name: 'Issue Token' });
 
-        const name = screen.getByLabelText('Token name (ticker)');
-        const supply = screen.getByLabelText('Supply');
-        const form = screen.getByRole('form', { name: 'Token details' });
+        const name = screen.getByLabelText('Ticker');
+        const supply = () => screen.getByRole('textbox', { name: 'Max supply' });
+        // The refusal, whether the error summary above Issue Token or the
+        // amount field's own error states it.
+        const refusal = async (text) => {
+            let found = null;
+            await waitFor(() => {
+                found = screen.getAllByRole('alert').find((alert) => (
+                    typeof text === 'string' ? alert.textContent.includes(text) : text.test(alert.textContent)
+                ));
+                expect(found).toBeTruthy();
+            });
+            return found;
+        };
         fireEvent.change(name, { target: { value: '   ' } });
-        fireEvent.change(supply, { target: { value: '1' } });
+        fireEvent.change(supply(), { target: { value: '1' } });
         fireEvent.submit(form);
-        const required = await screen.findByText('Token name is required.');
-        expectPlainCopy(required);
+        expectPlainCopy(await refusal('Ticker is required.'));
 
         fireEvent.change(name, { target: { value: 'UTILITY' } });
-        fireEvent.change(supply, { target: { value: '-1' } });
+        fireEvent.change(supply(), { target: { value: '-1' } });
         fireEvent.submit(form);
-        const positive = await screen.findByText('Supply must be a positive number.');
-        expectPlainCopy(positive);
+        expectPlainCopy(await refusal(/Max supply must be zero or a positive number\.|Enter a valid/));
 
-        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
-        fireEvent.change(supply, { target: { value: '1.123456789' } });
+        // Divisible is on by default: eight places.
+        fireEvent.change(supply(), { target: { value: '1.123456789' } });
         fireEvent.submit(form);
-        const precision = await screen.findByText('Supply can have at most 8 decimal places.');
-        expectPlainCopy(precision);
+        expectPlainCopy(await refusal(/Max supply can have at most 8 decimal places\.|at most 8 decimal places/));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -272,6 +300,8 @@ describe('Create token field validation', () => {
 describe('Create dispenser field validation', () => {
     it('rejects a negative amount and excessive fiat decimals with plain copy', async () => {
         const messaging = mountDispenser();
+        // The Full view carries the checked amount fields; Quick filters keystrokes.
+        fireEvent.click(await screen.findByRole('radio', { name: /Full/ }));
         const give = await screen.findByLabelText(/^Give amount/);
         fireEvent.change(give, { target: { value: '-1' } });
         const negative = await screen.findByText(/Enter a valid decimal amount/);
@@ -279,16 +309,17 @@ describe('Create dispenser field validation', () => {
 
         fireEvent.change(give, { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
-        fireEvent.click(screen.getByRole('button', { name: /Advanced options/ }));
-        fireEvent.change(screen.getByLabelText('Priced in fiat (optional)'), {
-            target: { value: 'USD' },
-        });
+        fireEvent.click(screen.getByRole('button', { name: /Dispenser Terms/ }));
+        // G122: the Fiat currency field opens its picker page.
+        fireEvent.click(screen.getByRole('button', { name: /^Fiat currency:/ }));
+        fireEvent.click(within(screen.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: /USD/ }));
         fireEvent.change(screen.getByLabelText(/^Fiat amount/), {
             target: { value: '12.345' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Dispenser' }));
 
-        const precision = await screen.findByText(
+        // Listed in the form error notice and under the field itself.
+        const [precision] = await screen.findAllByText(
             'Fiat amount can have at most 2 decimal places, like 12.34 or 3.',
         );
         expectPlainCopy(precision);
@@ -300,20 +331,20 @@ describe('Contacts field validation', () => {
     it('rejects empty and whitespace-only fields with plain copy', async () => {
         const messaging = mountContacts();
         await screen.findByText('No contacts yet');
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const emptyName = await screen.findByText('Name is required.');
         expectPlainCopy(emptyName);
 
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const whitespaceName = await screen.findByText('Name is required.');
         expectPlainCopy(whitespaceName);
 
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: '   ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const emptyAddress = await screen.findByText('At least one address entry is required.');
         expectPlainCopy(emptyAddress);
         expect(messaging.saveContact).not.toHaveBeenCalled();

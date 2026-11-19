@@ -75,34 +75,30 @@ const FORMS = [
         name: 'DispenserForm',
         Form: DispenserForm,
         props: {},
-        read: async () => (await screen.findByLabelText('Source')).value,
+        read: async () => (await screen.findByLabelText('From address')).value,
     },
     {
+        // The wizard route is the one Issue Token form: its From section
+        // holds the fee-paying source.
         name: 'TokenWizard',
         Form: TokenWizard,
         props: {},
-        read: async () => {
-            fireEvent.click(await screen.findByText('Meme token'));
-            return (await screen.findByLabelText('Fee paid by')).value;
-        },
+        read: async () => (await screen.findByLabelText('From address')).value,
     },
     {
+        // Batch has no page From field: transaction 1's Network and From row
+        // names its source in an AddressText.
         name: 'BatchComposerForm',
         Form: BatchComposerForm,
         props: {},
-        read: async () => {
-            const select = await screen.findByLabelText('From address');
-            return ADDRESSES[CHAIN].find((a) => a.id === select.value)?.address;
-        },
+        read: async () => (await screen.findByRole('button', { name: 'Change the network and From address of transaction 1' }))
+            .querySelector('[dir="ltr"][aria-label]').getAttribute('aria-label'),
     },
     {
         name: 'ParallelComposer',
         Form: ParallelComposer,
         props: {},
-        read: async () => {
-            const select = await screen.findByLabelText('From address');
-            return ADDRESSES[CHAIN].find((a) => a.id === select.value)?.address;
-        },
+        read: async () => (await screen.findByLabelText('From')).value,
     },
 ];
 

@@ -32,41 +32,45 @@ const rule = (css, selector) => {
 };
 
 describe('device pass layout guards', () => {
-    it('keeps Home quick-action tiles secondary and outranking the Button variant', () => {
-        const jsx = read('packages/core/src/shared/routes/Home.jsx');
-        const css = read('packages/core/src/shared/routes/Home.module.css');
-        const tiles = buttonsWith(jsx, 'className={styles.quickAction}');
-        expect(tiles.length).toBeGreaterThanOrEqual(5);
-        for (const tile of tiles) expect(tile).toContain('variant="secondary"');
-        expect(css).not.toMatch(/(^|\n)\.quickAction\s*\{/);
-        expect(rule(css, '.quickActions .quickAction')).toMatch(/background:\s*var\(--xc-surface-raised\)/);
+    it('keeps quick-action tiles secondary and outranking the Button variant', () => {
+        const jsx = read('packages/core/src/ui/QuickActionTile.jsx');
+        const css = read('packages/core/src/ui/QuickActionTile.module.css');
+        const tokenDetail = read('packages/core/src/shared/routes/TokenDetail.jsx');
+        const tiles = buttonsWith(jsx, 'className={[styles.tile, square ? styles.square : null, className]');
+        expect(tiles).toHaveLength(1);
+        expect(tiles[0]).toContain('variant="secondary"');
+        // Token detail's actions moved from tiles to the shared action list (G101).
+        expect(tokenDetail).toMatch(/<ActionList\b/);
+        expect(tokenDetail).not.toMatch(/<QuickActionTile\b/);
+        expect(css).not.toMatch(/(^|\n)\.tile\s*\{[^}]*background/);
+        expect(rule(css, '.tile.tile')).toMatch(/background:\s*var\(--xc-surface-raised\)/);
     });
 
-    it('keeps the account and wallet row button outlined at the row end', () => {
+    it('keeps the account and wallet rows as one list row that opens the page, with no row-end menu button', () => {
+        // The approved redesign retired the per-row menu button: the whole row opens the page.
         const css = read('packages/core/src/shared/routes/WalletPicker.module.css');
         expect(css).not.toMatch(/(^|\n)\.rowMenuBtn\s*\{/);
-        expect(rule(css, '.rowWrap .rowMenuBtn')).toMatch(/position:\s*absolute/);
         for (const file of ['AccountPicker.jsx', 'WalletPicker.jsx']) {
             const jsx = read(`packages/core/src/shared/routes/${file}`);
-            const buttons = buttonsWith(jsx, 'className={pickerStyles.rowMenuBtn}');
-            expect(buttons.length, file).toBeGreaterThan(0);
-            for (const button of buttons) expect(button, file).toContain('variant="secondary"');
+            expect(jsx, file).not.toContain('rowMenuBtn');
+            expect(jsx, file).toMatch(/<ListRow\b/);
         }
     });
 
-    it('stacks icon over label in the four-column Home action grid', () => {
+    it('has no bottom action row on Home at any size', () => {
+        // Home has no action row; every action lives in the navigation and the wallet menu.
         const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
+        const jsx = read('packages/core/src/shared/routes/Home.jsx');
+        expect(css).not.toMatch(/\.actionsFull/);
+        expect(jsx).not.toMatch(/actionsFull/);
     });
 
-    it('keeps stacked Home action icons on one line when a label wraps', () => {
-        const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
-    });
-
-    it('hides a search-only header menu when the rail shows Search', () => {
+    it('never hides the header menu button for a side menu Search', () => {
+        // The side menu has no Search row (U99, operator 2026-11-18), so the header
+        // menu button is the visible wallet menu trigger at every width.
         const css = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(css).toMatch(/\.layout\[data-xc-rail='shown'\] :global\(\[data-header-menu='search-only'\]\)\s*\{\s*display:\s*none;/);
+        expect(css).not.toMatch(/data-header-menu/);
+        expect(css).not.toMatch(/\.search\b/);
     });
 
     it('shows no reachability notice for a demo wallet in any shell', () => {

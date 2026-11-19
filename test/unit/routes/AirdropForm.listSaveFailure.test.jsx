@@ -68,8 +68,6 @@ function mountAirdrop(overrides = {}) {
         requoteNativeFee: vi.fn().mockResolvedValue(null),
         reserve: vi.fn().mockResolvedValue({}),
         releaseReservation: vi.fn().mockResolvedValue({}),
-        putConfirmSession: vi.fn().mockResolvedValue({ id: 'cs' }),
-        clearConfirmSession: vi.fn().mockResolvedValue({}),
         createList: vi.fn().mockResolvedValue({ txid: 'listtxid' }),
         savePendingAirdrop: vi.fn().mockRejectedValue(new Error('storage full')),
         getActionByTxid: vi.fn().mockResolvedValue(null),
@@ -99,9 +97,9 @@ describe('AirdropForm after the recipient list is broadcast', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Recipients' }), { target: { value: RECIPIENTS.join('\n') } });
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '1' } });
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/i }));
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: /^Sign/ }));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();
         fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();

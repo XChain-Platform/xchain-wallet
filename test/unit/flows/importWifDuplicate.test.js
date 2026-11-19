@@ -48,7 +48,31 @@ function memCollection(initial = []) {
         findBy: async (field, value) => Array.from(m.values())
             .filter((r) => r[field] === value)
             .map((r) => JSON.parse(JSON.stringify(r))),
+        _restore: (records) => {
+            m.clear();
+            records.forEach((r) => m.set(r.id, JSON.parse(JSON.stringify(r))));
+        },
     };
+}
+
+function withGuardedPutMany(vault) {
+    vault.putManyGuarded = async (buildEntries) => {
+        const document = {
+            wallets: await vault.wallets.list(),
+            addresses: await vault.addresses.list(),
+        };
+        const entries = buildEntries(document);
+        const stores = [...new Set(entries.map((entry) => entry.store))];
+        const snapshots = new Map();
+        for (const store of stores) snapshots.set(store, await store.list());
+        try {
+            for (const entry of entries) await entry.store.put(entry.record);
+        } catch (error) {
+            for (const [store, records] of snapshots) store._restore(records);
+            throw error;
+        }
+    };
+    return vault;
 }
 
 const DESCRIPTOR = {
@@ -74,14 +98,14 @@ let vault;
 
 beforeEach(async () => {
     const encryptedSeed = bytesToBase64(await encrypt(MASTER_KEY, new Uint8Array(16).fill(3)));
-    vault = {
+    vault = withGuardedPutMany({
         wallets: memCollection([
             { id: 'w1', schemaVersion: 1, name: 'Legacy Wallet', encryptedSeed, kdfParams: {}, importedKeys: [] },
             { id: 'w2', schemaVersion: 1, name: 'Other Wallet', encryptedSeed, kdfParams: {}, importedKeys: [] },
         ]),
         accounts: memCollection([{ id: 'acct-1', walletId: 'w1', index: 0, name: 'Main' }]),
         addresses: memCollection(),
-    };
+    });
 });
 
 function doImport(walletId = 'w1', label) {
@@ -248,6 +272,7 @@ describe('import flow persistence safety', () => {
 describe('discovery control validation', () => {
     const discoveryDeps = {
         mnemonic: MNEMONIC,
+        format: 'bip39',
         chainRegistry: {},
         sdkRegistry: {},
     };
@@ -270,6 +295,7 @@ describe('discovery control validation', () => {
         const probeStarted = new Promise((resolve) => { markProbeStarted = resolve; });
         const scan = discoverUsedAddresses({
             mnemonic: MNEMONIC,
+            format: 'bip39',
             chainRegistry: {
                 supportedChains: () => [DESCRIPTOR],
                 get: () => DESCRIPTOR,

@@ -25,7 +25,7 @@
 // the entries cross the messaging boundary, where an Error's own fields do
 // not survive. Both are plain JSON values, so they do.
 
-import { tickerForCoin } from '../registry/coinTicker.js';
+import { explorerCoinCode, tickerForCoin } from '../registry/coinTicker.js';
 import { decimalToBaseUnitsRounded } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { synthesizeDemoBalances } from './demoFixtures.js';
@@ -33,6 +33,7 @@ import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
 import { explorerFreshScope, explorerReadFresh } from '../sdk/explorerRateLimit.js';
 import { probeTxInclusion } from './txInclusionProbe.js';
 import { markPendingTxIndexed } from '../notifications/pendingTxBridge.js';
+import { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } from '../shared/utils/walletDataFreshness.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
@@ -121,23 +122,23 @@ export function _resetBatchSupportMemo() {
 }
 
 /**
- * How often Home re-runs the whole balance load while the wallet is open.
+ * Home's balance cadence. Nothing pushes balance changes to the wallet, so
+ * an open Home checks every BALANCE_CHECK_INTERVAL_MS and reads again only
+ * once its data is BALANCE_MAX_AGE_MS old; a broadcast, an explicit refresh
+ * or a switch to a scope with no fresh saved copy reads at once.
  *
- * Nothing pushes balance changes to the wallet (an incoming send, a mint
- * landing, a token someone else sent you), so Home polls: 20s balances
- * catching an incoming token promptly against hammering the SDK/indexer on
- * every open tab. The polling effect in Home.jsx also refires immediately on
- * focus/visibility and pauses while the document is hidden.
- *
- * It lives HERE, next to the aggregator it re-runs, rather than as a private
- * const in Home.jsx, because it is not only a UI cadence: it is the wallet's
- * SUSTAINED request rate against the public endpoints, and
- * tools/release/cold-open-profile.mjs has to read the same number the app
- * uses when it works out what the zone rate limits must clear. A profile that
- * restated the interval would go quietly wrong the first time someone tuned
- * it.
+ * Exported here, beside the aggregator they gate, because they are the
+ * wallet's SUSTAINED request rate against the public endpoints and
+ * tools/release/cold-open-profile.mjs reads the same numbers the app uses.
  */
-export const BALANCE_POLL_INTERVAL_MS = 20000;
+export { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS };
+
+/**
+ * How often a screen watching this wallet's own unconfirmed transactions
+ * (History's pending rows, a pending action's detail) reads again. Only
+ * pending watching runs at this rate; settled data follows the age rule above.
+ */
+export const PENDING_POLL_INTERVAL_MS = 20000;
 
 // D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
 // never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
@@ -178,29 +179,35 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // unscaled made every decimals>0 token read 10^decimals too small (3000
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
 // fixtures, dev mocks) are atomic already and pass through untouched.
-export function tokensFromBalances(balResp) {
-    return tokenRowsFromBalances(balResp).rows;
+export function tokensFromBalances(balResp, scope) {
+    return tokenRowsFromBalances(balResp, scope).rows;
 }
 
 // A row that is not an object (null, a number) carries no tick; it is skipped
-// so the rest of the ledger stays readable, and the read is marked partial.
-function tokenRowsFromBalances(balResp) {
+// so the rest of the ledger stays readable, and the read is marked partial. So
+// is a page that holds fewer rows than the ledger's own `total`: the ticks
+// past it were never read, which is not the same as the address not holding them.
+function tokenRowsFromBalances(balResp, scope) {
     if (!balResp || !Array.isArray(balResp.data)) return { rows: [], invalid: true };
+    if (!balanceScopeMatches(balResp, scope)) return { rows: [], invalid: true, truncated: false };
+    const total = Number(balResp.total);
+    const truncated = Number.isSafeInteger(total) && total > balResp.data.length;
     const rows = [];
     let invalid = false;
     for (const row of balResp.data) {
-        const normalized = normalizeTokenBalanceRow(row);
+        const normalized = normalizeTokenBalanceRow(row, scope);
         if (!normalized) {
             invalid = true;
             continue;
         }
         rows.push(normalized);
     }
-    return { rows, invalid };
+    return { rows, invalid, truncated };
 }
 
-function normalizeTokenBalanceRow(row) {
+function normalizeTokenBalanceRow(row, scope) {
     if (!row || typeof row !== 'object') return null;
+    if (!balanceScopeMatches(row, scope)) return null;
     const tick = typeof row.tick === 'string' ? row.tick.trim() : '';
     const divisibility = Number(row.divisibility ?? row.decimals ?? 0);
     if (!tick || !Number.isInteger(divisibility) || divisibility < 0 || divisibility > 18) return null;
@@ -221,6 +228,33 @@ function normalizeTokenBalanceRow(row) {
         displayName: row.displayName || row.display_name || tick,
         imageUrl: row.imageUrl || row.image || null,
     };
+}
+
+function declaredStringMatches(subject, field, expected) {
+    if (!Object.prototype.hasOwnProperty.call(subject, field)) return true;
+    const value = subject[field];
+    if (typeof value !== 'string' || !value.trim()) return false;
+    return expected.some((candidate) => (
+        typeof candidate === 'string'
+        && candidate.trim()
+        && value.trim().toLowerCase() === candidate.trim().toLowerCase()
+    ));
+}
+
+// Older explorer rows carry no scope fields. When a response or row does name
+// its scope, it must agree with the address and chain that were queried before
+// the amount can be credited to that wallet entry.
+function balanceScopeMatches(subject, scope) {
+    if (!scope || !subject || typeof subject !== 'object') return true;
+    if (scope.address && Object.prototype.hasOwnProperty.call(subject, 'address')
+        && !answersForAddress(subject.address, scope.address)) return false;
+    if (scope.coin && !declaredStringMatches(
+        subject, 'coin', [scope.coin, ...(scope.coinAliases || [])],
+    )) return false;
+    if (scope.network && !declaredStringMatches(
+        subject, 'network', [scope.network, ...(scope.networkAliases || [])],
+    )) return false;
+    return true;
 }
 
 function isExactNonnegativeInteger(value) {
@@ -420,12 +454,12 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
 // and vice versa). Throws only when BOTH reads fail, so the caller can surface
 // a single error. Shared by addressBalances (single-address, Send preview +
 // Max) and walletBalances (Home aggregator) so the two never diverge.
-async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
+async function fetchAddressShape({ sdk, address, nativeTicker, descriptor, opts }) {
     const [balResp, addrResp] = await Promise.all([
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
-    return shapeFromReads({ balResp, addrResp, nativeTicker, address });
+    return shapeFromReads({ balResp, addrResp, nativeTicker, descriptor, address });
 }
 
 /**
@@ -438,9 +472,10 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
  * new explorer and one on an old explorer must render identically, and a second
  * copy of this logic is exactly how that would stop being true.
  *
- * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null }} reads
+ * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null,
+ *   descriptor?: { id?: string, coin?: string, networkKind?: string }, address?: string }} reads
  */
-function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
+export function shapeFromReads({ balResp, addrResp, nativeTicker, descriptor, address }) {
     const balOk = !(balResp instanceof Error);
     const addrOk = !(addrResp instanceof Error);
     if (!balOk && !addrOk) {
@@ -463,8 +498,17 @@ function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     // projecting the coin from zero. A confirmed amount that is not a
     // non-negative decimal (text, a negative, an object) is the same
     // "could not read": the number is unknown, not zero.
-    const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
-    const balUnreadable = balOk && tokenResult.invalid;
+    const tokenScope = {
+        address,
+        coin: descriptor?.coin,
+        coinAliases: [nativeTicker, explorerCoinCode(descriptor)],
+        network: descriptor?.networkKind,
+        networkAliases: [descriptor?.id],
+    };
+    const tokenResult = balOk
+        ? tokenRowsFromBalances(balResp, tokenScope)
+        : { rows: [], invalid: false, truncated: false };
+    const balUnreadable = balOk && (tokenResult.invalid || tokenResult.truncated);
     const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp, address);
     const unavailable = [
         ...(balOk && !balUnreadable ? [] : ['tokens']),
@@ -473,7 +517,9 @@ function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     const reason = !balOk
         ? balResp?.message
         : (balUnreadable
-            ? 'balance service returned invalid token data'
+            ? (tokenResult.invalid
+                ? 'balance service returned invalid token data'
+                : 'balance service returned only part of the token list')
             : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message));
     return {
         native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,
@@ -631,7 +677,9 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
         })
         : new Set();
     const readOpts = indexed.size > 0 ? { ...(opts || {}), fresh: true } : opts;
-    const readShape = () => fetchAddressShape({ sdk, address, nativeTicker, opts: readOpts });
+    const readShape = () => fetchAddressShape({
+        sdk, address, nativeTicker, descriptor, opts: readOpts,
+    });
     const shape = indexed.size > 0
         ? await explorerFreshScope(sdk, readShape)
         : await readShape();
@@ -903,11 +951,11 @@ function applyFailure(entry, e) {
 // (/address/) for one address and hand the UI the { native, tokens } shape it
 // reads. Either call failing alone still yields a partial result; only a double
 // failure (the helper throws) surfaces `error`.
-async function perAddressEntry({ sdk, addr, nativeTicker, opts }) {
+async function perAddressEntry({ sdk, addr, nativeTicker, descriptor, opts }) {
     const base = baseEntryFor(addr);
     try {
         base.balances = await fetchAddressShape({
-            sdk, address: addr.address, nativeTicker, opts,
+            sdk, address: addr.address, nativeTicker, descriptor, opts,
         });
     } catch (e) {
         applyFailure(base, e);
@@ -920,7 +968,7 @@ async function perAddressEntry({ sdk, addr, nativeTicker, opts }) {
 // becomes an Error carrying the slot's own code and message: that is what makes
 // the shared shaper mark it `unavailable` in the same words the per-address
 // path would have used.
-function readsFromBatchEntry(entry, address) {
+export function readsFromBatchEntry(entry, address) {
     const err = entry && entry.error ? entry.error : null;
     const failed = () => {
         const e = new Error(String((err && err.error) || `no batch result for ${address}`));
@@ -939,14 +987,14 @@ function readsFromBatchEntry(entry, address) {
 
 // One POST for up to BALANCES_BATCH_MAX_ADDRESSES addresses of one chain.
 // Returns the same entries, in the same order, as the per-address path would.
-async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
+async function batchChunkEntries({ sdk, chunk, nativeTicker, descriptor, opts }) {
     // An explorer (or a stand-in SDK) without the batch route. Remember the
     // instance so later polls skip the probe entirely, and serve this chunk
     // the old way so the user sees balances rather than an error.
     const fallBack = () => {
         rememberBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
         return Promise.all(
-            chunk.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+            chunk.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, descriptor, opts })),
         );
     };
     let resp;
@@ -971,7 +1019,9 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
             resp ? resp[addr.address] : null, addr.address,
         );
         try {
-            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker, address: addr.address });
+            base.balances = shapeFromReads({
+                balResp, addrResp, nativeTicker, descriptor, address: addr.address,
+            });
         } catch (e) {
             applyFailure(base, e);
         }
@@ -1105,7 +1155,7 @@ export async function walletBalances({
     //
     //    One request per chain rather than two per address is the whole point:
     //    a five-address wallet on three chains asked the explorer for 30 reads
-    //    every 20s poll, which is the sustained rate the zone rate limits have
+    //    on every balance refresh, which is the sustained rate the zone rate limits have
     //    to clear. When the SDK carries `getBalancesBatch` and the explorer
     //    answers it, the same poll is 3 requests. Both halves are conditions,
     //    not assumptions: an SDK older than the method, or an explorer older
@@ -1125,7 +1175,9 @@ export async function walletBalances({
                     && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
                 if (!canBatch) {
                     result[cid] = await Promise.all(
-                        addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts: readOpts })),
+                        addrs.map((addr) => perAddressEntry({
+                            sdk, addr, nativeTicker, descriptor, opts: readOpts,
+                        })),
                     );
                     return;
                 }
@@ -1134,7 +1186,9 @@ export async function walletBalances({
                     chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
                 }
                 const perChunk = await Promise.all(
-                    chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts: readOpts })),
+                    chunks.map((chunk) => batchChunkEntries({
+                        sdk, chunk, nativeTicker, descriptor, opts: readOpts,
+                    })),
                 );
                 // Flattened in chunk order, so the entries come back in the address
                 // order the caller passed however many requests it took.

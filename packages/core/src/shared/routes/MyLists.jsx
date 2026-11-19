@@ -9,16 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { ListToolbar } from '../components/ListToolbar.jsx';
+import { sharedListDirectoryChainId } from '../chainSelection.js';
+import { homeDescriptor, useSharedListDirectory } from '../hooks/useSharedListDirectory.js';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { listStatusText } from '../utils/listItemStatusText.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/routes.js';
@@ -43,14 +46,17 @@ const OWNED_LIST_REVALIDATE_MS = 16_000;
  * Scoped to the active account: only that account's addresses are
  * unioned over, matching DispensersList.
  *
+ * The filter's Show choice adds the shared-list directory (the Shared lists
+ * screen's own loader) as the same list rows: My lists (default), Shared
+ * with me, or All.
+ *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.activeAccountId]   scope the address union to this account
- * @param {(chainId: string, actionIndex: string) => void} props.onOpenList
+ * @param {(chainId: string, actionIndex: string, shared?: { origin: 'shared', directoryChainId: string | null }) => void} props.onOpenList
  * @param {() => void} [props.onCreateList]  opens the Create list form
- * @param {() => void} [props.onCreateUnionList]  shows "Create union list" when passed
- * @param {() => void} [props.onOpenSharedLists]   shows "Shared lists" when passed
  * @param {() => void} props.onBack
+ * @param {'mine' | 'shared' | 'all'} [props.initialShow]  the filter's first Show choice (a deep link to Shared with me passes 'shared')
  */
 export function MyLists(props) {
     const { walletId, activeAccountId } = props;
@@ -58,7 +64,7 @@ export function MyLists(props) {
     return <MyListsScreen key={listKey} {...props} />;
 }
 
-function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
+function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onBack, initialShow = 'mine' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { offline, recheck } = useNetworkOffline({ walletId });
@@ -77,6 +83,8 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     const [listsRevalidated, setListsRevalidated] = useState(false);
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Which lists show: the wallet's own, the shared-list directory, or both.
+    const [show, setShow] = useState(/** @type {'mine' | 'shared' | 'all'} */ (initialShow));
 
     useEffect(() => {
         let cancelled = false;
@@ -117,7 +125,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             Promise.all(addrs.map((addr) =>
                 messaging.getListsForSource({ chainId: cid, address: addr })
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
-                    .catch((err) => ({ addr, error: err?.message || String(err) }))
+                    .catch((err) => ({ addr, error: userFacingMessage(err, 'Failed to load lists.') }))
             )).then((results) => {
                 if (cancelled) return;
                 /** @type {any[]} */
@@ -180,9 +188,44 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             .map(([cid, s]) => chainRegistry.get(cid)?.displayName || cid)
     ), [listsByChain]);
 
+    // Shared with me: the Shared lists screen's own directory loader, read on
+    // the wallet's network, shown as the same rows as the wallet's lists. It
+    // reads only once Show asks for it.
+    const directoryChainId = useMemo(() => {
+        const firstChain = addressesByChain ? Object.keys(addressesByChain)[0] : null;
+        return firstChain ? sharedListDirectoryChainId(null, chainRegistry.get(firstChain)?.networkKind) : null;
+    }, [addressesByChain]);
+    const shared = useSharedListDirectory({
+        messaging,
+        chainId: directoryChainId,
+        enabled: show !== 'mine',
+        scopeKey: walletId,
+    });
+    const sharedRows = useMemo(() => (shared.directory?.lists || []).map((entry) => {
+        const descriptor = homeDescriptor(entry.homeChain, directoryChainId);
+        if (!descriptor?.id) return null;
+        return {
+            chainId: descriptor.id,
+            action_index: String(entry.homeListIndex),
+            name: entry.name,
+            type: entry.type === 'token' ? '1' : '2',
+            status: 'valid',
+            source: typeof entry.owner === 'string' ? entry.owner : '',
+            shared: true,
+        };
+    }).filter(Boolean), [shared.directory, directoryChainId]);
+    const sharedLoading = show !== 'mine' && !shared.directory && !shared.loadError;
+
+    const shownRows = useMemo(() => {
+        if (show === 'mine') return allRows;
+        if (show === 'shared') return sharedRows;
+        const seen = new Set(allRows.map((row) => `${row.chainId}:${row.action_index}`));
+        return [...allRows, ...sharedRows.filter((row) => !seen.has(`${row.chainId}:${row.action_index}`))];
+    }, [show, allRows, sharedRows]);
+
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return allRows.filter((row) => {
+        return shownRows.filter((row) => {
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
             // The row's own title (name and index) and kind are searchable, so what
@@ -194,45 +237,37 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                 row.name, listLabel(row.action_index ?? '?', row.name, kind), kind,
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
-    }, [allRows, query, network]);
+    }, [shownRows, query, network]);
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            backLabel="Back to home"
-            title="My lists"
-        />
-    );
-    // The page header holds only the title and Back, so every action of the
-    // screen sits in the content's actions row, in every state. An empty
-    // list offers Create list from its EmptyState instead, so the screen
-    // never shows it twice.
-    const actionsFor = (emptyOffersCreate) => (
-        (onCreateList && !emptyOffersCreate) || onOpenSharedLists || onCreateUnionList ? (
-            <>
-                {onCreateList && !emptyOffersCreate ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        icon={<Icon.PlusIcon />}
-                        onClick={() => onCreateList()}
-                    >
-                        Create list
-                    </Button>
-                ) : null}
-                {onOpenSharedLists ? (
-                    <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-                ) : null}
-                {onCreateUnionList ? (
-                    <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
-                ) : null}
-            </>
-        ) : null
-    );
+    // The title bar holds the filter (search, Network, Show) and, at the far
+    // right, Create list as a plain plus; the page body is only the list and
+    // the empty state is text only.
+    const plus = onCreateList ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            aria-label="Create list"
+            title="Create list"
+            onClick={() => onCreateList()}
+        >
+            {null}
+        </Button>
+    ) : null;
 
-    const wrap = (children, toolbar, { notices = null, emptyOffersCreate = false } = {}) => (
-        <Screen variant={variant} header={header}>
-            <ListPage notices={notices} actions={actionsFor(emptyOffersCreate)} toolbar={toolbar}>
+    const wrap = (children, filterMenu = null, { notices = null } = {}) => (
+        <Screen
+            variant={variant}
+            header={(
+                <PageHeader
+                    onBack={onBack}
+                    backLabel="Back to home"
+                    title="My Lists"
+                    trailing={filterMenu || plus ? <>{filterMenu}{plus}</> : null}
+                />
+            )}
+        >
+            <ListPage notices={notices}>
                 {children}
             </ListPage>
         </Screen>
@@ -245,7 +280,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
-                        label: 'Try again',
+                        label: 'Try Again',
                         onAction: () => {
                             setAddressesError(null);
                             setAddressesByChain(null);
@@ -275,20 +310,49 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         );
     }
 
-    const toolbar = (
-        <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search lists">
-            <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </ListToolbar>
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={network !== 'all' || show !== 'mine'}
+            label="Filter lists"
+            searchPlaceholder="Search"
+            searchLabel="Search lists"
+        >
+            <NetworkFilterDropdown value={network} onChange={setNetwork} iconOnly={false} />
+            <Select
+                aria-label="Show lists"
+                size="md"
+                value={show}
+                onChange={(event) => setShow(/** @type {'mine' | 'shared' | 'all'} */ (event.target.value))}
+            >
+                <Select.Option value="mine" icon={<Icon.UserIcon />}>My lists</Select.Option>
+                <Select.Option value="shared" icon={<Icon.ShareIcon />}>Shared with me</Select.Option>
+                <Select.Option value="all" icon={<Icon.ListIcon />}>All lists</Select.Option>
+            </Select>
+        </ListFilterMenu>
     );
 
+    // The wallet's own lists count only when Show includes them, and the
+    // directory only when Show asks for it.
+    const mineErrors = show === 'shared' ? [] : loadErrors;
+    const sharedError = show === 'mine' ? null : shared.loadError;
     // Offline, the screen's one message is its offline state below.
-    const loadingNotice = anyLoading && visibleRows.length === 0 && !offline;
-    const notices = loadErrors.length > 0 && !offline ? (
+    const loadingNotice = ((show !== 'shared' && anyLoading) || sharedLoading) && visibleRows.length === 0 && !offline;
+    const notices = sharedError && !offline ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{ label: 'Try Again', onAction: shared.reload }}
+        >
+            Couldn't load the shared lists. Try again in a moment.
+        </StatusMessage>
+    ) : mineErrors.length > 0 && !offline ? (
         <StatusMessage
             variant="error"
             className={styles.entryDescription}
             recovery={{
-                label: 'Try again',
+                label: 'Try Again',
                 onAction: () => {
                     setListsByChain({});
                     setListsReload((value) => value + 1);
@@ -297,31 +361,34 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         >
             {/* Names the chains only: the raw fetch error carries API paths and
                 HTTP codes that mean nothing to the user. */}
-            Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
+            Couldn't load your lists for {mineErrors.join(', ')}. Try again in a moment.
         </StatusMessage>
     ) : loadingNotice ? (
         <StatusMessage variant="status" label={t('routes.myLists.loading')} busy>{t('routes.myLists.loading')}</StatusMessage>
     ) : null;
-    const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
-
     return wrap(
         <>
-            {offline && allRows.length === 0 ? (
+            {offline && shownRows.length === 0 ? (
                 <OfflineEmptyState body="Your lists load when the connection returns." onRetry={recheck} />
             ) : loadingNotice ? (
                 <div aria-hidden="true">
                     <Skeleton.List rows={5} />
                 </div>
-            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+            ) : (mineErrors.length > 0 || sharedError) && shownRows.length === 0 ? (
                 null
             ) : visibleRows.length === 0 ? (
-                allRows.length === 0 ? (
-                    <EmptyState
-                        title="No lists yet"
-                        body="Create an address list for airdrops or a token list for project rosters and gates."
-                        actionLabel={onCreateList ? 'Create list' : undefined}
-                        onAction={onCreateList ? () => onCreateList() : undefined}
-                    />
+                shownRows.length === 0 ? (
+                    show === 'shared' ? (
+                        <EmptyState
+                            title="No shared lists yet"
+                            body="Published shared lists appear here after you or someone else publishes one."
+                        />
+                    ) : (
+                        <EmptyState
+                            title="No lists yet"
+                            body="Create an address list for airdrops or a token list for project rosters and gates."
+                        />
+                    )
                 ) : (
                     <EmptyState title="No matching lists" body="Try a different search or network filter." titleAs="p" />
                 )
@@ -334,15 +401,17 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                         >
                             <MyListRow
                                 row={row}
-                                onSelect={() => onOpenList(row.chainId, String(row.action_index))}
+                                onSelect={() => (row.shared
+                                    ? onOpenList(row.chainId, String(row.action_index), { origin: 'shared', directoryChainId })
+                                    : onOpenList(row.chainId, String(row.action_index)))}
                             />
                         </li>
                     ))}
                 </ul>
             )}
         </>,
-        toolbar,
-        { notices, emptyOffersCreate },
+        filterMenu,
+        { notices },
     );
 }
 
@@ -372,6 +441,7 @@ function MyListRow({ row, onSelect }) {
             className={local.row}
             onClick={onSelect}
             aria-label={ariaLabel}
+            chevron
             leading={(
                 <span className={local.iconWrap}>
                     <span className={local.iconLetter} aria-hidden="true">

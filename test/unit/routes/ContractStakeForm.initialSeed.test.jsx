@@ -23,10 +23,12 @@
 // rather than the callers that reach it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+// The contract-stake route: the one Staking form on a contract target.
+import { ContractStakeRoute as ContractStakeForm } from '../../helpers/stakingFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-regtest';
@@ -60,7 +62,10 @@ const ADDRESSES = {
 
 const POSITION_PUBKEY = '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9';
 
-function mountForm(props = {}, messagingExtra = {}) {
+// `walletMode` among the extras is the mode of wallet `w`, published the way the
+// shell does from the wallet list; every other entry is a messaging method.
+function mountForm(props = {}, { walletMode = 'full', ...messagingExtra } = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         // Shaped like the real host's getActiveAddresses(): a map of chainId
@@ -102,6 +107,7 @@ function mountForm(props = {}, messagingExtra = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -120,12 +126,13 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         expect(tokenField).toBeTruthy();
 
         // Signing pubkey: pre-filled with the position's key, not blank.
-        const pubkeyField = screen.getByLabelText(/signing public key/i);
+        const pubkeyField = screen.getByLabelText(/signing key$/i, { selector: 'input' });
         expect(pubkeyField.value).toBe(POSITION_PUBKEY);
 
         // From: the position's own address, not whichever address the
         // active-address default would otherwise have picked.
-        const fromField = await screen.findByLabelText('From');
+        // The standard From section labels the field "From address".
+        const fromField = await screen.findByLabelText('From address');
         expect(fromField.value).toBe(POSITION_ADDRESS);
     });
 
@@ -135,12 +142,16 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         const tokenField = await screen.findByRole('button', { name: /^Token: XCHAIN/ });
         expect(tokenField).toBeTruthy();
 
-        const pubkeyField = screen.getByLabelText(/signing public key/i);
+        const pubkeyField = screen.getByLabelText(/signing key$/i, { selector: 'input' });
         expect(pubkeyField.value).toBe('');
 
         // No initialFromAddress: the ordinary active-address default wins.
-        const fromField = await screen.findByLabelText('From');
+        // The standard From section labels the field "From address".
+        const fromField = await screen.findByLabelText('From address');
         expect(fromField.value).toBe(ACTIVE_ADDRESS);
+        // The shared Advanced section sits directly above Speed and Fees.
+        const ids = [...document.querySelectorAll('[data-form-section]')].map((n) => n.getAttribute('data-form-section'));
+        expect(ids.slice(-2)).toEqual(['advanced', 'fee']);
     });
 });
 
@@ -202,14 +213,14 @@ describe('ContractStakeForm unstake availability', () => {
         await act(async () => { pendingStakeLookups[0]([row]); });
         expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Signing public key'), {
+        fireEvent.change(screen.getByLabelText('Signing Key'), {
             target: { value: mixedKey },
         });
         await waitFor(() => expect(pendingStakeLookups).toHaveLength(2));
         await act(async () => { pendingStakeLookups[1]([row]); });
         expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Signing public key'), {
+        fireEvent.change(screen.getByLabelText('Signing Key'), {
             target: { value: 'f'.repeat(64) },
         });
         await waitFor(() => expect(pendingStakeLookups).toHaveLength(3));
@@ -234,7 +245,7 @@ describe('ContractStakeForm stake amount validation', () => {
 
         expect(await screen.findByText('5 XCHAIN available')).toBeInTheDocument();
         fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), { target: { value: '6' } });
-        fireEvent.change(screen.getByLabelText('Signing public key'), {
+        fireEvent.change(screen.getByLabelText('Signing Key'), {
             target: { value: 'a'.repeat(64) },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
@@ -297,7 +308,7 @@ describe('ContractStakeForm stake amount validation', () => {
             initialMode: 'stake',
             initialSigningPubkey: signingPubkey,
         }, {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             getWalletBalances: vi.fn().mockResolvedValue({
                 [CHAIN]: [{
                     address: ACTIVE_ADDRESS,
@@ -311,15 +322,16 @@ describe('ContractStakeForm stake amount validation', () => {
         fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
             target: { value: '2.50000000' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
         expect(await screen.findByRole('form', { name: 'Stake review' })).toBeInTheDocument();
+        expect(screen.getByText('Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         expect(screen.getByText('2.50000000 XCHAIN')).toBeInTheDocument();
         expect(screen.getByText('10 blocks')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to edit' }));
 
         expect(await screen.findByLabelText('Amount (XCHAIN)')).toHaveValue('2.50000000');
-        expect(screen.getByLabelText('Signing public key')).toHaveValue(signingPubkey);
+        expect(screen.getByLabelText('Signing Key')).toHaveValue(signingPubkey);
     });
 });
 
@@ -361,7 +373,7 @@ describe('ContractStakeForm penalty warning', () => {
             initialMode: 'stake',
             initialSigningPubkey: 'a'.repeat(64),
         }, {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             getWalletBalances: vi.fn().mockResolvedValue({
                 [CHAIN]: [{
                     address: ACTIVE_ADDRESS,
@@ -372,18 +384,91 @@ describe('ContractStakeForm penalty warning', () => {
                 }],
             }),
         });
-        expect(await screen.findByText('Penalty destination')).toBeInTheDocument();
+        // The form itself no longer shows the penalty destination; the
+        // review states the risk.
+        expect(await screen.findByRole('group', { name: 'Stake On' })).toBeInTheDocument();
+        expect(screen.queryByText('Penalty destination')).toBeNull();
         expect(screen.queryByText('Slashed funds')).not.toBeInTheDocument();
 
         fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
             target: { value: '1' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
         const review = await screen.findByRole('form', { name: 'Stake review' });
         expect(review).toHaveTextContent('Penalty risk');
         expect(review).toHaveTextContent('This contract can take some or all of your staked tokens as a penalty.');
         expect(review).toHaveTextContent('Penalties are sent to');
         expect(review).not.toHaveTextContent(/slash/i);
+    });
+});
+
+describe('ContractStakeForm in the one Staking form (Layout 1)', () => {
+    const namedContract = () => ({
+        getContractByActionIndex: vi.fn().mockResolvedValue({
+            row: {
+                cooldown_blocks: 288,
+                slash_destination: 'bcrt1qslashdestinationexampleexampleexample',
+                meta_name: 'Yield Vault',
+            },
+        }),
+    });
+
+    it('keeps a fixed title and opens the main section on Stake On with the cooldown hint', async () => {
+        mountForm({ initialMode: 'stake' }, namedContract());
+
+        const stakeOn = await screen.findByRole('group', { name: 'Stake On' });
+        expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /2048|Yield Vault/ })).toBeNull();
+        expect(stakeOn).toHaveTextContent('Yield Vault#2048');
+        // 288 Bitcoin blocks at the 10-minute target.
+        expect(stakeOn).toHaveAccessibleDescription('Unstaking takes about 2 days (288 blocks)');
+        expect(screen.getByRole('button', { name: 'Choose what to stake on' })).toBeInTheDocument();
+
+        // The toggle is the main section's first field (ruling 2026-11-13),
+        // then Stake On, then the Token, Amount and Signing Key fields.
+        const main = stakeOn.closest('[data-form-section="main"]');
+        expect(screen.getByRole('button', { name: 'Staking' })).toHaveAttribute('aria-expanded', 'true');
+        const order = [
+            within(main).getByRole('radiogroup', { name: 'Action' }),
+            stakeOn,
+            within(main).getByRole('button', { name: /^Token:/ }),
+            within(main).getByLabelText(/^Amount/),
+            within(main).getByLabelText('Signing Key'),
+        ];
+        for (let i = 1; i < order.length; i += 1) {
+            expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+        expect(within(main).getAllByRole('radio').map((radio) => radio.textContent))
+            .toEqual(['Stake', 'Unstake', 'Delegate']);
+    });
+
+    it('switches the action from the toggle, with the hint, fields and action button following', async () => {
+        mountForm({ initialMode: 'stake' }, namedContract());
+        const stakeOn = await screen.findByRole('group', { name: 'Stake On' });
+        expect(screen.getByRole('radio', { name: 'Stake' })).toHaveAttribute('aria-checked', 'true');
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Unstake' }));
+        expect(screen.getByRole('radio', { name: 'Unstake' })).toHaveAttribute('aria-checked', 'true');
+        expect(stakeOn).toHaveAccessibleDescription('Free to use in about 2 days (288 blocks)');
+        expect(screen.getByRole('button', { name: 'Unstaking' })).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Unstake' })).toHaveLength(1);
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Delegate' }));
+        expect(screen.getByRole('group', { name: 'Stake On' }))
+            .toHaveAccessibleDescription('Unstaking takes about 2 days (288 blocks)');
+        expect(screen.getByLabelText('New Signing Key')).toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Amount/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Delegate Key' })).toBeInTheDocument();
+        // The page title follows the Action field.
+        expect(screen.getByRole('heading', { name: 'Delegate' })).toBeInTheDocument();
+    });
+
+    it('has no penalty destination field', async () => {
+        mountForm({ initialMode: 'stake' }, namedContract());
+        await screen.findByRole('group', { name: 'Stake On' });
+        expect(screen.queryByText('Penalty destination')).toBeNull();
+        expect(screen.queryByText('(configured at deploy)')).toBeNull();
+        expect(screen.queryByText('bcrt1qslashdestinationexampleexampleexample')).toBeNull();
     });
 });

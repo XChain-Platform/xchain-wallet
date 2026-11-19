@@ -44,7 +44,10 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-deviation-gate.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, openFormSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
+import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
     expectConfirmModal,
@@ -59,14 +62,37 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The wallet menu row that opens the oracle price form (the grouped menu's title). */
+const ORACLE_COMMAND = 'My oracle';
 /** Three publishes, each paying a real coin protocol fee here. */
 const FUNDING = 3;
 const TICK = 'XCHAIN';
 const FIAT = 'USD';
+/**
+ * The protocol fee fraction, the form's 1% stop. The form takes the fee on a
+ * slider of named stops (Free, 0.5%, 1%, 2%, 5%, Custom) in the optional
+ * Usage Fee section.
+ */
 const USAGE_FEE = '0.01';
+const USAGE_FEE_STOP = { index: '2', valueText: '1 percent' };
+
+/**
+ * Opens the Usage Fee section and sets the slider to the 1% stop by position,
+ * so a revisit that prefills a fee still lands on the same stop.
+ */
+async function setUsageFee(main) {
+    await openFormSection(main, 'Usage Fee');
+    const fee = main.getByRole('slider', { name: 'Usage fee', exact: true });
+    await fee.fill(USAGE_FEE_STOP.index);
+    await expect(fee, `the usage fee slider is not on the ${USAGE_FEE} stop`)
+        .toHaveAttribute('aria-valuetext', USAGE_FEE_STOP.valueText);
+}
 
 /** The three prices, sized around the form's 25% threshold. */
 const FIRST = '1.50';
@@ -129,16 +155,17 @@ async function stagePublish(page, value) {
     // Home first: a palette command for the route already mounted is a no-op
     // (D-117), and after a publish this route sits on its own result screen.
     await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-    await openPaletteCommand(page, 'Publish oracle price');
+    await openPaletteCommand(page, ORACLE_COMMAND);
     const main = page.getByRole('main');
-    await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
     // D-145: this form published on the wallet's first chain until it grew a
     // picker, so on a Litecoin run this is what keeps it off Bitcoin.
     await selectVenueChain(main);
-    await main.getByLabel(/^Token ticker/).fill(TICK);
-    await main.getByLabel('Currency').selectOption(FIAT);
+    // G122: the Token and Fiat currency fields open picker pages.
+    await pickToken(main, TICK);
+    await pickFiatCurrency(main, FIAT);
     await main.getByLabel(/^Price of one/).fill(value);
-    await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
+    await setUsageFee(main);
     await main.getByRole('button', { name: 'Publish price' }).click();
     // A full-mode wallet signs from the shared confirm screen, which carries the
     // oracle notes, the typed PUBLISH box and the password.
@@ -147,10 +174,9 @@ async function stagePublish(page, value) {
 
 /** Signs the staged publish and returns the indexed action. */
 async function signPublish(page, review) {
-    const pw = review.getByLabel('Password', { exact: true });
+    const pw = fieldByLabel(review, 'Password');
     if (await pw.count() > 0) await pw.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const done = page.getByRole('main');
     await expect(done, 'no transaction id ever appeared after approving the publish')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -180,9 +206,9 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                 await createWallet(page, { password: PASSWORD, name: 'Deviation Operator' });
                 await switchToRegtest(page, PASSWORD);
 
-                await openPaletteCommand(page, 'Publish oracle price');
+                await openPaletteCommand(page, ORACLE_COMMAND);
                 const main = page.getByRole('main');
-                await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+                await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
                 oracle = await main.getByRole('textbox', { name: /^Publishing address/ }).inputValue();
                 expect(oracle, `no ${REGTEST_CHAIN_LABEL} address to publish from`)
@@ -242,46 +268,45 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
 
                 // It says WHAT the move is, not merely that something is unusual:
                 // the number is the whole point on a fat-fingered decimal.
-                const alert = review.getByRole('alert').filter({ hasText: /move from your last published/i });
-                await expect(alert, 'the review does not name the move against the last published price')
+                // The move is stated in the "Before you approve" block, which is
+                // not an alert, and the size is computed from this spec's prices.
+                const movePct = Math.round(((Number(BIG_MOVE) - Number(FIRST)) / Number(FIRST)) * 100);
+                const moveText = `+${movePct}%`;
+                const warning = review.getByTestId('confirm-warning');
+                await expect(warning.getByText(
+                    `This is a ${moveText} move from the last published price. Check the decimal point before approving.`,
+                ), 'the review does not name the move against the last published price')
                     .toBeVisible({ timeout: 30_000 });
-                const said = (await alert.textContent()) || '';
-                expect(said, 'the warning does not state the size of the move')
-                    .toMatch(/100(\.0+)?\s*%/);
-                // Compared as a NUMBER, not as the string that was typed: the
-                // form renders the value the mirror stored, and 1.50 comes back
-                // as "1.5". A `toContain('1.50')` here fails on formatting while
-                // the sentence is perfectly correct, which is a spec defect
-                // dressed as a product one.
-                const quoted = Number((said.match(/price of\s+([\d.]+)/) || [])[1]);
-                expect(quoted, `the warning does not quote the price being moved from: "${said}"`)
-                    .toBe(Number(FIRST));
+                // The prior value is a fact row, compared as a NUMBER because the
+                // form renders the stored value ("1.50" comes back as "1.5").
+                const pending = review.locator('dt', { hasText: /^Pending price$/ })
+                    .locator('xpath=following-sibling::dd[1]');
+                await expect(pending, 'the review does not quote the price being moved from')
+                    .toHaveText(`${Number(FIRST)} ${FIAT} (${moveText})`);
 
                 const box = typedConfirmBox(review);
                 await expect(box, 'a +100% move did not ask for the typed confirm at all')
                     .toBeVisible({ timeout: 30_000 });
 
                 // THE ASSERTION THAT MATTERS: the button is not merely
-                // accompanied by a box, it is BLOCKED by it.
-                const publish = page.getByTestId('confirm-approve');
-                await expect(publish,
-                    'the typed confirm is decorative: Publish is enabled with the box empty')
-                    .toBeDisabled();
+                // accompanied by a box, it is BLOCKED by it. Approve keeps its
+                // colour (G130), so the block is what a tap does: refused with
+                // a notice at the top (confirm-blocked), nothing sent.
+                await expectApproveRefused(page, 'credentials',
+                    'a +100% publish with the typed confirm empty (the typed confirm is decorative)');
 
                 // A near miss must not pass: neither a different word nor the
                 // right word in another case, since every typed confirmation
                 // matches its word exactly.
                 await box.fill('PUBLICH');
-                await expect(publish, 'a wrong word unlocked the publish')
-                    .toBeDisabled();
+                await expectApproveRefused(page, 'credentials', 'a +100% publish typed "PUBLICH"');
                 await box.fill('publish');
-                await expect(publish, 'a lower-case word unlocked the publish')
-                    .toBeDisabled();
+                await expectApproveRefused(page, 'credentials', 'a +100% publish typed in lower case');
 
                 await box.fill('PUBLISH');
-                await expect(publish,
+                await expect(page.getByTestId('confirm-blocked'),
                     'the form rejects the exact word it asks for')
-                    .toBeEnabled({ timeout: 15_000 });
+                    .toHaveCount(0, { timeout: 15_000 });
 
                 const published = await signPublish(page, review);
                 expect(String(published.status),

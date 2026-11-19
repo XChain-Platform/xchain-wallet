@@ -1,8 +1,20 @@
 /* One row of an activity list. The list is the card (a flush card with
    dividers between rows, on Home and in History alike), so a row draws no
-   border, corner or fill of its own; it keeps the card inset. */
+   border, corner or fill of its own; it keeps the card inset. The row
+   carries the shared Button classes, whose hover and press rules outrank
+   .row:hover, so it points their colours at the muted row fill instead of
+   the ghost slate. Button's single-class rules tie a single-class rule here,
+   so whichever sheet loads last would win; the doubled class outranks them
+   in any sheet order (the plain class is listed too so the rule is found
+   under its own name). */
+.row.row,
 .row {
-    padding: var(--xc-card-pad);
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
+    --xc-button-hover-border: transparent;
+    justify-content: normal;
+    max-width: none;
+    /* The same row inset as the Coins and Tokens lists. */
+    padding: var(--xc-list-row-padding);
     background: transparent;
     border: 0;
     border-radius: 0;
@@ -12,15 +24,14 @@
     box-sizing: border-box;
     position: relative;
     display: grid;
-    /* Two lines: the title and amount on top, the context, status and time
-       below. The title owns the flexible column, so the context and amount
-       give way first and the title is never cut to a few letters. The title
-       column keeps a floor, so a long amount wraps inside its own column
-       instead of squeezing the label to nothing. */
+    /* Keep action/status, amount, and block/time on separate lines. The title
+       owns the flexible column and keeps a floor, so context and long amounts
+       give way or wrap without hiding the action. */
     grid-template-columns: auto minmax(3rem, 1fr) auto auto auto;
     grid-template-areas:
-        "mark label primary primary trailing"
-        "mark label status time trailing";
+        "mark label label status trailing"
+        "mark primary primary primary trailing"
+        "mark block block time trailing";
     align-items: center;
     column-gap: var(--xc-space-2);
     row-gap: var(--xc-space-1);
@@ -31,21 +42,42 @@
     white-space: nowrap;
 }
 
-.row:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .row.row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
-.row:focus-visible {
+@media (hover: hover) and (pointer: fine) {
+    .row.row:hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+        border-color: currentColor;
+    }
+}
+
+.row.row:active:not(:disabled) {
+    background: var(--xc-row-hover-bg);
+    border-color: currentColor;
+    filter: none;
+    transform: none;
+}
+
+.row.row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-.selected {
-    background: var(--xc-bg-muted);
+/* Doubled to stay ahead of the doubled row rule above. */
+.selected.selected {
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
+/* The icon sits a step further from its text than the other cells sit from
+   each other. */
 .mark {
     grid-area: mark;
+    margin-inline-end: var(--xc-space-1);
 }
 
 .labelCell,
@@ -66,8 +98,24 @@
     gap: var(--xc-space-1);
 }
 
+.labelLine {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.actionIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
 .label {
     max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: var(--xc-text-sm);
@@ -99,11 +147,17 @@
     text-overflow: ellipsis;
 }
 
+/* A counterparty AddressText keeps the line's muted colour, ahead of the
+   kit's own text colour; it fits the rest of the line itself (G99). */
+.context > [dir='ltr'][aria-label] {
+    color: inherit;
+}
+
 .primary {
     grid-area: primary;
     font-size: var(--xc-text-sm);
     font-weight: 700;
-    text-align: end;
+    text-align: start;
     white-space: normal;
     overflow-wrap: anywhere;
     text-overflow: clip;
@@ -124,18 +178,28 @@
 }
 
 .confirmed {
-    background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
-    color: var(--xc-success, #14b86c);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
 }
 
 .failed {
-    background: var(--xc-danger-bg, rgba(220, 38, 38, 0.10));
-    color: var(--xc-danger-fg, #d93838);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-fg);
 }
 
+/* The amber text token clears AA on the pill's 18% tint; --xc-warning
+   itself reads 4.25:1 there in the light theme. */
 .pending {
-    background: var(--xc-warning-bg, rgba(217, 119, 6, 0.10));
-    color: var(--xc-warning, #d99000);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.block {
+    grid-area: block;
+    justify-self: start;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
 }
 
 .time {
@@ -155,11 +219,16 @@
 }
 
 @media (max-width: 400px) {
-    .row {
+    .row.row {
         column-gap: var(--xc-space-1);
+        grid-template-areas:
+            "mark label label status trailing"
+            "mark primary primary primary trailing"
+            "mark block block time trailing";
     }
 
     .primary,
+    .block,
     .time {
         font-size: var(--xc-text-xs);
     }
@@ -168,4 +237,36 @@
         padding: 0 var(--xc-space-1);
         font-size: 9px;
     }
+}
+
+/* Outlined status pills: the text keeps the readable status colour; the
+   outline and a stronger tint carry the brightness. Each tint is listed
+   first as the plain status background for browsers without color-mix(). */
+.status.confirmed {
+    border: 1px solid var(--xc-success-fill);
+    background: var(--xc-success-bg);
+    background: color-mix(in srgb, var(--xc-success-fill) 16%, transparent);
+}
+
+.status.pending {
+    border: 1px solid var(--xc-warning);
+    background: var(--xc-warning-bg);
+    background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
+}
+
+.status.failed {
+    border: 1px solid var(--xc-danger);
+    background: var(--xc-danger-bg);
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+}
+
+/* A row with no trailing control renders no trailing cell and drops that
+   column, so the status pill sits one row inset from the right edge.
+   ActivityRow sets the class, since the Safari 16 baseline has no :has(). */
+.row.row.noTrailing {
+    grid-template-columns: auto minmax(3rem, 1fr) auto auto;
+    grid-template-areas:
+        "mark label label status"
+        "mark primary primary primary"
+        "mark block block time";
 }

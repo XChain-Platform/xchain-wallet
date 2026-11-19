@@ -17,10 +17,11 @@
 //   { psbtHex, encoding?, fromAddress?, chainId? }
 
 import { useMemo, useState } from 'react';
-import { AnimatedQrFrames, RadioGroup, StatusMessage } from '../../ui/index.js';
+import { AnimatedQrFrames, Icon, IconSelect, StatusMessage } from '../../ui/index.js';
 import { CopyButton, Textarea } from '../../ui/index.js';
 import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import styles from './WatcherExport.module.css';
 import { t } from '../../i18n/index.js';
@@ -41,7 +42,7 @@ export function WatcherExport({ result }) {
                 ? encodeBbqrPsbtFrames(psbtHex)
                 : encodeXcwChunks(psbtHex);
         } catch (e) {
-            return { error: e?.message || String(e) };
+            return { error: userFacingMessage(e, 'Could not build the QR codes for this transaction.') };
         }
     }, [psbtHex, qrFormat]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
@@ -64,7 +65,9 @@ export function WatcherExport({ result }) {
                 </dl>
             ) : null}
             <div className={styles.successTxidBlock}>
-                <p className={styles.successLabel}>{t('components.watcherResultPanel.unsignedTransactionHex')}</p>
+                <p className={styles.successLabel}>
+                    {t('components.watcherResultPanel.unsignedTransactionHex')}
+                </p>
                 <Textarea
                     readOnly
                     aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}
@@ -72,28 +75,28 @@ export function WatcherExport({ result }) {
                     rows={6}
                     className={styles.machineText}
                     style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    fieldAction={(
+                        <CopyButton
+                            key={psbtHex}
+                            value={psbtHex}
+                            label={t('components.watcherResultPanel.copyHex')}
+                            ariaLabel={t('components.watcherResultPanel.copyUnsignedTransactionHex')}
+                            iconOnly
+                        />
+                    )}
                 />
-                <div className={styles.successTxidRow}>
-                    <CopyButton
-                        key={psbtHex}
-                        value={psbtHex}
-                        label={t('components.watcherResultPanel.copyHex')}
-                        ariaLabel={t('components.watcherResultPanel.copyUnsignedTransactionHex')}
-                    />
-                </div>
             </div>
             <div className={styles.successTxidBlock}>
-                <RadioGroup
-                    legend={t('components.watcherResultPanel.qrFormat')}
-                    name="watcher-qr-format"
+                {/* The themed dropdown with an icon per option, never radios (G119). */}
+                <IconSelect
+                    label={t('components.watcherResultPanel.qrFormat')}
+                    help={t('components.watcherResultPanel.qrFormatHelp')}
                     value={qrFormat}
                     onChange={setQrFormat}
                     options={[
-                        { value: 'xcw', label: 'XCW (this wallet)' },
-                        { value: 'bbqr', label: 'BBQr (Sparrow / Coldcard / SeedSigner)' },
+                        { value: 'xcw', label: 'XCW (this wallet)', icon: <Icon.WalletIcon /> },
+                        { value: 'bbqr', label: 'BBQr (Sparrow / Coldcard / SeedSigner)', icon: <Icon.ScanIcon /> },
                     ]}
-                    role="radiogroup"
-                    aria-label={t('components.watcherResultPanel.animatedQrFormat')}
                 />
             </div>
             {exportFrames && exportFrames.error ? (

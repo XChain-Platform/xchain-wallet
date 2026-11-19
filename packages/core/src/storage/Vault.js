@@ -25,8 +25,10 @@
 //   - Reads migrate records forward via the schema migration harness and
 //     cache the result. The on-disk record stays at its stored version until
 //     the next write.
-//   - AAD is optional; when supplied it's passed through to AEAD
-//     unchanged on both save and load.
+//   - AAD is optional; production shells currently omit it. Supplying AAD for
+//     an existing vault is a format change because a no-AAD blob cannot open
+//     with AAD. It requires a read-old/write-new migration or document-version
+//     change. See the shared-key format note in codec.js.
 
 import {
     DOCUMENT_VERSION,
@@ -50,6 +52,7 @@ import {
     migratePriceAlert,
     migrateGatedKey,
     migratePendingDeploy,
+    migratePendingFileUpload,
     migrateAutopayOrder,
     migrateAutopayLease,
 } from '../schemas/migrations.js';
@@ -59,6 +62,7 @@ import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validateContact } from '../schemas/contact.js';
 import { validatePendingAirdrop } from '../schemas/pendingAirdrop.js';
 import { validatePendingDeploy } from '../schemas/pendingDeploy.js';
+import { validatePendingFileUpload } from '../schemas/pendingFileUpload.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateMultisigSigningSession } from '../schemas/multisigSigningSession.js';
 import { validateCoSignerAccount } from '../schemas/coSignerAccount.js';
@@ -105,6 +109,7 @@ const DISPOSABLE_LOCAL_KEYS = new Set([
 const DISPOSABLE_LOCAL_PREFIXES = [
     'xc:balanceCache:',
     'xc:historyCache:',
+    'xc:ownedTokens:',
 ];
 const DISPOSABLE_CHROME_KEYS = ['xchain.logConsole'];
 
@@ -172,13 +177,14 @@ export class VaultValidationError extends Error {
  * @typedef {Object} VaultOpts
  * @property {import('./backend.js').StorageBackend} backend
  * @property {Uint8Array} masterKey               32 bytes; caller retains lifetime
- * @property {Uint8Array} [aad]
+ * @property {Uint8Array} [aad]                     optional format parameter; production shells omit it
  * @property {boolean} [autoSave]                 default true
+ * @property {object} [settingsMigrationCtx]      prices for the settings migrations (flows/legacyRates.js builds it); absent means no price, so legacy queues drop
  */
 
 export class Vault {
     /** @param {VaultOpts} opts */
-    constructor({ backend, masterKey, aad, autoSave = true }) {
+    constructor({ backend, masterKey, aad, autoSave = true, settingsMigrationCtx = undefined }) {
         if (!backend) throw new Error('Vault: backend is required');
         if (!(masterKey instanceof Uint8Array) || masterKey.length !== 32) {
             throw new Error('Vault: masterKey must be a 32-byte Uint8Array');
@@ -200,7 +206,15 @@ export class Vault {
         // absorbed only by the tail so later operations can still proceed.
         this._writeTail = Promise.resolve();
 
-        this.wallets = makeCollection(this, 'wallets', migrateWallet, validateWallet);
+        // A v3 wallet takes its mode from the raw stored settings. The legacy
+        // key has no default, so settings writes keep it until every wallet
+        // has been read forward.
+        this.wallets = makeCollection(
+            this,
+            'wallets',
+            (r) => migrateWallet(r, { legacyWalletMode: this._doc?.settings?.walletMode }),
+            validateWallet,
+        );
         this.accounts = makeCollection(this, 'accounts', migrateAccount, validateAccount);
         this.addresses = makeCollection(this, 'addresses', migrateAddress, validateAddress);
         this.contacts = makeCollection(this, 'contacts', migrateContact, validateContact);
@@ -227,6 +241,12 @@ export class Vault {
             'pendingAirdrops',
             migratePendingAirdrop,
             validatePendingAirdrop,
+        );
+        this.pendingFileUploads = makeCollection(
+            this,
+            'pendingFileUploads',
+            migratePendingFileUpload,
+            validatePendingFileUpload,
         );
         // PC-38: crash-safe state for the multi-transaction chunked DEPLOY.
         this.pendingDeploys = makeCollection(
@@ -288,7 +308,7 @@ export class Vault {
         // that never overrode them. Readers always see the full record
         // (inflate on get); writers hand in a full record which is
         // validated full, then reduced to deltas (deflate on put).
-        this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings, {
+        this.settings = makeSingleton(this, 'settings', (r) => migrateSettings(r, settingsMigrationCtx), validateSettings, {
             inflate: inflateSettings,
             deflate: deflateSettings,
         });
@@ -452,6 +472,39 @@ export class Vault {
     }
 
     /**
+     * Build and store several records from the current document in one write
+     * queue slot. The builder may refuse by throwing; in that case no record
+     * is changed. This is for read-derive-write flows whose precondition must
+     * still hold at the instant the write is built.
+     *
+     * @param {(document: import('./codec.js').VaultDocument) => Array<{ store: { _prepare: Function }, record: object }>} buildEntries
+     * @returns {Promise<void>}
+     */
+    async putManyGuarded(buildEntries) {
+        this._assertOpen();
+        if (typeof buildEntries !== 'function') {
+            throw new TypeError('Vault.putManyGuarded: builder must be a function');
+        }
+        await this._mutate((document) => {
+            const entries = buildEntries(document);
+            if (!Array.isArray(entries)) {
+                throw new TypeError('Vault.putManyGuarded: builder must return an array');
+            }
+            const steps = entries.map((entry) => {
+                const store = entry?.store;
+                if (!store || store._vault !== this || typeof store._prepare !== 'function') {
+                    throw new TypeError('Vault.putManyGuarded: every entry needs a store from this vault');
+                }
+                return store._prepare(entry.record);
+            });
+            return {
+                document: steps.reduce((next, apply) => apply(next), document),
+                persist: steps.length > 0,
+            };
+        });
+    }
+
+    /**
      * Whether `candidate` is the key this vault is sealed under, compared in
      * constant time. Lets a password change ask "does the old password open
      * the vault?" without decrypting the blob a second time.
@@ -557,6 +610,19 @@ export class Vault {
             logConsole.record({ source: 'vault', level: 'info', message: nextKey ? 'rekey' : 'reseal wallets' });
             return true;
         });
+    }
+
+    /**
+     * A copy of the key this vault is sealed under, for a caller that must seal
+     * a record beside the vault under the same key: the recovery-phrase reset
+     * record (flows/phraseRecovery.js) keeps its recovery key sealed under it and
+     * the key itself in its bundle. The caller zeroes the copy.
+     *
+     * @returns {Uint8Array}
+     */
+    exportMasterKeyCopy() {
+        this._assertOpen();
+        return new Uint8Array(this._masterKey);
     }
 
     /** Whether this handle is open: false once close() or clear() has run, or before open(). */

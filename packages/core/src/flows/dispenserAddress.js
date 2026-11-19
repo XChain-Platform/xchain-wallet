@@ -34,11 +34,13 @@
 // tag and default label.
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
-import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
 
 const MAX_DERIVATION_INDEX = 0x7fffffff;
@@ -98,7 +100,8 @@ async function probeIndexFunding({
  * @property {string} chainId
  * @property {string} [accountId]               preferred, pick the Account by id
  * @property {number} [accountIndex]            fallback, pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
- * @property {string} [addressType]             defaults to descriptor.defaultAddressType
+ * @property {string} [addressType]             defaults by wallet format via
+ *                                              defaultAddressTypeForWallet (p2pkh for counterwallet-legacy)
  * @property {string} [label]                   defaults to "<TICKER> Dispenser #N+1" (e.g. "BTC Dispenser #2")
  */
 
@@ -125,6 +128,8 @@ export async function dispenserAddress({
         throw new Error('dispenserAddress: walletId is required');
     }
     if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet derives only through its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'a new address without it connected');
         throw new Error('dispenserAddress: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('dispenserAddress: chainRegistry is required');
@@ -174,8 +179,10 @@ export async function dispenserAddress({
     // below must not apply. Partitioning by type there would hand the
     // dispenser the key already in use as a personal receive address -
     // the exact collision the "never collides" note above rules out.
-    const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
+    const sharedIndexSpace = await indexSpaceSharedForAccount(vault, walletId, {
+        account, addresses: allAddresses, signerKind: providedSigner?.kind,
+    });
     const held = new Set();
     let highest = -1;
     let dispenserCount = 0;
@@ -216,9 +223,9 @@ export async function dispenserAddress({
         });
     const ownsSigner = !providedSigner;
     const signerKind = signer.kind;
-    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
     try {
+        const addressSource = addressSourceForSignerKind(signerKind);
         // Fill the lowest gap below `highest` whose address the chain has
         // never funded; a gap the chain shows was actually used stays
         // skipped, same as `held`, so the range grows past it instead.

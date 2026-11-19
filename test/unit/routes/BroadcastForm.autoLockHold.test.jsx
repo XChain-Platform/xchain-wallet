@@ -1,12 +1,11 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Auto-lock waits for a raw broadcast that is already on its way to the node.
-// Locking under it tears the session down while the request is in flight and
-// leaves the host closed before the broadcast record is settled.
+// The Broadcast form no longer owns raw transaction submission, so opening it
+// cannot create the auto-lock hold used by the signed-transaction relay.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import React, { useState } from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -14,9 +13,7 @@ import { useAutoLockPolicy } from '../../../packages/core/src/shared/hooks/useAu
 import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 
-const MINUTE = 60 * 1000;
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
-const LEGACY_TX = '0200000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03000000474830450221001111111111111111111111111111111111111111111111111111111111110121023333333333333333333333333333333333333333333333333333333333333333fdffffff0240e20100000000001976a914444444444444444444444444444444444444444488ac00000000000000001c6a1a58434841494eabababababababababababababababababababab00000000';
 
 function Shell({ children }) {
     const [state, setState] = useState('unlocked');
@@ -43,25 +40,14 @@ function makeMessaging(broadcastSignedTxRequest) {
     });
 }
 
-// A laptop lid closed past the timeout: both clocks jump, then the page
-// becomes visible again and the hook checks the deadline at once.
-async function sleepAndWake(ms) {
-    const wall = Date.now() + ms;
-    const mono = performance.now() + ms;
-    vi.spyOn(Date, 'now').mockReturnValue(wall);
-    vi.spyOn(performance, 'now').mockReturnValue(mono);
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-}
-
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
 });
 
-describe('raw broadcast and auto-lock', () => {
-    it('defers auto-lock while a pasted transaction is broadcasting', async () => {
-        let finish;
-        const broadcastSignedTxRequest = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+describe('BroadcastForm and raw broadcast auto-lock', () => {
+    it('does not expose the removed raw transaction request path', async () => {
+        const broadcastSignedTxRequest = vi.fn();
         const messaging = makeMessaging(broadcastSignedTxRequest);
         render(
             <MessagingProvider shell="web" messaging={messaging}>
@@ -72,23 +58,11 @@ describe('raw broadcast and auto-lock', () => {
                 </ToastHost>
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
-        fireEvent.change(screen.getByLabelText('Signed transaction code'), { target: { value: LEGACY_TX } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
-        await screen.findByText(/spends 1 input/);
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-        await waitFor(() => expect(broadcastSignedTxRequest).toHaveBeenCalledTimes(1));
-        expect(isAutoLockHeld()).toBe(true);
+        await screen.findByLabelText('Message');
 
-        await sleepAndWake(2 * MINUTE);
-        expect(messaging.lockWallet).not.toHaveBeenCalled();
-        expect(screen.queryByText('Locked screen')).toBeNull();
-
-        // The deadline already passed, so the lock follows as soon as the
-        // broadcast settles, with the host still open to record its outcome.
-        await act(async () => { finish({ txid: 'deadbeef' }); });
+        expect(screen.queryByLabelText('Signed transaction')).toBeNull();
+        expect(screen.queryByLabelText('Signed transaction code')).toBeNull();
         expect(isAutoLockHeld()).toBe(false);
-        await waitFor(() => expect(messaging.lockWallet).toHaveBeenCalledTimes(1));
-        expect(broadcastSignedTxRequest).toHaveBeenCalledTimes(1);
+        expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
     });
 });

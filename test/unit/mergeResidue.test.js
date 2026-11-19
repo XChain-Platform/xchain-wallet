@@ -45,7 +45,7 @@ const RUNTIME_GLOBALS = new Set([
     'Infinity', 'Intl', 'isFinite', 'JSON', 'localStorage', 'location', 'Map',
     'Math', 'module', 'MutationObserver', 'NaN', 'navigator', 'Node', 'Notification',
     'Number', 'Object', 'parseFloat', 'parseInt', 'process', 'Promise', 'Proxy',
-    'queueMicrotask', 'Reflect', 'RegExp', 'Request', 'requestAnimationFrame', 'require',
+    'queueMicrotask', 'RangeError', 'Reflect', 'RegExp', 'Request', 'requestAnimationFrame', 'require',
     'ResizeObserver', 'sessionStorage', 'Set', 'setImmediate', 'setInterval',
     'setTimeout', 'String', 'Symbol', 'TextDecoder', 'TextEncoder', 'TypeError',
     'Uint8Array', 'undefined', 'unescape', 'URL', 'URLSearchParams', 'WeakMap',
@@ -57,6 +57,10 @@ const STANDARD_HOOKS = new Set([
     'useId', 'useImperativeHandle', 'useInsertionEffect', 'useLayoutEffect',
     'useMemo', 'useReducer', 'useRef', 'useState', 'useSyncExternalStore',
     'useTransition',
+    // The form error standard's state hook: like useState, each call is its
+    // own error map, so a form with two steps may keep two (Create Wallet's
+    // password step and its recovery phrase quiz).
+    'useFormErrors',
 ]);
 
 function scan(code) {

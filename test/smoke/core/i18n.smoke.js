@@ -158,6 +158,7 @@ assert.ok(
 // from the source, so a new t() call is covered the day it lands.
 
 const KEY_SHAPE = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
+const HOSTNAME_SHAPE = /^(?:[a-z0-9-]+\.)+(?:app|com|dev|io|net|org)$/i;
 const PAIRS = { '(': ')', '[': ']', '{': '}' };
 
 // Identifier vars cannot be read from source; these files pin theirs by
@@ -179,12 +180,12 @@ function sourceFiles(dir, out = []) {
 
 /** True when `s` has the dotted translation-key shape. */
 function isDictionaryKey(s) {
-    return KEY_SHAPE.test(s);
+    return KEY_SHAPE.test(s) && !HOSTNAME_SHAPE.test(s);
 }
 
 /** Return every quoted dictionary-key literal in `text`. */
 function keyLiterals(text) {
-    return [...text.matchAll(/(['"])([^'"\n]+)\1/g)]
+    return [...text.matchAll(/(['"])([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)\1/g)]
         .map((m) => m[2])
         .filter(isDictionaryKey);
 }
@@ -293,8 +294,10 @@ translatedRoots.push(join(packagesDir, 'desktop', 'renderer'));
 const translated = translatedRoots
     .flatMap((dir) => sourceFiles(dir))
     .map((f) => ({ rel: relative(wsRoot, f).split('\\').join('/'), src: readFileSync(f, 'utf8') }))
-    // HistoryShared.jsx holds the pending copy tables (key literals, no t() call of its own).
-    .filter(({ rel, src }) => (/(?<![\w$.])t\(/.test(src) || rel === 'packages/core/src/shared/routes/HistoryShared.jsx') && keyLiterals(src).length > 0);
+    // These data files hold key literals consumed by a translator in another module.
+    .filter(({ rel, src }) => (/(?<![\w$.])t\(/.test(src)
+        || rel === 'packages/core/src/shared/routes/HistoryShared.jsx'
+        || rel === 'packages/core/src/shared/routeRegistry.js') && keyLiterals(src).length > 0);
 
 const seenKeys = new Set();
 for (const { rel, src } of translated) {

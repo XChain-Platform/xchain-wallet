@@ -8,32 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PC-06: ISSUE create-time completeness. The Token Creation Wizard's
-// Custom template gains an advanced disclosure carrying the ISSUE v0
-// fields that previously needed three separate post-create admin edits
-// (PC-02 lock matrix, PC-03 callback trio, PC-04 access lists), so a
-// fair-mint token is fully configured in one transaction.
+// ISSUE create-time completeness. The one Issue form carries the ISSUE v0
+// fields that otherwise need separate post-create admin edits (the lock
+// switches, the callback trio, the access lists), so a fair-mint token is
+// fully configured in one transaction.
 //
 // Asserts:
 //   1. The advanced fields live in one pure, testable module and the
 //      seven-flag lock table is shared with the admin matrix.
-//   2. The wizard imports that module plus the SAME list picker the
-//      admin access-lists mode uses (create and edit bind identically).
-//   3. Only the Custom composer folds the advanced fields in; the five
-//      opinionated templates are untouched.
-//   4. Submit pre-flights the advanced fields BEFORE composing, scoped
-//      to Custom, and re-opens the panel on a rejection.
-//   5. The panel renders all three groups, driven by LOCK_FLAGS rather
-//      than a hardcoded subset.
-//   6. The `lockOnCreate` shortcut and the matrix do not offer two
-//      controls for the same wire field.
-//   7. The two create-time rails have live inputs: the chain tip (for
+//   2. The Issue a Token route renders IssueTokenForm, which imports that
+//      module plus the SAME list picker the admin access-lists mode uses
+//      (create and edit bind identically).
+//   3. The callback trio, the lock switches and the lists each write their
+//      own ISSUE fields during composition.
+//   4. The input check pre-flights the callback BEFORE the review step.
+//   5. The form renders all three groups, driven by the shared lock table
+//      rather than a hardcoded subset.
+//   6. The two create-time rails have live inputs: the chain tip (for
 //      the callback future-block check the indexer skips on a create)
 //      and the callback token's divisibility.
-//   8. The panel is Custom-only and collapsed by default.
-//   9. composeIssueParams stays file-local (the original wizard smoke's
-//      invariant survives this change).
-//  10. The CSS module ships the new class names.
+//   7. The three groups start collapsed.
+//   8. The route holds no composer of its own and the old stylesheet is gone.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -47,16 +42,18 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const fieldsPath = join(core, 'src', 'shared', 'utils', 'issueAdvancedFields.js');
 const wizardPath = join(sharedRoutes, 'TokenWizard.jsx');
+const formPath = join(sharedRoutes, 'IssueTokenForm.jsx');
+const locksPath = join(sharedRoutes, 'issueLocks.js');
 const adminPath = join(sharedRoutes, 'TokenAdminForm.jsx');
-const cssPath = join(sharedRoutes, 'TokenWizard.module.css');
 
 assert.ok(existsSync(fieldsPath), 'issueAdvancedFields.js exists');
 assert.ok(existsSync(wizardPath), 'TokenWizard.jsx exists');
+assert.ok(existsSync(formPath), 'IssueTokenForm.jsx exists');
 
 const fields = readFileSync(fieldsPath, 'utf8');
-const src = readFileSync(wizardPath, 'utf8');
+const src = readFileSync(formPath, 'utf8');
+const locks = readFileSync(locksPath, 'utf8');
 const admin = readFileSync(adminPath, 'utf8');
-const css = readFileSync(cssPath, 'utf8');
 
 // --- 1. One pure module, one lock table --------------------------------
 
@@ -77,15 +74,23 @@ assert.ok(
     'the admin lock matrix consumes the shared LOCK_FLAGS',
 );
 
-// --- 2. Wizard wiring ---------------------------------------------------
+// --- 2. Issue form wiring -----------------------------------------------
 
 assert.ok(
-    /import \{[\s\S]*?LOCK_FLAGS[\s\S]*?applyAdvancedIssueFields[\s\S]*?validateAdvancedIssueFields[\s\S]*?advancedIssueWarnings[\s\S]*?\} from '\.\.\/utils\/issueAdvancedFields\.js'/.test(src),
-    'wizard imports the advanced-field helpers',
+    /return <IssueTokenForm\b/.test(readFileSync(wizardPath, 'utf8')),
+    'the Issue a Token route renders IssueTokenForm',
+);
+assert.ok(
+    /import \{[\s\S]*?applyAdvancedIssueFields[\s\S]*?validateAdvancedIssueFields[\s\S]*?\} from '\.\.\/utils\/issueAdvancedFields\.js'/.test(src),
+    'the form imports the advanced-field helpers',
+);
+assert.ok(
+    /import \{ ISSUE_LOCKS \} from '\.\/issueLocks\.js'/.test(src),
+    'the form draws its lock switches from the shared lock table',
 );
 assert.ok(
     /import \{ ListPickerScreen \} from '\.\.\/components\/ListPickerScreen\.jsx'/.test(src),
-    'wizard reuses the shared ListPickerScreen (same picker as the admin access-lists mode)',
+    'the form reuses the shared ListPickerScreen (same picker as the admin access-lists mode)',
 );
 assert.ok(
     /filterType="2"/.test(src),
@@ -95,84 +100,89 @@ assert.ok(
     /import \{ blockDateEstimateText \} from '\.\.\/utils\/blockDateEstimate\.js'/.test(src),
     'callback block height carries a date estimate',
 );
-
-// --- 3. Custom-only composition ----------------------------------------
-
-const composersBlock = src.match(/const TEMPLATE_COMPOSERS = \{[\s\S]*?\n\};/);
-assert.ok(composersBlock, 'TEMPLATE_COMPOSERS found');
-const composers = composersBlock[0];
-const applyCount = (composers.match(/applyAdvancedIssueFields\(/g) || []).length;
-assert.equal(
-    applyCount, 1,
-    'exactly one composer folds the advanced fields in (Custom); the five presets are untouched',
-);
-const customComposer = composers.match(/custom\(form\) \{[\s\S]*?\n    \},/);
-assert.ok(customComposer, 'custom composer found');
 assert.ok(
-    /applyAdvancedIssueFields\(p, form\.advanced\)/.test(customComposer[0]),
-    'the Custom composer is the one that applies them',
+    /LOCK_FLAGS/.test(locks) && /LOCK_COPY_BY_FIELD\.get\(field\)\.label/.test(locks),
+    'issueLocks.js builds ISSUE_LOCKS from the shared LOCK_FLAGS copy',
+);
+
+// --- 3. The callback rides the ISSUE; locks and lists have their own fields
+
+const composeBlock = src.match(/p\.DECIMALS = divisible[\s\S]*?return p;/);
+assert.ok(composeBlock, 'ISSUE composition found');
+const compose = composeBlock[0];
+assert.equal(
+    (compose.match(/applyAdvancedIssueFields\(/g) || []).length, 1,
+    'the callback trio is folded in by exactly one call',
+);
+assert.ok(
+    /applyAdvancedIssueFields\(p, callbackFields\)/.test(compose),
+    'the callback fields are the only ones handed to the advanced-field helper',
+);
+assert.ok(
+    /for \(const lock of ISSUE_LOCKS\) \{\s*\n\s*if \(locks\[lock\.key\]\) p\[lock\.field\] = '1';/.test(compose),
+    'every checked lock switch writes its own LOCK_* field',
+);
+assert.ok(
+    /if \(allowList\.trim\(\)\) p\.ALLOW_LIST = allowList\.trim\(\);/.test(compose)
+        && /if \(blockList\.trim\(\)\) p\.BLOCK_LIST = blockList\.trim\(\);/.test(compose),
+    'a chosen allow-list and block-list write ALLOW_LIST and BLOCK_LIST',
 );
 
 // --- 4. Pre-flight before compose --------------------------------------
 
-const submitBlock = src.match(/function handleDetailsSubmit\([\s\S]*?\n    \}\n/);
-assert.ok(submitBlock, 'handleDetailsSubmit found');
-const submit = submitBlock[0];
+// issueInputsCheck answers from issueInputsIssues, which collects every
+// problem so one press can list them all (G120); the checks live there.
 assert.ok(
-    /if \(template === 'custom'\) \{[\s\S]*?validateAdvancedIssueFields\(advanced, \{/.test(submit),
-    'advanced pre-flight is scoped to the Custom template',
+    /function issueInputsCheck\(\) \{\s*\n\s*const found = issueInputsIssues\(\);/.test(src),
+    'issueInputsCheck answers from the collected input issues',
 );
+const checkBlock = src.match(/function issueInputsIssues\(\) \{[\s\S]*?\n    \}\n/);
+assert.ok(checkBlock, 'issueInputsIssues found');
+const check = checkBlock[0];
 assert.ok(
-    /setShowAdvanced\(true\);\s*\n\s*setFormError\(advancedError\)/.test(submit),
-    'a rejected advanced field re-opens the panel so the user can see the field',
-);
-assert.ok(
-    submit.indexOf('validateAdvancedIssueFields') < submit.indexOf("setStage('preview')"),
-    'validation runs before the wizard opens its review step',
+    /validateAdvancedIssueFields\(callbackFields, \{/.test(check),
+    'the callback is pre-flighted with the shared validator',
 );
 for (const key of ['supply', 'currentHeight', 'callbackTickDecimals']) {
     assert.ok(
-        new RegExp(`${key},`).test(submit),
+        new RegExp(`${key},`).test(check),
         `pre-flight passes ${key} into the validator`,
     );
 }
-
-// --- 5. All three groups, LOCK_FLAGS-driven ----------------------------
-
-const panelBlock = src.match(/function AdvancedIssuePanel\(\{[\s\S]*?\n\}\n/);
-assert.ok(panelBlock, 'AdvancedIssuePanel found');
-const panel = panelBlock[0];
+const reviewBlock = src.match(/const found = issueInputsIssues\(\);[\s\S]{0,1600}?setStage\('review'\)/);
+assert.ok(reviewBlock, 'review step is gated by the input check');
 assert.ok(
-    /LOCK_FLAGS\.map\(\(f\) => \{/.test(panel),
-    'the lock matrix is rendered from LOCK_FLAGS, not a hardcoded subset',
+    /if \(!formErrors\.validate\(problems\) \|\| feeStop\) return;[\s\S]*setStage\('review'\)/.test(reviewBlock[0]),
+    'validation runs before the form opens its review step',
+);
+
+// --- 5. All three groups, shared-lock driven ----------------------------
+
+assert.ok(
+    /\{ISSUE_LOCKS\.map\(\(lock\) => \{/.test(src),
+    'the lock switches are rendered from ISSUE_LOCKS, not a hardcoded subset',
 );
 for (const [label, needle] of [
-    ['callback token', /label="Callback token \(optional\)"/],
-    ['callback payout', /label="Payout per unit"/],
-    ['callback block', /label="Callback allowed from block"/],
-    ['allow-list', /Choose allow-list/],
-    ['block-list', /Choose block-list/],
+    ['callback token', /id="issue-callback-tick"/],
+    ['callback payout', /id="issue-callback-amount"/],
+    ['callback block', /id="issue-callback-block"/],
+    ['allow-list', /id="issue-allow-list"/],
+    ['block-list', /id="issue-block-list"/],
 ]) {
-    assert.ok(needle.test(panel), `advanced panel renders the ${label} control`);
+    assert.ok(needle.test(src), `the form renders the ${label} control`);
+}
+for (const id of ['locks', 'lists', 'callback']) {
+    assert.ok(
+        new RegExp(`<FormSection\\s+id="${id}"`).test(src),
+        `the ${id} group is its own FormSection`,
+    );
 }
 assert.ok(
-    /advancedIssueWarnings\(advanced\)/.test(src) && /<FormNotice variant="warning" role="alert" lines=\{warnings\} \/>/.test(panel),
-    'permanent-choice warnings are surfaced as one form notice',
+    /ISSUE_LOCKS[\s\S]{0,200}key: 'mintSupply'|\['mintSupply', 'LOCK_MINT_SUPPLY'\]/.test(src + locks),
+    'the mint-supply lock is one of the lock switches',
 );
 
-// --- 6. No two controls for one wire field -----------------------------
-
-assert.ok(
-    /const forcedByShortcut = \{ max_supply: !!lockOnCreate, mint: !!lockOnCreate \}/.test(panel),
-    'the lockOnCreate shortcut claims exactly the two flags it sets',
-);
-assert.ok(
-    /checked=\{forced \|\| !!lockChecks\[f\.key\]\}/.test(panel)
-        && /disabled=\{forced\}/.test(panel),
-    'flags already committed by the shortcut render checked and disabled',
-);
-
-// --- 7. Live inputs for the two create-time rails -----------------------
+// --- 6. Live inputs for the two create-time rails -----------------------
 
 assert.ok(
     /messaging\.getIndexerWatermark\(\{ chainId \}\)[\s\S]{0,200}r\.watermark/.test(src),
@@ -187,49 +197,26 @@ assert.ok(
     'an unreachable explorer leaves divisibility unproven (whole numbers only), never assumed divisible',
 );
 
-// --- 8. Custom-only, collapsed by default ------------------------------
+// --- 7. Collapsed by default -------------------------------------------
 
-assert.ok(
-    /const \[showAdvanced, setShowAdvanced\] = useState\(false\)/.test(src),
-    'the panel is collapsed by default',
-);
-// `resolved` is `template` after TEMPLATE_ALIASES maps retired ids onto
-// the template that absorbed them (merged Community into
-// Utility); either name reads the same gate.
-assert.ok(
-    /\{(?:template|resolved) === 'custom' && advancedPanel \?/.test(src),
-    'the panel only mounts for the Custom template',
-);
-assert.ok(
-    !/advanced/.test(JSON.stringify(src.match(/const TEMPLATE_FIELDS = \{[\s\S]*?\n\};/)?.[0] || '')),
-    'TEMPLATE_FIELDS is untouched by the advanced panel (it gates the flat fields only)',
-);
-
-// --- 9. Original wizard invariant survives ------------------------------
-
-assert.ok(
-    !/export function composeIssueParams/.test(src),
-    'composeIssueParams stays file-local',
-);
-
-// --- 10. CSS ------------------------------------------------------------
-
-// Lock hints render as the kit Checkbox description, so no .lockFlagHint hook remains.
-for (const cls of [
-    'advanced', 'advancedBody',
-    'lockFlagRow', 'listRow',
-]) {
+const openBlock = src.match(/const INITIAL_OPEN_SECTIONS = \{[\s\S]*?\n\};/);
+assert.ok(openBlock, 'INITIAL_OPEN_SECTIONS found');
+for (const id of ['locks', 'lists', 'callback']) {
     assert.ok(
-        new RegExp(`\\.${cls}[\\s,{:]`).test(css),
-        `TokenWizard.module.css ships .${cls}`,
+        new RegExp(`\\b${id}: false`).test(openBlock[0]),
+        `the ${id} group starts collapsed`,
     );
 }
-assert.ok(
-    /<FormSection\s+title="Locks \(permanent\)"/.test(src)
-        && /<FormSection\s+title="Callback"/.test(src)
-        && /<FormSection\s+title="Access lists"/.test(src),
-    'advanced groups delegate their headings and layout to FormSection',
-);
-assert.ok(!/\.advancedHeading[\s,{:]/.test(css), 'advanced groups have no route-level heading style');
 
-console.log('OK: token wizard advanced smoke (PC-06: create-time lock matrix + callback trio + access lists folded into the Custom template; shared LOCK_FLAGS + ListPickerScreen; create-only future-block and divisibility rails)');
+// --- 8. The route keeps no compose logic of its own ---------------------
+
+assert.ok(
+    !/composeIssueParams|TEMPLATE_COMPOSERS/.test(readFileSync(wizardPath, 'utf8')),
+    'the Issue a Token route holds no template composer',
+);
+assert.ok(
+    !existsSync(join(sharedRoutes, 'TokenWizard.module.css')),
+    'the retired wizard stylesheet is gone',
+);
+
+console.log('OK: issue form advanced smoke (create-time lock switches + callback trio + access lists on the one Issue form; shared lock table + ListPickerScreen; create-only future-block and divisibility rails)');

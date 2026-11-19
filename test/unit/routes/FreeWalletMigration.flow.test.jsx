@@ -15,8 +15,8 @@ const FREEWALLET_PHRASE = 'explode gaze wolf admit nice charm except three any g
 const BIP39_24_WORD_PHRASE = `${Array(23).fill('abandon').join(' ')} art`;
 const PASSWORD = 'correct-horse-battery';
 
-function FreeWalletImportFlow({ messaging }) {
-    const [step, setStep] = useState('welcome');
+function FreeWalletImportFlow({ messaging, initialStep = 'welcome' }) {
+    const [step, setStep] = useState(initialStep);
 
     if (step === 'complete') {
         return <h1>Imported FreeWallet</h1>;
@@ -28,12 +28,11 @@ function FreeWalletImportFlow({ messaging }) {
                 <Onboarding
                     onCreate={() => setStep('create')}
                     onImport={() => setStep('import')}
-                    onImportFromFreeWallet={() => setStep('freewallet')}
                 />
             ) : null}
-            {step === 'freewallet' ? (
+            {step === 'import' || step === 'freewallet' ? (
                 <ImportWallet
-                    variant="freewallet"
+                    variant={step === 'freewallet' ? 'freewallet' : 'default'}
                     mode="fresh"
                     onBack={() => setStep('welcome')}
                     onImported={() => setStep('complete')}
@@ -49,7 +48,7 @@ afterEach(() => {
 });
 
 describe('FreeWallet onboarding migration flow', () => {
-    it('uses the third onboarding entry to import a 12-word legacy phrase', async () => {
+    it('imports a 12-word legacy phrase through the FreeWallet wallet type', async () => {
         localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
         localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
         localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
@@ -59,13 +58,18 @@ describe('FreeWallet onboarding migration flow', () => {
         render(<FreeWalletImportFlow messaging={messaging} />);
 
         expect(screen.getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Create new wallet', 'Import wallet', 'From FreeWallet']);
-        fireEvent.click(screen.getByRole('button', { name: 'From FreeWallet' }));
+            .toEqual(['Create New Wallet', 'Import Wallet']);
+        expect(screen.queryByRole('button', { name: 'Import FreeWallet' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Import Wallet' }));
 
-        expect(screen.getByRole('heading', { name: 'Import from FreeWallet' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Wallet name')).toHaveValue('FreeWallet');
-        expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Import Wallet' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Wallet type: Standard recovery phrase' }));
+        fireEvent.click(screen.getByRole('option', { name: /^FreeWallet \/ PartyWallet/ }));
+        expect(screen.getByRole('button', { name: 'Wallet type: FreeWallet / PartyWallet' })).toBeInTheDocument();
+        expect(screen.getByLabelText('Wallet name')).toHaveValue('Imported Wallet');
         expect(screen.getByText('0 / 12 words')).toBeInTheDocument();
+        expect(screen.getByText('Uses the legacy Counterwallet/FreeWallet word list.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import' }).className).toMatch(/success/);
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), {
             target: { value: BIP39_24_WORD_PHRASE },
@@ -74,28 +78,39 @@ describe('FreeWallet onboarding migration flow', () => {
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Expected 12 words, got 24.');
+        // The import form is on the form error standard: its notice lists the
+        // problem and the phrase field says it under itself too.
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Expected 12 words, got 24.');
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), {
             target: { value: FREEWALLET_PHRASE },
         });
-        expect(screen.getByText('Counterwallet/FreeWallet recovery phrase detected')).toBeInTheDocument();
+        expect(screen.getByText('FreeWallet / Counterwallet recovery phrase detected')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' }))
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' }))
             .toBeInTheDocument();
         await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalledWith({
             password: PASSWORD,
             mnemonic: FREEWALLET_PHRASE,
-            name: 'FreeWallet',
+            name: 'Imported Wallet',
             bip39Passphrase: '',
+            walletMode: 'full',
             format: 'counterwallet-legacy',
         }));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
         expect(await screen.findByRole('heading', { name: 'Imported FreeWallet' }))
             .toBeInTheDocument();
+    });
+
+    it('keeps the old route working by preselecting FreeWallet', () => {
+        render(<FreeWalletImportFlow messaging={{}} initialStep="freewallet" />);
+
+        expect(screen.getByRole('heading', { name: 'Import Wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Wallet type: FreeWallet / PartyWallet' })).toBeInTheDocument();
+        expect(screen.getByText('Uses the legacy Counterwallet/FreeWallet word list.')).toBeInTheDocument();
     });
 });
 
@@ -113,22 +128,24 @@ describe('FreeWallet lane format pin', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: phrase } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        const detected = screen.queryByText('Counterwallet/FreeWallet recovery phrase detected') !== null;
+        const detected = screen.queryByText('FreeWallet / Counterwallet recovery phrase detected') !== null;
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-        await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalled());
         return { messaging, detected };
     }
 
     it('pins the legacy format for a phrase both wordlists accept', async () => {
         const { messaging, detected } = await submit(BOTH_LISTS_PHRASE);
         expect(detected).toBe(true);
+        await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalled());
         expect(messaging.importMnemonic).toHaveBeenCalledWith(
             expect.objectContaining({ format: 'counterwallet-legacy' }),
         );
     });
 
-    it('leaves a BIP39-only phrase to auto-detection', async () => {
+    it('refuses a BIP39-only phrase when FreeWallet is selected', async () => {
         const { messaging } = await submit(BIP39_ONLY_PHRASE);
-        expect(messaging.importMnemonic.mock.calls[0][0]).not.toHaveProperty('format');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent(/Counterwallet\/FreeWallet word list/);
+        expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });
 });

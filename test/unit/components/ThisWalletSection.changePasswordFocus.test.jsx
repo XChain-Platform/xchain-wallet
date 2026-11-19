@@ -52,7 +52,7 @@ describe('change password focus after a refusal', () => {
         fireEvent.change(next, { target: { value: 'replacement-1' } });
         fireEvent.change(confirm, { target: { value: 'replacement-1' } });
         confirm.focus();
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
 
         await waitFor(() => expect(current).toHaveFocus());
         expect(current).toBeEnabled();
@@ -66,7 +66,7 @@ describe('change password focus after a refusal', () => {
         fireEvent.change(next, { target: { value: 'short' } });
         fireEvent.change(confirm, { target: { value: 'short' } });
         confirm.focus();
-        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change Password' }));
         expect(next).toHaveFocus();
     });
 });

@@ -59,10 +59,25 @@ assert.match(
     'a view change closes the global scanner',
 );
 
-const navSelects = app.match(/onSelect=\{\(view\) => [^\n]*\}/g) || [];
-assert.ok(navSelects.length >= 2, 'located the navigation onSelect handlers');
-for (const handler of navSelects) {
-    assert.match(handler, /setGlobalScannerOpen\(false\)/, `navigation closes the scanner: ${handler}`);
-}
+assert.match(
+    app,
+    /const handleMenuSelect = \(view\) => \{\s*setGlobalScannerOpen\(false\);/,
+    'the shared menu selection handler closes the scanner before navigating',
+);
+assert.match(
+    app,
+    /<LeftNav[\s\S]{0,300}?onSelect=\{handleMenuSelect\}/,
+    'the sidebar closes the scanner through the shared menu handler',
+);
+assert.match(
+    app,
+    /<BottomTabBar[\s\S]{0,300}?onSelect=\{handleMenuSelect\}/,
+    'the tab bar closes the scanner through the shared menu handler',
+);
+assert.match(
+    app,
+    /menu=\{\{[\s\S]{0,500}?onSelect: handleMenuSelect,/,
+    'wallet menu rows close the scanner through the shared menu handler',
+);
 
 console.log('global-scanner-closes-on-navigation smoke OK');

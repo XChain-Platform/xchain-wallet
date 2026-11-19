@@ -52,7 +52,7 @@ assert.match(hostSrc, /voteParams: params/,
     const routeIdx = hostSrc.indexOf("host.register('action.vote.composeForConfirm'");
     const route = hostSrc.slice(routeIdx, routeIdx + 3000);
     assert.match(route, /VOTE_BUILDERS\s*=\s*\[/, 'the builder name is allow-listed');
-    for (const b of ['createPollParams', 'castBallotParams', 'delegateVoteParams', 'clearVoteDelegationParams']) {
+    for (const b of ['createPollParams', 'castBallotParams', 'delegateParams', 'clearDelegationParams']) {
         assert.ok(route.includes(`'${b}'`), `allow-list covers ${b}`);
     }
     assert.match(route, /VOTE_BUILDERS\.includes\(builder\)/, 'an unlisted builder is rejected');
@@ -76,12 +76,13 @@ for (const [shell, ...p] of [
 
 const VOTE_FORMS = [
     ['CreatePollForm.jsx', 'createPollParams'],
-    ['DelegateVoteForm.jsx', 'delegateVoteParams'],
+    ['DelegateVoteForm.jsx', 'delegateParams'],
     ['PollDetail.jsx', 'castBallotParams'],
 ];
 for (const [file, builder] of VOTE_FORMS) {
     const src = read('packages', 'core', 'src', 'shared', 'routes', file);
-    assert.match(src, /messaging\.composeVoteForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeVoteForConfirm\(withAdvancedOptions\(\{/,
         `${file}: composes through the VOTE builder route`);
     assert.ok(src.includes(`'${builder}'`), `${file}: names the ${builder} builder`);
 

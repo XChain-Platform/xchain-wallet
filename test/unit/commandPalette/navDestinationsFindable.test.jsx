@@ -14,17 +14,20 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
 import { navItem } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { NAV_SURFACE_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
-import { t } from '../../../packages/core/src/i18n/index.js';
 
 const SYNONYMS = {
     home: ['overview', 'balances'],
     history: ['transactions', 'activity'],
     send: ['transfer'],
     receive: ['address', 'deposit'],
+    'my-tokens': ['tokens', 'assets'],
     scan: ['qr', 'camera'],
-    markets: ['dex', 'market', 'exchange'],
+    markets: ['dex', 'exchange'],
     'market-activity': ['marketplace', 'market'],
     'dispensers-list': ['vending', 'dispenser'],
+    'bet-markets': ['bet', 'betting'],
+    'governance-polls': ['governance', 'vote'],
+    'staking-dashboard': ['staking', 'stake'],
     'contracts-list': ['contract', 'vm'],
     messaging: ['inbox', 'messages'],
     contacts: ['address book', 'people'],
@@ -34,7 +37,6 @@ const SYNONYMS = {
 };
 
 function labelFor(id) {
-    if (id === 'settings') return t('home.settings');
     return navItem(id).label;
 }
 
@@ -60,11 +62,11 @@ function reaches(commands, query, expectedId, navigate, scan) {
     return false;
 }
 
-// The demo wallet is the narrowest catalogue; every destination must survive it.
+// Every navigation destination must be findable in a wallet where its gate is open.
 describe('every sidebar and bottom-bar destination is findable in the command palette', () => {
     const navigate = vi.fn();
     const scan = vi.fn();
-    const commands = buildCommands({ ...ctxFor(navigate, scan), isDemoWallet: true });
+    const commands = buildCommands(ctxFor(navigate, scan));
     const ids = [...new Set([...NAV_SURFACE_DESTINATIONS.sidebar, ...Object.values(NAV_SURFACE_DESTINATIONS).flat()])];
 
     it.each(ids)('%s is found by its visible label', (id) => {
@@ -75,5 +77,13 @@ describe('every sidebar and bottom-bar destination is findable in the command pa
         for (const word of words) {
             expect(reaches(commands, word, id, navigate, scan), `${word} -> ${id}`).toBe(true);
         }
+    });
+});
+
+describe('hidden command-palette destinations', () => {
+    it('offers multisig signing only behind the Bitcoin gate', () => {
+        const commands = buildCommands({ navigate() {}, hasBtcAddress: true });
+        expect(commands.map((command) => command.id)).toContain('nav-multisig-sign');
+        expect(buildCommands({ navigate() {} }).map((command) => command.id)).not.toContain('nav-multisig-sign');
     });
 });

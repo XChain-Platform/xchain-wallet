@@ -60,20 +60,29 @@ describe('Messaging thread composer', () => {
 });
 
 describe('List member blocks', () => {
+    // [route, the CSS module holding its member classes]: the List form's
+    // Edit and Fork body keeps the fork form's member styles.
     it.each([
-        'packages/core/src/shared/routes/ListDetail.jsx',
-        'packages/core/src/shared/routes/ListForkForm.jsx',
-    ])('%s draws no bullets outside its member box', (file) => {
-        const lists = read(file).match(/<ul className=\{styles\.detailsList\}[^>]*>/g) || [];
+        ['packages/core/src/shared/routes/ListDetail.jsx', 'packages/core/src/shared/routes/ListDetail.module.css'],
+    ])('%s draws no bullets outside its member box', (file, cssFile) => {
+        const lists = read(file).match(/<ul className=\{[^}]*\}[^>]*>/g) || [];
         expect(lists.length).toBeGreaterThan(0);
-        for (const tag of lists) expect(tag).toMatch(/listStyle:\s*'none'/);
+        // A list is either inline-styled without bullets or a card class that sets list-style: none.
+        const cardClasses = /(itemList|memberList)\}/;
+        for (const tag of lists) expect(tag).toMatch(new RegExp(`listStyle:\\s*'none'|${cardClasses.source}`));
+        const css = read(cssFile);
+        for (const name of ['itemList', 'memberList']) {
+            if (new RegExp(`\\.${name}\\b`).test(css)) expect(rule(css, `.${name}`)).toMatch(/list-style:\s*none/);
+        }
     });
 });
 
 describe('Encrypted-session request actions', () => {
     it('outlines Decline and Message beside the filled Share my key', () => {
         const src = read('packages/core/src/shared/routes/MessagingInbox.jsx');
-        expect(src).toMatch(/<Button variant="secondary" onClick=\{onDecline\}/);
+        expect(src).toMatch(/<Button variant="secondary" icon=\{<Icon\.XIcon \/>\} onClick=\{onDecline\}/);
         expect(src).toMatch(/<Button variant="secondary" onClick=\{onMessage\}/);
+        // G92: a demo wallet's press is refused as a result, never a disabled button.
+        expect(src).toMatch(/<Button variant="success" icon=\{<Icon\.KeyIcon \/>\} onClick=\{demoGuard\.blocked \? demoGuard\.refuse : onShare\}/);
     });
 });

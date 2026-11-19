@@ -28,13 +28,14 @@ import {
     Screen,
     PageHeader,
     Button,
+    AddressField,
     Input,
-    Select,
-    ChainPicker,
+    NetworkField,
     CopyButton,
     AddressText,
     FormPage,
     StatusMessage,
+    Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -42,12 +43,35 @@ import {
     CoSignerPolicyEditor,
     emptyPolicyDraft,
     buildPolicyDraft,
+    declarePolicyTokenIds,
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
+import {
+    allowedTokensText,
+    confirmationThresholdSummary,
+    perActionLimitSummary,
+    policyNoLimitText,
+    rollingLimitSummary,
+} from '../utils/coSignerPolicyLimit.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/coSigner.js';
 import styles from './IssueTokenForm.module.css';
+// The token page's details card: label-left value-right fact rows.
+import tokenPageStyles from './ManageToken.module.css';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+
+// One fact as a label-left value-right row of the details card.
+function FactRow({ label, value, mono = false, testId }) {
+    return (
+        <div className={tokenPageStyles.approvedDetailRow}>
+            <dt>{label}</dt>
+            <dd className={mono ? tokenPageStyles.approvedMono : undefined} data-testid={testId}>{value}</dd>
+        </div>
+    );
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -78,6 +102,12 @@ function limitValue(value) {
     return policyNoLimitText(value) ?? <code>{exactValue(value)}</code>;
 }
 
+function policyLimitValue(value, summary) {
+    const noLimit = policyNoLimitText(value);
+    if (noLimit) return noLimit;
+    return <>{summary.join('; ')}{' '}<code>{exactValue(value)}</code></>;
+}
+
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -95,6 +125,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
 
     const [daemonAddressId, setDaemonAddressId] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [agentPubkey, setAgentPubkey] = useState('');
     const [name, setName] = useState('Agent account');
     const [policyDraft, setPolicyDraft] = useState(emptyPolicyDraft());
@@ -105,6 +136,10 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const requestRef = useRef(0);
     const submittingRef = useRef(false);
+    // True while Review looks up the token numbers, so a second press waits.
+    const reviewingRef = useRef(false);
+    // Per-ticker messages from the last token number lookup.
+    const [tokenErrors, setTokenErrors] = useState(/** @type {Record<string, string> | null} */ (null));
 
     useEffect(() => {
         const request = requestRef.current + 1;
@@ -178,6 +213,9 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return keys;
     }, [addressesByChain]);
 
+    // Set by a Create press, so the compose problem then shows as an error
+    // and outlines its field.
+    const [attempted, setAttempted] = useState(false);
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
         if (!btcChainIds.includes(chainId) || !descriptor) return 'Pick a supported Bitcoin network.';
@@ -187,7 +225,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         }
         if (!daemonAddress.derivationPath) return 'The selected address has no derivation path on record.';
         if (!PUBKEY_RE.test(agentPubkey.trim())) {
-            return 'Enter a compressed agent public key starting with 02 or 03, followed by 64 hex characters.';
+            return 'Enter the agent public key: 66 characters starting with 02 or 03.';
         }
         if (walletKeyXOnly.has(agentPubkey.trim().toLowerCase().slice(2))) {
             return 'The agent key must differ from every key in this wallet.';
@@ -201,20 +239,38 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return null;
     }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor, walletKeyXOnly]);
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event?.preventDefault();
-        if (composeError || !chainId || !daemonAddress) return;
+        setAttempted(true);
+        if (composeError || !chainId || !daemonAddress || reviewingRef.current) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setSubmitError(built.error); return; }
         const addressError = policyAddressError(built, descriptor);
         if (addressError) { setSubmitError(addressError); return; }
+        // Record the token number of every ticker the rules name before review;
+        // a ticker that cannot be matched stays on this screen with its field marked.
+        const request = requestRef.current;
+        reviewingRef.current = true;
+        let declared;
+        try {
+            declared = await declarePolicyTokenIds({ policy: built.policy, chainId, messaging });
+        } finally {
+            reviewingRef.current = false;
+        }
+        if (requestRef.current !== request) return;
+        if (declared.error) {
+            setTokenErrors(declared.tokenErrors);
+            setSubmitError(declared.error);
+            return;
+        }
+        setTokenErrors(null);
         setReviewPayload({
             walletId,
             chainId,
             agentPubkey: agentPubkey.trim().toLowerCase(),
             daemonPubkey: String(daemonAddress.publicKey).toLowerCase(),
             daemonDerivationPath: daemonAddress.derivationPath,
-            policy: built.policy,
+            policy: declared.policy,
             allowedOutputs: built.allowedOutputs,
             name: name.trim() || 'Agent account',
         });
@@ -252,10 +308,11 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' ? () => setStage('compose') : onBack}
             backLabel={stage === 'review' ? 'Back to form' : undefined}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review agent account' : 'New agent account'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Agent Account' : 'New Agent Account'}
         />
     );
     const wrap = (children) => (
@@ -264,39 +321,82 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         </Screen>
     );
 
+    // The load error, the loading line and the created-account panel lay out
+    // through FormPage like the compose and review stages, so no state draws
+    // straight into Screen.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label="Create agent account"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(
+            <FormPage label="Create agent account">
+                <p className={styles.hint}>Loading wallet…</p>
+            </FormPage>,
+        );
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="This Wallet's Key"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={handleChainChange}
+                onPick={(address) => {
+                    setDaemonAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
     }
 
     if (stage === 'done') {
         const account = result;
         return wrap(
-            <>
-                <p className={styles.successTitle}>Agent account created</p>
-                <p className={styles.hint}>
-                    Fund this address to give the agent a balance to operate on. The
-                    agent and this wallet must both sign every spend; this wallet
-                    signs automatically when a request satisfies the policy, and asks
-                    you to approve each one.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{account?.name}</dd>
-                    <dt className={styles.detailsLabel}>Fund this address</dt>
-                    <dd className={styles.detailsValue} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <AddressText address={account?.aggregateAddress} />
-                        <CopyButton value={account?.aggregateAddress || ''} label="Copy address" />
-                    </dd>
-                </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={() => (onDone ? onDone(account?.id) : onBack())}>
-                        {onDone ? 'View account' : 'Done'}
+            <FormPage
+                label="Agent account created"
+                actions={(
+                    <Button
+                        variant="success"
+                        icon={onDone ? <Icon.ForwardIcon /> : <Icon.CheckIcon />}
+                        onClick={() => (onDone ? onDone(account?.id) : onBack())}
+                    >
+                        {onDone ? 'View Account' : 'Done'}
                     </Button>
-                </div>
-            </>,
+                )}
+            >
+                <p className={styles.successTitle}>Agent account created</p>
+                {/* Facts as label-left value-right rows, the address in full when it fits (G99). */}
+                <section className={tokenPageStyles.approvedDetailsCard} aria-label="Agent account">
+                    <dl className={tokenPageStyles.approvedDetailsList}>
+                        <FactRow label="Name" value={account?.name} />
+                        <FactRow label="Fund this address" value={(
+                            // A row of the cell's full width (not shrink-to-content), so the
+                            // fit measures the real room beside the copy icon.
+                            <span style={{ display: 'flex', width: '100%', minWidth: 0, alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--xc-space-1)' }}>
+                                <AddressText address={account?.aggregateAddress} fit />
+                                <CopyButton value={account?.aggregateAddress || ''} label="Copy Address" />
+                            </span>
+                        )} />
+                    </dl>
+                </section>
+                {/* The one note, in the warning card, never a loose paragraph. */}
+                <WarningCard data-agent-created-note="">
+                    <WarningLine>
+                        Fund this address to give the agent a balance to operate on. The
+                        agent and this wallet must both sign every spend, so each request
+                        waits for your approval in this wallet; the rules refuse anything
+                        outside them.
+                    </WarningLine>
+                </WarningCard>
+            </FormPage>,
         );
     }
 
@@ -308,41 +408,50 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 onSubmit={handleSubmit}
                 status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'} disabled={stage === 'submitting'}>
-                        Create agent account
+                    <Button type="submit" variant="primary" icon={<Icon.PlusIcon />} loading={stage === 'submitting'} disabled={stage === 'submitting'}>
+                        Create Agent Account
                     </Button>
                 )}
             >
-                <p className={styles.hint}>Check every value before creating this account.</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Account name</dt>
-                    <dd className={styles.detailsValue}>{reviewPayload.name}</dd>
-                    <dt className={styles.detailsLabel}>Wallet</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.walletId}</code></dd>
-                    <dt className={styles.detailsLabel}>This wallet's address</dt>
-                    <dd className={styles.detailsValue}><AddressText address={daemonAddress?.address || ''} /></dd>
-                    <dt className={styles.detailsLabel}>This wallet's public key</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonPubkey}</code></dd>
-                    <dt className={styles.detailsLabel}>This wallet's derivation path</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonDerivationPath}</code></dd>
-                    <dt className={styles.detailsLabel}>Agent public key</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.agentPubkey}</code></dd>
-                    <dt className={styles.detailsLabel}>Allowed actions</dt>
-                    <dd className={styles.detailsValue}>
-                        {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
-                        {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
-                    </dd>
-                    <dt className={styles.detailsLabel}>Allowed recipients</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
-                    <dt className={styles.detailsLabel}>Per-action limits</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerAction)}</dd>
-                    <dt className={styles.detailsLabel}>Rolling limit</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerWindow)}</dd>
-                    <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.confirmAbove)}</dd>
-                    <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
-                </dl>
+                {/* Every value as a label-left value-right row; no stacked uppercase labels. */}
+                <section className={tokenPageStyles.approvedDetailsCard} aria-label="Agent account values">
+                    <dl className={tokenPageStyles.approvedDetailsList}>
+                        <FactRow label="Account name" value={reviewPayload.name} />
+                        <FactRow label="Wallet" value={reviewPayload.walletId} mono />
+                        <FactRow label="This wallet's address" value={<AddressText address={daemonAddress?.address || ''} fit />} />
+                        <FactRow label="This wallet's public key" value={reviewPayload.daemonPubkey} mono />
+                        <FactRow label="This wallet's account path" value={reviewPayload.daemonDerivationPath} mono />
+                        <FactRow label="Agent public key" value={reviewPayload.agentPubkey} mono />
+                        <FactRow label="Allowed actions" value={(
+                            <>
+                                {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
+                                {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
+                            </>
+                        )} />
+                        <FactRow label={t('coSigner.policy.tokens.title')} testId="review-allowed-tokens" value={(
+                            <>
+                                {allowedTokensText(reviewedPolicy)}
+                                {Array.isArray(reviewedPolicy.allowedTicks) ? <>{' '}<code>{exactValue(reviewedPolicy.allowedTicks)}</code></> : null}
+                                {/* The token number each named token is saved with. */}
+                                {reviewedPolicy.tickIds ? <>{' '}<code data-testid="review-token-numbers">{exactValue(reviewedPolicy.tickIds)}</code></> : null}
+                            </>
+                        )} />
+                        <FactRow label="Allowed recipients" value={limitValue(reviewedPolicy.allowedDestinations)} />
+                        <FactRow label="Per-action limits" value={policyLimitValue(
+                            reviewedPolicy.maxPerAction,
+                            perActionLimitSummary(reviewedPolicy.maxPerAction),
+                        )} />
+                        <FactRow label="Rolling limit" value={policyLimitValue(
+                            reviewedPolicy.maxPerWindow,
+                            rollingLimitSummary(reviewedPolicy.maxPerWindow),
+                        )} />
+                        <FactRow label="Confirmation thresholds" value={policyLimitValue(
+                            reviewedPolicy.confirmAbove,
+                            confirmationThresholdSummary(reviewedPolicy.confirmAbove),
+                        )} />
+                        <FactRow label="Allowed transaction outputs" value={<code>{exactValue(reviewPayload.allowedOutputs)}</code>} />
+                    </dl>
+                </section>
             </FormPage>,
         );
     }
@@ -354,53 +463,48 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             status={(
                 <>
                     {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-                    {composeError ? <p className={styles.hint}>{composeError}</p> : null}
+                    {attempted && composeError ? <StatusMessage variant="error">{composeError}</StatusMessage> : null}
                 </>
             )}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={Boolean(composeError)}
+                    icon={<Icon.PlusIcon />}
                 >
-                    Review agent account
+                    Create Agent Account
                 </Button>
             )}
         >
-            <details>
-                <summary>How agent accounts work</summary>
-                <p className={styles.hint}>
-                    An automated agent shares a 2-of-2 address with this wallet. This wallet signs requests that
-                    fit the policy and refuses requests outside it. Agent accounts support Bitcoin networks.
-                </p>
-            </details>
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The Bitcoin network for the shared 2-of-2 agent account. This wallet's key must come from an address on this network."
                 value={chainId}
                 onChange={handleChainChange}
                 chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                 chainRegistry={chainRegistry}
             />
 
-            <Select
+            <AddressField
                 label="This wallet's key"
-                value={daemonAddressId}
-                onChange={(e) => setDaemonAddressId(e.target.value)}
-                hint="One of your addresses on this network. Its public key becomes this wallet's half of the pair."
-            >
-                <option value="">Select address</option>
-                {chainAddresses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                        {a.address}{a.label ? ` · ${a.label}` : ''}
-                    </option>
-                ))}
-            </Select>
+                icon="addresses"
+                value={daemonAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose this wallet's key"
+                placeholder="Select address"
+                error={attempted && composeError && /wallet's key|public key on record|derivation path/.test(composeError) ? composeError : undefined}
+                help="An automated agent shares a 2-of-2 Bitcoin address with this wallet. This wallet signs requests that fit the policy and refuses requests outside it. Pick one of your addresses on this network; its public key becomes this wallet's half of the pair."
+            />
 
             <Input
-                label="Agent public key (hex, 33-byte compressed)"
+                label="Agent public key"
                 value={agentPubkey}
                 onChange={(e) => setAgentPubkey(e.target.value.trim())}
                 placeholder="02abcdef…"
+                error={attempted && composeError && /agent public key|agent key/i.test(composeError) ? composeError : undefined}
+                help="Enter the agent's compressed public key: 66 hexadecimal characters starting with 02 or 03. The agent shows this key when you set up its wallet connection."
             />
 
             <Input
@@ -408,9 +512,10 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Agent account"
+                help="Give this agent account a local label that only you see in this wallet."
             />
 
-            <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
+            <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} tokenErrors={tokenErrors} />
 
         </FormPage>,
     );

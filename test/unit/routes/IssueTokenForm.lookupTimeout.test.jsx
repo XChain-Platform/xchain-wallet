@@ -72,7 +72,7 @@ async function advance(ms) {
 
 async function submit() {
     await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await vi.advanceTimersByTimeAsync(0);
     });
 }
@@ -85,7 +85,7 @@ afterEach(() => {
 async function fillAndSubmit() {
     await advance(0);
     fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'HELD' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '5000' } });
     await submit();
 }
 

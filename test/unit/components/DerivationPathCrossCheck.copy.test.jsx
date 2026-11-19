@@ -10,7 +10,7 @@ import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/comp
 afterEach(() => cleanup());
 
 describe('DerivationPathCrossCheck help copy', () => {
-    it('explains the safety check briefly without a specification number', () => {
+    it('shows the read-only derivation path with no help icon (G121)', () => {
         render(
             <DerivationPathCrossCheck
                 signerName="Test device"
@@ -20,13 +20,8 @@ describe('DerivationPathCrossCheck help copy', () => {
             />,
         );
 
-        fireEvent.focus(screen.getByRole('button', { name: 'Derivation path help' }));
-        const tip = screen.getByRole('tooltip');
-        expect(tip.textContent).toBe(
-            'Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account.',
-        );
-        expect(tip.textContent.length).toBeLessThan(140);
-        expect(tip.textContent).not.toMatch(/BIP\d+/i);
+        expect(screen.queryByRole('button', { name: 'Account path help' })).toBeNull();
+        expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
     it('explains a mismatch plainly and leaves the derivation path unchanged', () => {

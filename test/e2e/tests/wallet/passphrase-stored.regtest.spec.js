@@ -98,18 +98,21 @@ import {
     REGTEST_CHAIN_LABEL,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     seedPrices,
-    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { restoreBackupFile } from '../../fixtures/backupRestore.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 // The generator is imported for its CONSTANTS, not to rebuild the envelope: the
 // checked-in file is the fixture, and reading its secrets from the one place
@@ -121,16 +124,11 @@ import {
     PRE_SPEC_WALLET_NAME,
     PRE_SPEC_WALLET_PASSWORD,
 } from '../../fixtures/make-pre-spec-passphrase-backup.mjs';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The 25th word for wallets this spec creates itself. */
 const PASSPHRASE = 'a-passphrase-typed-once-at-setup';
-/**
- * The password the RESTORING device picks for itself, different from every
- * other password here on purpose: a re-key that silently kept the source
- * device's password would pass any spec that reused one string for two roles.
- */
-const NEW_DEVICE_PASSWORD = 'this-device-password-4471';
 /** Opens the envelope AT4 exports. Not the fixture's; not any device's. */
 const BACKUP_PASSWORD = 'export-envelope-password-5520';
 
@@ -172,7 +170,7 @@ const CAPTURE_COPY =
  * also what the "no prompt after setup" assertions read.
  */
 function capturePassphraseField(page) {
-    return page.getByLabel('Passphrase', { exact: true });
+    return fieldByLabel(page, 'Passphrase');
 }
 
 /**
@@ -197,7 +195,7 @@ async function freshContext(browser) {
     return context;
 }
 
-/** Opens Settings via the command palette. */
+/** Opens Settings via the wallet menu. */
 async function openSettingsViaPalette(page) {
     await openPaletteCommand(page, 'Settings');
 }
@@ -216,18 +214,19 @@ async function exportEnvelope(page, walletName) {
     await openSettingsViaPalette(page);
     await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
 
-    const exportRow = page.getByRole('main').getByRole('button', { name: 'Export…', exact: true });
+    // Backup and Recovery's Encrypted backup file row lands straight on the form.
+    const exportRow = page.getByRole('main').getByRole('button', { name: /^Encrypted backup file\b/ });
     await expect(exportRow, 'the Backup section offers no export action')
         .toBeVisible({ timeout: 30_000 });
     await exportRow.click();
 
-    await page.getByLabel('Backup password', { exact: true }).fill(BACKUP_PASSWORD);
-    await page.getByLabel('Confirm backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Confirm backup password').fill(BACKUP_PASSWORD);
     // Take the download route: a headless browser cannot answer the save picker.
     await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
+        page.getByRole('main').getByRole('button', { name: 'Export Backup', exact: true }).click(),
     ]);
     const envelope = await readFile(await download.path(), 'utf8');
 
@@ -250,13 +249,15 @@ async function revealRecoveryPhrase(page, password) {
     await openSettingsViaPalette(page);
     await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
 
-    const show = page.getByRole('main').getByRole('button', { name: 'Show…', exact: true });
+    // The Recovery phrase page opens straight on its password step (no Show button).
+    const show = page.getByRole('main').getByRole('button', { name: /^Recovery phrase\b/ }).first();
     await expect(show, 'the Backup section offers no seed-phrase reveal')
         .toBeVisible({ timeout: 30_000 });
     await show.click();
 
-    await page.getByLabel('Wallet password', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Reveal', exact: true }).click();
+    await fieldByLabel(page, 'Wallet password').fill(password);
+    // The submit reads "Reveal Phrase".
+    await page.getByRole('button', { name: /^Reveal(?: phrase)?$/i }).click();
     // The heading, by role: the panel's warning paragraph ("Never share your
     // recovery phrase...") also contains the words as a substring.
     await expect(page.getByRole('heading', { name: 'Your recovery phrase', exact: true }),
@@ -291,23 +292,15 @@ async function openFreshRestoreScreen(page) {
 }
 
 /**
- * Restores `envelope` into a browser with no vault, under a device password of
- * this device's own choosing.
- *
- * The three fields are three different secrets and are filled from three
- * different strings everywhere this is called. A lane that confused two of them
- * would pass just as happily against a spec that did not.
+ * Restores `envelope` into a browser with no vault. The tab asks for the
+ * file's password, then for the wallet's own once the file has opened, and
+ * the restored wallet keeps the wallet's password on this device: every later
+ * unlock takes `walletPassword`. The two are different strings everywhere this
+ * is called, so a lane that confused them fails here.
  */
-async function restoreOntoFreshDevice(page, {
-    envelope, backupPassword, walletPassword, devicePassword,
-}) {
+async function restoreOntoFreshDevice(page, { envelope, backupPassword, walletPassword }) {
     await openFreshRestoreScreen(page);
-    await page.getByPlaceholder('{"version":1').fill(envelope);
-    await page.getByLabel('Backup password', { exact: true }).fill(backupPassword);
-    await page.getByLabel('Password of the wallet in this backup', { exact: true })
-        .fill(walletPassword);
-    await page.getByLabel('Password for this device', { exact: true }).fill(devicePassword);
-    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await restoreBackupFile(page, { content: envelope, backupPassword, walletPassword });
     // Every caller goes on to wait for the shell, which sits behind the
     // donation notice a restore now ends on.
     await acknowledgeImportNotice(page);
@@ -332,7 +325,7 @@ async function lockAndUnlockWithPasswordOnly(page, password) {
         + 'accepted, which is the per-unlock prompt storing it at setup removed')
         .toHaveCount(0);
 
-    await page.getByLabel('Password', { exact: true }).fill(password);
+    await fieldByLabel(page, 'Password').fill(password);
     await unlockButton(page).click();
 
     await expect(unlockedAnyScreen(page),
@@ -373,21 +366,16 @@ async function fundedVenueAddress(page, amount) {
 async function signSelfSend(page, address) {
     await gotoSection(page, 'Send');
     await selectVenueSendAsset(page);
-    await page.getByLabel('To', { exact: true }).fill(address);
+    await fieldByLabel(page, 'To').fill(address);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
     await mainButton(page, 'Send').click();
 
     await expectConfirmModal(page, 'a self-send from a stored-passphrase wallet', 90_000);
-    await expect(page.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
     await expect(capturePassphraseField(page),
         'the confirm screen is asking for a passphrase, so signing still depends on a secret '
         + 'the user was told they would never type again')
         .toHaveCount(0);
-    await expect(page.getByTestId('confirm-approve'),
-        'the wallet composed a payment it cannot approve: it holds no signer for its own '
-        + 'address, which is what a seed derived without the passphrase looks like on screen')
-        .toBeEnabled({ timeout: 90_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
 
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }),
         'the wallet approved a payment that never reached the node')
@@ -432,9 +420,8 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
             await test.step('fund the address the Issue form will sign from', async () => {
                 await openPaletteCommand(page, 'Issue token');
                 const main = page.getByRole('main');
-                await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(main);
-                source = await main.getByLabel('From').inputValue();
+                await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+                source = await readIssueSource(main);
                 expect(source, 'the Issue form has no venue-chain address to sign with')
                     .toMatch(REGTEST_ADDRESS_RE);
                 await fundAddress(source, ISSUE_FUNDING);
@@ -457,27 +444,18 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
             await test.step('and it signs an ISSUE the chain accepts', async () => {
                 await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
-                await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(form);
-                expect(await form.getByLabel('From').inputValue(),
+                await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+                expect(await readIssueSource(form),
                     'the Issue form moved to a different address after the unlock')
                     .toBe(source);
-                await form.getByLabel('Ticker').fill(tick);
-                await form.getByLabel('Supply', { exact: true }).fill('1000');
-                await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+                await issuePlainToken(form, { ticker: tick, supply: '1000' });
 
                 await expectConfirmModal(page, `the ISSUE of ${tick}`, 90_000);
                 await expect(capturePassphraseField(page),
                     'the confirm screen is asking for the passphrase, so the create screen was '
                     + 'not the last place it is typed')
                     .toHaveCount(0);
-                const approve = page.getByTestId('confirm-approve');
-                await expect(approve,
-                    'Approve is disabled on a wallet that just unlocked: the password alone did '
-                    + 'not produce a signer for this wallet, leaving the unlock-time '
-                    + 'passphrase bug unfixed')
-                    .toBeEnabled({ timeout: 120_000 });
-                await approve.click();
+                await approveConfirm(page);
 
                 const txid = await waitForShownTxid(page.getByRole('main'), {
                     timeout: 180_000,
@@ -580,7 +558,6 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             envelope,
                             backupPassword: PRE_SPEC_BACKUP_PASSWORD,
                             walletPassword: PRE_SPEC_WALLET_PASSWORD,
-                            devicePassword: NEW_DEVICE_PASSWORD,
                         });
                         await expect(page.getByRole('alert'),
                             'the restore refused the pre-spec envelope. If it names the record or '
@@ -608,7 +585,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                         await expect(capturePassphraseField(page),
                             'the unlock form carries a passphrase field again')
                             .toHaveCount(0);
-                        await page.getByLabel('Password', { exact: true }).fill(NEW_DEVICE_PASSWORD);
+                        await fieldByLabel(page, 'Password').fill(PRE_SPEC_WALLET_PASSWORD);
                         await unlock.click();
 
                         // Step 2. The password was right, so the wallet is open;
@@ -667,11 +644,11 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     // The claim of the whole spec, on the wallet that has the
                     // most to lose from it being false. If the capture did not
                     // persist, this is where it shows.
-                    await lockAndUnlockWithPasswordOnly(page, NEW_DEVICE_PASSWORD);
+                    await lockAndUnlockWithPasswordOnly(page, PRE_SPEC_WALLET_PASSWORD);
                 });
 
                 await test.step('and it signs', async () => {
-                    await switchToRegtest(page, NEW_DEVICE_PASSWORD);
+                    await switchToRegtest(page, PRE_SPEC_WALLET_PASSWORD);
                     const address = await fundedVenueAddress(page, SEND_FUNDING);
                     await signSelfSend(page, address);
                 });
@@ -683,8 +660,9 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
     // AT4's first half: the re-key leg. The passphrase blob cannot ride through
     // a restore verbatim - the restore mints a fresh salt for the new seal, so
     // a carried-over blob fails its GCM tag at the first unlock and the wallet
-    // opens and then derives somebody else's addresses.
-    test('AT4 an export from a stored-passphrase wallet signs under a DIFFERENT device password',
+    // opens and then derives somebody else's addresses. The restored wallet
+    // keeps its own password (restore-v2), but the seal is still re-made.
+    test('AT4 an export from a stored-passphrase wallet signs on another device after the re-key',
         async ({ page, browser }) => {
             /** @type {string} */
             let envelope;
@@ -709,12 +687,11 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
             try {
                 const two = await context.newPage();
 
-                await test.step('DEVICE TWO: restore under a password device one never had', async () => {
+                await test.step('DEVICE TWO: restore the backup onto a fresh device', async () => {
                     await restoreOntoFreshDevice(two, {
                         envelope,
                         backupPassword: BACKUP_PASSWORD,
                         walletPassword: PASSWORD,
-                        devicePassword: NEW_DEVICE_PASSWORD,
                     });
                     await expect(unlockedShell(two), 'the restore never reached an unlocked wallet')
                         .toBeVisible({ timeout: kdfStepTimeout() });
@@ -722,7 +699,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
 
                 await test.step('it never asks for the passphrase, because the envelope carried it',
                     async () => {
-                        await lockAndUnlockWithPasswordOnly(two, NEW_DEVICE_PASSWORD);
+                        await lockAndUnlockWithPasswordOnly(two, PASSWORD);
                     });
 
                 await test.step('and it is device one\'s wallet, and it can spend device one\'s coins',
@@ -875,13 +852,13 @@ async function importMnemonic(page, { words, passphrase, name }) {
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
 
-    await page.getByLabel('Recovery phrase', { exact: true }).fill(words.join(' '));
-    await page.getByLabel('Wallet name').fill(name);
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    await fieldByLabel(page, 'Recovery phrase').fill(words.join(' '));
+    await fieldByLabel(page, 'Wallet name').fill(name);
+    await fieldByLabel(page, 'Password').fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     if (passphrase !== null) {
-        await page.getByLabel('This wallet uses a BIP39 passphrase').check();
-        await page.getByLabel('BIP39 passphrase', { exact: true }).fill(passphrase);
+        await page.getByRole('switch', { name: 'This wallet uses an extra passphrase', exact: true }).check();
+        await fieldByLabel(page, 'Extra passphrase').fill(passphrase);
     }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 

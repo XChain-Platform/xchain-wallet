@@ -41,9 +41,18 @@ describe('shared/actionDisplayLabel', () => {
     });
 
     it('maps ADDRESS, VOTE, and DEPLOY to humanized phrases (not the bare opcode)', () => {
-        expect(actionDisplayLabel('ADDRESS')).toBe('Messaging setup');
+        expect(actionDisplayLabel('ADDRESS')).toBe('Address settings');
+        expect(actionDisplayLabel('ADDRESS')).not.toMatch(/messag/i);
         expect(actionDisplayLabel('VOTE')).toBe('Vote');
         expect(actionDisplayLabel('DEPLOY')).toBe('Publish contract');
+    });
+
+    it('names BROADCAST as an announcement and CALLBACK as a token recall', () => {
+        expect(actionDisplayLabel('BROADCAST')).toBe('Announcement');
+        expect(actionDisplayLabel('broadcast')).toBe('Announcement');
+        expect(actionDisplayLabel('CALLBACK')).toBe('Token recall');
+        expect(actionDisplayLabel('callback')).toBe('Token recall');
+        expect(actionDisplayLabel('CALLBACK')).not.toMatch(/callback/i);
     });
 
     it('maps validator and mirror-injected verbs, not the recased opcode', () => {
@@ -64,14 +73,14 @@ describe('shared/actionDisplayLabel', () => {
 
     it('maps indexer lifecycle verbs, not the recased opcode', () => {
         expect(actionDisplayLabel('COINPAY_EXPIRE')).toBe('Coin payment expired');
-        expect(actionDisplayLabel('BET_EXPIRE')).toBe('Bet expired');
+        expect(actionDisplayLabel('BET_EXPIRE')).toBe('Prediction refunded');
         expect(actionDisplayLabel('DISPENSER_CLOSE')).toBe('Dispenser closed');
         expect(actionDisplayLabel('DISPENSER_EXPIRE')).toBe('Dispenser expired');
         expect(actionDisplayLabel('ORDER_EXPIRE')).toBe('Order expired');
         expect(actionDisplayLabel('ORDER_MATCH')).toBe('Order matched');
         expect(actionDisplayLabel('SWAP_EXPIRE')).toBe('Swap expired');
         expect(actionDisplayLabel('SWAP_MATCH')).toBe('Swap matched');
-        expect(actionDisplayLabel('BET')).toBe('Bet');
+        expect(actionDisplayLabel('BET')).toBe('Buy prediction');
         // A History row must not read "Coinpay expire" beside "Coin payment".
         expect(actionDisplayLabel('COINPAY_EXPIRE')).not.toBe('Coinpay expire');
     });
@@ -135,6 +144,18 @@ describe('shared/psbtActionSummary', () => {
 
     it('summarizes a SLEEP action as a lock or pause', () => {
         expect(psbtActionSummary({ action: 'SLEEP', version: 1 })).toBe('Carries an XChain Lock, pause or resume action');
+    });
+
+    it('summarizes ADDRESS without describing a messaging action', () => {
+        expect(psbtActionSummary({ action: 'ADDRESS', version: 1 }))
+            .toBe('Carries an XChain Address settings action');
+    });
+
+    it('uses the plain display names for announcement and recall actions', () => {
+        expect(psbtActionSummary({ action: 'BROADCAST', version: 0 }))
+            .toBe('Carries an XChain Announcement action');
+        expect(psbtActionSummary({ action: 'CALLBACK', version: 0 }))
+            .toBe('Carries an XChain Token recall action');
     });
 
     it('reads cleanly when the action name is missing', () => {

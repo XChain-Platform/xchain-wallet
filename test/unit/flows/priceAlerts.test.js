@@ -53,6 +53,29 @@ describe('flows/priceAlerts', () => {
         expect(await vault.priceAlerts.count()).toBe(1);
     });
 
+    it('normalizes and saves a token alert', async () => {
+        const saved = await saveAlert({ vault, ...ALERT, tick: '  pepe.usd-1  ' });
+
+        expect(saved.tick).toBe('PEPE.USD-1');
+        expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ tick: 'PEPE.USD-1' });
+    });
+
+    it('dedupes identical token alerts after ticker normalization', async () => {
+        const first = await saveAlert({ vault, ...ALERT, tick: 'pepe' });
+        const duplicate = await saveAlert({ vault, ...ALERT, tick: ' PEPE ' });
+
+        expect(duplicate.id).toBe(first.id);
+        expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('does not dedupe the same native coin and token alert terms', async () => {
+        const coin = await saveAlert({ vault, ...ALERT });
+        const token = await saveAlert({ vault, ...ALERT, tick: 'BTC' });
+
+        expect(token.id).not.toBe(coin.id);
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
     it('does not collide across direction/target', async () => {
         await saveAlert({ vault, ...ALERT });
         await saveAlert({ vault, ...ALERT, direction: 'below' });
@@ -102,6 +125,17 @@ describe('flows/priceAlerts', () => {
             triggeredAt: null,
         });
         expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('changes and clears the ticker while editing in place', async () => {
+        const original = await saveAlert({ vault, ...ALERT, tick: 'PEPE' });
+        const changed = await saveAlert({ vault, ...ALERT, id: original.id, tick: 'doge' });
+        const cleared = await saveAlert({ vault, ...ALERT, id: original.id, tick: '   ' });
+
+        expect(changed).toMatchObject({ id: original.id, tick: 'DOGE' });
+        expect(cleared.id).toBe(original.id);
+        expect(cleared).not.toHaveProperty('tick');
+        expect(await vault.priceAlerts.get(original.id)).not.toHaveProperty('tick');
     });
 
     it('rejects an edit that would duplicate another alert', async () => {
@@ -203,6 +237,45 @@ describe('flows/priceAlerts', () => {
         await expect(saveAlert({ vault, ...ALERT, direction: 'x' })).rejects.toThrow();
         await expect(saveAlert({ vault, ...ALERT, targetFiat: 0 })).rejects.toThrow();
         await expect(saveAlert({ vault, ...ALERT, walletId: '' })).rejects.toThrow();
+        await expect(saveAlert({ vault, ...ALERT, tick: 'NOT OK!' })).rejects.toThrow('tick may only contain');
+    });
+
+    describe('paused alerts', () => {
+        it('pauses an alert through save with its terms kept, and rearm resumes it', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            const paused = await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            expect(paused).toMatchObject({ id: saved.id, status: 'paused', targetFiat: 70000, triggeredAt: null });
+            expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ status: 'paused' });
+
+            const resumed = await rearmAlert({ vault, id: saved.id, walletId: 'wallet-1' });
+            expect(resumed.status).toBe('armed');
+        });
+
+        it('keeps a paused alert paused when its terms are edited', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            const edited = await saveAlert({ vault, ...ALERT, id: saved.id, targetFiat: 65000 });
+            expect(edited).toMatchObject({ status: 'paused', targetFiat: 65000 });
+        });
+
+        it('resumes a paused alert when the same alert is added again', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            const again = await saveAlert({ vault, ...ALERT });
+            expect(again).toMatchObject({ id: saved.id, status: 'armed' });
+            expect(await vault.priceAlerts.count()).toBe(1);
+        });
+
+        it('keeps a pause that lands while the alert is being delivered', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            expect(await markAlertTriggered({ vault, id: saved.id })).toBeNull();
+            expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ status: 'paused', triggeredAt: null });
+        });
+
+        it('refuses a status other than armed or paused', async () => {
+            await expect(saveAlert({ vault, ...ALERT, status: 'triggered' })).rejects.toThrow('status must be');
+        });
     });
 
     it('leaves an alert edited since it fired armed when markAlertTriggered carries the fired terms', async () => {

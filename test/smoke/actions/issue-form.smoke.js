@@ -30,7 +30,7 @@
 //   7. ActionsMenu.jsx exists and renders an entries[] prop with
 //      label + optional description; popup + web both pass an `issue`
 //      entry wired to setUnlockedView('issue').
-//   8. Home accepts onActions and wires a "More actions" button.
+//   8. Home has no More quick action; the wallet menu carries All actions.
 //   9. popup + web App.jsx import IssueTokenForm + ActionsMenu and
 //      track the `'issue'` + `'actions'` sub-routes.
 
@@ -48,18 +48,23 @@ const web = join(wsRoot, 'packages', 'web');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const formPath = join(sharedRoutes, 'IssueTokenForm.jsx');
+const locksPath = join(sharedRoutes, 'issueLocks.js');
 const cssPath = join(sharedRoutes, 'IssueTokenForm.module.css');
 const menuPath = join(sharedRoutes, 'ActionsMenu.jsx');
 const menuCssPath = join(sharedRoutes, 'ActionsMenu.module.css');
+const confirmPath = join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
 
 assert.ok(existsSync(formPath), 'IssueTokenForm.jsx exists');
+assert.ok(existsSync(locksPath), 'issueLocks.js exists');
 assert.ok(existsSync(cssPath), 'IssueTokenForm.module.css exists');
 assert.ok(existsSync(menuPath), 'ActionsMenu.jsx exists');
 assert.ok(existsSync(menuCssPath), 'ActionsMenu.module.css exists');
 
 const src = readFileSync(formPath, 'utf8');
+const locksSrc = readFileSync(locksPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 const menuSrc = readFileSync(menuPath, 'utf8');
+const confirmSrc = readFileSync(confirmPath, 'utf8');
 
 // --- 1. Public surface -------------------------------------------------
 
@@ -140,9 +145,21 @@ assert.ok(
     !/TICK:\s*ticker\.trim\(\)\.toUpperCase\(\)/.test(src),
     'IssueTokenForm does not uppercase the ticker on the wire',
 );
+// U80: an empty supply still issues the ticker, and zero max supply is the
+// indexer's uncapped sentinel, so only a malformed max supply is refused.
 assert.ok(
-    /Supply must be a positive number/.test(src),
-    'IssueTokenForm rejects zero/empty supply',
+    /Max supply must be zero or a positive number/.test(src),
+    'IssueTokenForm refuses a malformed max supply',
+);
+// Walk ruling: the submit always reads Issue Token with the Issue action's
+// PlusIcon; there is no separate Reserve ticker label or path.
+assert.ok(
+    !/Reserve ticker|issue\.reserveTicker/.test(src),
+    'IssueTokenForm has no Reserve ticker label or path',
+);
+assert.ok(
+    /<FormAction[\s\S]{0,80}icon=\{<Icon\.PlusIcon \/>\}[\s\S]{0,400}\{t\('issue\.title'\)\}\s*<\/FormAction>/.test(src),
+    'IssueTokenForm submit always reads Issue Token with the PlusIcon',
 );
 
 // --- 6. Params composer: ISSUE v0 shape ------------------------------
@@ -155,8 +172,11 @@ assert.ok(
 // chain records a tick exactly as written, so upper-casing here is the half
 // of the coercion a user cannot see, silently reaching the ledger under a
 // different name than typed. It passes through trimmed only.
+// The wire tick is `issueTick`: the trimmed ticker, or PARENT.CHILD for a
+// subtoken, with neither half recased.
 assert.ok(
-    /TICK:\s*ticker\.trim\(\),/.test(src),
+    /TICK:\s*issueTick,/.test(src)
+        && /const issueTick = isSubtoken && parentToken\.trim\(\)\s*\?\s*`\$\{parentToken\.trim\(\)\}\.\$\{ticker\.trim\(\)\}`\s*:\s*ticker\.trim\(\);/.test(src),
     'composer sends the ticker as typed, trimmed and not recased',
 );
 assert.ok(
@@ -173,19 +193,21 @@ assert.ok(
     'composer sets MINT_SUPPLY from the initial-mint field, defaulting to supply',
 );
 assert.ok(
-    /Initial mint cannot be more than the supply/.test(src),
+    /Initial mint cannot be more than the max supply/.test(src),
     'IssueTokenForm rejects an initial mint above the cap before it costs a fee',
 );
 assert.ok(
     /divisible\s*\?\s*'8'\s*:\s*'0'/.test(src),
     'composer maps divisible → DECIMALS 8 / 0',
 );
-assert.ok(
-    /p\.LOCK_MAX_SUPPLY\s*=\s*'1'/.test(src)
-        && /p\.LOCK_MINT\s*=\s*'1'/.test(src)
-        && /p\.LOCK_MINT_SUPPLY\s*=\s*'1'/.test(src),
-    'composer sets LOCK_MAX_SUPPLY + LOCK_MINT + LOCK_MINT_SUPPLY when lockSupply is true',
-);
+// U80: seven independent lock switches, each composing its own field; the
+// combined "lock supply" option and the bridge lock are gone from this form.
+assert.ok(src.includes("import { ISSUE_LOCKS } from './issueLocks.js'"), 'IssueTokenForm imports the shared Issue lock list');
+for (const field of ['LOCK_MAX_SUPPLY', 'LOCK_MAX_MINT', 'LOCK_MINT', 'LOCK_MINT_SUPPLY', 'LOCK_DESCRIPTION', 'LOCK_SLEEP', 'LOCK_CALLBACK']) {
+    assert.ok(locksSrc.includes(`'${field}'`), `the Locks section composes ${field}`);
+}
+assert.ok(/p\[lock\.field\]\s*=\s*'1'/.test(src), 'composer sets each switched-on lock field to 1');
+assert.ok(!locksSrc.includes('LOCK_BRIDGE'), 'the bridge lock stays off the Issue form');
 assert.ok(
     /p\.TRANSFER\s*=\s*transferTo/.test(src),
     'composer sets TRANSFER from transferTo',
@@ -214,13 +236,16 @@ assert.ok(
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(
-    /onActions/.test(home) && /onClick=\{onActions\}/.test(home),
-    'Home accepts + wires onActions for the Actions menu',
+    !/onActions/.test(home) && !home.includes('<Icon.MoreIcon />'),
+    'Home has no More quick action; the Actions menu is the All actions row of the wallet menu',
 );
-assert.ok(
-    home.includes('More actions'),
-    'Home exposes a "More actions" button',
-);
+{
+    const walletMenu = readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8');
+    assert.ok(
+        /id: 'actions', labelKey: 'walletMenu\.row\.allActions'/.test(walletMenu),
+        'the wallet menu carries the All actions row that opens the Actions menu',
+    );
+}
 
 // --- 9. Both shells wire the new sub-routes ---------------------------
 
@@ -254,9 +279,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx includes the issue entry`,
     );
     assert.ok(
-        /onActions=\{activeWalletId/.test(app)
-            || /onActions=\{/.test(app),
-        `${shell} App.jsx passes onActions to Home`,
+        !/onActions=\{/.test(app),
+        `${shell} App.jsx passes no onActions to Home (Home has no More quick action)`,
     );
 }
 
@@ -273,9 +297,10 @@ assert.ok(
 
 // --- 11. CSS module ---------------------------------------------------
 
+// The From line is the shared FromSection now, so .fromLine is gone (an
+// unreferenced class fails cssModuleReferences).
 for (const cls of [
     '.picker',
-    '.fromLine',
     '.checkRow',
     '.detailsList',
     '.actions',
@@ -286,11 +311,15 @@ for (const cls of [
         `IssueTokenForm.module.css defines ${cls}`,
     );
 }
-assert.ok(!/^\.warnings\s*\{/m.test(css), 'IssueTokenForm warnings render through StatusMessage, not a route box');
-assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'IssueTokenForm warnings use the shared warning message');
-assert.ok(src.includes('<FormPage'), 'IssueTokenForm delegates its page card to FormPage');
+assert.ok(!/^\.warnings\s*\{/m.test(css), 'IssueTokenForm has no route-level warning box');
+assert.ok(
+    /decoded=\{reviewDecoded\}/.test(src)
+        && /decodedWarnings:[\s\S]{0,120}formattedDecoded\?\.warnings/.test(confirmSrc),
+    'IssueTokenForm decoder warnings feed Confirm Standard shared warning slot',
+);
+assert.ok(src.includes('<FormFrame'), 'IssueTokenForm delegates its responsive form surface to FormFrame');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'IssueTokenForm has no route-level page card');
 
 console.log(
-    'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "More actions" entry + popup/web wiring)',
+    'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "All actions" entry + popup/web wiring)',
 );

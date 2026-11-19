@@ -16,6 +16,7 @@ import { DispenserForm } from '../../../packages/core/src/shared/routes/Dispense
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { DispenserExplorer } from '../../../packages/core/src/shared/routes/DispenserExplorer.jsx';
 import { dispenserFillPriceLabel } from '../../../packages/core/src/shared/utils/dispenserPricing.js';
+import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const BTC_CHAIN = 'bitcoin-mainnet';
 const SOURCE = {
@@ -35,7 +36,15 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
+// A wallet's mode is published by the shell from the wallet list, not read from
+// settings; the mode the settings mock names is published for wallet-a.
 function provider(children, messaging) {
+    messaging.getSettings?.()?.then?.((settings) => {
+        walletModes.publishWalletModes?.({
+            wallets: [{ id: 'wallet-a', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'wallet-a',
+        });
+    });
     return <MessagingProvider shell="web" messaging={messaging}>{children}</MessagingProvider>;
 }
 
@@ -62,9 +71,28 @@ function commonMessaging(overrides = {}) {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    walletModes.resetWalletModes?.();
 });
 
 describe('dispenser async safety', () => {
+    it('renders form-specific help for its network and token fields', async () => {
+        const messaging = commonMessaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC_CHAIN]: SOURCE }),
+        });
+        render(provider(
+            <DispenserForm walletId="wallet-a" initialChainId={BTC_CHAIN} onBack={() => {}} />,
+            messaging,
+        ));
+
+        // Network lives in the closed From section; the Token field (with its
+        // own help) is in the Full view of the open Dispenser section.
+        fireEvent.click(await screen.findByRole('button', { name: /^From/ }));
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('radio', { name: 'Full' }));
+        expect(await screen.findByRole('button', { name: 'About Token' })).toBeInTheDocument();
+    });
+
     it('shows plain validation copy for a malformed dispenser ID without querying the indexer', async () => {
         const getDispenserByActionIndex = vi.fn();
         const messaging = commonMessaging({
@@ -101,7 +129,7 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create' });
+        const create = await screen.findByRole('button', { name: 'Create Dispenser' });
         await waitFor(() => expect(create).toBeEnabled());
 
         const form = create.closest('form');
@@ -130,7 +158,7 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create' });
+        const create = await screen.findByRole('button', { name: 'Create Dispenser' });
         await waitFor(() => expect(create).toBeEnabled());
         fireEvent.click(create);
         await waitFor(() => expect(messaging.generateDispenserAddress).toHaveBeenCalledOnce());
@@ -146,15 +174,22 @@ describe('dispenser async safety', () => {
         const messaging = commonMessaging({
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC_CHAIN]: SOURCE }),
+            // The "Buyers pay with" picker lists the tokens the source holds.
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [BTC_CHAIN]: [{
+                    address: SOURCE.address,
+                    balances: { tokens: [{ tick: 'PAY', quantity: '100', divisibility: 0 }] },
+                }],
+            }),
         });
         const mount = () => render(provider(
             <DispenserForm walletId="wallet-draft" initialChainId={BTC_CHAIN} initialTick="XCHAIN" onBack={() => {}} />,
             messaging,
         ));
         const first = mount();
-        fireEvent.click(await screen.findByLabelText('A token'));
-        fireEvent.change(screen.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(screen.getByLabelText('Payment amount per fill'), { target: { value: '4.5' } });
+        fireEvent.click(await screen.findByRole('button', { name: /^Buyers pay with:/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /PAY/ }));
+        fireEvent.change(await screen.findByLabelText(/^Payment amount per fill/), { target: { value: '4.5' } });
 
         const key = 'xc:formdraft:dispenser:wallet-draft';
         await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values).toMatchObject({
@@ -164,9 +199,8 @@ describe('dispenser async safety', () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
 
-        await waitFor(() => expect(screen.getByLabelText('A token')).toBeChecked());
-        expect(screen.getByLabelText('Payment token')).toHaveValue('PAY');
-        expect(screen.getByLabelText('Payment amount per fill')).toHaveValue('4.5');
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Buyers pay with: PAY/ })).toBeInTheDocument());
+        expect(screen.getByLabelText(/^Payment amount per fill/)).toHaveValue('4.5');
     });
 
     it('stores no draft and offers no Restore for a form left on its defaults', async () => {
@@ -208,7 +242,7 @@ describe('dispenser async safety', () => {
             messaging,
         ));
         const first = mount();
-        await screen.findByLabelText('A token');
+        await screen.findByLabelText(/^Give amount/);
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(localStorage.getItem(key)).toBeNull();
         first.unmount();
@@ -219,7 +253,7 @@ describe('dispenser async safety', () => {
             values: { chainId: BTC_CHAIN, fromAddressId: SOURCE.id, ticker: 'XCHAIN', giveAmount: '', payWith: 'coin' },
         }));
         mount();
-        await screen.findByLabelText('A token');
+        await screen.findByLabelText(/^Give amount/);
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
         expect(localStorage.getItem(key)).toBeNull();
@@ -234,16 +268,17 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
-        const form = screen.getByRole('textbox').closest('form');
-        await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).toBeEnabled());
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        // The search box lives in the title bar's filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
+        await waitFor(() => expect(screen.queryByText('Enter a token or seller address to search.')).toBeNull());
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 
         await waitFor(() => expect(getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
         const callsWhilePending = getDispensersForToken.mock.calls.length;
-        fireEvent.submit(form);
+        // Submitting the same search again while it is pending stays deduplicated.
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
         expect(getDispensersForToken).toHaveBeenCalledTimes(callsWhilePending);
         await act(async () => response.resolve({ data: [] }));
     });
@@ -256,9 +291,10 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
-        fireEvent.submit(screen.getByRole('textbox').closest('form'));
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
         await waitFor(() => expect(messaging.getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
 
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
@@ -320,7 +356,7 @@ describe('dispenser async safety', () => {
             chainId: BTC_CHAIN, address: 'oracle-two',
         }));
         await waitFor(() => expect(screen.queryAllByText(/10 USD/)).toHaveLength(0));
-        expect(screen.getAllByText(/Set by an oracle, in USD/)).not.toHaveLength(0);
+        expect(screen.getAllByText(/a USD price/)).not.toHaveLength(0);
     });
 
     it('starts one watcher owner action for two same-render submits', async () => {
@@ -341,8 +377,10 @@ describe('dispenser async safety', () => {
             messaging,
         ));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        // Close is a row of the Actions tab's action list (G101); its name
+        // carries its description, so it is matched by its leading title.
+        fireEvent.click(await screen.findByRole('button', { name: /^Close(?! Dispenser$)/ }));
+        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         const form = submit.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -371,9 +409,9 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Create' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create Dispenser' }));
 
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         const form = submit.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -411,7 +449,9 @@ describe('dispenser async safety', () => {
             messaging,
         ));
 
-        const buy = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        // The detail page opens on Actions; buying is the Buy page its first row opens.
+        fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
+        const buy = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
         fireEvent.click(buy);

@@ -13,6 +13,7 @@ import { tokenInfoFor } from '../../../packages/core/src/flows/tokenInfo.js';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { SwapDetail } from '../../../packages/core/src/shared/routes/SwapDetail.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 
@@ -92,17 +93,26 @@ describe('demo session offline boundary', () => {
         });
 
         render(provider(messaging, <MyOrdersView walletId={WALLET} onBack={() => {}} />));
-        expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(await screen.findByRole('list', { name: 'Orders' })).toBeInTheDocument();
         cleanup();
 
         render(provider(messaging, <MySwapsView walletId={WALLET} onBack={() => {}} />));
-        expect(await screen.findByText('No swaps yet')).toBeInTheDocument();
+        expect(await screen.findByRole('list', { name: 'Swaps' })).toBeInTheDocument();
+        cleanup();
+
+        // A demo swap's details come from the bundled fixture, not the explorer.
+        render(provider(messaging, (
+            <SwapDetail walletId={WALLET} chainId={CHAIN} actionIndex="4201260" onBack={() => {}} />
+        )));
+        expect(await screen.findByTestId('swap-detail-give')).toHaveTextContent('1 RAREPEPE');
         cleanup();
 
         render(provider(messaging, (
             <DispensersList walletId={WALLET} onOpenDispenser={() => {}} onBack={() => {}} />
         )));
-        expect(await screen.findByText('EXAMPLE')).toBeInTheDocument();
+        expect(await screen.findByRole('button', {
+            name: 'Open EXAMPLE dispenser #4198220',
+        })).toBeInTheDocument();
         cleanup();
 
         render(provider(messaging, (
@@ -118,10 +128,11 @@ describe('demo session offline boundary', () => {
         expect(await screen.findByRole('heading', { name: 'BTC' })).toBeInTheDocument();
         cleanup();
 
+        // Send opens with no demo notice. The press and its refusal are
+        // Send.demoWallet.test.jsx's; this test only proves no network read.
         render(provider(messaging, <Send walletId={WALLET} onBack={() => {}} />));
-        expect(await screen.findByText(
-            "Demo wallets can't move funds. Create a real wallet to send.",
-        )).toBeInTheDocument();
+        await screen.findByRole('form', { name: 'Send' });
+        expect(screen.queryByText(/Demo wallets can't move funds/)).toBeNull();
 
         await waitFor(() => expect(networkReads).toEqual([]));
         expect(globalThis.fetch).not.toHaveBeenCalled();

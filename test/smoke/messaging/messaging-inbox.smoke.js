@@ -112,7 +112,7 @@ assert.ok(
     /if \((?:shareTarget && )?(?:lane|shareLane)\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.(?:lane|shareLane)\.confirmProps\}/.test(src),
     'MessagingInbox renders the shared dry-run confirmation screen for the reply',
 );
-assert.ok(/Share my key/.test(src),
+assert.ok(/Share My Key/.test(src),
     'MessagingInbox renders a "Share my key" reply action');
 assert.ok(/<ActionConfirmScreen[\s\S]*?signerReady=\{signerReady\}/.test(src),
     'MessagingInbox passes signer readiness to the confirmation screen');
@@ -123,15 +123,19 @@ assert.ok(/function ThreadComposer\b/.test(src),
     'MessagingInbox defines ThreadComposer (docked message input)');
 assert.ok(/onSubmit=\{\(\) => \{/.test(src) && /onCompose\(\{/.test(src),
     'composer Enter routes the draft to the New-message form via onCompose');
-assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src),
+assert.ok(/toAddress: activeCounterparty/.test(src) && /message: t,/.test(src),
     'the reply prefill carries the recipient and the typed body');
 assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
     'the reply locks the conversation encryption method onto the form');
-assert.ok(/<Input[\s\S]*?className=\{local\.composerInput\}/.test(src)
-    && /<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
-    'composer pairs the shared message Input with a shared send Button');
-assert.ok(/<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
-    'the shared composer send Button is labelled and submits the form (Enter or click)');
+// G95: the reply field spans the full width with no send button; Enter or
+// the keyboard's Send key submits the form.
+const composerSrc = src.slice(src.indexOf('function ThreadComposer'));
+assert.ok(/<form className=\{local\.composer\} onSubmit=\{handleSubmit\}>\s*<Input[\s\S]*?className=\{local\.composerInput\}/.test(composerSrc)
+    && /enterKeyHint="send"/.test(composerSrc),
+    'composer is the shared message Input in a form that sends on Enter');
+assert.ok(/aria-label="Reply, press Enter to send"/.test(composerSrc)
+    && !/<Button type="submit"/.test(composerSrc.slice(0, composerSrc.indexOf('</form>'))),
+    'the composer field is labelled with how to send, and carries no send button');
 assert.ok(!/function SendConfirm\b/.test(src) && !/messaging\.messageAction\s*\(/.test(src),
     'the bespoke SendConfirm screen is gone; ComposeMessage is the single send surface');
 assert.ok(!/>\s*Reply\s*</.test(src),
@@ -179,8 +183,8 @@ assert.ok(/readMsgRead\b/.test(src) && /writeMsgRead\b/.test(src),
     'MessagingInbox loads + persists per-conversation read marks');
 assert.ok(/lastIncomingTimestamp\b/.test(src),
     'conversations track their newest incoming message for unread detection');
-assert.ok(/local\.unreadDot\b/.test(src),
-    'the conversation list shows an unread dot');
+assert.ok(/notificationStyles\.unreadDot\b/.test(src),
+    'the conversation list shows the shared Notifications unread dot');
 assert.ok(/function openConversation\b/.test(src) && /setSelectedCounterparty\(/.test(src),
     'opening a conversation goes straight to the thread and clears the read mark');
 assert.ok(/Unread messages/.test(src) && /firstUnreadRef\b/.test(src),
@@ -233,16 +237,18 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports MessagingInbox`);
     assert.ok(app.includes("'messaging'"),
         `${shell} App.jsx tracks the messaging sub-route`);
-    assert.ok(/onMessaging={/.test(app) || /onMessaging=activeWalletId/.test(app),
-        `${shell} App.jsx threads onMessaging to Home`);
+    assert.ok(!/onMessaging=\{/.test(app),
+        `${shell} App.jsx passes no onMessaging to Home`);
 }
 
-// --- 6. Home wiring ----------------------------------------------------
+// --- 6. Entry: the wallet menu's Messaging row ---------------------------
+// Home has no bottom action row; Messaging is a wallet menu row.
 
 const homeSrc = withEnglishCopy(readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8'));
-assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
-assert.ok(/>\s*Messaging\b/.test(homeSrc),
-    'Home.jsx renders a "Messaging" button');
+assert.ok(!/onMessaging/.test(homeSrc), 'Home.jsx carries no Messaging button of its own');
+assert.ok(/id: 'messaging', labelKey: 'walletMenu\.row\.messaging'/.test(
+    readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8'),
+), 'the wallet menu carries the Messaging row');
 
 // --- 7. wallet-removal sweep -----------------------------------
 

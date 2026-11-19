@@ -8,8 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { AddressField, Button, FieldNote, FormPage, Icon, IconSelect, PageHeader, Screen, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+// New Message sits on the Wallet Form Standard frame (a send-like form).
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummaryParts,
+    summaryLineWithAddress,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -18,8 +33,10 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -31,21 +48,14 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
-import { coinToFiatExact } from '../../flows/priceLookup.js';
-import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
-import { useFiatRate } from '../hooks/useFiatRate.js';
-import { useSettings } from '../hooks/useSettings.js';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
-import {
-    MAX_MESSAGE_ATTACHMENT_BYTES,
-    MESSAGE_ATTACHMENT_TYPES,
-    serializeMessageContent,
-} from '../utils/messageContent.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { formatBytes, reachedEightyPercent } from '../utils/formatBytes.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/composeMessage.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/verifySignature.js';
@@ -54,6 +64,7 @@ const KEY_MISMATCH_MESSAGE =
     "The encryption key found for this recipient doesn't belong to their address, so nothing was signed or sent. Check the address before trying again.";
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
@@ -82,7 +93,6 @@ function pickFundingAddress(addrs, active) {
     }
     return list.find((a) => a.source === 'hd' || a.source === 'imported-wif') || null;
 }
-
 
 /**
  * §41.7.3 Compose encrypted message.
@@ -181,9 +191,6 @@ function ComposeMessageForm({
     );
     const [toAddress, setToAddress] = useState(initialToAddress || '');
     const [message, setMessage] = useState(initialMessage || '');
-    const [attachment, setAttachment] = useState(/** @type {{ name: string, type: string, dataUrl: string, size: number } | null} */ (null));
-    const [attachmentError, setAttachmentError] = useState(/** @type {string | null} */ (null));
-    const attachmentReadIdRef = useRef(0);
     const [password, setPassword] = useState('');
     // Network-fee tier picker (Low / Normal / Fast / Custom), mirroring Send.
     // Custom mode reveals a rate input. Defaults to Normal.
@@ -194,6 +201,8 @@ function ComposeMessageForm({
     // fewer rows on failure), the icon in the Address field opens the picker.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    // Own-address picker behind the From field (U60).
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [pubkeyState, setPubkeyState] = useState(
         /** @type {'idle' | 'checking' | 'found' | 'missing' | 'error'} */ ('idle'),
     );
@@ -242,6 +251,12 @@ function ComposeMessageForm({
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
+    const form = useFormErrors();
+    const fromFieldId = 'compose-message-from';
+    const recipientFieldId = 'compose-message-recipient';
+    const messageFieldId = 'compose-message-body';
+    const encryptionFieldId = 'compose-message-encryption';
+    const feeFieldId = 'compose-message-fee';
     const [submitError, setSubmitErrorMessage] = useState(/** @type {string | null} */ (null));
     const [submitErrorDetails, setSubmitErrorDetails] = useState('');
     const setSubmitError = useCallback((message, details = '') => {
@@ -250,6 +265,12 @@ function ComposeMessageForm({
     }, []);
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    // The standard sections' open state, held above the early returns so it
+    // survives the pickers and the confirm page. Only Message starts open; a
+    // Send refusal names its section and bumps the counter to reopen it.
+    const formSections = useFormSections({ from: false, message: true, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'message' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
@@ -292,7 +313,7 @@ function ComposeMessageForm({
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || t('composeMessage.loadFailed'));
+                if (!cancelled) setLoadError(userFacingMessage(err, t('composeMessage.loadFailed')));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, initialChainId, fromAddressId]);
@@ -457,25 +478,6 @@ function ComposeMessageForm({
         : null;
     const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: customEstimate });
 
-    // Fiat value of a fee amount, paid on the delivery network. Passed to the
-    // FeeSelector so each tier's readout shows its cost in a colored bubble next
-    // to the time estimate. Tiny values collapse below the currency's minor unit.
-    // Oracle-primary with CoinGecko fallback (§45); the
-    // fallback is gated on the privacy.priceDataEnabled setting.
-    const { settings } = useSettings();
-    const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const fiatRate = useFiatRate({
-        chainCoin: chainRegistry.get(chainId)?.coin,
-        fiatCurrency,
-        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        enabled: chainRegistry.get(chainId)?.networkKind === 'mainnet',
-    });
-    const fiatForFee = useMemo(() => (coinAmount) => {
-        const value = coinToFiatExact(coinAmount, fiatRate);
-        if (value == null || !(Number(value) > 0)) return null;
-        return formatFiatAmount(value, fiatRate?.fiatCurrency || fiatCurrency);
-    }, [fiatRate, fiatCurrency]);
-
     // Catch random text before review. A message can be delivered on any chain
     // regardless of the recipient's chain, so the address is validated only as a
     // real address (any supported network), NOT against the delivery network.
@@ -485,17 +487,36 @@ function ComposeMessageForm({
         [toAddress],
     );
     const addressError = addressInvalid ? t('composeMessage.invalidAddress') : undefined;
-    const wireMessage = useMemo(
-        () => serializeMessageContent(message, attachment),
-        [message, attachment],
-    );
+    const wireMessage = message;
     const messageMethod = sendUnencrypted
         ? null
         : (encryptionChoice === 'ecdh' && !hw ? 2 : 1);
+    const reviewEncryptionLabel = sendUnencrypted
+        ? t('composeMessage.plainLabel')
+        : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
+    const legacyDecoded = useMemo(() => (
+        stage === 'review' || stage === 'submitting'
+            ? {
+                summary: `${sendUnencrypted ? 'Send plain text message to' : 'Send encrypted message to'} ${toAddress.trim()}.`,
+                details: [
+                    { label: 'Recipient', value: toAddress.trim() },
+                    { label: t('composeMessage.encryptionLabel'), value: reviewEncryptionLabel },
+                    { label: t('verifySignature.message'), value: wireMessage },
+                ],
+                warnings: [],
+            }
+            : null
+    ), [reviewEncryptionLabel, sendUnencrypted, stage, toAddress, wireMessage]);
+    const legacyComposed = useMemo(() => (legacyDecoded ? {
+        action: 'MESSAGE',
+        chainId,
+        decoded: legacyDecoded,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, legacyDecoded]);
     const wireMessageBytes = messageWireByteLength(wireMessage, messageMethod);
     const messageLengthSubject = sendUnencrypted
-        ? t(attachment ? 'composeMessage.subjectPlainAttachment' : 'composeMessage.subjectPlain')
-        : t(attachment ? 'composeMessage.subjectEncryptedAttachment' : 'composeMessage.subjectEncrypted');
+        ? t('composeMessage.subjectPlain')
+        : t('composeMessage.subjectEncrypted');
     const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
         ? t('composeMessage.tooLong', {
             subject: messageLengthSubject,
@@ -505,50 +526,6 @@ function ComposeMessageForm({
         : undefined;
     const messageCharacterError = actionTextSafetyError(message, t('verifySignature.message')) || undefined;
     const messageError = messageCharacterError || messageLengthError;
-
-    function handleAttachmentPick(event) {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        const readId = ++attachmentReadIdRef.current;
-        setAttachment(null);
-        const type = String(file.type || '').toLowerCase();
-        if (!MESSAGE_ATTACHMENT_TYPES.includes(type)) {
-            setAttachmentError(t('composeMessage.attachmentUnsupported'));
-            event.target.value = '';
-            return;
-        }
-        if (file.size === 0) {
-            setAttachmentError(t('composeMessage.attachmentEmpty'));
-            event.target.value = '';
-            return;
-        }
-        if (file.size > MAX_MESSAGE_ATTACHMENT_BYTES) {
-            setAttachmentError(t('composeMessage.attachmentTooLarge', {
-                size: file.size.toLocaleString(),
-                max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString(),
-            }));
-            event.target.value = '';
-            return;
-        }
-        setAttachmentError(null);
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (readId !== attachmentReadIdRef.current) return;
-            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-            if (!dataUrl.startsWith(`data:${type};base64,`)) {
-                setAttachmentError(t('composeMessage.attachmentUnreadable'));
-                return;
-            }
-            setAttachment({ name: file.name || 'attachment', type, dataUrl, size: file.size });
-        };
-        reader.onerror = () => {
-            if (readId === attachmentReadIdRef.current) {
-                setAttachmentError(t('composeMessage.attachmentUnreadable'));
-            }
-        };
-        reader.readAsDataURL(file);
-        event.target.value = '';
-    }
 
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
@@ -604,10 +581,7 @@ function ComposeMessageForm({
         hardware: 'sendHandshakeHw',
     });
 
-    // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
-    // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
-    // back as `prebuiltParams`, since re-encrypting would change the bytes).
-    async function openConfirmScreen() {
+    function buildMessageRequest() {
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -616,18 +590,49 @@ function ComposeMessageForm({
             source: fromAddress.source,
             signerId: fromAddress.signerId,
         };
-        // chainId = the recipient's chain (sets COIN, resolves their key);
-        // broadcastChainId = the delivery network that funds + pays the fee.
-        const base = {
-            walletId,
-            chainId: destChainId,
-            broadcastChainId: chainId,
+        return {
             from,
-            destination: toAddress.trim(),
-            message: wireMessage,
-            method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
-            ...(feePerKb != null ? { feePerKb } : {}),
+            base: {
+                walletId,
+                chainId: destChainId,
+                broadcastChainId: chainId,
+                from,
+                destination: toAddress.trim(),
+                message: wireMessage,
+                method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
+                ...(feePerKb != null ? { feePerKb } : {}),
+            },
         };
+    }
+
+    function mapSubmitFailure(err) {
+        if (err?.name === 'InvalidPasswordError') {
+            return { message: t('composeMessage.incorrectPassword') };
+        }
+        if (err?.name === 'PubkeyNotFoundError') {
+            return { message: t('composeMessage.keyUnavailable'), missingKey: true };
+        }
+        if (err?.name === 'PubkeyMismatchError') return { message: KEY_MISMATCH_MESSAGE };
+        const message = submitFailureMessage(err, {
+            chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
+        });
+        return { message, details: submitFailureDetails(err, message) };
+    }
+
+    function showSubmitFailure(err, { clearPubkeyError = false } = {}) {
+        const failure = mapSubmitFailure(err);
+        if (failure.missingKey) {
+            setPubkeyState('missing');
+            if (clearPubkeyError) setPubkeyError(null);
+        }
+        setSubmitError(failure.message, failure.details);
+    }
+
+    // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
+    // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
+    // back as `prebuiltParams`, since re-encrypting would change the bytes).
+    async function openConfirmScreen() {
+        const { from, base } = buildMessageRequest();
         setSubmitError(null);
         try {
             const res = await actionConfirm.run({
@@ -635,7 +640,7 @@ function ComposeMessageForm({
                 // network: that is the chain the transaction lands on.
                 chainId,
                 from,
-                compose: () => messaging.composeMessageForConfirm(base),
+                compose: () => messaging.composeMessageForConfirm(withAdvancedOptions(base)),
                 onApprove: (prebuiltPsbt, composed) => submitConfirmed({
                     ...base,
                     prebuiltParams: composed.messageParams,
@@ -648,29 +653,7 @@ function ComposeMessageForm({
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            if (err?.name === 'PubkeyNotFoundError') {
-                setPubkeyState('missing');
-                setSubmitError(t('composeMessage.keyUnavailable'));
-                return;
-            }
-            // Retrying cannot help: the key on offer would encrypt to someone else.
-            if (err?.name === 'PubkeyMismatchError') {
-                setSubmitError(KEY_MISMATCH_MESSAGE);
-                return;
-            }
-            // submitFailureMessage owns the translation for the shapes the
-            // encoder writes for a log ("no spendable UTXOs found for the
-            // funding address"), since this is the screen a user reads. The
-            // fallback keeps err.message AHEAD of the house string, which is
-            // the helper's stated contract ("the message the form would have
-            // shown") and what every other swept form passes. Dropping that
-            // half swallows a specific host reason, such as an
-            // insufficient-funds shortfall naming the amount required, behind
-            // a bare "Send failed."
-            const failureMessage = submitFailureMessage(err, {
-                chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
-            });
-            setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
+            showSubmitFailure(err);
         }
     }
 
@@ -680,29 +663,33 @@ function ComposeMessageForm({
     function handleReview(event) {
         event?.preventDefault?.();
         if (stage !== 'form') return;
-        // Require a source on the selected delivery network.
-        if (!fromAddress || !chainId) {
-            setSubmitError(t('composeMessage.noSigningAddress'));
+        // Each attempt bumps the counter; a refusal names its section.
+        setReviewAttempt((n) => n + 1);
+        setErrorSection(null);
+        const recipient = toAddress.trim();
+        const problems = {
+            [fromFieldId]: !fromAddress || !chainId ? t('composeMessage.noSigningAddress') : null,
+            [recipientFieldId]: !recipient
+                ? t('composeMessage.enterRecipient')
+                : (addressInvalid ? addressError : null),
+            [messageFieldId]: !message.trim() ? t('composeMessage.enterMessage') : messageError,
+            [feeFieldId]: feeStop ? (feeStop.formError || 'Choose a valid network fee.') : null,
+            [encryptionFieldId]: recipient && !addressInvalid && !sendUnencrypted && pubkeyState !== 'found'
+                ? (pubkeyError || (pubkeyState === 'missing'
+                    ? t('composeMessage.keyMissing')
+                    : 'Wait for the recipient encryption key check to finish.'))
+                : null,
+        };
+        if (!singleEncode && !hw && !signerReady && password.length === 0) {
+            problems[encryptionFieldId] = 'Unlock the wallet before sending an ECDH message.';
+        }
+        if (!form.validate(problems)) {
+            if (problems[fromFieldId]) setErrorSection('from');
+            else if (problems[feeFieldId]) setErrorSection('fee');
+            else setErrorSection('message');
+            setSubmitError(null);
             return;
         }
-        // Require a recipient and either text or an attachment.
-        if (!toAddress.trim()) {
-            setSubmitError(t('composeMessage.enterRecipient'));
-            return;
-        }
-        if (!message.trim() && !attachment) {
-            setSubmitError(t('composeMessage.enterMessage'));
-            return;
-        }
-        if (messageError) return;
-        if (addressInvalid) return;
-        if (feeStop) {
-            setSubmitError(feeStop.formError);
-            return;
-        }
-        // Plain text needs no recipient key, so it never waits on (or is blocked
-        // by) the pubkey lookup; encrypted sends require a resolved key.
-        if (!sendUnencrypted && pubkeyState !== 'found') return;
         // Every plaintext send shows the warning first and consumes the
         // acceptance, so a reply in a plaintext thread is asked like a new message.
         if (sendUnencrypted) {
@@ -718,15 +705,23 @@ function ComposeMessageForm({
         // the credential guards below (which the legacy review stage relies on)
         // must not gate getting there.
         if (singleEncode) { openConfirmScreen(); return; }
-        if (!hw && !signerReady && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (!hw && !signerReady && password.length === 0) {
+            form.validate({ [encryptionFieldId]: 'Unlock the wallet before sending an ECDH message.' });
+            setErrorSection('message');
+            return;
+        }
+        if (hw && hwStatus !== 'available') {
+            form.validate({ [fromFieldId]: 'Connect and unlock the hardware wallet to continue.' });
+            setErrorSection('from');
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
+        if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
         if (messageError) return;
         if (addressInvalid) return;
         if (feeStop) return;
@@ -748,59 +743,16 @@ function ComposeMessageForm({
             return;
         }
         try {
-            const base = {
-                walletId,
-                // chainId = the recipient's chain (sets COIN, resolves their
-                // key); broadcastChainId = the delivery network that funds + pays
-                // the fee. They differ when messaging e.g. a BTC address via DOGE.
-                chainId: destChainId,
-                broadcastChainId: chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                destination: toAddress.trim(),
-                message: wireMessage,
-                method: sendUnencrypted
-                    ? null
-                    : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            const r = hw
-                ? await messaging.messageActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.messageAction({ ...base, password });
+            const { base } = buildMessageRequest();
+            const r = await messaging.messageAction({ ...base, password });
             if (onSent) { onSent(r); return; }
             setResult(r);
             setStage('done');
         } catch (err) {
-            const name = err?.name;
-            if (name === 'InvalidPasswordError') {
-                setSubmitError(t('composeMessage.incorrectPassword'));
-            } else if (name === 'PubkeyNotFoundError') {
-                setSubmitError(t('composeMessage.keyUnavailable'));
-                setPubkeyState('missing');
-                setPubkeyError(null);
-            } else if (name === 'PubkeyMismatchError') {
-                setSubmitError(KEY_MISMATCH_MESSAGE);
-            } else {
-                // Same translation, and the same fallback, as the confirm path
-                // above. The helper's own header names this exact trap: a form
-                // swept on one submit path and not the other still ships wire
-                // wording on the other.
-                const failureMessage = submitFailureMessage(err, {
-                    chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || t('composeMessage.sendFailed'),
-                });
-                setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
-            }
+            showSubmitFailure(err, { clearPubkeyError: true });
             setStage('review');
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
+            passwordRef.current?.focus();
+            passwordRef.current?.select();
         }
     }
 
@@ -878,6 +830,7 @@ function ComposeMessageForm({
 
         const header = (
         <PageHeader
+            nested={stage === 'review'}
             onBack={stage === 'review' ? () => setStage('form') : onBack}
             title={stage === 'review' || stage === 'submitting' ? t('composeMessage.reviewTitle') : t('composeMessage.newTitle')}
         />
@@ -888,18 +841,25 @@ function ComposeMessageForm({
         </Screen>
     );
 
+    // The load error, the loading line and the sent panel lay out through
+    // FormPage like the form and review stages, so each keeps the template
+    // edge and rhythm instead of sitting bare in the Screen content box.
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <FormPage
+                as="div"
+                label={t('composeMessage.newTitle')}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>{t('composeMessage.loadingWallet')}</p>);
+        return wrap(
+            <FormPage as="div" label={t('composeMessage.newTitle')}>
+                <p className={styles.hint}>{t('composeMessage.loadingWallet')}</p>
+            </FormPage>,
+        );
     }
 
     if (handshakeQueued) {
@@ -923,111 +883,65 @@ function ComposeMessageForm({
             return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('composeMessage.whatMessage')} unsaved={result.unsaved} />);
         }
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label={t('shell.messageSent')}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>{t('common.done')}</Button>}
+            >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('shell.messageSent')}</p>
                 {result?.txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         {t('gatedPublish.transaction')} <code>{result.txid}</code>
                     </p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        // Fee reflects the picked tier/custom rate on the delivery network.
-        const fee = selectedFeeEstimate;
-        const ticker = descriptor?.coin
-            ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
-            : '';
-        const feeText = fee
-            ? `${fee.coinAmount} ${ticker}`.trim() + (fee.rate ? ` (${fee.rate})` : '')
-            : t('common.estimateUnavailable');
-        // Plain text is whatever the user selected, not only the pubkey-missing
-        // fallback: they can deliberately send plaintext even to a known key.
-        const unencrypted = sendUnencrypted;
-        const encryptionLabel = unencrypted
-            ? t('composeMessage.plainLabel')
-            : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={t('composeMessage.reviewTitle')}
-                onSubmit={handleSubmit}
-                status={hw && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {hw
-                            ? t('send.review.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                            : t('composeMessage.confirmSend')}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={legacyDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={nativeTicker}
+                credentialsReady={hw ? hwStatus === 'available' : (signerReady || password.length > 0)}
+                credentials={(
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        unlocked={signerReady}
+                        password={password}
+                        onPasswordChange={(value) => { setPassword(value); if (submitError) setSubmitError(null); }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
+                    />
                 )}
-            >
-                <p className={styles.summary}>
-                    {t('composeMessage.reviewSummary', { kind: unencrypted ? 'plain' : 'encrypted' })}
-                </p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                            <dd className={styles.detailsValue}>
-                                <ChainBadge descriptor={descriptor} size="sm" />
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <DetailRow
-                        label={t('send.fields.to')}
-                        value={<AddressText address={toAddress.trim()} />}
-                    />
-                    <DetailRow label={t('composeMessage.encryptionLabel')} value={encryptionLabel} />
-                    <DetailRow label={t('send.networkFee')} value={feeText} />
-                    <DetailRow
-                        label={t('verifySignature.message')}
-                        value={(
-                            <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                {message || t('composeMessage.attachmentOnly')}
-                            </span>
-                        )}
-                    />
-                    {attachment ? (
-                        <DetailRow
-                            label={t('composeMessage.attachmentLabel')}
-                            value={`${attachment.name} (${attachment.size.toLocaleString()} bytes)`}
-                        />
-                    ) : null}
-                </dl>
-
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    unlocked={signerReady}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={stage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                    signerInfo={hwSignerInfo}
-                />
-            </FormPage>,
+                summary={{
+                    verb: t('composeMessage.sendMessage'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    recipient: toAddress.trim(),
+                }}
+                networkFee={selectedFeeEstimate?.coinAmount ? {
+                    amount: String(selectedFeeEstimate.coinAmount), ticker: nativeTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -1035,8 +949,16 @@ function ComposeMessageForm({
         return (
             <ActionConfirmScreen
                 {...handshakeLane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbRequestSession'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(toAddress.trim() ? { recipient: toAddress.trim() } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={selectedFeeEstimate}
                 signerReady={signerReady}
                 hintClassName={styles.hint}
                 hwSignerInfo={hwSignerInfo}
@@ -1056,8 +978,16 @@ function ComposeMessageForm({
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('composeMessage.sendMessage'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(toAddress.trim() ? { recipient: toAddress.trim() } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={fee}
                 feeText={fee?.coinAmount
                     ? t('composeMessage.feeSummary', { amount: `${fee.coinAmount} ${ticker}`.trim() })
                     : undefined}
@@ -1094,11 +1024,43 @@ function ComposeMessageForm({
         );
     }
 
+    // Own-address picker: opens filtered to the delivery network; picking an
+    // address on another network switches the form's Network to it (U60).
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title={t('send.fromAddress')}
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={(cid) => {
+                    setChainId(cid);
+                    if (submitError) setSubmitError(null);
+                }}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    // A section holding the last refusal gets a key that changes on every
+    // attempt, so it reopens even after being closed. errorSection is cleared
+    // at the start of each attempt, so it names only the latest refusal's section.
+    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt : 0);
+    const messageSummary = joinSummaryParts([
+        toAddress.trim() ? summaryLineWithAddress(t, 'send.summary.toAddressStart', 'address', toAddress.trim()) : null,
+        encryptionOptions.find((option) => option.value === encryptionValue)?.label || null,
+    ]);
+    const feeTicker = descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : '';
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label={t('composeMessage.newTitle')}
             onSubmit={handleReview}
+            errors={form}
             status={[
                 submitError ? (
                     <StatusMessage key="submit-error" variant="error" details={submitErrorDetails}>
@@ -1129,6 +1091,7 @@ function ComposeMessageForm({
                             id="compose-plaintext-cancel"
                             variant="secondary"
                             size="sm"
+                            icon={plaintextConfirmationPending === 'send' ? <Icon.XIcon /> : <Icon.LockIcon />}
                             onClick={() => setPlaintextConfirmationPending(false)}
                         >
                             {plaintextConfirmationPending === 'send' ? t('common.cancel') : t('composeMessage.keepEncrypted')}
@@ -1145,6 +1108,7 @@ function ComposeMessageForm({
                                 type="button"
                                 variant="secondary"
                                 size="sm"
+                                icon={<Icon.KeyIcon />}
                                 loading={handshakeBusy}
                                 onClick={handleRequestSession}
                             >
@@ -1165,21 +1129,77 @@ function ComposeMessageForm({
                     <StatusMessage key="key-lookup-error" variant="error">{pubkeyError}</StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                // The one standard action (green, with an icon).
+                <FormAction
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing || Boolean(messageError)}
                 >
                     {actionConfirm.composing ? t('composeMessage.preparingReview') : t('composeMessage.sendMessage')}
-                </Button>
+                </FormAction>
+            )}
+            /* The standard order. From (closed) holds the delivery
+               Network and the funding From address; Message (open)
+               holds the recipient, the message and the
+               encryption; then the Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={networkOptions.map((option) => option.value)}
+                    chainRegistry={chainRegistry}
+                    // The delivery network sets COIN, resolves the recipient's
+                    // key, funds the transaction and pays the fee.
+                    onNetworkChange={(v) => {
+                        setChainId(v);
+                        setFromAddressId(null);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    networkHelp={t('composeMessage.networkHelp')}
+                    // The funding address, auto-picked per network and
+                    // changeable through the own-address picker.
+                    address={fromAddress?.address || null}
+                    addressId={fromFieldId}
+                    formErrorKey={fromFieldId}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel={t('send.source.choose')}
+                    addressHelp={t('composeMessage.fromHelp')}
+                    revealKey={sectionErrorKey('from')}
+                />
+            )}
+            fee={(
+                // Low / Normal / Fast / Custom on the delivery network.
+                <FeeSection
+                    id={feeFieldId}
+                    formErrorKey={feeFieldId}
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={feeTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={(next) => {
+                        setFeePick(next);
+                        if (submitError) setSubmitError(null);
+                        if (handshakeError) setHandshakeError(null);
+                    }}
+                    customEstimate={customEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                />
             )}
         >
-            {/* 1. Address (recipient), with an address-book shortcut */}
+            <FormSection
+                id="message"
+                title={t('verifySignature.message')}
+                icon={Icon.MessageIcon}
+                {...formSections.bind('message')}
+                revealKey={sectionErrorKey('message')}
+                summary={messageSummary}
+            >
+            {/* 3. Address (recipient), with an address-book shortcut */}
             <AddressField
+                id={recipientFieldId}
                 label={t('verifySignature.address')}
+                help={t('composeMessage.recipientHelp')}
                 icon="contacts"
                 value={toAddress}
                 onChange={(e) => {
@@ -1196,9 +1216,11 @@ function ComposeMessageForm({
                 error={addressError}
             />
 
-            {/* 2. Message */}
+            {/* 4. Message */}
             <Textarea
+                id={messageFieldId}
                 label={t('verifySignature.message')}
+                help={t('composeMessage.messageHelp')}
                 value={message}
                 onChange={(e) => {
                     setMessage(e.target.value);
@@ -1206,50 +1228,22 @@ function ComposeMessageForm({
                 }}
                 rows={4}
                 placeholder={t('composeMessage.messagePlaceholder')}
-                hint={messageError
-                    ? undefined
-                    : t(sendUnencrypted ? 'composeMessage.byteCountPlain' : 'composeMessage.byteCountEncrypted', {
-                        bytes: wireMessageBytes.toLocaleString(),
-                        max: MAX_MESSAGE_BYTES.toLocaleString(),
-                    })}
+                counter={reachedEightyPercent(wireMessageBytes, MAX_MESSAGE_BYTES)
+                    ? t(sendUnencrypted ? 'composeMessage.byteCountPlain' : 'composeMessage.byteCountEncrypted', {
+                        bytes: formatBytes(wireMessageBytes),
+                        max: formatBytes(MAX_MESSAGE_BYTES, { limit: true }),
+                    })
+                    : undefined}
                 error={messageError}
                 style={{ minHeight: '4rem' }}
             />
 
-            <div>
-                <Input
-                    id="message-attachment"
-                    type="file"
-                    label={t('composeMessage.attachmentLabel')}
-                    optional
-                    accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
-                    onChange={handleAttachmentPick}
-                    hint={t('composeMessage.attachmentHint', { max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString() })}
-                    error={attachmentError}
-                />
-                {attachment ? (
-                    <p>
-                        {t('composeMessage.attached', { name: attachment.name, size: attachment.size.toLocaleString() })}{' '}
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                                attachmentReadIdRef.current += 1;
-                                setAttachment(null);
-                                setAttachmentError(null);
-                            }}
-                        >
-                            {t('send.recipient.remove')}
-                        </Button>
-                    </p>
-                ) : null}
-            </div>
-
-            {/* 3. Encryption. Locked (still visible) for thread replies: a
+            {/* 6. Encryption. Locked (still visible) for thread replies: a
                 conversation keeps the method it started with. */}
             <IconSelect
+                id={encryptionFieldId}
                 label={t('composeMessage.encryptionLabel')}
+                help={t('composeMessage.encryptionHelp')}
                 value={encryptionControlValue}
                 onChange={onEncryptionChange}
                 options={encryptionOptions}
@@ -1265,34 +1259,8 @@ function ComposeMessageForm({
                     {t('composeMessage.keyFound')}
                 </p>
             ) : null}
-            {/* 4. Delivery network */}
-            <IconSelect
-                label={t('composeMessage.deliveryNetworkLabel')}
-                value={chainId || ''}
-                onChange={(v) => {
-                    setChainId(v);
-                    setFromAddressId(null);
-                    if (submitError) setSubmitError(null);
-                }}
-                options={networkOptions}
-            />
-
-            {/* 5. Network fee (Low / Normal / Fast / Custom slider) */}
-            {feeTiers ? (
-                <FeeSelector
-                    label={t('send.networkFee')}
-                    coinTicker={descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : ''}
-                    formatFiat={fiatForFee}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={(next) => {
-                        setFeePick(next);
-                        if (submitError) setSubmitError(null);
-                        if (handshakeError) setHandshakeError(null);
-                    }}
-                    customEstimate={feePick.mode === 'custom' ? customEstimate : null}
-                />
-            ) : null}
+            </FormSection>
+            {/* 7. Network fee: the standard FeeSection, passed to FormFrame above. */}
 
             {/* The send's own failure, on the stage the send is pressed from.
                 On the confirm-page path the host composes and pre-flights
@@ -1302,15 +1270,6 @@ function ComposeMessageForm({
                 nowhere to render: only the review stage read `submitError`, so
                 Send message looked like a button that does nothing. Cleared by
                 the next edit of the address, message or delivery network. */}
-        </FormPage>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
+        </FormFrame>,
     );
 }

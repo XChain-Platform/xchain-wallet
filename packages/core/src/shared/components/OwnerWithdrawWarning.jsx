@@ -31,7 +31,7 @@ export function OwnerWithdrawWarning({ ownerWithdraw }) {
             variant="warning"
             role="note"
             testId="owner-withdraw-warning"
-            lead={t('components.ownerWithdrawWarning.deployerCanWithdraw')}
+            title={t('components.ownerWithdrawWarning.deployerCanWithdraw')}
         >
             {`${OWNER_WITHDRAW_WARNING} ${t('components.ownerWithdrawWarning.onlySendTokensHereIf')}`}
         </FormNotice>

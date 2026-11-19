@@ -178,19 +178,28 @@ export interface BridgeErrorResult {
 export interface ConnectOpts {
     // App-declared identity, shown in the approval modal (§43.4).
     appName?: string;
+    // Optional icon: an http(s) URL with a .png/.jpg/.jpeg/.webp/.gif/.ico
+    // path, or a base64 data URL of one of those types. SVG is refused. The
+    // wallet never fetches it: the extension draws it inside this page and
+    // keeps a PNG of at most 128x128 px and 32 KB, so a cross-origin URL must
+    // allow CORS. Without it (or if it fails) the wallet uses the page's own
+    // <link rel="icon"> / apple-touch-icon, else the site's initials.
     appIcon?: string;
     // Chain ids from getSupportedChains()[].id that the dApp wants to use.
     // Wallet presents these pre-selected; the user may narrow the set.
     // Unknown ids are not offered. Omit to show all supported chains.
     requestedChains?: ChainId[];
-    // Minimum bridge-spec semver range the dApp requires (e.g. '^1.2.0').
-    // Wallet warns the user if the installed wallet's bridge falls outside.
+    // Semver range the dApp requires (e.g. '^1.2.0'). If no supported
+    // version satisfies it, connect() fails with BRIDGE_VERSION_MISMATCH.
+    // Omit to skip negotiation.
     requiredBridgeVersion?: string;
 }
 
 export interface ConnectSuccess {
     ok: true;
     version: string;
+    // Lists every bridge-spec version the wallet can speak.
+    supportedVersions: string[];
     accounts: Account[];
     chains: ChainId[];
     permissions: SitePermissions;
@@ -239,8 +248,9 @@ export interface SendActionParams {
     memo?: string;
 }
 
-// Params for a SWEEP action (Phase 1) - empty a source of all of one asset,
-// or all assets if asset is omitted.
+// Params for a SWEEP action (Phase 1). SWEEP empties the source by category.
+// `asset` is reserved for future per-asset support; current wallets reject it
+// with INVALID_PARAMS rather than widening it into a whole-address sweep.
 export interface SweepActionParams {
     fromAddress: string;
     toAddress: string;
@@ -388,6 +398,8 @@ export interface SignInParams {
     expiresInMs?: number;
     // If set, wallet restricts the address picker to these chains.
     chains?: CoinId[];
+    // Restricts the address picker to one full chain id when set.
+    chainId?: ChainId;
 }
 
 // Structured form of the v2 challenge. The signed bytes are the string

@@ -34,6 +34,7 @@ function createMessaging() {
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN_ID]: SOURCE }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+        signMessageRequest: vi.fn().mockResolvedValue({ signature: 'draft-test-signature' }),
     };
     return new Proxy(target, {
         get(object, property) {
@@ -46,9 +47,9 @@ function createMessaging() {
     });
 }
 
-function mountForm() {
+function mountForm(messaging = createMessaging()) {
     return render(
-        <MessagingProvider shell="web" messaging={createMessaging()}>
+        <MessagingProvider shell="web" messaging={messaging}>
             <SignMessageForm walletId={WALLET_ID} onBack={() => {}} />
         </MessagingProvider>,
     );
@@ -87,7 +88,7 @@ describe('Sign message draft autosave', () => {
     it('stores nothing for a form left without message text', async () => {
         mountForm();
         const field = await screen.findByLabelText('Message');
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign message' })).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign Message' })).toBeInTheDocument());
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(localStorage.getItem(KEY)).toBeNull();
         fireEvent.change(field, { target: { value: 'typed' } });
@@ -117,10 +118,29 @@ describe('Sign message draft autosave', () => {
         }));
         mountForm();
         await screen.findByRole('button', { name: 'Restore' });
-        fireEvent.click(screen.getByRole('button', { name: 'Discard saved draft' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
+        expect(localStorage.getItem(KEY)).toBeNull();
+        expect(screen.queryByTestId('draft-notice')).toBeNull();
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'after discard' } });
         await waitFor(() => {
             expect(localStorage.getItem(KEY)).toContain('after discard');
         });
+    });
+
+    it('clears a signed draft and resumes saving when the signed message is edited', async () => {
+        const messaging = createMessaging();
+        mountForm(messaging);
+        const message = await screen.findByLabelText('Message');
+        await waitFor(() => expect(screen.getByLabelText('Signing address')).toHaveValue(SOURCE.address));
+        fireEvent.change(message, { target: { value: 'message to sign' } });
+        await waitFor(() => expect(localStorage.getItem(KEY)).toContain('message to sign'));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Message' }));
+
+        await waitFor(() => expect(screen.getByRole('textbox', { name: 'Signature' }))
+            .toHaveTextContent('draft-test-signature'));
+        expect(localStorage.getItem(KEY)).toBeNull();
+
+        fireEvent.change(message, { target: { value: 'edited after signing' } });
+        await waitFor(() => expect(localStorage.getItem(KEY)).toContain('edited after signing'));
     });
 });

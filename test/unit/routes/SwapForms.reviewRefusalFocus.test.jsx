@@ -54,7 +54,10 @@ describe.each([
                 {makeForm({})}
             </MessagingProvider>,
         );
-        const review = await screen.findByRole('button', { name: 'Review' });
+        const review = await screen.findByRole('button', {
+            // Form Standard action labels are Title Case verbs.
+            name: _name === 'SwapForm' ? 'Create Swap' : 'Create Cross-Chain Swap',
+        });
         review.focus();
         await waitFor(() => expect(review).toBeEnabled());
         fireEvent.click(review);

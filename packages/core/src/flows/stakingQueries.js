@@ -37,7 +37,12 @@ export async function readAllPages(read, opts) {
     if (!first || Array.isArray(first) || !Array.isArray(first.data)) return first;
     const total = Number(first.total);
     const pageSize = first.data.length;
-    if (!Number.isFinite(total) || pageSize === 0 || pageSize >= total) return first;
+    if (!Number.isFinite(total) || total <= 0 || pageSize >= total) return first;
+    // An empty first page under a positive total has no page size to step
+    // by, and returning it would show every sum as zero.
+    if (pageSize === 0) {
+        throw new Error(`The explorer sent 0 of ${total} rows, so the totals cannot be read yet.`);
+    }
     const pages = Math.ceil(total / pageSize);
     if (pages > MAX_PAGES) {
         throw new Error(`This address has ${total} rows, more than the wallet can read at once.`);
@@ -152,7 +157,7 @@ export async function validatorsForChain({ sdkRegistry, chainId, opts }) {
  * Per-capability MIN_STAKE thresholds for capability staking, read live
  * from the hub. Returns an array of { capability, min_stake, disabled }
  * rows, or null when the hub is unreachable / not configured (e.g. regtest)
- * or the linked SDK predates the getter. Backs StakeForm's live "which
+ * or the linked SDK predates the getter. Backs the Staking form's live "which
  * capabilities does this stake qualify for" readout. Capabilities are
  * global governance config; chainId only selects which SDK's hub to ask.
  *

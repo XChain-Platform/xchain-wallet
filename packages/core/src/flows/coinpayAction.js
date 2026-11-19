@@ -107,6 +107,7 @@ async function assertNoPaymentInFlight(opts, actionIndex, sourceAddress) {
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
  * @property {string} [actionSummary]  Override for the PendingTx History label (PC-16 auto-pay)
+ * @property {boolean} [scopedPayment]  locked auto pay lane; see submitAction
  */
 
 /**
@@ -319,6 +320,15 @@ export async function coinpayAction(opts) {
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
         actionData: { action: 'COINPAY', params },
+        // Manual and automatic payments both come through here. The encoder is
+        // a network service and this lane has no confirm screen, so its PSBT is
+        // held to the confirm pipeline's tamper checks before any signer runs:
+        // the payee output at the exact amount, the COINPAY carrier, change
+        // back to the source and nothing else.
+        verifyBuiltTx: true,
+        // Locked auto pay: no rotated change. It follows the automatic
+        // donation rule like every other send (§36, ruling 2026-11-14).
+        ...(opts.scopedPayment === true && { scopedPayment: true }),
         encoderOpts: {
             pubkey: source.publicKey,
             // Select funding UTXOs BY ADDRESS and return change to the payer.

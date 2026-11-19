@@ -62,11 +62,14 @@
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
+    approveConfirm,
     fundAddress,
-    selectVenueChain,
+    issuePlainToken,
+    readIssueSource,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -92,45 +95,36 @@ const RUN = String(Date.now()).slice(-6);
 const TICK_SHORT = `WCS${RUN}`;
 const TICK_LONG = `WCL${RUN}`;
 
-/**
- * Puts the wallet into watcher mode and waits for the write to land.
- *
- * A mode change stays pending behind a confirmation dialog, and the radio
- * shows the pending choice while it is open, so a checked radio alone does not
- * prove the write landed: the dialog closing does.
- */
-async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
-    await openPaletteCommand(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet mode\b/ }).click();
-    const radio = page.getByRole('radio', { name: label });
-    await expect(radio).toBeVisible({ timeout: 30_000 });
-    await radio.click();
-    const ask = page.getByRole('dialog', { name: /^Switch to .* mode\?$/ });
-    await ask.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
-    await expect(ask, `the ${mode} mode change never saved`).toBeHidden({ timeout: 30_000 });
-    await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
-}
-
 /** Fills the issue form and leaves it at the review stage, ready to build. */
 async function stageIssue(page, tick, description) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     // §3.5: every form carries its own chain picker and the wallet defaults to
     // Bitcoin. Skipping this composes on the contended chain instead of the one
     // the run was pointed at, which is a silently wrong-venue pass.
-    await selectVenueChain(main, 'Network');
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-    await main.getByLabel('Description (optional)').fill(description);
-    // Watcher mode is the branch that gets a review stage at all: full mode
-    // composes straight onto the confirm screen (single-encode).
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(main.getByRole('button', { name: 'Create transaction for signing', exact: true }),
+    await readIssueSource(main);
+    // The watcher review is the shared confirm screen, which says another
+    // device signs; its Approve builds the unsigned transaction.
+    await issuePlainToken(main, { ticker: tick, supply: SUPPLY, description });
+    await expect(page.getByTestId('confirm-modal').filter({ hasText: /Another phone signs for this wallet/i }),
         'the form did not reach the watcher review stage')
         .toBeVisible({ timeout: 30_000 });
     return main;
+}
+
+/**
+ * Builds the unsigned transaction from the watcher review (its Approve).
+ * approveConfirm re-taps through the settle window and pre-flight check, and
+ * throws when the screen shows an error; a build that is expected to be
+ * refused passes `refused` and the caller reads the refusal itself.
+ */
+async function createTransactionForSigning(page, { refused = false } = {}) {
+    if (refused) {
+        await approveConfirm(page, 'the watcher build').catch(() => {});
+        return;
+    }
+    await approveConfirm(page, 'the watcher build');
 }
 
 const hexBox = (page) => page.getByRole('textbox', { name: 'Unsigned transaction code' });
@@ -143,14 +137,16 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
         let source;
 
         await test.step('onboard, fund, and go watch-only', async () => {
-            await createWallet(page, { password: PASSWORD, name: 'Watcher Chunk Wallet' });
+            // The mode is chosen when the wallet is created and stays fixed.
+            await createWallet(page, {
+                password: PASSWORD, name: 'Watcher Chunk Wallet', walletMode: 'watcher',
+            });
             await switchToRegtest(page, PASSWORD);
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Network');
-            source = await main.getByLabel('From').inputValue();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(main);
             expect(source, 'this wallet has no address on the venue chain').toMatch(REGTEST_ADDRESS_RE);
 
             // Funding is not incidental: the encoder selects real UTXOs, and an
@@ -162,13 +158,11 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-
-            await setWalletMode(page, 'watcher');
         });
 
         await test.step('CONTROL: a short payload still exports an unsigned transaction', async () => {
-            const main = await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
+            await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
+            await createTransactionForSigning(page);
 
             const hex = hexBox(page);
             await expect(hex, 'the watcher lane produced no unsigned transaction for a payload that '
@@ -189,11 +183,12 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             // Back via the panel's own control: re-selecting "Issue token" while
             // the route is already mounted changes no state, so the form would
             // stay on its result screen (D-117's shape).
-            await page.getByRole('button', { name: 'Build another', exact: true }).click();
-            const main = await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
+            await page.getByRole('button', { name: 'Build Another', exact: true }).click();
+            await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
+            await createTransactionForSigning(page, { refused: true });
 
-            const alert = page.getByRole('main').getByRole('alert')
+            // The refusal may land on the confirm screen's own error slot.
+            const alert = page.getByRole('main').getByRole('alert').or(page.getByTestId('confirm-error'))
                 .filter({ hasText: /too large for one transaction/i }).first();
             await expect(alert, 'the wallet said nothing about an action it can only half-build')
                 .toBeVisible({ timeout: 120_000 });
@@ -219,9 +214,15 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
                 + 'commit with no reveal, and signing it spends coin into a script nothing can open')
                 .toHaveCount(0);
 
-            // A way out, rather than a dead end (D-134 / D-151 family).
-            await expect(page.getByRole('button', { name: 'Edit', exact: true }),
-                'the refusal left the user on a screen with no way back to the form')
+            // A way out, rather than a dead end (D-134 / D-151 family). The
+            // refusal stays on the confirm screen (G127), whose Reject returns
+            // to the form.
+            const reject = page.getByTestId('confirm-reject');
+            await expect(reject, 'the refusal left the user on a screen with no way back to the form')
+                .toBeVisible({ timeout: 30_000 });
+            await reject.click();
+            await expect(fieldByLabel(page.getByRole('main'), 'Ticker'),
+                'Reject on the refused build did not return to the Issue form')
                 .toBeVisible({ timeout: 30_000 });
         });
     });

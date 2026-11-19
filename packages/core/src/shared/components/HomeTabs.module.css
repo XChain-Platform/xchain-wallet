@@ -1,15 +1,25 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    /* 8px between every Home block. */
+    gap: var(--xc-space-2);
     width: 100%;
 }
 
 .tabsRow {
+    /* What the row gives to controls beside the tabs; the narrow sizing
+       below leaves it out of the room the labels can use. */
+    --home-tabs-aside: 0px;
     display: flex;
     align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+/* The list filter button (U72) shares the row: one square control and the
+   row gap. */
+.tabsRowWithFilter {
+    --home-tabs-aside: calc(var(--xc-control-h-md) + var(--xc-space-2));
 }
 
 .tabsRow > [role='tablist'] {
@@ -17,71 +27,29 @@
     width: auto;
 }
 
+/* The tabs share the row evenly, as every view toggle does. */
 .tabsRow [role='tab'] {
-    flex: 0 0 auto;
+    flex: 1 1 0;
     white-space: nowrap;
 }
 
-.sortControl {
-    display: flex;
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-    height: var(--xc-control-h-md);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.sortCompactValue,
-.sortCompactIcon {
-    display: none;
-}
-
-.sortSelect {
-    height: 100%;
-    min-height: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    font: inherit;
-}
-
-.sortSelect:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
 @media not all and (min-width: 600px) {
-    .tabsRow {
-        flex-direction: column;
-        gap: var(--xc-space-2);
-    }
-
-    /* The tab row has the whole width here. The five labels take about
-       16.4em at the tab font size on the widest text rendering a platform
-       gives Inter (hinted, whole-pixel advances run several percent wider
-       than the unhinted measure), so each tab's side padding gives way, down
-       to 1px, when the 12px default would push Activity behind a sideways
-       scroll: a 320px phone, or 130 and 150 percent text. When even 1px of
-       padding cannot hold the labels, the tab font size gives way to what
-       the row can carry, so the tabs never scroll sideways. Rows with room
-       keep the 12px padding and the token font size unchanged. A WebView
-       without container queries keeps the 12px padding and the scrolling
-       row. */
+    /* The tab row has the whole width here. The four labels (Coins, Tokens,
+       NFTs, DeFi) take about 11em at the tab font size on the widest text
+       rendering a platform gives Inter, and the rest of the row is fixed:
+       four 16px icons, their gaps, the tabs' side padding and the dividers,
+       about 136px. When a 320px phone or 130 and 150 percent text leaves the
+       labels less than that, the tab font size gives way to what the row can
+       carry, so no label runs into its neighbour and the tabs never scroll
+       sideways. Rows with room keep the token font size unchanged. A WebView
+       without container queries keeps the token size and the scrolling row. */
     @supports (container-type: inline-size) and (width: 1cqw) {
         .tabsRow {
             container-type: inline-size;
         }
 
         .tabsRow [role='tab'] {
-            font-size: min(var(--xc-text-sm), calc((100cqw - 10px) / 16.4));
-            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 16.4em) / 10), var(--xc-space-3));
+            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 136px) / 11));
         }
     }
 
@@ -89,66 +57,6 @@
         width: 100%;
     }
 
-    .sortControl {
-        align-self: flex-end;
-    }
-}
-
-@media (max-width: 420px) {
-    .sortControl {
-        position: relative;
-        justify-content: center;
-        gap: var(--xc-space-1);
-        padding: 0 var(--xc-space-2);
-        border: 1px solid var(--xc-border-strong);
-        border-radius: var(--xc-control-radius);
-        background: var(--xc-surface);
-        color: var(--xc-text);
-    }
-
-    .sortControl:focus-within {
-        outline: 2px solid var(--xc-focus-ring);
-        outline-offset: -2px;
-    }
-
-    /* The "Sort balances" label stays visible here: the sort control sits on
-       its own row under the tabs below 600px, so there is room for it at every
-       phone width, and a bare value with a chevron did not say what it sorted. */
-    .sortLabel {
-        color: var(--xc-text-muted);
-        white-space: nowrap;
-    }
-
-    .sortCompactValue,
-    .sortCompactIcon {
-        display: inline-flex;
-        align-items: center;
-        pointer-events: none;
-    }
-
-    .sortCompactIcon {
-        width: var(--xc-control-icon-sm, var(--xc-icon-sm));
-        height: var(--xc-control-icon-sm, var(--xc-icon-sm));
-    }
-
-    .sortCompactIcon > svg {
-        width: 100%;
-        height: 100%;
-    }
-
-    .sortSelect {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        min-height: 0;
-        opacity: 0;
-        cursor: pointer;
-        font-size: 16px;
-    }
-
-    .sortSelect:focus-visible {
-        outline: none;
-    }
 }
 
 /* ───── Tab panel ───── */
@@ -180,158 +88,123 @@
     overflow: hidden;
 }
 
-/* The Activity tab's rows carry no border of their own; a divider runs
-   between them, as in History. */
+/* The Activity and DeFi tabs' rows carry no border of their own; a divider
+   runs between them, as in History. */
 .activityList > li + li {
     border-top: 1px solid var(--xc-border);
 }
 
-/* Small action-type glyph rendered next to the action label on both
-   Activity and DeFi rows. Accent-coloured 16px square that aligns
-   with the row's first-line text. */
-.activityActionIcon {
+/* The full-width See all activity button that closes the Activity tab sits
+   one step below the row list. */
+.seeAllActivity {
+    margin-top: var(--xc-space-3);
+}
+
+/* An icon beside each Home tab label. */
+.tabWithIcon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.tabIcon {
     --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
     flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-accent-text);
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
 }
 
-/* Square token icon for any non-native token (XCHAIN, XCP, NFTs,
-   etc.) so the visual cleanly separates "this row is about a token"
-   from "this row is about a native coin" (which uses the circular
-   chain icon via balanceStyles.iconImg). Sized 48px to fill the same
-   wrap, with subtle corner-rounding so it doesn't feel pixel-flush. */
-.tokenIconSquare {
-    width: 48px;
-    height: 48px;
-    object-fit: cover;
-    display: block;
-    border-radius: var(--xc-radius-sm);
+
+/* The balance content and its full-bleed chart share one clipped surface. */
+.heroStack {
+    display: grid;
+    position: relative;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-hero-border);
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-hero-bg);
+    box-shadow: var(--xc-hero-shadow);
+    overflow: hidden;
+    color: var(--xc-hero-text);
 }
 
-/* Status pill used in DeFi rows. Matches History.module.css `.statusPill`
-   (full rounded pill, same font sizing) so the validity badge reads
-   identically across History and DeFi. `margin-inline-start: auto`
-   pushes it to the trailing edge of the row's first line. */
-.statusBadge {
-    margin-inline-start: auto;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.6;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-.statusValid {
-    background: color-mix(in srgb, var(--xc-success) 18%, transparent);
-    color: var(--xc-success);
-}
-.statusInvalid {
-    background: color-mix(in srgb, var(--xc-danger) 18%, transparent);
-    color: var(--xc-danger-fg);
-}
-.statusPending {
-    background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
-    color: var(--xc-warning);
+/* Forced-colors mode drops the app blue, so the card pins both halves. */
+@media (forced-colors: active) {
+    .heroStack {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
 }
 
-/* DeFi rows navigate to ActionDetail. The divider lives on the button so
-   the list's first item can skip the top border. */
-.demoRowButton {
-    appearance: none;
-    background: transparent;
-    border: none;
-    border-top: 1px solid var(--xc-border);
-    width: 100%;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    cursor: pointer;
-    color: inherit;
-    text-align: start;
-    font-family: inherit;
-    font-size: inherit;
-}
-.demoList > li:first-child > .demoRowButton { border-top: none; }
-.demoRowButton:hover { background: var(--xc-bg-muted); }
-.demoRowButton:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.demoRowBody {
-    flex: 1 1 auto;
+.heroStack > * {
+    grid-area: 1 / 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
 }
 
-.demoRowMain {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    flex-wrap: wrap;
+.heroStack > section:first-child {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    pointer-events: none;
 }
 
-/* Action label on the row's first line. Plain bold uppercase text
-   (no pill background) so the leading edge aligns flush with the
-   primary line below and the meta line below that, matching the
-   History row's `.actionBadge` treatment. */
-.demoActionTag {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--xc-text);
+.heroStack > section:first-child button,
+.heroStack > section:first-child [role='menu'] {
+    pointer-events: auto;
 }
 
-.demoRowPrimary {
-    font-size: var(--xc-text-md);
-    font-weight: 700;
-    color: var(--xc-text);
+/* Set by the card's component when a chart is drawn behind it (Safari 16
+   has no :has()), so the range chips at the foot clear the figures. */
+.heroStackWithChart > section:first-child {
+    padding-bottom: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
 }
 
-.demoRowMeta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
+.heroStackWithChart {
+    min-height: 160px;
 }
 
-/* Confirmation count pill. Mirrors History.module.css `.confirmationsPill`
-   so a DeFi row's meta line reads identically to the History timeline. */
-.confirmationsPill {
+/* The Home tabs take the shared view-toggle look (SegmentedControl.module.css). */
+
+/* Inside the row the tabs share the width evenly while they fit; a tab never
+   shrinks below its icon and label (the shared min-width: max-content), so a
+   longer label such as Tokens takes room from a shorter one instead of
+   running into its neighbour. The side padding stays tight enough that all
+   four tabs fit beside the filter button on a 360px popup. */
+.tabsRow.tabsRow [role='tab'] {
+    flex: 1 1 0;
+    padding-inline: var(--xc-space-1);
+}
+
+/* The DeFi rows' forward chevron, at the Back chevron's size like the Coins
+   and Tokens rows (BalanceList .rowChevron): a 32px icon box that gives back
+   its empty sides so the stroke meets the row's padding. */
+.rowChevron {
+    --xc-icon-size: 32px;
     display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-text);
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.7;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
 }
 
-/* Trailing-edge relative timestamp. Mirrors History's `.rowRelativeTime`. */
-.rowRelativeTime {
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* A DeFi row is two lines: the action and its status badge on top, the amount
+   and date under them, the chevron down the right edge. Tripled selector to
+   outrank ActivityRow's narrow width areas. */
+.defiRow.defiRow.defiRow {
+    grid-template-areas:
+        "mark label label status trailing"
+        "mark primary primary time trailing";
+    /* A Coins or Tokens row's height: its content floor plus the shared
+       row inset above and below (BalanceList .row and .rowContent). */
+    min-height: calc(var(--xc-control-h-lg) + 2 * var(--xc-list-row-padding));
+    box-sizing: border-box;
 }

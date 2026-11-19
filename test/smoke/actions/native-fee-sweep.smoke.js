@@ -8,12 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the PC-51 sweep: every quotable authoring form mounts the shared
-// NativeFeeToggle through the useNativeFee hook and threads the flag into its
-// flow, and every quotable flow forwards it into submitAction's encoderOpts.
-// Guards the "one form forgot one lane" regression class the hook exists to
-// prevent, and pins the NativeFeeToggle doc to the quotable-set rule (the
-// stale ISSUE/ORDER/SWAP/DISPENSER-only claim must not come back).
+// Smoke for native-fee policy adoption: fee-bearing forms offer the shared
+// control, while fee-free forms keep only any chain-required submit flag.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -26,14 +22,13 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const routes = (f) => read('packages', 'core', 'src', 'shared', 'routes', f);
 const flows = (f) => read('packages', 'core', 'src', 'flows', f);
 
-// ---- forms newly threaded by the sweep: toggle mounted via the hook, flag
-// present in every payload it builds ----
+// ---- fee-bearing forms: toggle mounted via the hook, flag present in every
+// payload they build ----
 const SWEEP_FORMS = [
     'CreateOrderForm.jsx', 'DividendForm.jsx', 'AirdropForm.jsx',
-    'BroadcastForm.jsx', 'ListCreateForm.jsx', 'ListForkForm.jsx',
-    'DestroyForm.jsx', 'LinkForm.jsx', 'SleepForm.jsx',
-    'PublishFileForm.jsx', 'AttachContentForm.jsx', 'OracleForm.jsx',
-    'CallbackForm.jsx', 'SweepForm.jsx', 'TokenAdminForm.jsx',
+    // The one List form; its Edit and Fork body was ListForkForm.jsx.
+    'ListCreateForm.jsx',
+    'CallbackForm.jsx', 'SweepForm.jsx',
     // Added 2026-08-01. It was on NEITHER list, so this smoke passed
     // while the one authoring surface for an ownership sale composed ORDER and
     // DISPENSER with no fee output at all: on LTC/DOGE the transaction
@@ -46,19 +41,42 @@ const SWEEP_FORMS = [
 for (const f of SWEEP_FORMS) {
     const src = routes(f);
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
-    assert.match(src, /<NativeFeeToggle/, `${f} renders the toggle`);
+    // The toggle renders inside the standard Network fee section: either the
+    // form mounts it directly, or it hands its toggle props to the fee card.
+    assert.match(src, /<NativeFeeToggle|nativeFeeProps:/, `${f} renders the toggle`);
     assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
     // The spread is what carries `mandatory` to the toggle; hand-picking
     // checked/onChange instead would silently drop it and re-open the opt-in on
     // a chain that has no other fee lane.
-    assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
+    assert.match(src, /(\.\.\.|nativeFeeProps: )nativeFee\.toggleProps\b/, `${f} passes the whole toggleProps`);
 }
+
+const FEELESS_FORMS = [
+    'AddressPreferencesForm.jsx', 'AttachContentForm.jsx', 'BroadcastForm.jsx',
+    'DestroyForm.jsx', 'LinkForm.jsx', 'OracleForm.jsx',
+    'PublishFileForm.jsx', 'SleepForm.jsx', 'TokenAdminForm.jsx',
+];
+for (const f of FEELESS_FORMS) {
+    const src = routes(f);
+    assert.match(src, /nativeFeeForFeelessAction/, `${f} derives the chain-required flag`);
+    assert.doesNotMatch(src, /useNativeFee/, `${f} does not mount interactive fee state`);
+    assert.doesNotMatch(src, /NativeFeeToggle/, `${f} shows only the Network fee field`);
+    assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
+}
+
+// MINT is protocol-fee-free on every chain, including chains that require a
+// native fee for priced actions. It must not derive or send a native-fee flag.
+const mint = routes('MintForm.jsx');
+assert.doesNotMatch(mint, /nativeFeeForFeelessAction/, 'MintForm does not derive a native-fee flag');
+assert.doesNotMatch(mint, /useNativeFee/, 'MintForm does not mount interactive fee state');
+assert.doesNotMatch(mint, /NativeFeeToggle/, 'MintForm does not render a native-fee toggle');
+assert.doesNotMatch(mint, /payFeeInNativeCoin/, 'MintForm does not send a native-fee flag');
 
 // ---- pre-PC-51 toggle forms migrated onto the shared hook ----
 const MIGRATED = [
     ['routes', 'IssueTokenForm.jsx'], ['routes', 'SwapForm.jsx'],
-    ['routes', 'DispenserForm.jsx'], ['routes', 'TokenWizard.jsx'],
-    ['routes', 'AdvancedActionsForm.jsx'], ['routes', 'MintForm.jsx'],
+    ['routes', 'DispenserForm.jsx'],
+    ['routes', 'AdvancedActionsForm.jsx'],
     ['components', 'PlaceOrderPanel.jsx'],
 ];
 for (const [dir, f] of MIGRATED) {
@@ -70,7 +88,7 @@ for (const [dir, f] of MIGRATED) {
     );
     // A form that hides `mandatory` would render an unticked opt-in on
     // LTC/DOGE, which is the pre-fix bug wearing the post-fix hook.
-    assert.match(src, /mandatory=\{nativeFeeMandatory\}/, `${f} passes mandatory to the toggle`);
+    assert.match(src, /mandatory(=\{|: )nativeFeeMandatory/, `${f} passes mandatory to the toggle`);
 }
 
 // ----: no form may call the hook without naming its chain ----
@@ -148,13 +166,14 @@ for (const f of BET_FORMS) {
     const src = routes(f);
     assert.match(src, /import \{ useNativeFee \}/, `${f} uses the useNativeFee hook`);
     assert.doesNotMatch(src, /useNativeFee\(\s*\)/, `${f} passes its chain to useNativeFee`);
-    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}/,
+    assert.match(src, /<NativeFeeToggle \{\.\.\.nativeFee\.toggleProps\}|nativeFeeProps: nativeFee\.toggleProps\b/,
         `${f} renders the toggle with the whole toggleProps (so `
         + 'mandatory survives)');
     // BOTH lanes: the flag has to be in the composed PSBT the user approves AND
     // in the submit that signs it. A form that threaded only one would preview
     // a fee output it never pays for, or pay for one nobody previewed.
-    const composeIdx = src.indexOf('messaging.composeBetForConfirm({');
+    // G98: the Advanced section's choices wrap the compose request.
+    const composeIdx = src.indexOf('messaging.composeBetForConfirm(withAdvancedOptions({');
     assert.ok(composeIdx !== -1, `${f} composes through the BET route`);
     // The window spans the compose call and the submit beside it; BetFeedDetail
     // re-reads the market between them, so the submit sits about 950 characters on.
@@ -285,7 +304,18 @@ const EXEMPT = new Map([
     // BATCH lane, fee-quote denied.
     ['BatchComposerForm.jsx', 'BATCH is fee-quote denied'],
     ['GatedPublishForm.jsx', 'BATCH lane, fee-quote denied'],
+    // Each declares a kind (SWAP_KIND, ORDER_KIND) and renders
+    // TradeOwnerActionForm with it; that shared form mounts useNativeFee and
+    // threads the flag, and the scan holds it to that below.
+    ['MySwapsView.jsx', 'Edit and Cancel Swap compose in TradeOwnerActionForm, which threads payFeeInNativeCoin'],
+    ['OrderActionPanel.jsx', 'Edit and Cancel Order compose in TradeOwnerActionForm, which threads payFeeInNativeCoin'],
 ]);
+{
+    const owner = routes('TradeOwnerActionForm.jsx');
+    assert.match(owner, /import \{ useNativeFee \}/, 'TradeOwnerActionForm uses the useNativeFee hook');
+    assert.match(owner, /payFeeInNativeCoin: true/, 'TradeOwnerActionForm threads the native-fee flag into its payloads');
+    assert.match(owner, /nativeFeeProps: \{ \.\.\.nativeFee\.toggleProps\b/, 'TradeOwnerActionForm passes the whole toggleProps');
+}
 
 for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
     const src = routes(file);

@@ -63,7 +63,7 @@ describe('storeVersionFromTag', () => {
     });
 
     it('places each field in its own decimal slot', () => {
-        expect(storeVersionFromTag('v1.0.0')).toBe(10000050);
+        expect(storeVersionFromTag('v9.8.7')).toBe(90080750);
         expect(storeVersionFromTag('v0.1.0')).toBe(10050);
         expect(storeVersionFromTag('v0.0.1')).toBe(150);
         expect(storeVersionFromTag('v2.34.56')).toBe(20345650);
@@ -98,7 +98,7 @@ describe('storeVersionFromTag', () => {
             'v0.333.1-respin.1',
             'v0.333.2',
             'v0.334.0',
-            'v1.0.0',
+            'v9.8.7',
         ];
         const codes = sequence.map(storeVersionFromTag);
         for (let i = 1; i < codes.length; i += 1) {

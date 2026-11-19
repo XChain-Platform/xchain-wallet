@@ -8,74 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { BROADCAST_MESSAGE_TYPES } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
+
 // Host messages that sign a transaction and then broadcast it or persist it
 // (pending record, broadcast queue entry, multisig session state). Cutting
 // one of these off mid-flight can leave a broadcast transaction the wallet
-// never recorded, so quit waits for them.
-//
-// Derived from the extension background host: every type registered through
-// its hardware-signer wrapper plus the software twin of each, every handler
-// that wires a broadcast-failure fallback, and the explicit broadcast and
-// queue steps. Reads, quotes, compose-for-confirm previews, unsigned PSBT
-// builders and sign-and-return calls are left out on purpose: they leave no
-// half-written state, and counting them let any slow read block quit.
-const SIGNED_ACTIONS = [
-    'action.send',
-    'action.sweep',
-    'action.issue',
-    'action.mint',
-    'action.destroy',
-    'action.callback',
-    'action.sleep',
-    'action.broadcast',
-    'action.oraclePrice',
-    'action.addressPrefs',
-    'action.deployChunked',
-    'action.dispenser',
-    'action.dividend',
-    'action.createList',
-    'action.airdrop',
-    'action.advanced',
-    'action.order',
-    'action.cancelOrder',
-    'action.editOrder',
-    'action.coinpay',
-    'action.swap',
-    'action.link',
-    'action.file',
-    'action.gatedPublish',
-    'action.message',
-    'messaging.handshake',
-    'action.deploy',
-    'action.execute',
-    'action.deposit',
-    'action.withdraw',
-    'action.stake',
-    'action.unstake',
-    'action.collect',
-    'action.delegate',
-    'action.revokeDelegation',
-    'action.createPoll',
-    'action.castBallot',
-    'action.delegateVote',
-    'action.createMarket',
-    'action.placeBet',
-    'action.resolveMarket',
-    'action.cancelMarket',
-    'action.editBetFeedLists',
-    'action.clearVoteDelegation',
-    'action.contractStake',
-];
-
+// never recorded, so quit waits for them. The broadcasting routes are core's
+// one list (shared/utils/broadcastRoutes.js); a queue enqueue persists a
+// signed transaction without broadcasting it, so it is added here.
 export const QUIT_DEFERRING_MESSAGE_TYPES = new Set([
-    ...SIGNED_ACTIONS,
-    ...SIGNED_ACTIONS.map((type) => `${type}.hw`),
-    'wallet.publishLabels',
-    'tx.replace',
-    'broadcast.signedTx',
-    'broadcast.queue.broadcast',
+    ...BROADCAST_MESSAGE_TYPES,
     'broadcast.queue.enqueue',
-    'multisigSign.finalize',
 ]);
 
 /**

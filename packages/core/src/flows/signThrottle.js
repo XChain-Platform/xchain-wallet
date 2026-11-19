@@ -168,9 +168,33 @@ export function createSignThrottle(opts = {}) {
         // so re-persisting is redundant.
     }
 
+    /**
+     * Read-only live status for Settings: the limits in force and, for each
+     * origin with requests still inside the window, how many it has used and
+     * how long until it may ask again (0 while under the limit). One pass over
+     * the buckets, no mutation and no persist.
+     *
+     * @returns {{ burst: number, windowMs: number, sites: Array<{ origin: string, used: number, waitMs: number }> }}
+     */
+    function status() {
+        const { burst, windowMs } = getLimits();
+        const t = now();
+        const cutoff = t - windowMs;
+        const sites = [];
+        for (const [origin, list] of buckets) {
+            const fresh = list.filter((ts) => ts > cutoff);
+            if (fresh.length === 0) continue;
+            const waitMs = fresh.length >= burst ? Math.max(0, fresh[0] + windowMs - t) : 0;
+            sites.push({ origin, used: fresh.length, waitMs });
+        }
+        sites.sort((a, b) => (b.waitMs - a.waitMs) || (b.used - a.used) || a.origin.localeCompare(b.origin));
+        return { burst, windowMs, sites };
+    }
+
     return {
         check,
         clear,
+        status,
         snapshot,
         seed,
         // Static fields kept for back-compat. Callers reading these

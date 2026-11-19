@@ -57,7 +57,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -89,35 +91,27 @@ const RECIPIENTS = [
 const TOTAL_SENT = 11;
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 /**
- * The FIRST recipient's amount field.
- *
- * The extra rows are `Recipient N amount`, so anchoring on a leading "Amount"
- * keeps this to row one. A bare substring would match all three and trip
- * strict mode, which is the good outcome; asserting on the wrong row silently
- * would not be.
+ * The one amount field on screen: Single's, or the open Multi add-recipient
+ * form's. Only one is ever drawn, so a second match trips strict mode, which
+ * is the good outcome; asserting on the wrong field silently would not be.
  */
 function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
 }
 
 /**
- * An extra recipient's address field.
- *
- * `combobox`, not `textbox`: every address input in the wallet is an
- * AddressCombobox (it suggests contacts and own addresses), and the role it
- * reports is the combobox. The first row is reached by its "To" label instead,
- * which is why only these rows need saying out loud.
+ * Multi's add-recipient form: Add Recipient opens it with the last row's
+ * asset, To and Amount are filled, and Add collapses it into a row.
  */
-function recipientAddressField(page, n) {
-    return page.getByRole('combobox', { name: `Recipient ${n} address` });
-}
-
-function recipientAmountField(page, n) {
-    return page.getByRole('textbox', { name: `Recipient ${n} amount` });
+async function addMultiRecipient(page, { address, amount }) {
+    await page.getByRole('button', { name: 'Add Recipient' }).click();
+    await toField(page).fill(address);
+    await amountField(page).fill(amount);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
 }
 
 /**
@@ -212,10 +206,9 @@ test.describe('multi-recipient SEND on regtest', () => {
         await test.step('fill three recipient rows on the real Send form', async () => {
             await gotoSection(page, 'Send');
 
-            // Native BTC has no multi-leg action form, so "+ Add recipient" is
-            // deliberately absent until a TOKEN is selected. Picking XCHAIN
-            // first is therefore part of the flow, not setup.
-            await expect(page.getByRole('button', { name: '+ Add recipient' })).toHaveCount(0);
+            // The Single tab sends to one recipient; several are the Multi
+            // tab's list, so Single draws no add-recipient control at all.
+            await expect(page.getByRole('button', { name: 'Add Recipient' })).toHaveCount(0);
 
             // Was three lines that searched for XCHAIN and clicked the first
             // "Open XCHAIN details" row - which is CHAIN-BLIND: every chain
@@ -225,17 +218,20 @@ test.describe('multi-recipient SEND on regtest', () => {
             await toField(page).fill(RECIPIENTS[0].address);
             await amountField(page).fill(RECIPIENTS[0].amount);
 
+            // Single's complete recipient opens as Multi's first row; each
+            // further one is added through the add-recipient form.
+            await page.getByRole('tab', { name: 'Multi' }).click();
+            await expect(page.getByTestId('send-multi-row')).toHaveCount(1);
             for (let i = 1; i < RECIPIENTS.length; i++) {
-                await page.getByRole('button', { name: '+ Add recipient' }).click();
-                await recipientAddressField(page, i + 1).fill(RECIPIENTS[i].address);
-                await recipientAmountField(page, i + 1).fill(RECIPIENTS[i].amount);
+                await addMultiRecipient(page, RECIPIENTS[i]);
             }
+            await expect(page.getByTestId('send-multi-row')).toHaveCount(RECIPIENTS.length);
 
             // The form's own arithmetic, before anything is composed: one
             // network fee for the whole list is the claim the multi-recipient
             // path is FOR, and it is the number the user decides on.
             await expect(page.getByRole('main'))
-                .toContainText(`Total: ${TOTAL_SENT} XCHAIN across 3 recipients, in one transaction and one network fee.`);
+                .toContainText(`Total: ${TOTAL_SENT} XCHAIN to 3 recipients, in one transaction with one network fee.`);
         });
 
         await test.step('the confirm surface names every leg, then signs once', async () => {
@@ -248,34 +244,34 @@ test.describe('multi-recipient SEND on regtest', () => {
             // the intent is described from the COMPOSED action, and describing
             // a repeated-field SEND as if it were a single one named the first
             // recipient while paying two more people. The summary now
-            // states the total, the chain and the count, and every leg is
+            // states the total and count, and every leg is
             // itemised below it.
-            const intent = page.getByTestId('action-intent');
-            await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on ${REGTEST_CHAIN_LABEL} to 3 recipients`);
-            // Each leg is its own detail row: the confirm surface labels them
-            // "To 1", "To 2", ... (ConfirmActionModal reviewDetailLabel), and
-            // the value names the amount and the full address of that leg, so
-            // a mis-ordered or missing leg fails on its own row.
-            for (let i = 0; i < RECIPIENTS.length; i++) {
-                const leg = intent.locator('dl > div')
-                    .filter({ has: page.locator('dt', { hasText: new RegExp(`^To ${i + 1}$`) }) });
-                await expect(leg, `the confirm surface lists no "To ${i + 1}" leg`).toHaveCount(1);
-                await expect(leg.locator('dd'))
-                    .toHaveText(`${RECIPIENTS[i].amount} XCHAIN to ${RECIPIENTS[i].address}`);
-            }
+            await expect(page.getByTestId('confirm-sentence'))
+                .toContainText(`Send ${TOTAL_SENT} XCHAIN to 3 recipients`);
+            // The Confirm Standard's multi-send summary (G127): one fact row
+            // per asset, its total and recipient count, and no row per
+            // destination, so a list of any length stays one screen
+            // (ConfirmActionModal's unit test pins zero confirm-recipient
+            // rows). Each leg's address and amount is proven on chain below.
+            const facts = page.getByTestId('confirm-facts');
+            await expect(facts.getByTestId('confirm-asset-label')).toHaveText(['XCHAIN']);
+            await expect(facts.getByTestId('confirm-asset-summary'))
+                .toHaveText([`${TOTAL_SENT} to ${RECIPIENTS.length} recipients`]);
+            await expect(page.getByTestId('confirm-recipient')).toHaveCount(0);
 
             // A real dry-run against the indexer, on a three-leg action. The
             // §4.7 reservation covers the SUM of the primary tick; reserving
             // only the first row would leave this affordable-looking and fail
-            // later, so a "Will likely fail" here is a real finding.
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+            // later, so a "Will likely fail" here is a real finding. A token SEND always
+            // carries the transfer rules the network judges at settlement, so an approval
+            // reads as the blue settle-time note (operator 2026-11-18).
+            await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'settleChecks');
 
-            // The footer action names what it signs: one verb over the SUM of
-            // the legs, so a leg dropped from the composed action shows here too.
+            // The docked footer is Reject and Approve (G127); the sentence
+            // above states the SUM of the legs, so a dropped leg shows there.
             const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toHaveText(`Send ${TOTAL_SENT} XCHAIN`);
-            await expect(approve).toBeEnabled();
-            await approve.click();
+            await expect(approve).toHaveText('Approve');
+            await approveConfirm(page);
 
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
                 .toBeVisible({ timeout: 180_000 });

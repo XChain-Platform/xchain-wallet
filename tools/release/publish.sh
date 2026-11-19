@@ -482,6 +482,18 @@ fi
 echo "publish.sh: verifying the signed release before upload ..." >&2
 bash "$HERE/verify.sh" --input "$INPUT_DIR" --tag "$TAG" >&2
 
+# dev-mock publish gate begin
+# verify.sh warns, but this effector must refuse before any release byte moves.
+M_GATE="$(xr_header_field "$MANIFEST" "dev-mock-gate")"
+if [[ "$M_GATE" != "enforced" ]]; then
+    echo "publish.sh: $MANIFEST records the dev-mock gate as '${M_GATE:-unrecorded}', not 'enforced'; refusing to publish $TAG." >&2
+    echo "  The gate keeps the fabricated-address dev SDK, which cannot sign or" >&2
+    echo "  broadcast, out of a shipped bundle. Nothing was uploaded. Re-sign the" >&2
+    echo "  release with the gate running." >&2
+    exit 1
+fi
+# dev-mock publish gate end
+
 BASE="$(target_path)"
 MANIFEST_REMOTE="$BASE/$MANIFEST_REL"
 
@@ -555,8 +567,24 @@ YMLS=()
 while IFS= read -r line; do [[ -n "$line" ]] && YMLS+=("$line"); done < <(
     xr_list_update_info "$INPUT_DIR")
 BINARIES=()
-while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done < <(
-    xr_list_artifacts "$INPUT_DIR")
+# artifact list gate begin
+# Capture the result because set -e does not observe a process substitution's
+# status. A failed listing must stop before the manifest or pointers upload.
+if ! ARTIFACT_LIST="$(xr_list_artifacts "$INPUT_DIR")"; then
+    echo "publish.sh: could not list the artifacts in $INPUT_DIR; refusing to publish $TAG." >&2
+    echo "  Nothing was uploaded. See the artifact listing error above." >&2
+    exit 1
+fi
+while IFS= read -r line; do [[ -n "$line" ]] && BINARIES+=("$line"); done <<< "$ARTIFACT_LIST"
+
+M_ARTIFACTS="$(xr_header_field "$MANIFEST" "artifacts")"
+if [[ ! "$M_ARTIFACTS" =~ ^[0-9]+$ || "${#BINARIES[@]}" -ne "$M_ARTIFACTS" ]]; then
+    echo "publish.sh: $INPUT_DIR holds ${#BINARIES[@]} artifact(s) but the signed manifest covers ${M_ARTIFACTS:-an unrecorded number}; refusing to publish $TAG." >&2
+    echo "  Either the listing came back short or files were added or removed since signing." >&2
+    echo "  Nothing was uploaded. Re-stage exactly the signed set, or sign again." >&2
+    exit 1
+fi
+# artifact list gate end
 
 # An APK in this set has to be the CEREMONY's own build, never one Google
 # signed. Play's `Prevent unofficial installs` is code injected into the

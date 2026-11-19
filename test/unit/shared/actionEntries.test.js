@@ -6,8 +6,8 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: the Actions menu entry list, which used to be copy-pasted into all
-// three shells.
+// Unit: the Actions menu entry list, one list shared by all three shells in
+// place of a copy in each.
 //
 // Two behaviours are worth pinning, because both were regressions in the
 // shipped triplicate:
@@ -43,11 +43,36 @@ describe('ACTION_ENTRY_DEFS', () => {
         expect(new Set(handlers).size).toBe(handlers.length);
     });
 
-    it('gives every entry a label and a description', () => {
+    it('gives every entry a label or label key and a description', () => {
         for (const def of ACTION_ENTRY_DEFS) {
-            expect(def.label, `${def.id} label`).toBeTruthy();
+            expect(def.label || def.labelKey, `${def.id} label`).toBeTruthy();
             expect(def.description, `${def.id} description`).toBeTruthy();
         }
+    });
+
+    it('describes token issuance as a template choice', () => {
+        const issue = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'issue');
+        expect(issue.label).toBe('Issue token');
+        expect(issue.description).toMatch(/template/i);
+    });
+
+    it('names the on-chain publish action without overloading network broadcast', () => {
+        const broadcast = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'broadcast');
+        expect(broadcast.label).toBe('Announce');
+        expect(broadcast.description).toMatch(/publish/i);
+    });
+
+    it('names the prediction markets destination with buy wording', () => {
+        const markets = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'bet-markets');
+        expect(markets.label).toBe('Prediction markets');
+        expect(markets.description).toBe('Browse prediction markets, buy and track positions, or run a market of your own as its oracle.');
+    });
+
+    it('leaves developer tools out of All actions and lists Multisig signing for multisig sends', () => {
+        const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
+        expect(ids).not.toContain('parallel');
+        expect(ids).not.toContain('advanced');
+        expect(ids).toContain('multisig-sign');
     });
 
     it('is frozen, so a shell cannot mutate the menu for the others', () => {
@@ -125,7 +150,8 @@ describe('buildActionEntries', () => {
             if (e.id === 'pair-signer') continue;
             const def = ACTION_ENTRY_DEFS.find((d) => d.id === e.id);
             expect(e.description).toBe(def.description);
-            expect(e.label).toBe(def.label);
+            if (def.labelKey) expect(e.label).toBeTruthy();
+            else expect(e.label).toBe(def.label);
         }
     });
 

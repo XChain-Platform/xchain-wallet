@@ -10,12 +10,10 @@
 
 // Panic-mode disclosure policy.
 //
-// The freeze itself is enforced in `flows/panicMode.js` and works: signing is
-// refused at `assertSigningAllowed`. The defect this module fixes is that the
-// refusal used to arrive only when the user pressed Approve & Sign. Home
-// showed nothing, Send opened normally and quoted the full spendable balance,
-// and the confirm screen said "Wallet unlocked. No password needed." -- the
-// exact opposite of the truth about this wallet's ability to sign.
+// The freeze itself is enforced in `flows/panicMode.js`, where
+// `assertSigningAllowed` refuses signing. This module surfaces that refusal
+// before Approve & Sign, so Home and Send do not look usable while the wallet
+// cannot sign.
 //
 // The fix is not simply "add a banner", because panic mode has two very
 // different origins:
@@ -30,11 +28,8 @@
 //                 protection the user reached for.
 //
 // So ambient surfaces (Home, the Send form) disclose ONLY a self-armed
-// freeze. The sign surface is different: there the wallet was actively
-// asserting it could sign. A false reassurance is not neutral cover, and a
-// missing line is not a cue an observer can read, so on the sign surface both
-// origins suppress the "ready to sign" claim and only a self-armed freeze
-// adds an explanation in its place.
+// freeze. The sign surface follows the same disclosure rule: a self-armed
+// freeze adds an explanation, while a duress-armed freeze stays silent.
 //
 // Everything here is pure: `panicFreezeNotice` takes a state + clock and
 // returns what to render. The React binding lives in PanicFreezeNotice.jsx.

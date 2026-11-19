@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ChainPicker } from '../../../packages/core/src/ui/ChainPicker.jsx';
 import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
 import { NetworkField } from '../../../packages/core/src/ui/NetworkField.jsx';
@@ -158,7 +158,9 @@ describe('<IconSelect> accessible name', () => {
 });
 
 describe('picker keyboard operation', () => {
-    it('opens ChainPicker from the keyboard, navigates, selects, and restores focus', () => {
+    // ChainPicker is the Network field now: pressing it opens the full-screen
+    // network list (operator ruling 2026-11-13), never a listbox popover.
+    it('opens the network list from the field, moves with the arrows, selects, and restores focus', () => {
         const onChange = vi.fn();
         render(
             <ChainPicker
@@ -167,22 +169,26 @@ describe('picker keyboard operation', () => {
             />,
         );
         const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
 
-        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
-        const options = screen.getAllByRole('option');
-        expect(options[0]).toHaveFocus();
-        expect(options[0]).toHaveAttribute('aria-selected', 'true');
+        fireEvent.click(trigger);
+        expect(screen.queryByRole('listbox')).toBeNull();
+        const list = screen.getByRole('dialog', { name: 'Network' });
+        const rows = within(list).getAllByRole('button', { name: /^Select / });
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toHaveAttribute('aria-current', 'true');
 
-        fireEvent.keyDown(options[0], { key: 'ArrowDown' });
-        expect(options[1]).toHaveFocus();
-        fireEvent.keyDown(options[1], { key: 'Enter' });
+        rows[0].focus();
+        fireEvent.keyDown(rows[0], { key: 'ArrowDown' });
+        expect(rows[1]).toHaveFocus();
+        fireEvent.click(rows[1]);
 
         expect(onChange).toHaveBeenCalledWith('litecoin-regtest');
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
     });
 
-    it('focuses searchable input, moves into results, and clears searches on Escape', () => {
+    it('lists every network with its ticker and kind and closes on Escape without a change', () => {
         const onChange = vi.fn();
         const chainIds = reg.supportedChains().map((chain) => chain.id);
         render(
@@ -194,17 +200,14 @@ describe('picker keyboard operation', () => {
         const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
 
         fireEvent.click(trigger);
-        const search = screen.getByRole('textbox', { name: 'Search networks' });
-        expect(search).toHaveFocus();
-        fireEvent.change(search, { target: { value: 'testnet' } });
-        expect(screen.getAllByRole('option')).toHaveLength(3);
-        fireEvent.keyDown(search, { key: 'ArrowDown' });
-        expect(screen.getAllByRole('option')[0]).toHaveFocus();
+        const list = screen.getByRole('dialog', { name: 'Network' });
+        expect(within(list).getAllByRole('button', { name: /^Select / })).toHaveLength(chainIds.length);
+        expect(within(list).getAllByText(/ · Testnet$/)).toHaveLength(3);
 
         fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
-        fireEvent.click(trigger);
-        expect(screen.getAllByRole('option')).toHaveLength(chainIds.length);
+        expect(onChange).not.toHaveBeenCalled();
     });
 
     it('supports IconSelect arrow, End, and Space keys', () => {

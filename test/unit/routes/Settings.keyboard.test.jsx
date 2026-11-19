@@ -116,12 +116,12 @@ afterEach(() => {
 describe('Settings keyboard interaction', () => {
     it('keeps an open drilldown when the native app pauses', async () => {
         const messaging = settingsHarness();
-        mount(<Settings onBack={() => {}} initialSubpageId="display" />, messaging);
-        expect(await screen.findByRole('heading', { level: 1, name: 'Display' })).toBeInTheDocument();
+        mount(<Settings onBack={() => {}} initialSubpageId="display-tokens" />, messaging);
+        expect(await screen.findByRole('heading', { level: 1, name: 'Tokens' })).toBeInTheDocument();
 
         act(() => dismissAllOverlays());
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Display' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Tokens' })).toBeInTheDocument();
     });
 
     it('tabs through every list control and restores each drilldown opener after Enter and Escape', async () => {
@@ -138,29 +138,26 @@ describe('Settings keyboard interaction', () => {
             messaging,
         );
 
-        await screen.findByText('0 contacts stored');
+        await screen.findByRole('button', { name: /^Wallets/ });
+        // Settings is eight group rows under two headings (2026-11-13):
+        // Connected Sites joined Privacy, Donations joined Network and Fees.
         const expected = [
             screen.getByRole('button', { name: 'Back to previous screen' }),
-            screen.getByRole('searchbox', { name: 'Search settings' }),
-            screen.getByRole('button', { name: /^This wallet/ }),
-            screen.getByRole('button', { name: /^Display/ }),
-            screen.getByRole('button', { name: /^Keyboard/ }),
-            screen.getByRole('button', { name: /^Privacy/ }),
-            screen.getByRole('button', { name: /^Safety/ }),
-            screen.getByRole('button', { name: /^Wallet mode/ }),
-            screen.getByRole('button', { name: /^Backup/ }),
-            screen.getByRole('button', { name: /^Fees/ }),
-            screen.getByRole('button', { name: /^Network & endpoints/ }),
-            screen.getByRole('button', { name: /^Connected sites/ }),
-            screen.getByRole('button', { name: 'Import…' }),
-            screen.getByRole('button', { name: /^Automatic donation system/ }),
-            screen.getByRole('button', { name: /^Developer mode/ }),
+            screen.getByRole('button', { name: 'Filter settings' }),
             screen.getByRole('button', { name: /^About/ }),
+            screen.getByRole('button', { name: /^Wallets/ }),
+            screen.getByRole('button', { name: /^Security/ }),
+            screen.getByRole('button', { name: /^Backup and Recovery/ }),
+            screen.getByRole('button', { name: /^Privacy and Sites/ }),
+            screen.getByRole('button', { name: /^Appearance/ }),
+            screen.getByRole('button', { name: /^Notifications/ }),
+            screen.getByRole('button', { name: /^Network and Fees/ }),
+            screen.getByRole('button', { name: /^Advanced/ }),
         ];
         await expectTabOrder(expected);
 
         const user = userEvent.setup();
-        for (const name of ['Display', 'Privacy', 'Backup']) {
+        for (const name of ['Appearance', 'Privacy and Sites', 'Backup and Recovery']) {
             const opener = screen.getByRole('button', { name: new RegExp(`^${name}`) });
             opener.focus();
             await user.keyboard('{Enter}');
@@ -184,17 +181,20 @@ describe('Settings keyboard interaction', () => {
             screen.getByRole('switch', { name: 'Show hide button on rows' }),
         ];
         await expectTabOrder([
+            screen.getByRole('button', { name: 'About Hide small balances' }),
             switches[0],
+            screen.getByRole('button', { name: 'About Hide unknown tokens' }),
             switches[1],
+            screen.getByRole('button', { name: 'About Small-balance threshold' }),
             screen.getByRole('combobox', { name: 'Small-balance threshold' }),
+            screen.getByRole('button', { name: 'About Balance number format' }),
             screen.getByRole('combobox', { name: 'Balance number format' }),
+            screen.getByRole('button', { name: 'About Show pin button on rows' }),
             switches[2],
+            screen.getByRole('button', { name: 'About Show hide button on rows' }),
             switches[3],
-            screen.getByRole('combobox', { name: 'Token network' }),
-            screen.getByRole('textbox', { name: 'Token ticker' }),
-            screen.getByRole('button', { name: 'Watch token' }),
-            screen.getByRole('button', { name: 'Reset list preferences' }),
-            screen.getByRole('button', { name: 'Reset to defaults' }),
+            screen.getByRole('button', { name: 'Reset List Preferences' }),
+            screen.getByRole('button', { name: 'Reset to Defaults' }),
         ]);
 
         const user = userEvent.setup();
@@ -224,11 +224,18 @@ describe('Settings keyboard interaction', () => {
             screen.getByRole('switch', { name: 'Always require hardware cross-check confirm' }),
         ];
         expect(tor).toBeDisabled();
+        // Each switch's '?' tip sits on its label line, before the switch
+        // (ruling 2026-11-13); the disabled Tor switch keeps its reachable tip.
+        const tipFor = (name) => screen.getByRole('button', { name: `About ${name}` });
         await expectTabOrder([
-            ...switches,
+            tipFor('Tor routing'),
+            ...switches.flatMap((toggle) => [tipFor(toggle.getAttribute('aria-label')), toggle]),
+            // U57: each field's '?' tip sits on its label line, before the field.
+            screen.getByRole('button', { name: 'About clipboard auto-clear' }),
             screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' }),
+            screen.getByRole('button', { name: 'About form draft retention' }),
             screen.getByRole('combobox', { name: 'Form draft retention' }),
-            screen.getByRole('button', { name: 'Reset to defaults' }),
+            screen.getByRole('button', { name: 'Reset to Defaults' }),
         ]);
 
         const user = userEvent.setup();
@@ -245,8 +252,10 @@ describe('Settings keyboard interaction', () => {
         const messaging = settingsHarness();
         mount(<NetworkSection activeWallet={{ id: 'wallet-1' }} />, messaging);
 
+        const picker = await screen.findByRole('combobox', { name: 'Active network' });
         await expectTabOrder([
-            await screen.findByRole('combobox', { name: 'Active network' }),
+            screen.getByRole('button', { name: 'About the network setting' }),
+            picker,
         ]);
     });
 
@@ -261,7 +270,7 @@ describe('Settings keyboard interaction', () => {
             screen.getByRole('button', { name: 'Export…' }),
             screen.getByRole('button', { name: 'Show…' }),
             screen.getByRole('button', { name: 'Test…' }),
-            screen.getByRole('button', { name: 'Publish now…' }),
+            screen.getByRole('button', { name: 'Publish Now…' }),
             screen.getByRole('button', { name: 'Check…' }),
         ]);
     });

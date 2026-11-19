@@ -12,7 +12,16 @@ import { Button, Icon, Input } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 const VARIANTS = ['primary', 'secondary', 'ghost', 'link', 'danger', 'success'];
-const LABELS = { primary: 'Send', secondary: 'Receive', ghost: 'Cancel', link: 'Discard draft', danger: 'Delete', success: 'Approve' };
+const LABELS = { primary: 'Send', secondary: 'Receive', ghost: 'Cancel', link: 'Discard Draft', danger: 'Delete', success: 'Approve' };
+// One explicit icon per variant sample so every example Button renders an icon.
+const ICONS = {
+    primary: <Icon.SendIcon />,
+    secondary: <Icon.ReceiveIcon />,
+    ghost: <Icon.XIcon />,
+    link: <Icon.TrashIcon />,
+    danger: <Icon.TrashIcon />,
+    success: <Icon.CheckIcon />,
+};
 const row = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' };
 const sizeRow = { ...row, alignItems: 'flex-start' };
 const stack = { display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' };
@@ -32,12 +41,12 @@ export function ButtonsSection() {
                 when={<>Primary: the one action the screen exists for. Secondary: a second real action. Ghost: back out, cancel, less-used actions. Danger: destroys or spends irreversibly. Success: approve or confirm a pending request.</>}
                 sizing={<>The visual heights are <code>sm</code> 28px, <code>md</code> 36px, and <code>lg</code> 44px with a mouse, and 36px, 44px, and 48px on touch. A touch <code>sm</code> button extends its hit area to 44px, so compact buttons need enough space around them. In a FormPage action row buttons grow to share the row and wrap onto a new line; put the primary last.</>}
                 doRule={<>✓ One primary per screen · <code>type="submit"</code> only on the form's submit · <code>loading</code> while the action runs</>}
-                dontRule={<>✗ A styled <code>&lt;div&gt;</code> or <code>&lt;a&gt;</code> as a button · two primaries side by side · a variant name that does not exist (it renders unstyled)</>}
+                dontRule={<>✗ A styled <code>&lt;div&gt;</code> or <code>&lt;a&gt;</code> as a button · two primaries side by side · a variant name that does not exist (it renders unstyled) · a button without an icon · a label that is not Title Case</>}
             />
             <Markup>
 {`<Button variant="primary" type="submit" loading={busy}>Send</Button>
 <Button variant="ghost" onClick={onBack}>Cancel</Button>
-<Button variant="danger" size="sm" icon={null}>Delete</Button>
+<Button variant="danger" size="sm" icon={<Icon.TrashIcon />}>Delete</Button>
 <Button block variant="secondary" icon={<Icon.ReceiveIcon />}>Receive</Button>`}
             </Markup>
             <LiveExample label="Buttons align with fields at sm, md, and lg">
@@ -53,29 +62,29 @@ export function ButtonsSection() {
                                 style={{ width: 140 }}
                             />
                             {VARIANTS.map((v) => (
-                                <Button key={v} variant={v} size={size} onClick={noop}>{LABELS[v]}</Button>
+                                <Button key={v} variant={v} size={size} icon={ICONS[v]} onClick={noop}>{LABELS[v]}</Button>
                             ))}
                         </div>
                     ))}
                 </div>
             </LiveExample>
-            <LiveExample label="Loading and disabled">
+            {/* G130: a disabled button looks the same as an enabled one. */}
+            <LiveExample label="Loading and disabled (no disabled look)">
                 <div style={stack}>
                     <div style={row}>
                         <span style={tag}>loading</span>
-                        {VARIANTS.map((v) => <Button key={v} variant={v} loading>{LABELS[v]}</Button>)}
+                        {VARIANTS.map((v) => <Button key={v} variant={v} icon={ICONS[v]} loading>{LABELS[v]}</Button>)}
                     </div>
                     <div style={row}>
                         <span style={tag}>disabled</span>
-                        {VARIANTS.map((v) => <Button key={v} variant={v} disabled>{LABELS[v]}</Button>)}
+                        {VARIANTS.map((v) => <Button key={v} variant={v} icon={ICONS[v]} disabled>{LABELS[v]}</Button>)}
                     </div>
                 </div>
             </LiveExample>
             <LiveExample label="Icons and block width">
                 <div style={stack}>
                     <div style={row}>
-                        <Button onClick={noop}>Send</Button>
-                        <Button onClick={noop} icon={null}>Send</Button>
+                        <Button onClick={noop} icon={<Icon.SendIcon />}>Send</Button>
                         <Button variant="secondary" onClick={noop} icon={<Icon.CameraIcon />}>Scan</Button>
                     </div>
                     <Button block variant="primary" onClick={noop}>Continue</Button>

@@ -39,7 +39,6 @@ import {
     NATIVE_COIN as COIN,
     pendingRowFor,
     pickAssetByChainAndTick,
-    searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
     assertNoActionRecorded,
@@ -53,7 +52,10 @@ import {
     REGTEST_DESTINATION,
     switchToRegtest,
     unlockAfterReload,
+    openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin funded, and the slice of it the payment moves. */
@@ -61,7 +63,7 @@ const FUNDING = 1;
 const SEND_AMOUNT = '0.25';
 
 /**
- * History polls its pending set every 20s (BALANCE_POLL_INTERVAL_MS) and on
+ * History polls its pending set every 20s (PENDING_POLL_INTERVAL_MS) and on
  * focus. "Within one poll" is asserted against three beats: one that may
  * already be in flight when the block lands, one that reads the new view,
  * and one of slack for the tracker's own commit of that block.
@@ -137,8 +139,8 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
         await test.step(`send ${SEND_AMOUNT} ${COIN} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, REGTEST_CHAIN_LABEL, REGTEST_CHAIN_ID, COIN);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true })).toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await expect(await openFromAddress(page.getByRole('main'))).toHaveValue(own);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${COIN})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);
@@ -195,7 +197,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
 
             // And no explorer row appeared beside it: there is no action to
             // show, so the wallet's own confirmed record is the only row.
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(historyRows(page), 'History lists a second row for a plain payment the '
                 + 'explorer knows nothing about').toHaveCount(1, { timeout: 30_000 });
             await expect(pendingRowFor(page, txid)).toHaveCount(1);
@@ -215,13 +217,13 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
             await unlock.or(page.getByRole('navigation', { name: 'Primary navigation' })).first()
                 .waitFor({ state: 'visible', timeout: 150_000 });
             if (await unlock.count() > 0) {
-                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+                await fieldByLabel(page, 'Password').fill(PASSWORD);
                 await unlock.click();
                 await expect(page.getByRole('navigation', { name: 'Primary navigation' }))
                     .toBeVisible({ timeout: 150_000 });
             }
             await gotoSection(page, 'History');
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(pendingRowFor(page, txid).locator('[data-pending-state]'),
                 'after a reload the native send is pending again: the PendingTx record was never '
                 + 'flipped to indexed')

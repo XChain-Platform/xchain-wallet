@@ -25,9 +25,11 @@
 //   SPECULOS_API_URL=http://localhost:5012 pnpm test:hardware:ledger
 //
 // Optionally also set SPECULOS_TESTNET_API_URL to a Speculos running the
-// Bitcoin TEST app, which proves the wallet refuses to pair against it
-// with a message naming the cause (the Test app derives at coin-type 1',
-// which this wallet deliberately does not support).
+// Bitcoin TEST app, which proves the wallet refuses to PAIR against it
+// with a message naming the cause: pairing reads the device identity at the
+// Bitcoin app's 0' path, which the Test app (restricted to 1') cannot answer.
+// Signing on Bitcoin testnet and regtest does use the Test app, at 1'
+// (operator ruling 2026-11-15); this leg does not drive that yet.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
@@ -328,16 +330,33 @@ assert.equal(
 assert.ok(hydratedTx.ins[0].script.length > 100, 'the hydrated input carries a real scriptSig');
 }
 
-// --- 6. the Bitcoin Test app must be refused by name ------------------
+// --- 6. the Bitcoin Test app pairs and is recognised per chain -------
+//
+// Each app answers only its own coin type, so the same factory that reopens
+// the device before a testnet sign must work with the Test app open: it
+// reads the identifier at m/44'/1'/0', and the reconnect check re-derives
+// the recorded testnet address key through this app (ledgerIdentity.js).
 
 if (TESTNET_API) {
-    await assert.rejects(
-        pairWith(new SpeculosHttpTransport(TESTNET_API)),
-        /Open the Bitcoin app to pair/,
-        'pairing against the Test app names the cause instead of surfacing 0x6a82',
-    );
+    const testTransport = new SpeculosHttpTransport(TESTNET_API);
+    const test = await pairWith(testTransport);
+    assert.equal(test.pairingInfo.appName, 'Bitcoin Test', 'the Test app pairs and names itself');
+    assert.ok(test.pairingInfo.chainIds.includes('bitcoin-testnet'), 'the Test app serves bitcoin-testnet');
+    const [first] = await test.signer.getAddresses({
+        chainId: 'bitcoin-testnet', addressType: 'p2wpkh', accountIndex: 0, change: 0, startIndex: 0, count: 1,
+    });
+    const { ledgerIdentitiesFromAccounts } = await import('../../packages/core/src/signers/ledgerIdentity.js');
+    const { ensureLive } = await import('../../packages/core/src/signers/hardwareSession.js');
+    const record = {
+        vendor: 'ledger',
+        deviceIdentifier: pairingInfo.deviceIdentifier,
+        identities: ledgerIdentitiesFromAccounts([{
+            chainId: 'bitcoin-testnet', accountIndex: 0, derivationPath: first.path, publicKey: first.publicKey,
+        }]),
+    };
+    await ensureLive(record, { ledger: () => pairWith(testTransport) }, { chainId: 'bitcoin-testnet' });
 } else {
-    console.log('  (skipped Test-app refusal: set SPECULOS_TESTNET_API_URL to include it)');
+    console.log('  (skipped Test-app pairing: set SPECULOS_TESTNET_API_URL to include it)');
 }
 
 await transport.close();
@@ -348,7 +367,7 @@ console.log(
     + 'approved on-device with the path + message shown on screen'
     + (WalletUtils ? ', PSBT signed on-device spending the outpoint the PSBT named, '
         + 'witnessUtxo-only input refused, the SAME input signed once its real prev tx rides along (completing fix)' : '')
-    + (TESTNET_API ? ', Test app refused by name)' : ')'),
+    + (TESTNET_API ? ', Test app paired and recognised through its own coin type)' : ')'),
 );
 console.log(`  device: ${pairingInfo.model} / app ${pairingInfo.firmwareVersion} / id ${pairingInfo.deviceIdentifier}`);
 for (const s of screens) console.log(`  screen: ${s}`);

@@ -35,8 +35,9 @@
 // state change so toggling between OS settings + the wallet stays in
 // sync without a refresh.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, FormSection, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, FormSection, Icon, Input, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     describeBiometric,
@@ -49,7 +50,11 @@ import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
 
-export function BiometricRow() {
+// `direct` is the Biometric unlock page of its own: when the device supports it
+// and it is off, the page lands straight on the enable form (no Enable button
+// first, no Cancel; Back leaves). In the Security page's sheet (`bare`) the
+// sheet title names the form, and `onEnabled` closes the sheet once enrolled.
+export function BiometricRow({ direct = false, bare = false, onEnabled } = {}) {
     const { messaging } = useMessaging();
     // null while the probe is in flight; afterwards the provider's full
     // self-description, which is where every user-facing noun below comes from.
@@ -59,6 +64,9 @@ export function BiometricRow() {
     const [registered, setRegistered] = useState(isBiometricRegistered());
     const [enrolAction, setEnrolAction] = useState(/** @type {null | 'enable' | 'reenrol'} */ (null));
     const [password, setPassword] = useState('');
+    // G130: Enable is never disabled for an empty password; the press marks
+    // the field and leads the form with the error summary.
+    const formErrors = useFormErrors();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     // Re-run the pairing attempt on the recorded action. Biometric
@@ -66,6 +74,13 @@ export function BiometricRow() {
     // transient provider error) are always retryable with the same password
     // still in the field, so the error surface offers a one-click "Try again".
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
+    const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+
+    // The label-line help tip precedes the password input, so the generic
+    // focus hand-off would land on it; put the cursor in the field instead.
+    useEffect(() => {
+        if (enrolAction !== null) formRef.current?.querySelector('input')?.focus();
+    }, [enrolAction]);
 
     // Probed on mount and again whenever the app comes back into view: the
     // person removes or adds a face or finger in the device settings, which
@@ -110,7 +125,8 @@ export function BiometricRow() {
     const refreshRegistered = () => setRegistered(isBiometricRegistered());
 
     async function doEnable() {
-        if (busy || password.length === 0) return;
+        if (busy) return;
+        if (!formErrors.validate({ 'biometric-password': password.length === 0 ? t('locked.enterYourPassword') : null })) return;
         setBusy(true);
         setError(null);
         retryRef.current = null;
@@ -120,6 +136,7 @@ export function BiometricRow() {
             setPassword('');
             setEnrolAction(null);
             refreshRegistered();
+            onEnabled?.();
         } catch (err) {
             // Closing the prompt is a choice, not a failure: leave the form
             // as it was, with no error.
@@ -128,7 +145,7 @@ export function BiometricRow() {
                 setError('Incorrect wallet password.');
             } else {
                 retryRef.current = doEnable;
-                setError(err?.message || 'Biometric enrolment failed.');
+                setError(userFacingMessage(err, 'Biometric enrolment failed.'));
             }
         } finally {
             setBusy(false);
@@ -159,13 +176,15 @@ export function BiometricRow() {
             refreshRegistered();
         } catch (err) {
             retryRef.current = handleDisable;
-            setError(err?.message || 'Biometric unlock could not be disabled.');
+            setError(userFacingMessage(err, 'Biometric unlock could not be disabled.'));
         } finally {
             setBusy(false);
         }
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
+    const action = enrolAction ?? (direct && !registered ? 'enable' : null);
+    const directEnable = direct && enrolAction === null && action === 'enable';
     if (description === null) {
         return (
             <div style={ROW}>
@@ -208,10 +227,10 @@ export function BiometricRow() {
                     ) : null}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
-                        {t('settings.biometric.reEnrol')}
+                    <Button type="button" size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
+                        {t('settings.biometric.reEnrolAction')}
                     </Button>
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDisable} disabled={busy}>
+                    <Button type="button" size="sm" variant="secondary" icon={<Icon.XIcon />} onClick={handleDisable} disabled={busy}>
                         {busy ? t('settings.biometric.disabling') : t('settings.biometric.disable')}
                     </Button>
                 </div>
@@ -219,34 +238,34 @@ export function BiometricRow() {
         );
     }
 
-    if (enrolAction !== null) {
-        const isReenrol = enrolAction === 'reenrol';
+    if (action !== null) {
+        const isReenrol = action === 'reenrol';
         return (
             <SettingsInlineForm
                 error={error}
                 recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
-                onCancel={cancelEnrol}
+                onCancel={directEnable ? undefined : cancelEnrol}
                 cancelDisabled={busy}
             >
                 <FormPage
+                    ref={formRef}
                     onSubmit={handleEnable}
                     sectioned
                     submitFromAnyField
+                    errors={formErrors}
                     label={`${isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} ${t('settings.biometric.biometricUnlock2')}`}
                 >
                     <FormSection
-                        title={`${isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} ${t('settings.biometric.biometricUnlock2')}`}
+                        title={bare ? undefined : `${isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} ${t('settings.biometric.biometricUnlock2')}`}
                         headingLevel="h3"
-                        description={(
-                            <>
-                            {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
-                            </>
-                        )}
                     >
                     <Input
+                        id="biometric-password"
                         type="password"
                         revealable
                         enterKeyHint="go"
+                        label={t('send.gated.passwordLabel')}
+                        help={`${t('settings.biometric.confirmYourCurrentWalletPassword')} ${description.wrapNote}`.trim()}
                         value={password}
                         onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
                         placeholder={t('send.gated.passwordLabel')}
@@ -254,23 +273,27 @@ export function BiometricRow() {
                         aria-label={t('send.gated.passwordLabel')}
                     />
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            icon={null}
-                            onClick={cancelEnrol}
-                            disabled={busy}
-                        >
-                            {t('common.cancel')}
-                        </Button>
+                        {directEnable ? null : (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                icon={<Icon.XIcon />}
+                                onClick={cancelEnrol}
+                                disabled={busy}
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                        )}
                         <Button
                             type="submit"
-                            size="sm"
-                            icon={null}
-                            disabled={busy || password.length === 0}
+                            size={directEnable ? 'md' : 'sm'}
+                            block={directEnable}
+                            variant="success"
+                            icon={isReenrol ? <Icon.RefreshIcon /> : <Icon.CheckIcon />}
+                            disabled={busy}
                         >
-                            {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
+                            {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.safety.reEnrolBiometric') : t('settings.safety.enableBiometric'))}
                         </Button>
                     </div>
                     </FormSection>
@@ -290,8 +313,8 @@ export function BiometricRow() {
             <Button
                 type="button"
                 size="sm"
-                variant="ghost"
-                icon={null}
+                variant="secondary"
+                icon={<Icon.CheckIcon />}
                 onClick={() => setEnrolAction('enable')}
             >
                 {t('settings.biometric.enable')}

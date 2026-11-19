@@ -19,27 +19,30 @@ const VIEWPORTS = [
 
 async function openAccounts(page) {
     await openSettings(page);
-    const row = page.getByRole('main').getByRole('button', { name: /^Accounts & addresses\b/ });
-    await expect(row, 'Settings has no Accounts & addresses row').toBeVisible();
-    await row.click();
-    await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
+    // Accounts live under Settings, Wallets group, My Accounts.
+    const main = page.getByRole('main');
+    const group = main.getByRole('button', { name: /^Wallets\b/ });
+    await expect(group, 'Settings has no Wallets row').toBeVisible();
+    await group.click();
+    const accounts = main.getByRole('button', { name: /^My Accounts\b/ });
+    await expect(accounts, 'the Wallets group has no My Accounts row').toBeVisible();
+    await accounts.click();
+    await expect(page.getByRole('heading', { name: 'My Accounts', exact: true, level: 1 })).toBeVisible();
 }
 
+// Each account row is one button with a name and an icon; rename and the other
+// actions live on Account Details.
 async function expectRowControls(main, viewport) {
-    // Each account row wraps its select button and its rename control.
-    const rows = main.getByRole('button', { name: /^Rename\b/ }).locator('..');
+    const rows = main.getByRole('list', { name: 'My Accounts' }).getByRole('button');
 
     const count = await rows.count();
     expect(count, `${viewport}: demo mode rendered no account rows`).toBeGreaterThan(0);
     for (let index = 0; index < count; index += 1) {
-        const buttons = rows.nth(index).locator(':scope > button');
-        expect(await buttons.count(), `${viewport}: account row ${index + 1} has no end control`)
-            .toBe(2);
-        const control = buttons.nth(1);
+        const control = rows.nth(index);
         await expect(control, `${viewport}: account row ${index + 1} has no accessible name`)
             .toHaveAccessibleName(/\S/);
 
-        const icon = control.locator('svg').first();
+        const icon = control.locator('svg, img').first();
         await expect(icon, `${viewport}: account row ${index + 1} has no visible icon`).toBeVisible();
         const box = await icon.boundingBox();
         expect(box, `${viewport}: account row ${index + 1} icon has no layout box`).not.toBeNull();
@@ -48,53 +51,18 @@ async function expectRowControls(main, viewport) {
     }
 }
 
+// Add Account is the title bar's plus (G95): once, never in a pinned footer.
 async function expectCompactActions(page, viewport) {
-    // Add account and Manage sit in the pinned screen footer, as Add wallet
-    // and Manage wallet do on the Wallets screen.
-    const footer = page.locator('footer').filter({ has: page.getByRole('button', { name: 'Add account', exact: true }) });
-    await expect(footer, `${viewport}: Accounts actions are not in the screen footer`).toHaveCount(1);
-    const add = footer.getByRole('button', { name: 'Add account', exact: true });
-    const manage = footer.getByRole('button', { name: 'Manage', exact: true });
-    await expect(add).toBeVisible();
-    await expect(manage).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Add account', exact: true })).toHaveCount(0);
-
-    const metrics = await Promise.all([add, manage].map((button) => button.evaluate((element) => {
-        const label = element.querySelector('span:last-child');
-        const rect = element.getBoundingClientRect();
-        if (!label) return { top: rect.top, lineCount: 0, overflows: true };
-        const range = document.createRange();
-        range.selectNodeContents(label);
-        const lineRects = [...range.getClientRects()].filter((line) => line.width > 0 && line.height > 0);
-        return {
-            top: rect.top,
-            lineCount: lineRects.length,
-            overflows: element.scrollWidth > element.clientWidth + 1,
-        };
-    })));
-
-    expect(
-        Math.abs(metrics[0].top - metrics[1].top),
-        `${viewport}: Add account and Manage do not share one action row`,
-    ).toBeLessThanOrEqual(1);
-    expect(metrics.map(({ lineCount }) => lineCount), `${viewport}: an action label wraps`)
-        .toEqual([1, 1]);
-    expect(metrics.some(({ overflows }) => overflows), `${viewport}: an action overflows its button`)
-        .toBe(false);
-
-    // Pinned: the footer stays below the list at the bottom of the screen
-    // rather than following the last row.
-    const placement = await footer.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        // The screen body (the scrolling list region) precedes the footer.
-        const body = element.previousElementSibling?.getBoundingClientRect();
-        return { top: rect.top, mainBottom: body ? body.bottom : null };
-    });
-    expect(placement.mainBottom, `${viewport}: no screen body to measure`).not.toBeNull();
-    expect(
-        placement.top,
-        `${viewport}: action footer is not pinned below the account list`,
-    ).toBeGreaterThanOrEqual(placement.mainBottom - 1);
+    await expect(page.getByRole('button', { name: 'Add Account', exact: true }),
+        `${viewport}: Add account renders more than once or not at all`).toHaveCount(1);
+    await expect(page.locator('footer').getByRole('button', { name: 'Add Account', exact: true }),
+        `${viewport}: Accounts actions are pinned in a footer`).toHaveCount(0);
+    const add = page.getByRole('banner').getByRole('button', { name: 'Add Account', exact: true });
+    await expect(add, `${viewport}: Add account is not in the title bar`).toBeVisible();
+    const box = await add.boundingBox();
+    expect(box, `${viewport}: Add account has no layout box`).toBeTruthy();
+    expect(box.x + box.width, `${viewport}: Add account crosses the viewport`)
+        .toBeLessThanOrEqual(page.viewportSize().width + 1);
 }
 
 test('account row controls and actions fit at phone and desktop widths', async ({ page }) => {

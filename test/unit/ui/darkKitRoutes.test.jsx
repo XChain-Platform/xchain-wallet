@@ -21,7 +21,13 @@ const routeSources = import.meta.glob(
     { eager: true, query: '?raw', import: 'default' },
 );
 const KIT_CONTROL = /<(?:ListRow|Chip|Tabs|SegmentedControl|Checkbox|RadioGroup|Switch)(?=[\s/>])/;
+// Route bodies a parent route renders with the row or entry it resolved, so
+// they take props no registry entry supplies; the parent route covers them
+// here, and their own tests (AddressDetail.test.jsx) render them with real
+// props. routes-render and sharedRoutesNarrowLayout exclude the same files.
+const NOT_A_ROUTE = new Set(['ActionDetailView', 'AddressDetail']);
 const adopterEntries = Object.entries(routeSources)
+    .filter(([path]) => !NOT_A_ROUTE.has(path.slice(path.lastIndexOf('/') + 1, -4)))
     .filter(([, source]) => KIT_CONTROL.test(source))
     .map(([path]) => [path, path.slice(path.lastIndexOf('/') + 1, -4)])
     .sort((first, second) => first[1].localeCompare(second[1]));
@@ -30,6 +36,55 @@ const routeProps = Object.values(ROUTE_REGISTRY).reduce((props, route) => {
     if (!(route.component in props)) props[route.component] = route.minimalProps;
     return props;
 }, {});
+// Kit adopters in routes/ that are parts of a route, not registry routes,
+// take the minimal props their parent hands them.
+routeProps.HistoryDetailCard = {
+    entry: {
+        chainId: 'bitcoin-mainnet',
+        action: 'SEND',
+        txid: 'a'.repeat(64),
+        actionIndex: '1',
+        blockIndex: 1,
+        raw: {},
+    },
+    peerCache: {},
+};
+// My Orders' row, the Order detail body and its Edit and Cancel form take
+// the order MyOrdersView or OrderDetail resolved: one open, partly filled
+// XCHAIN for BTC order.
+const orderItem = {
+    chainId: 'bitcoin-mainnet',
+    key: 'bitcoin-mainnet:1',
+    owner: { id: 'addr-1', address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+    cancelledKeys: new Set(),
+    row: {
+        action_index: '1',
+        source: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+        status: 'valid',
+        give_tick: 'XCHAIN',
+        give_coin: '',
+        give_amount: '1000',
+        give_ownership: 0,
+        get_tick: '',
+        get_coin: 'BTC',
+        get_amount: '0.004',
+        get_ownership: 0,
+        tx_hash: 'a'.repeat(64),
+        expiration: 1893456000,
+        timestamp: 1763000000,
+    },
+    fill: { status: 'open', giveRemaining: '380', expiration: 1893456000 },
+};
+routeProps.OrderRow = { item: orderItem, status: 'open' };
+routeProps.OrderDetailBody = { item: orderItem, status: 'open', explorerUrl: null };
+// OrderDetail hands the form its messaging as a prop, not through context.
+routeProps.OrderActionPanel = {
+    type: 'cancel',
+    item: orderItem,
+    chainAddresses: [],
+    variant: 'popup',
+    messaging: new Proxy({}, { get: () => () => new Promise(() => {}) }),
+};
 const noop = () => {};
 const defaultProps = {
     walletId: 'wallet-1',

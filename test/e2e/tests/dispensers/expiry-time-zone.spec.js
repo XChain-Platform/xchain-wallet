@@ -17,7 +17,7 @@ test.use({ timezoneId: 'America/Chicago' });
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('combobox').first().fill(title);
     await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
@@ -28,9 +28,13 @@ test('the dispenser expiration field names its time zone and shows the UTC momen
     await createWallet(page);
     await gotoPalette(page, 'Create dispenser');
     const main = page.getByRole('main');
-    await main.getByRole('radio', { name: /Expire at a specific time/ }).check();
+    // Expiration sits in the collapsed Dispenser Terms section and is an icon dropdown (G44).
+    await main.getByRole("button", { name: /Dispenser Terms/ }).click();
+    await main.getByRole('combobox', { name: /Expiration/ }).click();
+    await page.getByRole('option', { name: /Expire at a specific time/ }).click();
 
-    const field = main.getByLabel('Expires');
+    // Exact, since the label row's help tip is named "About Expires" (U57).
+    const field = main.getByLabel('Expires', { exact: true });
     await expect(field).toHaveAccessibleDescription(/Time is in your local time zone, America\/Chicago \(UTC-[56]\)\./);
 
     // December is standard time in Chicago, so the offset follows the entered

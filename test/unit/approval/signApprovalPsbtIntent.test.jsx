@@ -45,7 +45,15 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     getTokenInfo: async () => { throw new Error('not used by signPsbt'); },
     requoteNativeFee: vi.fn(async () => ({ feeDestination: 'bcrt1qfeedestination' })),
     preflight: vi.fn(async () => ({ verdict: 'pass', findings: [], unverified: [] })),
-    describeAction: vi.fn(async () => { throw new Error('not used by signPsbt'); }),
+    describeAction: vi.fn(async () => ({
+        summary: 'Mint 1 JDOG.',
+        details: [
+            { label: 'Amount', value: '1' },
+            { label: 'Token', value: 'JDOG' },
+            { label: 'To', value: 'bcrt1qrecipientrecipient' },
+        ],
+        warnings: [],
+    })),
     parseCoSign: async () => { throw new Error('not used by signPsbt'); },
 }));
 
@@ -102,7 +110,15 @@ afterEach(() => {
     messaging.getSettings.mockReset();
     messaging.getSettings.mockResolvedValue({});
     messaging.describeAction.mockReset();
-    messaging.describeAction.mockRejectedValue(new Error('not used by signPsbt'));
+    messaging.describeAction.mockResolvedValue({
+        summary: 'Mint 1 JDOG.',
+        details: [
+            { label: 'Amount', value: '1' },
+            { label: 'Token', value: 'JDOG' },
+            { label: 'To', value: 'bcrt1qrecipientrecipient' },
+        ],
+        warnings: [],
+    });
     messaging.resolveApproval.mockClear();
     messaging.parsePsbt.mockReset();
     messaging.parsePsbt.mockResolvedValue(DEFAULT_PARSED_PSBT);
@@ -113,7 +129,7 @@ afterEach(() => {
 });
 
 describe('SignApproval signPsbt intent', () => {
-    it('matches every decoded input, output, and total exactly', async () => {
+    it('renders every bare-payment recipient in the shared confirm and leaves change out', async () => {
         const recipientA = 'bcrt1qrecipientaaaaaaaaaaaaaaaaaaaaaaaaaa';
         const recipientB = 'bcrt1qrecipientbbbbbbbbbbbbbbbbbbbbbbbbbb';
         messaging.parsePsbt.mockResolvedValue({
@@ -144,32 +160,17 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        await screen.findByText('Change (back to you)');
-        const inputs = screen.getAllByTestId('psbt-input');
-        const outputs = screen.getAllByTestId('psbt-output');
-        expect(inputs.map((row) => row.textContent)).toEqual([
-            'Your addressbcrt1qownaddressownaddress150,000 sats',
-            'Unknown input(unknown source script)50,000 sats',
-        ]);
-        expect(outputs.map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}120,000 sats`,
-            `Recipient${recipientB}20,000 sats`,
-            'Change (back to you)bcrt1qownaddressownaddress55,000 sats',
-        ]);
-
-        const panel = screen.getByTestId('psbt-intent-panel');
-        const totals = Object.fromEntries(
-            [...panel.querySelectorAll('dt')].map((label) => [
-                label.textContent,
-                label.nextElementSibling.textContent,
-            ]),
-        );
-        expect(totals).toEqual({
-            'Leaving this wallet': '140,000 sats',
-            'Total in': '200,000 sats',
-            'Total out': '195,000 sats',
-            'Network fee': '5,000 sats',
-        });
+        await waitFor(() => expect(screen.getByTestId('confirm-sentence'))
+            .toHaveTextContent('Send 0.0014 BTC to 2 recipients'));
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts).toHaveTextContent(recipientA);
+        expect(facts).toHaveTextContent(recipientB);
+        expect(facts).toHaveTextContent('0.0012 BTC');
+        expect(facts).toHaveTextContent('0.0002 BTC');
+        expect(facts).toHaveTextContent('0.00005 BTC');
+        expect(facts).not.toHaveTextContent('bcrt1qownaddressownaddress');
+        expect(screen.queryByTestId('psbt-input')).toBeNull();
+        expect(screen.queryByTestId('psbt-output')).toBeNull();
     });
 
     it('never displays a missing decoded amount as zero', async () => {
@@ -194,20 +195,10 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        const output = (await screen.findAllByTestId('psbt-output'))[0];
-        expect(output.textContent).toBe('Recipientbcrt1qincompleteoutputamount unknown');
-        const panel = screen.getByTestId('psbt-intent-panel');
-        const totals = Object.fromEntries(
-            [...panel.querySelectorAll('dt')].map((label) => [
-                label.textContent,
-                label.nextElementSibling.textContent,
-            ]),
-        );
-        expect(totals).toMatchObject({
-            'Leaving this wallet': 'unavailable',
-            'Total out': 'unavailable',
-            'Network fee': 'unavailable',
-        });
+        const status = await screen.findByTestId('confirm-status');
+        expect(status).toHaveAttribute('data-tone', 'danger');
+        expect(status).toHaveTextContent('cannot explain safely');
+        expect(document.body.textContent).not.toContain('0 BTC');
     });
 
     it('renders the intent decoded from the requested PSBT', async () => {
@@ -223,18 +214,14 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        const actionIntent = await screen.findByTestId('psbt-action-intent');
-        const panel = await screen.findByTestId('psbt-intent-panel');
-        // One decode, made after the wallet list answered: the panel never
-        // renders, drops back to "Decoding" and renders again when walletId
-        // lands (a second pass was what raced the missing-amount test).
+        await waitFor(() => expect(screen.getByTestId('confirm-sentence'))
+            .toHaveTextContent('Mint 1 JDOG.'));
+        const facts = screen.getByTestId('confirm-facts');
         expect(messaging.parsePsbt).toHaveBeenCalledTimes(1);
-        expect(actionIntent.textContent).toBe('Carries an XChain Mint action');
-        expect(panel.textContent).toContain('Recipient');
-        expect(panel.textContent).toContain('100,000 sats');
-        expect(panel.textContent).toContain('Change (back to you)');
-        expect(panel.textContent).toContain('49,500 sats');
-        expect(panel.textContent).toContain('Your address');
+        expect(facts).toHaveTextContent('bcrt1q');
+        expect(facts).toHaveTextContent('0.000005 BTC');
+        expect(screen.queryByTestId('psbt-input')).toBeNull();
+        expect(screen.queryByTestId('psbt-output')).toBeNull();
         expect(messaging.parsePsbt).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             psbtHex: 'deadbeefcafe',
@@ -254,9 +241,6 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        // The panel renders its checking state before the preflight call goes
-        // out, so the call is awaited rather than read on first paint.
-        await screen.findByTestId('preflight-panel');
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
@@ -290,7 +274,13 @@ describe('SignApproval signPsbt intent', () => {
 
         expect(await screen.findByText('The action would exceed the available balance.'))
             .toBeTruthy();
-        expect(screen.getByRole('button', { name: /Approve/i }).disabled).toBe(true);
+        // G130: Approve keeps its colour; the tap says why at the top and
+        // resolves nothing.
+        const approve = screen.getByRole('button', { name: /Approve/i });
+        expect(approve.disabled).toBe(false);
+        fireEvent.click(approve);
+        expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
+        expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
 
     it('uses input zero as the sender when another input belongs to this wallet', async () => {
@@ -317,7 +307,6 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        await screen.findByTestId('preflight-panel');
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
@@ -350,7 +339,6 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        await screen.findByTestId('preflight-panel');
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
@@ -470,7 +458,7 @@ describe('SignApproval 360x600 layout', () => {
             />,
         );
 
-        expect(await screen.findByTestId('request-origin-full')).toHaveTextContent(origin);
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent(/for attacker-controlled-subdomain/);
         expect(screen.getByText(message)).toBeTruthy();
 
         const approvalScreen = view.container.firstElementChild;
@@ -480,24 +468,19 @@ describe('SignApproval 360x600 layout', () => {
         expect(detailScrollport).toContainElement(screen.getByText(message));
         expect(actionFooter).not.toBeNull();
         expect(actionFooter).not.toBe(detailScrollport);
-        expect(actionFooter.querySelectorAll('button')).toHaveLength(2);
+        expect(screen.getByTestId('confirm-buttons').querySelectorAll('button')).toHaveLength(2);
         expect(screen.getByRole('button', { name: /Reject/i })).toBeVisible();
         expect(screen.getByRole('button', { name: /Approve/i })).toBeVisible();
 
         const screenCss = readCss('packages/core/src/ui/Screen.module.css');
-        const approvalCss = readCss('packages/extension/src/approval/approval.module.css');
         const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
-        const originCss = readCss('packages/core/src/shared/components/OriginIdentity.module.css');
         expect(screenCss).toMatch(/\.screen\s*\{[^}]*height:[^;}]+;[^}]*overflow:\s*hidden/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden/s);
         expect(screenCss).toMatch(/\.footer\s*\{[^}]*flex:\s*0 0 auto/s);
-        expect(approvalCss).toMatch(/\.footer > \*\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0/s);
-        expect(approvalCss).toMatch(/\.summaryValue\s*\{[^}]*max-width:\s*100%;[^}]*word-break:\s*break-all/s);
-        expect(signCss).toMatch(/\.sourceApp\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-        expect(originCss).toMatch(/\.fullOrigin[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(signCss).toMatch(/\.footer\s*\{[^}]*flex-direction:\s*column;[^}]*min-width:\s*0/s);
     });
 
-    it('renders every output without allowing detail rows or choices to set the window width', async () => {
+    it('renders many recipients in one facts card without restoring raw output rows', async () => {
         setApprovalViewport();
         const outputs = Array.from({ length: 24 }, (_, index) => ({
             address: `bcrt1q${String(index).padStart(2, '0')}${'destination'.repeat(16)}`,
@@ -524,22 +507,24 @@ describe('SignApproval 360x600 layout', () => {
             />,
         );
 
-        const panel = await screen.findByTestId('psbt-intent-panel');
-        expect(panel.querySelectorAll('[title^="bcrt1q"]')).toHaveLength(25);
-        expect(screen.getAllByText('Recipient')).toHaveLength(24);
+        await waitFor(() => expect(screen.getByTestId('confirm-sentence'))
+            .toHaveTextContent('24 recipients'));
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.querySelectorAll('dt')).toHaveLength(27);
+        expect(screen.queryByTestId('psbt-input')).toBeNull();
+        expect(screen.queryByTestId('psbt-output')).toBeNull();
 
         const detailScrollport = view.container.querySelector('main');
         const actionFooter = view.container.querySelector('footer');
-        expect(detailScrollport).toContainElement(panel);
+        expect(detailScrollport).toContainElement(facts);
         expect(detailScrollport.nextElementSibling).toBe(actionFooter);
-        expect(actionFooter.querySelectorAll('button')).toHaveLength(2);
+        expect(screen.getByTestId('confirm-buttons').querySelectorAll('button')).toHaveLength(2);
 
         const approvalCss = readCss('packages/extension/src/approval/approval.module.css');
         const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
         expect(approvalCss).toMatch(/\.toggleRow\s*\{[^}]*min-width:\s*0/s);
         expect(approvalCss).toMatch(/\.toggleRow > span:last-child\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/s);
-        expect(signCss).toMatch(/\.detailsRow\s*\{[^}]*grid-template-columns:\s*minmax\(0, max-content\) minmax\(0, 1fr\)/s);
-        expect(signCss).toMatch(/\.detailsValue\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/s);
+        expect(signCss).not.toMatch(/\.details(?:Row|Value)/);
     });
 });
 
@@ -566,7 +551,7 @@ describe('SignApproval untrusted text', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This connection request has expired.',
         );
-        expect(connect).toBeDisabled();
+        expect(connect).not.toBeDisabled();
         fireEvent.click(connect);
         expect(messaging.resolveApproval).toHaveBeenCalledTimes(1);
     });
@@ -595,7 +580,8 @@ describe('SignApproval untrusted text', () => {
             'This approval was interrupted. Return to the site and try again.',
         );
         expect(password).toHaveValue('');
-        expect(approve).toBeDisabled();
+        // The expired request cannot be approved again; the button keeps its
+        // colour (G130) and the interrupted notice says why.
         fireEvent.click(approve);
         expect(messaging.resolveApproval).toHaveBeenCalledTimes(1);
     });
@@ -613,7 +599,8 @@ describe('SignApproval untrusted text', () => {
             />,
         );
 
-        expect(await screen.findByText('Pay alice␦txt today')).toBeTruthy();
+        expect((await screen.findByTestId('confirm-message-text')).textContent)
+            .toBe('Pay alice[U+202E]txt[U+200B]\u2028today');
         expect(screen.queryByText('Pay alice\u202Etxt\u200B\u2028today')).toBeNull();
         expect(screen.getByText(/original message text/i)).toBeTruthy();
     });
@@ -636,7 +623,7 @@ describe('SignApproval untrusted text', () => {
 
         expect(await screen.findByText('trusted.example␦moc.live')).toBeTruthy();
         expect(screen.getByText('onetime code')).toBeTruthy();
-        expect(screen.getAllByText(/original sign-in text/i)).toHaveLength(2);
+        expect(screen.getAllByText(/original sign-in text/i)).toHaveLength(1);
     });
 
     // The handler refuses an approved sign-in with no address, so the window
@@ -662,11 +649,14 @@ describe('SignApproval untrusted text', () => {
                 onReject={() => {}}
             />,
         );
-        const second = await screen.findByText('bcrt1qsecondsecondsecond');
-        fireEvent.click(second.closest('label').querySelector('input[type="radio"]'));
+        // Sign in as is the themed dropdown (G119), not radios.
+        expect(screen.queryAllByRole('radio')).toHaveLength(0);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign in as: bcrt1qfirstfirstfirst' }));
+        fireEvent.click(screen.getByRole('option', { name: /^bcrt1qsecondsecondsecond/ }));
+        expect(screen.getByRole('button', { name: 'Sign in as: bcrt1qsecondsecondsecond' })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(false));
-        const approve = screen.getByRole('button', { name: 'Sign in' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign In' }).disabled).toBe(false));
+        const approve = screen.getByRole('button', { name: 'Sign In' });
         approve.focus();
         fireEvent.click(approve);
         await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledTimes(1));
@@ -691,7 +681,12 @@ describe('SignApproval untrusted text', () => {
         );
         expect(await screen.findByText(/no address it may sign in with/i)).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
-        expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(true);
+        // G130: Sign In keeps its colour; the tap names what is missing.
+        const signIn = screen.getByRole('button', { name: 'Sign In' });
+        expect(signIn.disabled).toBe(false);
+        fireEvent.click(signIn);
+        expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Choose the address to sign in with.');
+        expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
 });
 
@@ -724,8 +719,7 @@ describe('approval window keyboard controls', () => {
 
         const reject = await screen.findByRole('button', { name: 'Reject' });
         const approve = screen.getByRole('button', { name: 'Approve' });
-        const details = await screen.findByText('Details (1)');
-        const rawDetails = await screen.findByText('Developer · raw view');
+        expect(document.querySelector('details')).toBeNull();
         await waitFor(() => expect(document.activeElement).toBe(reject));
 
         await user.keyboard('{Enter}');
@@ -735,12 +729,8 @@ describe('approval window keyboard controls', () => {
         ));
         messaging.resolveApproval.mockClear();
 
-        await user.tab();
-        expect(document.activeElement).toBe(details);
-        await user.tab();
-        expect(document.activeElement).toBe(rawDetails);
-        await user.tab();
-        const password = screen.getByLabelText('Password');
+        const password = screen.getByLabelText('Password', { selector: 'input' });
+        password.focus();
         expect(document.activeElement).toBe(password);
         await user.keyboard('secret{Enter}');
         expect(password).toHaveValue('secret');

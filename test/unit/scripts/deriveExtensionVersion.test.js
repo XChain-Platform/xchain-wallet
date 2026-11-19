@@ -50,6 +50,12 @@ describe('deriveExtensionVersion', () => {
         );
     });
 
+    it('rejects a zero-padded segment longer than five digits', () => {
+        expect(() => deriveExtensionVersion('1.2.000003')).toThrowError(/unrecognized wallet version/);
+        expect(() => deriveExtensionVersion('1.2.3-beta.000001')).toThrowError(/unrecognized wallet version/);
+        expect(deriveExtensionVersion('1.2.00003')).toBe('1.2.3');
+    });
+
     it('rejects lane zero because it cannot preserve strict ordering', () => {
         expect(() => deriveExtensionVersion('1.2.3-respin.0')).toThrowError(
             new Error('deriveExtensionVersion: respin-number must be at least 1'),

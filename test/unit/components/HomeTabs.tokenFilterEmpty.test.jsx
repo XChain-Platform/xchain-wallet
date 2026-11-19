@@ -10,8 +10,8 @@
 
 // A token query that matches nothing used to strand the user on the Tokens
 // tab: the empty state pointed at a "top toolbar" that does not exist and the
-// filter row holding the query was collapsed. The empty state now clears the
-// query itself, and the filter row opens whenever a query is live.
+// query itself, while the single filter and sort button makes the active
+// filter visible and keeps all list controls in one popover.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const chainRegistry = {
     byCoin: () => [],
@@ -54,13 +55,14 @@ function mount(overrides = {}) {
         ...overrides,
     };
     const view = render(<HomeTabs {...props} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+    showHomeBalances('tokens');
     return { ...view, props };
 }
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    globalThis.localStorage?.clear();
 });
 
 describe('HomeTabs token filter empty state', () => {
@@ -72,19 +74,25 @@ describe('HomeTabs token filter empty state', () => {
         expect(screen.getByText('Matching tokens appear here after you change or clear the filter.')).toBeInTheDocument();
         expect(screen.queryByText(/top toolbar/)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Filter' }));
         expect(onTokenQueryChange).toHaveBeenCalledWith('');
     });
 
-    it('opens the filter row when it mounts with a live query', () => {
+    it('marks the filter button active and reveals the live query on demand', () => {
         mount({ tokenQuery: 'LTC' });
+        const button = screen.getByRole('button', { name: 'Filter and sort' });
+        expect(button.className).toMatch(/triggerActive/);
+        expect(screen.queryByRole('searchbox', { name: 'Search tokens by name' })).toBeNull();
+
+        fireEvent.click(button);
         expect(screen.getByRole('searchbox', { name: 'Search tokens by name' })).toHaveValue('LTC');
     });
 
-    it('keeps the filter row collapsed and shows no Clear action without a query', () => {
+    it('keeps the filter popover closed and shows no Clear action without a query', () => {
         mount({ onReceive: vi.fn() });
         expect(screen.queryByRole('searchbox', { name: 'Search tokens by name' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Filter and sort' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Clear Filter' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 });

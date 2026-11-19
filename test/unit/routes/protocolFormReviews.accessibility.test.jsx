@@ -16,6 +16,7 @@ import { DispenserForm } from '../../../packages/core/src/shared/routes/Dispense
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -94,6 +95,8 @@ function confirmEnvelope() {
 
 function mount(Component, walletMode, props = {}, overrides = {}) {
     const messaging = messagingFor(walletMode, overrides);
+    // Forms read the wallet's mode from the published wallet list, not settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const result = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Component walletId="wallet-1" onBack={() => {}} {...props} />
@@ -102,19 +105,24 @@ function mount(Component, walletMode, props = {}, overrides = {}) {
     return { ...result, messaging };
 }
 
-async function auditReview(container, name) {
+async function auditConfirm(container) {
+    expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
+    expect(screen.getByTestId('confirm-sentence')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.queryByText(/Estimate unavailable/i)).toBeNull();
+    await expectNoSeriousAxeViolations(container);
+}
+
+async function auditLegacyWatcherReview(container, name) {
     expect(await screen.findByRole('form', { name })).toBeTruthy();
     await expectNoSeriousAxeViolations(container);
 }
 
-async function auditConfirm(container) {
-    expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
-    await expectNoSeriousAxeViolations(container);
-}
-
-async function eachReviewMode(open) {
+async function eachReviewMode(open, { watcherConfirm = true } = {}) {
     const watcher = await open('watcher');
-    await auditReview(watcher.container, watcher.reviewName);
+    if (watcherConfirm) await auditConfirm(watcher.container);
+    else await auditLegacyWatcherReview(watcher.container, watcher.reviewName);
     cleanup();
 
     const full = await open('full');
@@ -123,6 +131,7 @@ async function eachReviewMode(open) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.restoreAllMocks();
 });
 
@@ -131,12 +140,12 @@ describe('protocol form review accessibility', () => {
         await eachReviewMode(async (walletMode) => {
             const mounted = mount(IssueTokenForm, walletMode);
             fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'TOKEN' } });
-            fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+            fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
             // Submit waits for the ticker availability lookup to settle.
             await waitFor(() => expect(mounted.messaging.getTokenInfo).toHaveBeenCalled(), { timeout: 3000 });
             await act(async () => { await mounted.messaging.getTokenInfo.mock.results.at(-1).value; });
-            fireEvent.click(screen.getByRole('button', { name: walletMode === 'watcher' ? 'Preview' : 'Issue token' }));
-            return { ...mounted, reviewName: 'Review token issue' };
+            fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
+            return mounted;
         });
     });
 
@@ -149,21 +158,20 @@ describe('protocol form review accessibility', () => {
             fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
             fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create Dispenser' }));
             return { ...mounted, reviewName: 'Review dispenser' };
-        });
+        }, { watcherConfirm: false });
     });
 
     it('audits order review and confirm screens', async () => {
         await eachReviewMode(async (walletMode) => {
             const mounted = mount(CreateOrderForm, walletMode, { initialChainId: CHAIN });
-            const ticker = await screen.findByLabelText('Ticker');
-            fireEvent.change(ticker, { target: { value: 'TOKEN' } });
-            const amounts = screen.getAllByLabelText(/^(Amount|Amount \(BTC\))$/);
-            fireEvent.change(amounts[0], { target: { value: '10' } });
-            fireEvent.change(amounts[1], { target: { value: '0.001' } });
-            fireEvent.click(screen.getByRole('button', { name: walletMode === 'watcher' ? 'Preview' : 'Place order' }));
-            return { ...mounted, reviewName: 'Review order' };
+            // The give asset is chosen on the Asset picker page, not typed.
+            fireEvent.click(await screen.findByRole('button', { name: /^Give asset/ }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Select TOKEN on Bitcoin/ }));
+            fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
+            fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '0.001' } });            fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+            return mounted;
         });
     });
 
@@ -172,14 +180,14 @@ describe('protocol form review accessibility', () => {
             chainId: CHAIN,
             presetTick: 'TOKEN',
         });
-        fireEvent.change(await screen.findByLabelText('What is being bet on'), {
+        fireEvent.change(await screen.findByLabelText('Question'), {
             target: { value: 'Will the accessibility audit pass?' },
         });
-        fireEvent.change(screen.getByLabelText('Outcome 0'), { target: { value: 'Yes' } });
-        fireEvent.change(screen.getByLabelText('Outcome 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Outcome 1'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Outcome 2'), { target: { value: 'No' } });
         const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
-        fireEvent.change(screen.getByLabelText('Betting closes'), { target: { value: tomorrow } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review market' }));
+        fireEvent.change(screen.getByLabelText('Closes'), { target: { value: tomorrow } });
+        fireEvent.click(screen.getByRole('button', { name: 'Open Market' }));
         await auditConfirm(mounted.container);
     });
 
@@ -189,13 +197,16 @@ describe('protocol form review accessibility', () => {
                 chainId: CHAIN,
                 presetTick: 'TOKEN',
             });
-            fireEvent.change(await screen.findByLabelText('Option 0'), { target: { value: 'Yes' } });
-            fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+            fireEvent.change(await screen.findByLabelText('Question'), {
+                target: { value: 'Should the audit pass?' },
+            });
+            fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'Yes' } });
+            fireEvent.change(screen.getByLabelText('Option 2'), { target: { value: 'No' } });
             fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '1100' } });
             fireEvent.click(screen.getByRole('button', {
-                name: walletMode === 'watcher' ? 'Preview' : 'Create poll',
+                name: 'Create Poll',
             }));
-            return { ...mounted, reviewName: 'Review poll' };
+            return mounted;
         });
     });
 
@@ -204,9 +215,10 @@ describe('protocol form review accessibility', () => {
             mode: 'address',
             initialChainId: CHAIN,
         });
-        fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        await auditReview(addressReview.container, 'Review lock address');
+        fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lock Address' }));
+        await auditConfirm(addressReview.container);
         cleanup();
         // A TOKEN record cached without an issuer must not answer the owner check.
         __clearTokenInfoCache();
@@ -221,8 +233,9 @@ describe('protocol form review accessibility', () => {
                 chainId: CHAIN, tick: 'TOKEN', divisibility: 8, locks: {}, creator: SOURCE,
             }),
         });
-        fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
+        fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pause Token' }));
         await auditConfirm(tokenConfirm.container);
     });
 
@@ -240,10 +253,7 @@ describe('protocol form review accessibility', () => {
         });
         fireEvent.change(screen.getByLabelText('Recipients'), { target: { value: RECIPIENT } });
         await waitFor(() => expect(screen.getByText(/1 valid address/)).toBeTruthy());
-        fireEvent.click(screen.getByRole('button', { name: 'Review recipients' }));
-        await auditReview(mounted.container, 'Review recipient list');
-
-        fireEvent.click(screen.getByRole('button', { name: /Sign address list/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Recipients' }));
         await auditConfirm(mounted.container);
     });
 });

@@ -31,9 +31,11 @@ assert.match(src, /contactsToCsv\(/, 'serializes to CSV');
 assert.match(src, /new Blob\(/, 'wraps in Blob for download');
 assert.match(src, /\.json/, 'download filename has .json');
 
-// Import path: file input accepts both formats and keeps JSON compatibility.
-assert.match(src, /type="file"/, 'file input present');
-assert.match(src, /accept="application\/json,text\/csv,\.json,\.csv"/, 'restricts to JSON and CSV files');
+// Import path: the shared FileField owns the input and the drop target, and
+// its dialog opens on both formats while JSON compatibility is kept.
+assert.match(src, /<FileField[\s\S]*?onFile=\{onImportFile\}/, 'import uses the shared file field');
+assert.match(src, /CONTACT_IMPORT_ACCEPT = \['application\/json', 'text\/csv', '\.json', '\.csv'\]/, 'restricts to JSON and CSV files');
+assert.match(src, /accept=\{CONTACT_IMPORT_ACCEPT\}/, 'file field dialog opens on JSON and CSV');
 assert.match(src, /JSON\.parse\(/, 'parses imported text');
 assert.match(src, /contactsFromCsv\(/, 'parses CSV imports');
 assert.match(src, /Array\.isArray\(parsed\)/, 'rejects non-arrays');
@@ -45,7 +47,7 @@ assert.match(src, /settings\.contacts\.importedSummary/, 'reports imported count
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');
-assert.match(settingsSrc, /import \{ ContactsSection \}/, 'Settings.jsx imports section');
+assert.match(settingsSrc, /import \{ ContactsExportPage, ContactsSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'contacts'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'panel'/);

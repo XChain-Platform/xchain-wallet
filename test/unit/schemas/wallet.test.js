@@ -16,7 +16,9 @@ import {
     validateWallet,
     WALLET_ORIGINS,
     WALLET_FORMATS,
+    WALLET_MODES,
     CURRENT_VERSION,
+    walletModeOf,
 } from '../../../packages/core/src/schemas/wallet.js';
 
 const BASE_KDF = {
@@ -36,6 +38,52 @@ const BASE_INPUT = {
     kdfParams: BASE_KDF,
 };
 
+const HARDWARE_INPUT = {
+    name: 'My Trezor',
+    origin: 'connected-hardware',
+    format: 'hardware',
+    passphraseEnabled: false,
+    encryptedSeed: '',
+    kdfParams: BASE_KDF,
+    walletMode: 'full',
+};
+
+describe('hardware wallet format (seedless, keys on the device)', () => {
+    const errorsFor = (patch) => validateWallet({ ...createWallet(HARDWARE_INPUT), ...patch }).errors;
+
+    it('lists the format and origin', () => {
+        expect(WALLET_FORMATS).toContain('hardware');
+        expect(WALLET_ORIGINS).toContain('connected-hardware');
+    });
+
+    it('accepts a seedless record with no keys, no passphrase, full mode', () => {
+        const r = validateWallet(createWallet(HARDWARE_INPUT));
+        expect(r.errors).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    it('refuses any seed, imported key or passphrase', () => {
+        expect(errorsFor({ encryptedSeed: 'c2VlZGRhdGE=' }).some((e) => e.startsWith('encryptedSeed'))).toBe(true);
+        expect(errorsFor({
+            importedKeys: [{ addressId: 'a1', encryptedWif: 'c2VlZA==', importedAt: new Date().toISOString() }],
+        }).some((e) => e.startsWith('importedKeys'))).toBe(true);
+        expect(errorsFor({ passphraseEnabled: true }).some((e) => e.startsWith('passphraseEnabled'))).toBe(true);
+        expect(errorsFor({ encryptedPassphrase: 'Y2lwaGVy' }).some((e) => e.startsWith('encryptedPassphrase')))
+            .toBe(true);
+    });
+
+    it('refuses the two-phone modes', () => {
+        expect(errorsFor({ walletMode: 'watcher' }).some((e) => e.startsWith('walletMode'))).toBe(true);
+        expect(errorsFor({ walletMode: 'signer' }).some((e) => e.startsWith('walletMode'))).toBe(true);
+    });
+
+    it('keeps the origin and the format together', () => {
+        expect(errorsFor({ origin: 'created' }).some((e) => e.startsWith('origin'))).toBe(true);
+        const seeded = createWallet({ ...BASE_INPUT, origin: 'connected-hardware' });
+        expect(validateWallet(seeded).errors.some((e) => e.startsWith('format'))).toBe(true);
+    });
+});
+
 describe('WALLET_ORIGINS', () => {
     it('contains expected origins', () => {
         expect(WALLET_ORIGINS).toContain('created');
@@ -51,6 +99,29 @@ describe('WALLET_FORMATS', () => {
         expect(WALLET_FORMATS).toContain('bip39');
         expect(WALLET_FORMATS).toContain('counterwallet-legacy');
         expect(WALLET_FORMATS).toContain('wif-only');
+    });
+});
+
+describe('walletMode (§20, per wallet)', () => {
+    it('defaults a new wallet to Normal and keeps a chosen mode', () => {
+        expect(createWallet(BASE_INPUT).walletMode).toBe('full');
+        for (const walletMode of WALLET_MODES) {
+            const w = createWallet({ ...BASE_INPUT, walletMode });
+            expect(w.walletMode).toBe(walletMode);
+            expect(validateWallet(w).ok).toBe(true);
+        }
+    });
+
+    it('refuses a record with no mode or an unknown one', () => {
+        const { walletMode: _omit, ...without } = createWallet(BASE_INPUT);
+        expect(validateWallet(without).ok).toBe(false);
+        expect(validateWallet({ ...createWallet(BASE_INPUT), walletMode: 'observer' }).ok).toBe(false);
+    });
+
+    it('walletModeOf reads anything unknown as Normal', () => {
+        expect(walletModeOf({ walletMode: 'signer' })).toBe('signer');
+        expect(walletModeOf({ walletMode: 'nope' })).toBe('full');
+        expect(walletModeOf(null)).toBe('full');
     });
 });
 
@@ -127,7 +198,10 @@ describe('validateWallet', () => {
 
     it('accepts all valid origins', () => {
         for (const origin of WALLET_ORIGINS) {
-            const w = createWallet({ ...BASE_INPUT, origin });
+            // A connected-hardware origin only travels with the seedless format.
+            const w = origin === 'connected-hardware'
+                ? createWallet({ ...HARDWARE_INPUT })
+                : createWallet({ ...BASE_INPUT, origin });
             expect(validateWallet(w).ok).toBe(true);
         }
     });
@@ -285,9 +359,9 @@ describe('validateWallet: encryptedPassphrase (§15.6)', () => {
         expect(createWallet(BASE_INPUT).encryptedPassphrase).toBeNull();
     });
 
-    it('a fresh record is at schema version 3', () => {
-        expect(createWallet(BASE_INPUT).schemaVersion).toBe(3);
-        expect(CURRENT_VERSION).toBe(3);
+    it('a fresh record is at schema version 4', () => {
+        expect(createWallet(BASE_INPUT).schemaVersion).toBe(4);
+        expect(CURRENT_VERSION).toBe(4);
     });
 
     it('accepts null on a bip39 passphrase wallet (the legacy, awaiting-capture state)', () => {

@@ -35,6 +35,7 @@ import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
 import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/hardwareSign.js';
 
 // The notice tone for each device state; a state not listed (cancelled) reads as info.
 const STATUS_VARIANT = {
@@ -143,9 +144,9 @@ export function statusCopy(status, signerKind, chainId, detail) {
         case 'available':
             return 'Ready. 1. Select the sign button below. 2. Review every detail on your device. 3. Approve on the device only if everything matches. To cancel, reject on the device; nothing will be signed.';
         case 'wrong-app':
-            return `Open the ${coinNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
+            return `Open the ${ledgerAppNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
         case 'unsupported-network':
-            return `This device can't sign on ${coinNameFor(chainId) || 'this network'}. Use the software signer instead.`;
+            return `This device can't sign on ${coinNameFor(chainId) || 'this network'}. Use an address from a software wallet instead.`;
         case 'locked':
             return signerKind === 'trezor'
                 ? 'Device is locked. Enter your PIN on the Trezor.'
@@ -155,7 +156,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
                 ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
                 : 'Device not detected. Check its connection, unlock it, and try again.';
         case 'not-connected':
-            return `This ${signerKind === 'trezor' ? 'Trezor' : 'Ledger'} is not connected in this session. Connect it again with Pair hardware signer, then try again.`;
+            // Approve opens the hardware sign page, whose Try again reconnects it.
+            return t('hardwareSign.notConnected', { vendor: signerKind === 'trezor' ? 'Trezor' : 'Ledger' });
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':
@@ -165,6 +167,17 @@ export function statusCopy(status, signerKind, chainId, detail) {
         default:
             return '';
     }
+}
+
+/**
+ * The Ledger app a chain signs in, as the device names it. The Bitcoin test
+ * networks sign in the Bitcoin Test app, matching LedgerSigner's
+ * LEDGER_APP_NAME_FOR_CHAIN; every other chain's app is its coin's name.
+ * @param {string | undefined} chainId
+ */
+function ledgerAppNameFor(chainId) {
+    if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') return 'Bitcoin Test';
+    return coinNameFor(chainId);
 }
 
 /** @param {string | undefined} chainId */

@@ -124,8 +124,8 @@ describe('extractSingle', () => {
 describe('contractMetaOf', () => {
     it('reads the contract object\'s flat fields', () => {
         expect(contractMetaOf({
-            meta_name: 'Escrow', meta_description: 'Two-party escrow', meta_version: '1.0.0',
-        })).toEqual({ name: 'Escrow', description: 'Two-party escrow', version: '1.0.0' });
+            meta_name: 'Escrow', meta_description: 'Two-party escrow', meta_version: '9.8.7',
+        })).toEqual({ name: 'Escrow', description: 'Two-party escrow', version: '9.8.7' });
     });
 
     it('reads an action payload\'s prefixed fields', () => {
@@ -195,8 +195,8 @@ describe('contractDisplayLabel names a contract the same way on every surface', 
 
     it('prints name, version and address', () => {
         expect(contractDisplayLabel(
-            { meta_name: 'Escrow', meta_version: '1.0.0' }, { chainId: CHAIN, actionIndex: 12 },
-        )).toBe('Escrow v1.0.0 (C:BTC:12)');
+            { meta_name: 'Escrow', meta_version: '9.8.7' }, { chainId: CHAIN, actionIndex: 12 },
+        )).toBe('Escrow v9.8.7 (C:BTC:12)');
     });
 
     it('omits the version when the contract exports none', () => {
@@ -223,7 +223,7 @@ describe('contractDisplayLabel names a contract the same way on every surface', 
 
     it('never prints the name alone: the address is the identity', () => {
         const label = contractDisplayLabel(
-            { meta_name: 'Escrow', meta_version: '1.0.0' }, { chainId: CHAIN, actionIndex: 12 },
+            { meta_name: 'Escrow', meta_version: '9.8.7' }, { chainId: CHAIN, actionIndex: 12 },
         );
         expect(label).toContain('C:BTC:12');
     });

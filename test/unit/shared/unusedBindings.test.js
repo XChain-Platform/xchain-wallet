@@ -23,7 +23,6 @@ const sourceFiles = [
     'packages/core/src/shared/routes/AirdropForm.jsx',
     'packages/core/src/shared/routes/CallbackForm.jsx',
     'packages/core/src/shared/routes/ContactsList.jsx',
-    'packages/core/src/shared/routes/CrossChainTemplates.jsx',
     'packages/core/src/shared/routes/DispenserExplorer.jsx',
     'packages/core/src/shared/routes/History.jsx',
     'packages/core/src/shared/routes/Home.jsx',

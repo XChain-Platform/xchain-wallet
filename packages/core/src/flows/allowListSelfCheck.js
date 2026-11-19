@@ -189,9 +189,9 @@ export function dispenserCreateAllowListVerdict({ members, getAddress, sourceAdd
  */
 export function ownerOffAllowListMessage(getAddress, { createFirst = false } = {}) {
     const addr = typeof getAddress === 'string' ? getAddress : '';
-    const shown = addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+    // The notice wraps, so the address is named in full (G99).
     const subject = addr
-        ? `This dispenser's own address (${shown}) is not on the allow-list`
+        ? `This dispenser's own address (${addr}) is not on the allow-list`
         : 'The new dispenser address will not be on the allow-list';
     const consequence = `${subject}, and the network checks it as well as `
         + 'the buyer. Every purchase would be refused, and a buyer only finds out after paying, '

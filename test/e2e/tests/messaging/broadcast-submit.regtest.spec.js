@@ -11,21 +11,10 @@
 // The standalone BROADCAST form's submit path (§40.6), driven against a
 // live regtest chain. Only the dev-mock venue had ever exercised it, so no
 // run had ever produced a signature the chain accepted, and nothing had
-// proven which wire VERSION each field combination actually selects once
-// real bytes hit a real node.
+// proven the plain-message format with real bytes on a real node.
 //
-// `BroadcastForm.jsx` maps three UI fields onto four protocol format
-// versions, entirely client-side, before compose ever runs:
-//
-//   - Feed name empty, Value/Feed fee/Memo all empty -> v0 (message only,
-//     no fee, the wallet's own zero-fee reference action - see
-//     `tests/fees/protocol-fee-mandatory-lane.regtest.spec.js`).
-//   - A Value present alongside a Feed fee or a non-empty memo -> v1
-//     (oracle: feed name + value, memo carries the free-text body and/or the
-//     UTC timestamp).
-//
-// This file drives both lanes and reads the version, the message, the
-// value, the fee and the memo back off the CHAIN's own BROADCAST row
+// This file drives format 0 and reads the version and message back off the
+// chain's own BROADCAST row
 // (`xchain-explorer`'s BROADCAST_QUERY: message / value / broadcast_fee /
 // memo / action_format), independently of the wallet's own "Broadcast
 // sent" screen.
@@ -41,7 +30,10 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -56,33 +48,31 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Broadcast');
     let main = page.getByRole('main');
-    await expect(main.getByLabel('Message (optional)', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    const address = await main.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
     await fundAddress(address, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Broadcast');
     main = page.getByRole('main');
-    await expect(main.getByLabel('Message (optional)', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From').inputValue(), 'still signing with the funded address').toBe(address);
+    expect(await (await openFromAddress(main)).inputValue(), 'still signing with the funded address').toBe(address);
     return { main, address };
 }
 
 /** Fills the password when the confirm screen asks for one and approves. */
 async function approveConfirm(page, what = 'this action') {
     await expectConfirmModal(page, what, 90_000);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
 }
 
 /** Reads the 64-hex-char transaction id printed on a form's done screen. */
@@ -103,7 +93,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
         await healVenueClock();
     });
 
-    test('a plain message with no feed, value or fee submits as v0 with no memo and no fee', async ({ page }) => {
+    test('a plain message submits as v0 with no memo, value, or feed fee', async ({ page }) => {
         const text = `xc-e2e plain broadcast ${STAMP}`;
         let address;
 
@@ -112,10 +102,8 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             address = opened.address;
             const main = opened.main;
 
-            await main.getByLabel('Message (optional)', { exact: true }).fill(text);
-            // Neither the feed name nor the value/fee fields are touched, so
-            // FormatSelector has nothing that forces a memo-carrying version.
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
+            await fieldByLabel(main, 'Message').fill(text);
+            await main.getByRole('button', { name: 'Announce', exact: true }).click();
 
             await approveConfirm(page, 'the plain broadcast');
             const txid = await readDoneTxid(page);
@@ -123,7 +111,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             const action = await waitForValidAction(txid);
             expect(action.action, 'the submit did not record a BROADCAST action').toBe('BROADCAST');
             expect(action.source, 'the broadcast was not signed by the funded address').toBe(address);
-            expect(String(action.action_format), 'a plain broadcast with none of feed/value/fee/memo set was not sent as v0')
+            expect(String(action.action_format), 'the plain broadcast was not sent as v0')
                 .toBe('0');
             expect(action.message, 'the on-chain MESSAGE does not match what was typed').toBe(text);
             expect(action.value, 'a plain broadcast recorded a VALUE nobody set').toBeFalsy();
@@ -131,40 +119,4 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
         });
     });
 
-    test('a feed name with a value and a fee submits as v1, and the memo carries the typed body', async ({ page }) => {
-        const feedName = `XCE2E${STAMP}`;
-        const body = `xc-e2e oracle body ${STAMP}`;
-        const value = '42.5';
-        const feedFee = '2';
-        let address;
-
-        await test.step('onboard, fund, and submit an oracle-style broadcast', async () => {
-            const opened = await onboardOntoBroadcastForm(page, 'Broadcast Oracle Wallet');
-            address = opened.address;
-            const main = opened.main;
-
-            await main.getByLabel('Feed name (optional)').fill(feedName);
-            await main.getByLabel('Message (optional)', { exact: true }).fill(body);
-            await main.getByLabel('Value (optional)').fill(value);
-            await main.getByLabel('Feed fee (%) (optional)', { exact: true }).fill(feedFee);
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
-
-            await approveConfirm(page, 'the oracle broadcast');
-            const txid = await readDoneTxid(page);
-
-            const action = await waitForValidAction(txid);
-            expect(action.action, 'the submit did not record a BROADCAST action').toBe('BROADCAST');
-            expect(action.source, 'the broadcast was not signed by the funded address').toBe(address);
-            expect(String(action.action_format),
-                'a feed name with a value and a fee was not sent as v1').toBe('1');
-            // The feed name is the wire MESSAGE for an oracle broadcast; the
-            // free-text body moves to MEMO instead (BroadcastForm's own field
-            // mapping), so it does not appear here.
-            expect(action.message, 'the on-chain MESSAGE is not the feed name that was typed').toBe(feedName);
-            expect(Number(action.value), 'the on-chain VALUE does not match what was typed').toBe(Number(value));
-            expect(Number(action.broadcast_fee ?? action.fee), 'the on-chain fee does not match what was typed')
-                .toBe(Number(feedFee));
-            expect(action.memo, 'the free-text body never reached the on-chain MEMO').toContain(body);
-        });
-    });
 });

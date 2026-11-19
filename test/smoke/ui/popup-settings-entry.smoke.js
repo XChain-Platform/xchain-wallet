@@ -66,12 +66,14 @@ assert.ok(
 
 // --- 2/3. A visible entry, prop-gated ---------------------------------
 
+// The hero's Settings entry is a row of its one actions menu (U52). The smoke
+// runner's English-source loader renders its t() label as the English text.
 assert.ok(
-    /aria-label="Open settings"/.test(hero),
-    'the balance hero renders a Settings control',
+    /id: 'settings', label: (?:t\('components\.totalBalanceHero\.openSettings'\)|(['"`])Open settings\1)/.test(hero),
+    'the balance hero offers a Settings control',
 );
 assert.ok(
-    /typeof onOpenSettings === 'function' \? \(/.test(hero),
+    /typeof onOpenSettings === 'function' \? [({]/.test(hero),
     'the hero gear is gated on the prop, so shells with a nav rail do not show it',
 );
 for (const [name, src] of [['HomeTabs', homeTabs], ['Home', home]]) {
@@ -80,8 +82,9 @@ for (const [name, src] of [['HomeTabs', homeTabs], ['Home', home]]) {
         `${name} threads onOpenSettings through to the hero`,
     );
 }
+// The gear is a control on Home, so it pushes Settings and Back returns Home.
 assert.ok(
-    /onOpenSettings=\{\(\) => openSettingsSection\(null\)\}/.test(popupApp),
+    /onOpenSettings=\{\(\) => openSettingsSection\(null, setUnlockedView\)\}/.test(popupApp),
     'the popup supplies the gear handler',
 );
 // Web and desktop DO pass onOpenSettings - to `<LeftNav>` and

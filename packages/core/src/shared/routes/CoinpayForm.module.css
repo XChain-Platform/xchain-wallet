@@ -1,0 +1,44 @@
+/* Payment section: the facts list itself uses the shared FactRows look; this
+   sheet holds the muted fiat note and the Time left pill. */
+
+/* The muted fiat note beside a value, digits kept in order on a
+   right-to-left page. */
+.boxFiat {
+    direction: ltr;
+    unicode-bidi: isolate;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+}
+
+/* An amount with its asset icon beside it, trailing-aligned like the other values. */
+.amountWithIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    max-inline-size: 100%;
+}
+
+/* Time left: an accent pill, red under an hour and once expired. */
+.pill {
+    display: inline-block;
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pillUrgent {
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+    color: var(--xc-danger-fg);
+}
+
+.txid {
+    margin: 0;
+    margin-block-end: var(--xc-space-2);
+}

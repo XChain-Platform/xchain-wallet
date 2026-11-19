@@ -79,8 +79,7 @@ export function HwFirmwareBanner({ signerInfo }) {
     const updateUrl = safeHttpUrl(verdict.updateUrl);
 
     return (
-        <StatusMessage variant={tone} role={role}>
-            <strong className={styles.headline}>{headline}</strong>
+        <StatusMessage variant={tone} role={role} title={headline}>
             {verdict.detail ? (
                 <p className={styles.detail}>{verdict.detail}</p>
             ) : null}

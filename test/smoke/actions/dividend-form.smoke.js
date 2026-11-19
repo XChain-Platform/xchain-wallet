@@ -50,6 +50,10 @@ const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
+const confirmModalSrc = readFileSync(
+    join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
+    'utf8',
+);
 
 const formPath = join(sharedRoutes, 'DividendForm.jsx');
 assert.ok(existsSync(formPath), 'DividendForm.jsx exists');
@@ -82,7 +86,15 @@ assert.ok(
     'DividendForm calls decoder with action: "DIVIDEND"',
 );
 assert.ok(/decoderLib\.decodeAction/.test(src), 'DividendForm invokes decoder.decodeAction');
-assert.ok(src.includes('decoded.warnings'), 'DividendForm renders decoder warnings');
+assert.ok(
+    /<ConfirmActionModal[\s\S]{0,900}?decoded=\{decoded\}/.test(src),
+    'DividendForm passes decoder warnings into the Confirm Standard surface',
+);
+assert.ok(
+    /const warning = confirmWarning\(\{[\s\S]{0,500}?decodedWarnings:[\s\S]{0,180}?formattedDecoded\?\.warnings/.test(confirmModalSrc)
+        && /<ConfirmStandard\b[\s\S]{0,1600}?warning=\{warning\}/.test(confirmModalSrc),
+    'ConfirmActionModal places decoded warnings in the short warning after the details',
+);
 
 // --- 4. Sign wires through messaging.dividendAction -------------------
 
@@ -111,8 +123,8 @@ assert.ok(
     'DividendForm surfaces eligible-holder count on review',
 );
 assert.ok(
-    /Total distribution/.test(src),
-    'DividendForm surfaces total-distribution estimate on review',
+    /<ConfirmActionModal[\s\S]{0,1400}?amount: String\(preview\.total\)/.test(src),
+    'DividendForm puts the total distribution in the Confirm Standard amount and Total',
 );
 
 // --- 6. Validation ----------------------------------------------------

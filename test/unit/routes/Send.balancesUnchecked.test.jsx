@@ -99,6 +99,9 @@ describe('Send empty state and the balance check', () => {
     it('keeps the form instead of claiming there is nothing to send when the coin balance was unreadable', async () => {
         mount('0', { balances: { native: null, tokens: [], unavailable: ['native'], unavailableReason: 'balance service unavailable' } });
         expect(await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 })).toBeInTheDocument();
+        expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
+        expect(screen.queryByText('0 BTC available')).toBeNull();
+        expect(screen.queryByText(/This address holds no BTC/)).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
     });
 
@@ -110,11 +113,14 @@ describe('Send empty state and the balance check', () => {
         expect(heading).toBeInTheDocument();
         expect(screen.getByText('Your balance may be out of date. Try again to refresh it.')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
-        // Plain, full-width page content, like the trustworthy empty state.
-        expect(heading.closest('[role="status"]').parentElement).toBe(screen.getByRole('main'));
+        // Plain, full-width page content, like the trustworthy empty state:
+        // the ListPage root is its only wrapper inside the page body, no form card.
+        const uncheckedState = heading.closest('[role="status"]');
+        expect(uncheckedState.parentElement.parentElement).toBe(screen.getByRole('main'));
+        expect(uncheckedState.closest('form')).toBeNull();
 
         const checksBefore = messaging.getWalletBalances.mock.calls.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(reachability.refresh).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(messaging.getWalletBalances.mock.calls.length).toBeGreaterThan(checksBefore));
 
@@ -129,7 +135,7 @@ describe('Send empty state and the balance check', () => {
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expect(screen.getByText(/Sending needs a network connection/)).toBeInTheDocument();
-        expect(screen.queryByText('Some balances may be out of date')).toBeNull();
+        expect(screen.queryByText(/Some information may be out of date/)).toBeNull();
         expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
@@ -140,19 +146,17 @@ describe('Send empty state and the balance check', () => {
         expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
-    it('does not also show the stale-balances notice on that screen', async () => {
+    it('does not also show the out-of-date notice on that screen', async () => {
         reachability.overall = 'degraded';
         mount('0', { inShell: true });
         expect(await screen.findByRole('heading', { name: "Balances couldn't be checked" })).toBeInTheDocument();
-        expect(screen.queryByText('Some balances may be out of date')).toBeNull();
+        expect(screen.queryByText(/Some information may be out of date/)).toBeNull();
     });
 
-    it('shows the notice once in the page content when Send has a form to show', async () => {
+    it('shows no degraded notice when Send has a form to show', async () => {
         reachability.overall = 'degraded';
         mount('100000000', { inShell: true });
         await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 });
-        const notice = screen.getByText('Some balances may be out of date');
-        expect(screen.getByRole('main').contains(notice)).toBe(true);
-        expect(screen.getAllByText('Some balances may be out of date')).toHaveLength(1);
+        expect(screen.queryByText('Some information may be out of date')).toBeNull();
     });
 });

@@ -14,6 +14,7 @@
 
 import { createRoot } from 'react-dom/client';
 import { defaultRegistry } from '../../core/src/registry/index.js';
+import { enableLocaleChunkRetry } from '../../core/src/i18n/index.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -29,12 +30,18 @@ import { installShellErrorCapture } from './errorCapture.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.jsx';
 import { installNativeFontScale } from './platform/nativeFontScale.js';
+import { CHUNK_RETRY_DELAYS_MS } from './retryablePromise.js';
 
 logConsole.attach();
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
 installNativeFontScale();
+
+// The web app fetches its locale chunks over the network, so a chunk that
+// failed offline is retried under a fresh URL. Core hands this importer only
+// a same-origin .js chunk URL; the packaged extension never registers one.
+enableLocaleChunkRetry((url) => import(/* @vite-ignore */ url));
 
 // Install before React mounts so every mobile KDF entry uses the native
 // provider, including callers that do not request session status first.
@@ -87,11 +94,12 @@ if (!container) {
 //
 // Before, not after, and not inside a component: everything the app does
 // from its first render - reading the vault, deriving a key, drawing an
-// unlock screen - assumes crypto.subtle and IndexedDB are there. An engine
-// missing one of them does not fail cleanly at the point of use; it gets far
-// enough to ask for a password and then breaks somewhere the user reads as
-// "my wallet is gone". This is the only screen such a device should see, and
-// it is deliberately plain HTML: the failure might be in the very primitives
+// unlock screen - assumes a secure context, crypto.getRandomValues and
+// IndexedDB are there. An engine missing one of them does not fail cleanly at
+// the point of use; it gets far enough to ask for a password and then breaks
+// somewhere the user reads as "my wallet is gone". This is the only screen
+// such a device should see, and it is deliberately plain HTML: the failure
+// might be in the very primitives
 // the app needs to render anything richer.
 /** The one screen a device that must not open the wallet ever sees. */
 function renderBlockingPanel(heading, message) {
@@ -108,6 +116,61 @@ function renderBlockingPanel(heading, message) {
     panel.append(title, body);
     container.append(panel);
 }
+
+function failedChunkUrl(error) {
+    const candidates = [error?.url, error?.message, error?.stack, String(error || '')];
+    for (const candidate of candidates) {
+        if (typeof candidate !== 'string') continue;
+        const match = candidate.match(/(?:https?:\/\/|\/)[^\s"'`]+?\.(?:m?js|css)(?:\?[^\s"'`]*)?/i);
+        if (match) return match[0].replace(/[),.;]+$/, '');
+    }
+    return null;
+}
+
+const waitForChunkRetry = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+let preloadRecoveryRunning = false;
+
+// Vite emits this event when a lazy chunk or one of its preload dependencies
+// fails. A brief host-side rate limit should not immediately strand the app on
+// an error screen: request the failed asset again on a fresh module URL, then
+// restart boot after the browser has proved the chunk is available.
+window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault();
+    if (preloadRecoveryRunning) return;
+    preloadRecoveryRunning = true;
+    const chunkUrl = failedChunkUrl(event.payload);
+    void (async () => {
+        if (!chunkUrl) throw event.payload || new Error('Failed chunk URL unavailable');
+        let lastError = event.payload;
+        for (let attempt = 0; attempt < CHUNK_RETRY_DELAYS_MS.length; attempt += 1) {
+            await waitForChunkRetry(CHUNK_RETRY_DELAYS_MS[attempt]);
+            try {
+                const retryUrl = new URL(chunkUrl, location.href);
+                if (retryUrl.origin !== location.origin) {
+                    throw new Error('Refusing to retry a chunk from another origin');
+                }
+                retryUrl.searchParams.set('xchain-preload-retry', String(attempt + 1));
+                if (retryUrl.pathname.endsWith('.css')) {
+                    const response = await fetch(retryUrl, { cache: 'no-store' });
+                    if (!response.ok) throw new Error(`Chunk retry returned HTTP ${response.status}`);
+                } else {
+                    await import(/* @vite-ignore */ retryUrl.href);
+                }
+                location.reload();
+                return;
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError;
+    })().catch(() => {
+        renderBlockingPanel(
+            'XChain Wallet could not finish loading',
+            'Part of the wallet did not load. Reload the page to try again.',
+        );
+        hideNativeSplash();
+    });
+});
 
 // A NATIVE shell whose vault plugin never registered.
 //

@@ -7,18 +7,42 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { getFiatRate } from '../../../packages/core/src/flows/priceLookup.js';
+
+// A fixed coin price: a due $5.00 queue is 0.00005 coin = 5,000 sats.
+vi.mock('../../../packages/core/src/flows/priceLookup.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    refreshFiatRates: vi.fn(async () => ({ updated: [] })),
+    getFiatRate: vi.fn(() => ({ rate: 100000, stale: false, chainCoin: 'bitcoin', fiatCurrency: 'USD' })),
+}));
 
 function makeHarness({ adsEnabled = false, adsCanSubmit = false } = {}) {
     const createTx = vi.fn(async ({ data, ...opts }) => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN', _opts: opts }));
     const createAction = vi.fn(() => ({ actionString: 'SEND|0|JDOG|1|addr', action: 'SEND', version: 0 }));
-    const sdk = { encoder: { createTx }, actions: { createAction } };
+    const sdk = {
+        encoder: { createTx },
+        actions: { createAction },
+        wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
+    };
     const sdkRegistry = { get: () => sdk };
-    const chainRegistry = { get: () => ({ coin: 'BTC', networkKind: 'regtest', adsDonationAddress: adsCanSubmit ? 'donateHere' : 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }) };
+    // Mainnet: only a mainnet send carries the automatic donation.
+    const chainRegistry = { get: () => ({ coin: 'BTC', networkKind: 'mainnet', adsDonationAddress: adsCanSubmit ? 'donateHere' : 'PLACEHOLDER_REPLACE_BEFORE_MAINNET' }) };
+    const defaults = createDefaultSettings();
+    // Due: the queue has reached its send-at total; otherwise donations are off.
     const settings = adsEnabled
-        ? { ads: { enabled: true, perChain: { btc: { accumulatedSats: 5000, triggerAmountSats: 1000, perTxAmountSats: 1, lifetimeTxCount: 0, lifetimeDonatedSats: 0 } } } }
-        : { ads: { enabled: false, perChain: {} } };
-    const vault = { settings: { get: async () => settings } };
-    return { sdk, sdkRegistry, chainRegistry, vault, createTx, createAction };
+        ? { ...defaults, ads: { ...defaults.ads, queued: '5', sendAt: '5' } }
+        : { ...defaults, ads: { ...defaults.ads, perTransaction: '0' } };
+    // Writable: a compose that plans the donation claims the queue first, and
+    // one that cannot claim it composes without the donation.
+    let stored = structuredClone(settings);
+    const vault = {
+        settings: {
+            get: async () => structuredClone(stored),
+            put: vi.fn(async (next) => { stored = structuredClone(next); }),
+        },
+    };
+    return { sdk, sdkRegistry, chainRegistry, vault, createTx, createAction, stored: () => stored };
 }
 
 const BASE_ARGS = (h) => ({
@@ -40,19 +64,60 @@ describe('composeForConfirm', () => {
         expect(h.createTx).toHaveBeenCalledOnce();
     });
 
-    it('folds the ADS donation output into customOutputs pre-modal but does NOT advance the accumulator', async () => {
+    it('uses the Normal chain rate when the form supplies no fee choice', async () => {
+        const h = makeHarness();
+        h.chainRegistry.get = () => ({ coin: 'bitcoin', networkKind: 'mainnet' });
+        await composeForConfirm(BASE_ARGS(h));
+        expect(h.createTx.mock.calls[0][0].feePerKb).toBe(6_000);
+    });
+
+    it('folds the due donation output into customOutputs pre-modal but does NOT advance the queue', async () => {
         const h = makeHarness({ adsEnabled: true, adsCanSubmit: true });
-        const putSpy = vi.fn();
-        h.vault.settings.put = putSpy;
         const composed = await composeForConfirm(BASE_ARGS(h));
         // The donation output is inside the encoderOpts used to build the PSBT...
         const custom = composed.encoderOpts.customOutputs;
         expect(custom.some((o) => o.address === 'donateHere' && o.value === 5000)).toBe(true);
         // ...and whitelisted-but-flagged in expectedOutputs.
         expect(composed.expectedOutputs.addressed.find((s) => s.address === 'donateHere').isAds).toBe(true);
-        // ...but the accumulator was NOT committed (no settings write).
-        expect(putSpy).not.toHaveBeenCalled();
-        expect(composed.adsPlan.canSubmit).toBe(true);
+        // ...the only settings write is the review claim on the queue...
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        expect(h.stored().ads.reserved).toMatchObject({ id: composed.adsPlan.reservationId, fiat: '5', review: true, pendingTxId: null });
+        // ...and the queue itself was NOT committed.
+        expect(h.stored().ads.queued).toBe('5');
+        expect(h.stored().ads.donationCount).toBe(0);
+        expect(composed.adsPlan).toMatchObject({ canSubmit: true, donationFiat: '5', currency: 'USD' });
+    });
+
+    it('builds without the donation when the address cannot cover it, and says so in the plan', async () => {
+        const h = makeHarness({ adsEnabled: true, adsCanSubmit: true });
+        h.createTx.mockImplementationOnce(async () => {
+            throw Object.assign(new Error('Insufficient funds'), { data: { reason: 'INSUFFICIENT_FUNDS' } });
+        });
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(h.createTx).toHaveBeenCalledTimes(2);
+        expect(h.createTx.mock.calls[0][0].customOutputs).toEqual([{ address: 'donateHere', value: 5000 }]);
+        expect(h.createTx.mock.calls[1][0].customOutputs ?? []).toEqual([]);
+        expect(composed.adsPlan).toMatchObject({ canSubmit: false, reason: 'unaffordable' });
+        expect(composed.expectedOutputs.addressed.some((s) => s.address === 'donateHere')).toBe(false);
+        expect(composed.encoderOpts.customOutputs ?? []).toEqual([]);
+        // Rebuilt without it, so the review claim taken for it went back.
+        expect(h.stored().ads.reserved).toBeUndefined();
+    });
+
+    it('builds once, without a donation, when there is no current price', async () => {
+        getFiatRate.mockImplementationOnce(() => null);
+        const h = makeHarness({ adsEnabled: true, adsCanSubmit: true });
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(h.createTx).toHaveBeenCalledTimes(1);
+        expect(composed.adsPlan).toMatchObject({ canSubmit: false, reason: 'no-price' });
+    });
+
+    it('builds once, without a donation, when the converted output is dust', async () => {
+        getFiatRate.mockImplementationOnce(() => ({ rate: 1e9, stale: false }));
+        const h = makeHarness({ adsEnabled: true, adsCanSubmit: true });
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(h.createTx).toHaveBeenCalledTimes(1);
+        expect(composed.adsPlan).toMatchObject({ canSubmit: false, reason: 'dust' });
     });
 
     it('propagates a createAction failure unwrapped (pre-modal reject path)', async () => {

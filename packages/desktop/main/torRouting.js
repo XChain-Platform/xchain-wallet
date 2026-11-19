@@ -133,19 +133,18 @@ async function applyNow({ settings, sdkRegistry, session, extraSessions = () => 
     if (!enabled) {
         if (applied.on || routed) {
             // Restore, in the reverse order of application. `applied` reads
-            // off whatever happens below, because the main session and
-            // dispatcher go direct first; a rejecting session leaves
-            // `routed` set so the next off retries it.
-            try {
-                if (originalDispatcher) setGlobalDispatcher(originalDispatcher);
-                const sessions = [...(session?.setProxy ? [session] : []), ...extraSessions()];
-                sdkRegistry?.setPool?.(null);
-                await forEachSession(sessions, (s) => s.setProxy({ mode: 'direct' }));
-                routed = false;
-                log('[xchain] Tor routing off: traffic is direct again');
-            } finally {
-                applied = { on: false, host: null, port: null };
-            }
+            // off before the first await, so a session created while the
+            // restore runs (and so missing from the list below) asks for
+            // direct instead of keeping the SOCKS proxy this off removes.
+            // A rejecting session leaves `routed` set so the next off
+            // retries it.
+            applied = { on: false, host: null, port: null };
+            if (originalDispatcher) setGlobalDispatcher(originalDispatcher);
+            const sessions = [...(session?.setProxy ? [session] : []), ...extraSessions()];
+            sdkRegistry?.setPool?.(null);
+            await forEachSession(sessions, (s) => s.setProxy({ mode: 'direct' }));
+            routed = false;
+            log('[xchain] Tor routing off: traffic is direct again');
         }
         applied = { on: false, host: null, port: null };
         return { on: false };

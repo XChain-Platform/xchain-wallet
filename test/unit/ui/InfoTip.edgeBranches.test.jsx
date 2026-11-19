@@ -71,6 +71,71 @@ describe('<InfoTip> edge branches', () => {
         expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '196px' });
     });
 
+    it('opens below when a clipping scroll area cuts off the room above', () => {
+        Object.defineProperty(window, 'visualViewport', {
+            configurable: true,
+            value: {
+                width: 320,
+                height: 600,
+                offsetLeft: 0,
+                offsetTop: 0,
+                addEventListener() {},
+                removeEventListener() {},
+            },
+        });
+        render(
+            <div data-testid="scroller" style={{ overflowY: 'auto' }}>
+                <InfoTip label="Explanation" />
+            </div>,
+        );
+        const scroller = screen.getByTestId('scroller');
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        // The viewport has 200px above the tip, but the scroll area starts 30px above it.
+        scroller.getBoundingClientRect = () => ({ left: 0, right: 320, top: 170, bottom: 600, width: 320, height: 430 });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 200, bottom: 224, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 80 });
+        Object.defineProperty(tooltip, 'scrollHeight', { configurable: true, value: 80 });
+
+        fireEvent.click(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(styles.placementBottom);
+    });
+
+    it('keeps the bubble inside a body that clips sideways beside a sidebar', () => {
+        Object.defineProperty(window, 'visualViewport', {
+            configurable: true,
+            value: {
+                width: 1280,
+                height: 800,
+                offsetLeft: 0,
+                offsetTop: 0,
+                addEventListener() {},
+                removeEventListener() {},
+            },
+        });
+        render(
+            <div data-testid="body" style={{ overflowX: 'hidden' }}>
+                <InfoTip label="Explanation" />
+            </div>,
+        );
+        const body = screen.getByTestId('body');
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        // The body starts at 220px (a sidebar sits left of it); the tip is 10px inside it.
+        body.getBoundingClientRect = () => ({ left: 220, right: 1280, top: 0, bottom: 800, width: 1060, height: 800 });
+        wrap.getBoundingClientRect = () => ({ left: 230, right: 254, top: 400, bottom: 424, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 200, height: 40 });
+
+        fireEvent.click(trigger);
+
+        // Centred on 242 the bubble would start at 142, so it moves right to start inside the body.
+        const offset = Number.parseFloat(/translateX\((-?[\d.]+)px\)$/.exec(screen.getByRole('tooltip').style.transform)[1]);
+        expect(242 - 100 + offset).toBeGreaterThanOrEqual(220);
+    });
+
     it('recomputes position from visual viewport resize events and detaches listeners', () => {
         const listeners = new Map();
         const viewport = {

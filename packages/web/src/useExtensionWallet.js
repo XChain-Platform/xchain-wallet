@@ -14,6 +14,7 @@
 // provider is present, whether the user has accepted, the in-flight
 // connect state, and the two actions (accept / switch back).
 
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { useCallback, useEffect, useState } from 'react';
 import {
     connectExtensionWallet,
@@ -106,7 +107,7 @@ export function useExtensionWallet() {
             return true;
         } catch (err) {
             // The provider being absent (or a transport fault) still throws.
-            setError(err?.message || 'Could not connect to the extension.');
+            setError(userFacingMessage(err, 'Could not connect to the extension.'));
             return false;
         } finally {
             setConnecting(false);

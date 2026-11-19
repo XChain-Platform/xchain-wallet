@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
@@ -12,7 +13,15 @@ const OPTIONS = [
     { value: 'public', label: 'Plain text', sub: 'Public', icon: <span>globe</span> },
 ];
 
+const iconSelectCss = readFileSync('packages/core/src/ui/IconSelect.module.css', 'utf8');
+
 describe('<IconSelect>', () => {
+    it('keeps menu options on the field font family and size', () => {
+        expect(iconSelectCss).toMatch(
+            /\.item\s*\{[^}]*font-family:\s*inherit;[^}]*font-size:\s*var\(--xc-control-font-size\);/s,
+        );
+    });
+
     it('opens a named listbox and marks the selected option', () => {
         render(<IconSelect label="Encryption" value="private" options={OPTIONS} onChange={() => {}} />);
         const trigger = screen.getByRole('button', { name: 'Encryption: Encrypted' });
@@ -55,5 +64,27 @@ describe('<IconSelect>', () => {
     it('uses the placeholder in the accessible name for an empty value', () => {
         render(<IconSelect label="Encryption" value="" options={[]} placeholder="Choose mode" onChange={() => {}} />);
         expect(screen.getByRole('button', { name: 'Encryption: Choose mode' })).toBeInTheDocument();
+    });
+
+    it('renders contextual help from the label row', () => {
+        render(
+            <IconSelect
+                label="Encryption"
+                help="Choose who can read this message."
+                value="private"
+                options={OPTIONS}
+                onChange={() => {}}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'About Encryption' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Choose who can read this message.');
+    });
+
+    it('renders no help affordance when help is absent', () => {
+        render(<IconSelect label="Encryption" value="private" options={OPTIONS} onChange={() => {}} />);
+
+        expect(screen.queryByRole('button', { name: 'About Encryption' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 });

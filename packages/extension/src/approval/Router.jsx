@@ -8,16 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
 import '@xchain-wallet/core/i18n/locales/en/extension.js';
-import { ListPage, Screen } from '@xchain-wallet/core/ui';
+import { ListPage, Notice, Screen, Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { watchApprovalRequest } from './watchRequest.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
-import styles from './approval.module.css';
+import { ApprovalHeader } from './ApprovalHeader.jsx';
 
 const { t } = i18n;
 const SIGN_APPROVAL_KINDS = new Set([
@@ -75,7 +76,9 @@ function ApprovalRoute() {
                 setData(request);
             })
             .catch((err) => {
-                if (!cancelled) setError(err?.message || 'Failed to load request.');
+                if (!cancelled) {
+                    setError(userFacingMessage(err, t('extension.approval.loadFailed')));
+                }
             });
         return () => { cancelled = true; };
     }, [id]);
@@ -119,18 +122,18 @@ function ApprovalRoute() {
 
     if (error) {
         return (
-            <Screen variant="small">
+            <Screen variant="small" header={<ApprovalHeader title={t('extension.approval.title')} />}>
                 <ListPage>
-                    <div role="alert" className={styles.error}>{error}</div>
+                    <Notice tone="danger">{error}</Notice>
                 </ListPage>
             </Screen>
         );
     }
     if (!data) {
         return (
-            <Screen variant="small">
+            <Screen variant="small" header={<ApprovalHeader title={t('extension.approval.title')} />}>
                 <ListPage>
-                    <p aria-live="polite">{t('extension.approval.loading')}</p>
+                    <Skeleton shape="card" ariaLabel={t('extension.approval.loading')} />
                 </ListPage>
             </Screen>
         );
@@ -141,11 +144,11 @@ function ApprovalRoute() {
     }
     if (!SIGN_APPROVAL_KINDS.has(data.kind)) {
         return (
-            <Screen variant="popup">
+            <Screen variant="popup" header={<ApprovalHeader title={t('extension.approval.title')} />}>
                 <ListPage>
-                    <div role="alert" className={styles.error}>
+                    <Notice tone="danger">
                         {t('extension.approval.unsupported')}
-                    </div>
+                    </Notice>
                 </ListPage>
             </Screen>
         );

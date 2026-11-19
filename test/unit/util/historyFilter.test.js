@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    ACTION_TYPE_OPTIONS,
     applyHistoryFilters,
     classifyEntryAction,
     classifyEntryStatus,
@@ -38,6 +39,11 @@ function entry(over) {
 }
 
 describe('shared/utils/historyFilter', () => {
+    it('labels the BROADCAST filter as an announcement', () => {
+        expect(ACTION_TYPE_OPTIONS.find((option) => option.id === 'broadcast')?.label)
+            .toBe('Announcement');
+    });
+
     describe('classifyEntryAction', () => {
         const wallet = new Set([WALLET_ADDR.toLowerCase()]);
 

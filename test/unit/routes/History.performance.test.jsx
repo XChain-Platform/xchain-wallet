@@ -22,8 +22,9 @@ vi.mock('../../../packages/core/src/i18n/index.js', async (importOriginal) => {
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
+import { EXPORT_ITEM, chooseHistoryMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -90,7 +91,7 @@ describe('History large-list performance', () => {
 
         // The block label rides on the newest row's accessible description.
         await waitFor(() => {
-            expect(view.container.querySelector('[data-history-row][aria-description*="Block 100,000"]')).not.toBeNull();
+            expect(view.container.querySelector('[data-history-row][aria-description*="Block 100000"]')).not.toBeNull();
         }, { timeout: 20_000 });
         const elapsedMs = performance.now() - startedAt;
         const renderedRows = view.container.querySelectorAll('[data-history-key]');
@@ -108,12 +109,12 @@ describe('History large-list performance', () => {
         });
         expect(renderMetrics.blockLabels.mock.calls.length - initialBlockLabels).toBe(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        chooseHistoryMenuItem(EXPORT_ITEM);
         expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} history items will be exported.`))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-        const showMore = screen.getByRole('button', { name: 'Show more history' });
+        const showMore = screen.getByRole('button', { name: 'Show More History' });
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
@@ -121,6 +122,8 @@ describe('History large-list performance', () => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(200);
         });
 
+        // Search sits in the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
         fireEvent.change(screen.getByLabelText('Search history'), {
             target: { value: 'rltc1qdestination4999' },
         });
@@ -132,7 +135,7 @@ describe('History large-list performance', () => {
                 `${CHAIN}:1:${ADDRESS}`,
             );
         });
-        expect(screen.queryByRole('button', { name: 'Show more history' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show More History' })).toBeNull();
     });
 
     it('retains expanded rows when a refresh inserts and overlaps a page boundary', async () => {
@@ -143,7 +146,7 @@ describe('History large-list performance', () => {
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(100);
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(200);
         });
@@ -163,7 +166,7 @@ describe('History large-list performance', () => {
             ...original.slice(100),
         ];
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
 
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalledTimes(2));

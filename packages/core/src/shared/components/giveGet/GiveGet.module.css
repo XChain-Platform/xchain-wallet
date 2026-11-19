@@ -1,0 +1,457 @@
+/* The shared Give/Get standard (Swap, Create order, Dispenser and Cross
+   Chain Swap). Quick view cards, the Full view's
+   collapsible sections, the ownership switches and the Quick | Full switch.
+   Colours come from tokens only so dark themes follow. */
+
+/* ---- Quick | Full switch ------------------------------------------- */
+
+.viewSwitch {
+    display: flex;
+    width: 100%;
+    /* A toggle sits right above what it toggles, so it pulls the
+       form's 16px gap below it down to 8px. */
+    margin-bottom: calc(var(--xc-space-2) * -1);
+}
+
+/* Inside the section it restyles: the section body's own gap spaces it. */
+.viewSwitchInSection {
+    display: flex;
+    width: 100%;
+}
+
+.viewSwitch > button,
+.viewSwitchInSection > button {
+    gap: var(--xc-space-2);
+    --xc-icon-size: 1rem;
+}
+
+/* ---- Full view sections ------------------------------------------- */
+
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The chevron points right while a section is closed and down when
+   it is open. */
+.chevron {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    transform: rotate(-90deg);
+    transition: transform var(--xc-transition);
+}
+
+.summary + .chevron {
+    margin-inline-start: 0;
+}
+
+.chevronOpen {
+    transform: none;
+}
+
+.summary {
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rateRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: 0 var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+}
+
+.rateLabel {
+    color: var(--xc-text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.rateValue {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--xc-text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Quick view: the Ownership card stacks its switch rows. */
+.toggleList {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.staticHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+}
+
+.staticBody {
+    padding: 0 var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+/* ---- Quick view cards ---------------------------------------------- */
+
+.quick {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.pair {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    background: var(--xc-bg-muted);
+}
+
+.cardTop {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    min-height: 28px;
+}
+
+.cardLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.spacer {
+    flex: 1 1 auto;
+}
+
+.cardMid {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    min-height: 48px;
+}
+
+.bigAmount {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--xc-radius-md);
+    outline: none;
+    background: transparent;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: 2rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+}
+
+/* tokens.css holds touch inputs at 1rem with !important so iOS never zooms
+   on focus; the hero amount stays above that floor at 2rem, so it outranks
+   the rule with a more specific selector of its own. */
+.cardMid input.bigAmount:not([type='checkbox']):not([type='radio']):not([type='range']) {
+    font-size: 2rem !important;
+}
+
+.bigAmount::placeholder {
+    color: var(--xc-text-muted);
+    opacity: 0.6;
+}
+
+.bigAmount:focus-visible {
+    box-shadow: 0 0 0 2px var(--xc-focus-ring);
+}
+
+.bigOwnership {
+    --xc-icon-size: 1.125rem;
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    color: var(--xc-accent-text);
+    font-size: var(--xc-text-md, 1rem);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.assetChip {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--xc-space-2);
+    max-width: 55%;
+    min-width: 0; /* Lets a long ticker ellipsize instead of crowding the chevron. */
+    height: var(--xc-control-h-lg);
+    /* The left inset equals the space above and below the 28px icon, so
+       the icon is concentric with the pill's round end; the right side
+       matches the gap so the chevron is not jammed. */
+    padding-block: 0;
+    padding-inline: calc((var(--xc-control-h-lg) - 28px) / 2) var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.assetChip:hover:not(:disabled) {
+    background: var(--xc-control-bg-hover);
+}
+
+.assetChip:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.assetChipEmpty {
+    padding-inline-start: var(--xc-space-3);
+    color: var(--xc-accent-text);
+}
+
+.assetTick {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chipCaret {
+    --xc-icon-size: 0.875rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+.cardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    min-height: 24px;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.balance {
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.addressRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+    font-size: var(--xc-text-xs);
+}
+
+.addressLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.addressValue {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono, ui-monospace, Menlo, monospace);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.iconButton {
+    --xc-icon-size: 1.125rem;
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    padding: 0;
+    border: 0;
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+}
+
+.iconButton:hover {
+    background: var(--xc-control-bg-hover);
+}
+
+.iconButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 1px;
+}
+
+/* The round flip button straddles the gap between the two cards. The row is
+   a zero-height flex child, so the pair's 8px gap falls on both sides of it;
+   pulling it back 4px each way leaves the cards 8px apart with the flip
+   centred in that gap. */
+.flipRow {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    height: 0;
+    margin-block: calc(var(--xc-space-1) * -1);
+}
+
+.flip {
+    --xc-icon-size: 1.125rem;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-top: -22px;
+    padding: 0;
+    border: 4px solid var(--xc-surface);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 1px var(--xc-border);
+    cursor: pointer;
+}
+
+.flip:hover:not(:disabled) {
+    background: var(--xc-control-bg-hover);
+}
+
+.flip:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.flip svg {
+    transform: rotate(90deg);
+}
+
+/* The Quick view's one-line terms row: opens the Full form's Options. */
+.termsRow {
+    --xc-icon-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius, var(--xc-radius-md));
+    background: var(--xc-card-bg, var(--xc-surface));
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.termsRow:hover {
+    background: var(--xc-control-bg-hover);
+}
+
+.termsRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.termsIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-accent-text);
+}
+
+.termsCopy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.termsTitle {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.termsSummary {
+    overflow: hidden;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.termsEdit {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    color: var(--xc-accent-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.termsEdit > span:last-child {
+    display: inline-flex;
+    transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chevron {
+        transition: none;
+    }
+}

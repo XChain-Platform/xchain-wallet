@@ -33,7 +33,10 @@
 //   deriveExtensionVersion('0.341.4');          // → '0.341.4'
 //   deriveExtensionVersion('0.341.4-respin.1'); // → '0.341.4.1'
 
-const RELEASE_RE = /^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta|respin)\.(\d+))?$/;
+// Each numeric group is at most five digits, the same bound the signing
+// gate's bash copy applies, so a zero-padded spelling cannot normalize here
+// while being refused there.
+const RELEASE_RE = /^(\d{1,5})\.(\d{1,5})\.(\d{1,5})(?:-(rc|beta|respin)\.(\d{1,5}))?$/;
 
 const MAX_SEGMENT = 65535;
 

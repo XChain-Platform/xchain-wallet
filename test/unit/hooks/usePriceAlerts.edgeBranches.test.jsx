@@ -66,7 +66,7 @@ describe('usePriceAlerts edge branches', () => {
             chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 10, fiatCurrency: 'USD',
         }));
         await act(async () => result.current.updateAlert('alert-1', {
-            chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 9, fiatCurrency: 'USD',
+            chainId: 'bitcoin-mainnet', tick: 'xchain', direction: 'below', targetFiat: 9, fiatCurrency: 'USD',
         }));
         await act(async () => result.current.rearm('alert-1'));
 
@@ -74,7 +74,7 @@ describe('usePriceAlerts edge branches', () => {
             walletId: 'wallet-1', chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 10, fiatCurrency: 'USD',
         });
         expect(messagingState.current.savePriceAlert).toHaveBeenNthCalledWith(2, {
-            id: 'alert-1', walletId: 'wallet-1', chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 9, fiatCurrency: 'USD',
+            id: 'alert-1', walletId: 'wallet-1', chainId: 'bitcoin-mainnet', tick: 'XCHAIN', direction: 'below', targetFiat: 9, fiatCurrency: 'USD',
         });
     });
 

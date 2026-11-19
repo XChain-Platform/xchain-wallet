@@ -1,15 +1,51 @@
-.controlRow {
+/* One list card: the Allowed sites, the Blocked entries, a site's
+   permission and connection facts. A hairline sits between rows. */
+.list {
+    composes: flush from '../../../ui/Card.module.css';
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.list > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+/* The value side of a label-left fact row. */
+.factValue {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* The identity card (G16): an outlined card with the icon centred, the
+   name in bold and the origin or entry type muted. */
+.identityCard {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: var(--xc-space-2);
+    color: var(--xc-text);
+    text-align: center;
 }
 
-.controlRow > * {
-    margin-bottom: 0;
+.identityName {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    overflow-wrap: anywhere;
 }
 
-.blockRow > :first-child {
-    flex: 1 1 12rem;
+.identityLine {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }

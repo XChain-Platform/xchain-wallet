@@ -46,8 +46,10 @@ function mount(messages) {
 async function replyFrom(messages) {
     const onCompose = mount(messages);
     fireEvent.click(await screen.findByText('🔒 Encrypted message'));
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Message' }), { target: { value: 'reply body' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    const input = await screen.findByRole('textbox', { name: 'Reply, press Enter to send' });
+    fireEvent.change(input, { target: { value: 'reply body' } });
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull();
+    fireEvent.submit(input.closest('form'));
     expect(onCompose).toHaveBeenCalledTimes(1);
     return onCompose.mock.calls[0][0];
 }
@@ -79,8 +81,9 @@ describe('MessagingInbox reply encryption', () => {
             timestamp: 1788300158, text: 'plain hello', encrypted: false, method: null,
         }]);
         fireEvent.click(await screen.findByText('plain hello'));
-        fireEvent.change(await screen.findByRole('textbox', { name: 'Message' }), { target: { value: 'reply body' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        const input = await screen.findByRole('textbox', { name: 'Reply, press Enter to send' });
+        fireEvent.change(input, { target: { value: 'reply body' } });
+        fireEvent.submit(input.closest('form'));
         expect(onCompose.mock.calls[0][0].fixedEncryption).toBe('plaintext');
     });
 });

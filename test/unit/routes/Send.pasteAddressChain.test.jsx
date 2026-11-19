@@ -76,7 +76,7 @@ async function pasteLink(text, chainIds) {
         </MessagingProvider>,
     );
     const to = await screen.findByLabelText(/^To$/);
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCES[chainIds[0]]));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCES[chainIds[0]]));
     fireEvent.paste(to, { clipboardData: { getData: () => text } });
     return to;
 }
@@ -89,15 +89,15 @@ afterEach(() => {
 describe('xchain: address link pasted on another chain', () => {
     it('moves Send to the chain the address belongs to', async () => {
         const to = await pasteLink(`xchain:${LTC_DEST}?amount=2`, ['bitcoin-mainnet', 'litecoin-mainnet']);
-        await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCES['litecoin-mainnet']));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCES['litecoin-mainnet']));
         expect(to).toHaveValue(LTC_DEST);
-        expect(screen.getByLabelText('Token')).toHaveValue('LTC');
+        expect(screen.getByRole('button', { name: 'Asset: LTC on Litecoin' })).toBeTruthy();
         expect(screen.getByLabelText(/^Amount \(LTC\)/)).toHaveValue('2');
     });
 
     it('stays on the open chain when the wallet has no address on the link chain', async () => {
         const to = await pasteLink(`xchain:${LTC_DEST}?amount=2`, ['bitcoin-mainnet']);
         await waitFor(() => expect(to).toHaveValue(LTC_DEST));
-        expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCES['bitcoin-mainnet']);
+        expect(screen.getByLabelText('From address')).toHaveValue(SOURCES['bitcoin-mainnet']);
     });
 });

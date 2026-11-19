@@ -17,7 +17,7 @@
 // tests under packages/core).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -48,8 +48,19 @@ function mount(restoreLabelsRequest) {
 /** Opens the restore form, waits for the chain picker, types the password. */
 async function openRestoreForm() {
     fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
-    await screen.findByLabelText('Restore network');
+    // The standard Network field (operator ruling 2026-11-13).
+    await screen.findByRole('button', { name: /^Network: / });
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'secret' } });
+}
+
+/** The rows the Network field's full-screen list offers, closed again after reading. */
+function networkRowNames() {
+    fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
+    const list = screen.getByRole('dialog', { name: 'Network' });
+    const names = within(list).getAllByRole('button', { name: /^Select / })
+        .map((row) => row.getAttribute('aria-label'));
+    fireEvent.click(within(list).getByRole('button', { name: /^Back/ }));
+    return names;
 }
 
 describe('BackupSection: check chain for backed-up contacts', () => {
@@ -71,9 +82,9 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         const messaging = mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        expect(screen.getByRole('option', { name: 'Dogecoin' })).toBeTruthy();
+        expect(networkRowNames().some((name) => name.startsWith('Select Dogecoin'))).toBe(true);
         expect(screen.queryByText(/testnet/i)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
 
         await waitFor(() => expect(messaging.restoreLabelsRequest).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -103,7 +114,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
 
         expect(await screen.findByText('No backed-up labels found on Dogecoin.')).toBeTruthy();
     });
@@ -113,7 +124,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
 
         expect(await screen.findByText('Invalid password')).toBeTruthy();
     });
@@ -125,9 +136,74 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
 
         expect(await screen.findByText('Incorrect password.')).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);
+    });
+});
+
+// Operator preference 2026-11-14: once unlocked, no password prompt where the
+// wallet can avoid it. While the session pool holds the wallet's signer
+// (wallet.signerReady), the host opens the seed with its master key.
+describe('BackupSection: check and publish with the unlocked session', () => {
+    function mountReady(extra) {
+        const messaging = {
+            getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [ADDRESS] })),
+            signerReady: vi.fn(async () => ({ ready: true })),
+            ...extra,
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet' }} />
+            </MessagingProvider>,
+        );
+        return messaging;
+    }
+
+    it('checks the network without a password field while the signer is pooled', async () => {
+        const restoreLabelsRequest = vi.fn(async () => ({ restored: false, skipped: null, chainId: null, searchedChainIds: [CHAIN_ID], errors: [] }));
+        const messaging = mountReady({ restoreLabelsRequest });
+        await waitFor(() => expect(messaging.signerReady).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
+        await screen.findByRole('button', { name: /^Network: / });
+        expect(screen.queryByLabelText('Wallet password')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
+
+        await waitFor(() => expect(restoreLabelsRequest).toHaveBeenCalledOnce());
+        expect(restoreLabelsRequest.mock.calls[0][0]).toEqual({ walletId: 'wallet-1', password: undefined, chainId: CHAIN_ID });
+    });
+
+    it('asks for the password in place when the pool emptied after the page read it', async () => {
+        const restoreLabelsRequest = vi.fn()
+            .mockRejectedValueOnce(new Error('restoreLabelSyncAfterImport: password is required'))
+            .mockResolvedValue({ restored: false, skipped: null, chainId: null, searchedChainIds: [CHAIN_ID], errors: [] });
+        const messaging = mountReady({ restoreLabelsRequest });
+        await waitFor(() => expect(messaging.signerReady).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
+        await screen.findByRole('button', { name: /^Network: / });
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
+
+        expect(await screen.findByText('Enter your wallet password to check for backed-up contacts.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Check for Contacts' }));
+        await waitFor(() => expect(restoreLabelsRequest).toHaveBeenCalledTimes(2));
+        expect(restoreLabelsRequest.mock.calls[1][0].password).toBe('secret');
+    });
+
+    it('prepares a label publish without a password field while the signer is pooled', async () => {
+        const prepareLabelsRequest = vi.fn(async () => { throw new Error('stop after prepare'); });
+        const messaging = mountReady({ prepareLabelsRequest, publishLabelsRequest: vi.fn() });
+        await waitFor(() => expect(messaging.signerReady).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /^Publish Now/ }));
+        await screen.findByRole('button', { name: /^Network: / });
+        expect(screen.queryByLabelText('Wallet password')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Labels' }));
+
+        await waitFor(() => expect(prepareLabelsRequest).toHaveBeenCalledOnce());
+        expect(prepareLabelsRequest.mock.calls[0][0]).toEqual({ walletId: 'wallet-1', password: undefined, chainId: CHAIN_ID });
     });
 });

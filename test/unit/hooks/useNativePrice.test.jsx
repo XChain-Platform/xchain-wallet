@@ -139,6 +139,20 @@ describe('useNativePrice successful responses', () => {
         });
     });
 
+    it('requests daily history only when the option is truthy', async () => {
+        messaging.getNativePricesRequest.mockResolvedValue({ prices: {} });
+        const { result } = renderHook(() => useNativePrice(CHAIN_ID, { includeHistory: true }));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: [CHAIN_ID],
+            includeSparkline: false,
+            includeHistory: true,
+            fiatCurrency: 'USD',
+        });
+    });
+
     it('surfaces an error returned in a resolved response', async () => {
         messaging.getNativePricesRequest.mockResolvedValue({ error: 'Oracle unavailable' });
         const { result } = renderHook(() => useNativePrice(CHAIN_ID));

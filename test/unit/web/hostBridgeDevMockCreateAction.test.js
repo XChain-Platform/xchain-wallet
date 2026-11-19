@@ -21,4 +21,32 @@ describe('hostBridge dev mock createAction', () => {
 
         expect(result.actionString).toBe('BROADCAST|2|hello|1.5|m');
     });
+
+    it('builds and serializes the create-poll input used by vote confirmation', () => {
+        const sdk = __createDevMockSdkForTests({ chainId: 'bitcoin-regtest' });
+        const params = sdk.voting.createPollParams({
+            tick: 'VOTE',
+            question: 'Ship it?',
+            options: ['Yes', 'No'],
+            endBlock: '950000',
+            maxSelections: '1',
+            tallyMode: 'approval',
+            weightMode: 'balance',
+            minVoters: '1',
+        });
+
+        expect(params).toEqual({
+            version: 0,
+            tick: 'VOTE',
+            endBlock: '950000',
+            options: 'Yes,No',
+            maxSelections: '1',
+            tallyMode: 'approval',
+            weightMode: 'balance',
+            minVoters: '1',
+            question: 'Ship it?',
+        });
+        expect(sdk.actions.createAction({ action: 'VOTE', params }).actionString)
+            .toBe('VOTE|0|VOTE|950000|Yes,No|1|approval|balance||1|||Ship it?');
+    });
 });

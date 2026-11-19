@@ -12,7 +12,6 @@ import {
     createWallet,
     expect,
     gotoSection,
-    nav,
     openSettings,
     test,
     unlockedShell,
@@ -36,17 +35,16 @@ async function openSettingsSubpage(page, name, ready) {
 async function lockFromPhoneNavigation(page) {
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible();
-    const bottomNavigation = nav(page);
-    await bottomNavigation.getByRole('button', { name: 'More', exact: true }).click();
-    const more = page.getByRole('dialog', { name: 'More', exact: true });
-    await more.getByRole('button', { name: 'Lock wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+    await menu.getByRole('button', { name: 'Lock wallet', exact: true }).click();
     await expect(unlockButton(page)).toBeVisible();
 }
 
 async function expectBiometricUnlockOffIfOffered(page) {
     const main = page.getByRole('main');
     const label = main.getByText('Biometric unlock', { exact: true }).first();
-    await openSettingsSubpage(page, 'Safety', label);
+    await openSettingsSubpage(page, 'Security', label);
     await expect(main.getByText('Checking this device…', { exact: true }))
         .toHaveCount(0, { timeout: 30_000 });
 
@@ -82,16 +80,21 @@ test.describe('Settings: change wallet password', () => {
         });
 
         await test.step('change the password in Settings', async () => {
-            const change = page.getByRole('main')
-                .getByRole('button', { name: 'Change…', exact: true });
-            await openSettingsSubpage(page, 'This wallet', change);
-            await change.click();
+            // Security > Wallet password opens straight on the form (no
+            // Change button first, no Cancel; Back leaves).
+            const passwordRow = page.getByRole('main')
+                .getByRole('button', { name: /^Wallet password\b/ }).first();
+            await openSettingsSubpage(page, 'Security', passwordRow);
+            await passwordRow.click();
+            await expect(page.getByLabel('Current wallet password', { exact: true }))
+                .toBeVisible({ timeout: 30_000 });
 
-            await page.getByLabel('Current wallet password').fill(OLD_PASSWORD);
+            // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+            await page.getByLabel('Current wallet password', { exact: true }).fill(OLD_PASSWORD);
             await page.getByLabel('New wallet password', { exact: true }).fill(NEW_PASSWORD);
-            await page.getByLabel('Confirm new wallet password').fill(NEW_PASSWORD);
+            await page.getByLabel('Confirm new wallet password', { exact: true }).fill(NEW_PASSWORD);
             await page.getByRole('main')
-                .getByRole('button', { name: 'Change password', exact: true })
+                .getByRole('button', { name: 'Change Password', exact: true })
                 .click();
 
             await expect(page.getByText('Wallet password changed.', { exact: true }))

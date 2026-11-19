@@ -1,75 +1,113 @@
-.countdown {
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
+/* The poll page draws its hero, tab strip, pick, results and lists from the
+   shared outcome page sheet (components/outcomeDetail); these are the pieces
+   only a ballot has. */
 
-.resultList {
+/* What this wallet voted, directly under the chart. */
+.yourVote {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.yourVoteHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.yourVoteHead h3,
+.yourVoteQuiet,
+.voteWeight {
+    margin: 0;
+}
+
+.yourVoteHead h3 {
+    min-width: 0;
+    font-size: var(--xc-text-md);
+    overflow-wrap: break-word;
+}
+
+.yourVoteQuiet,
+.voteWeight {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: break-word;
+}
+
+/* "You voted: ..." with a check, one line per voting address. */
+.youVoted {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.youVotedIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-success);
+}
+
+.youVotedText {
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+/* Cast Vote: the chosen options, with Change at the end of the row. */
+.chosen {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.chosenList {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--xc-space-1);
     min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.resultItem {
-    min-width: 0;
-}
-
-.resultHeader {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1) var(--xc-space-3);
-    min-width: 0;
-    margin-bottom: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-}
-
-.resultOption {
-    flex: 1 1 12rem;
-    min-width: 0;
+.chosenItem {
     color: var(--xc-text);
     font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.resultValues {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1) var(--xc-space-3);
-    min-width: 0;
-    color: var(--xc-text-muted);
-    font-variant-numeric: tabular-nums;
-}
-
-.resultValues > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.resultTrack {
-    height: var(--xc-space-2);
-    overflow: hidden;
-    background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill);
-}
-
-.resultFill {
-    height: 100%;
-    background: var(--xc-accent-primary);
-    border-radius: inherit;
+    overflow-wrap: break-word;
 }
 
 .ballotForm,
+.ballotLabelRow,
+.ballotOptions,
 .splitOptionRow,
 .splitOptionInput,
 .optionRow,
 .optionLabel {
     min-width: 0;
+}
+
+.ballotLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
+}
+
+.ballotOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-2);
 }
 
 .splitOptionRow {
@@ -83,7 +121,7 @@
 }
 
 .splitOptionInput :global(label) {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .optionRow {
@@ -99,12 +137,5 @@
 
 .optionLabel {
     flex: 1 1 auto;
-    overflow-wrap: anywhere;
-}
-
-@media not all and (min-width: 400px) {
-    .resultValues {
-        flex: 1 1 100%;
-        justify-content: space-between;
-    }
+    overflow-wrap: break-word;
 }

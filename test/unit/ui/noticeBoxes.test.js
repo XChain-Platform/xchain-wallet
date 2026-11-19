@@ -140,8 +140,9 @@ describe('notice boxes', () => {
 
     it('paints the warning and error boxes once, in StatusMessage', () => {
         const css = readFileSync(join(packagesRoot, 'core/src/ui/StatusMessage.module.css'), 'utf8');
-        expect(css).toMatch(/^\.row\.warning \{[^}]*background: var\(--xc-warning-bg\);/m);
-        expect(css).toMatch(/^\.row\.error \{[^}]*background: var\(--xc-danger\);/m);
+        // Notice Standard (2026-11-15): one danger look for warnings and
+        // errors, a light red tint with a thin red border.
+        expect(css).toMatch(/^\.row\.warning,\n\.row\.error \{[^}]*background: var\(--xc-danger-bg\);[^}]*border: 1px solid var\(--xc-danger\);/m);
     });
 
     it('draws no other warning or danger box except where the allowlist names why', () => {

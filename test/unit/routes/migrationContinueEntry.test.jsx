@@ -53,9 +53,12 @@ async function upgradeButtonText() {
         );
         for (let i = 0; i < 8; i += 1) await Promise.resolve();
     });
-    const texts = [...utils.container.querySelectorAll('button')].map((b) => b.textContent.trim());
+    // An ActionList row (G101) reads title then description; the entry's
+    // label is the title's own text.
+    const texts = [...utils.container.querySelectorAll('button')]
+        .map((b) => (b.querySelector('[class*="titleText"]') || b).textContent.trim());
     cleanup();
-    return texts.find((text) => /Upgrade recovery phrase|Continue migration/.test(text)) || null;
+    return texts.find((text) => /^(Upgrade recovery phrase|Continue migration)$/.test(text)) || null;
 }
 
 afterEach(() => {

@@ -59,7 +59,8 @@ assert.match(publish, /resolveGateMinAmountActive\(/, 'publish flow checks activ
 assert.match(publish, /not active on this chain yet/, 'early emission refused with a reason');
 assert.match(publish, /\.\.\.\(gateMinAmount !== null \? \[gateMinAmount\] : \[\]\)/,
     'GATE_MIN_AMOUNT rides as an optional ninth FILE field');
-assert.match(publish, /gateMinAmount,\s*\}\);/, 'threshold counted in the plaintext ceiling');
+// The second argument is the picked upload method's ceiling (Taproot or Standard).
+assert.match(publish, /gateMinAmount,\s*\}(, envelope \? \{ encoding: 'TAPROOT' \} : \{\})?\);/, 'threshold counted in the plaintext ceiling');
 
 // ---- 2b. Size math ----------------------------------------------------
 const limits = read('packages', 'core', 'src', 'flows', 'fileSizeLimits.js');
@@ -90,8 +91,9 @@ assert.match(host, /gatedSendReadiness\(\{[\s\S]*?to: req\.to,\s*\n\s*amount: re
 
 // ---- 2e. Publisher form: field behind the gate -------------------------
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
-assert.match(form, /gateMinAmountScheduledHeight\(chainId\)/, 'form reads the scheduled height (null = hidden)');
-assert.match(form, /getIndexerWatermark\(\{ chainId \}\)/, 'scheduled chains check the live watermark');
+// The form network follows the picked gate token, so the threshold reads that chain.
+assert.match(form, /gateMinAmountScheduledHeight\(selectedChainId\)/, 'form reads the scheduled height (null = hidden)');
+assert.match(form, /getIndexerWatermark\(\{ chainId: selectedChainId \}\)/, 'scheduled chains check the live watermark');
 assert.match(form, /\{thresholdActive \? \(/, 'threshold input renders only when ACTIVE');
 // The copy lives in the English locale; the form renders it through t().
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
@@ -104,7 +106,8 @@ assert.match(form, /thresholdActive && gateMinAmount\.trim\(\)\s*\n?\s*\? \{ gat
 const content = read('packages', 'core', 'src', 'flows', 'gatedContent.js');
 assert.match(content, /row\.gate_min_amount \?\? row\.gateMinAmount/, 'listGatedFiles carries the threshold through');
 const detail = read('packages', 'core', 'src', 'shared', 'routes', 'TokenDetail.jsx');
-assert.match(detail, /hold ≥ \{f\.gateMinAmount\} \{tick\} to unlock/, 'gated rows show the hold-N-to-unlock hint');
+assert.match(detail, /Hold \{formatWithThousands\(f\.gateMinAmount \|\| '1'\)\}/,
+    'locked gallery tiles show the formatted hold-N requirement');
 assert.match(detail, /file\.gateMinAmount \? `at least \$\{file\.gateMinAmount\}` : 'at least 1'/,
     'locked-access copy names the real threshold');
 

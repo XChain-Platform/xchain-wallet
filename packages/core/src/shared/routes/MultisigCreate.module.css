@@ -1,0 +1,59 @@
+.typeField,
+.cosignersSection,
+.mainActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.fieldLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
+}
+
+.fieldLabelRow label {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* The cosigners are collapsible Form Standard sections, one per signer. The
+   standard pulls a following section up by the form gap, so the list keeps
+   that gap and the sections end up 8px apart. */
+.cosignerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap, var(--xc-space-4));
+    min-width: 0;
+}
+
+.cosignerEditor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
+.mainActions {
+    align-items: stretch;
+    gap: 8px;
+}
+
+.reviewLegend {
+    padding: 0 var(--xc-space-2);
+    font-weight: 600;
+}
+
+.reviewKey {
+    display: block;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    word-break: break-word;
+}
+
+.fingerprintNote {
+    text-align: start;
+}

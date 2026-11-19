@@ -39,12 +39,20 @@ import {
     IPFS_GATEWAY_BASE,
 } from '../branding/branding.js';
 import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
+import { readRawFile } from './rawFileRead.js';
+import { imagePreviewDataUrl } from '../shared/utils/publishingFile.js';
 
 /**
  * @typedef {Object} TisMediaEntry
- * @property {string} url                                full https URL after scheme rewrite
+ * @property {string | null} url                         full https URL after scheme rewrite
+ * @property {string | null} dataRef                     on-chain FILE action reference
  * @property {string | null} type                        extension or TIS-supplied type ("png" / "icon" / "mp4" / …)
  * @property {string | null} name                        human-readable label when the TIS document provides one
+ * @property {boolean} locked                            whether the referenced FILE contains gated ciphertext
+ * @property {string | null} packId                      TIS pack metadata key
+ * @property {string | null} title                       display title supplied by the TIS document
+ * @property {string | null} hash                        declared sha256 hash
+ * @property {string | null} size                        declared dimensions or byte-size label
  */
 
 /**
@@ -57,9 +65,13 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 /**
  * @typedef {Object} TisFileEntry
- * @property {string} url
+ * @property {string | null} url
+ * @property {string | null} dataRef
  * @property {string | null} name
  * @property {string | null} type
+ * @property {boolean} locked
+ * @property {string | null} packId
+ * @property {string | null} title
  */
 
 /**
@@ -117,7 +129,9 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
  * @property {boolean} [loadError]                     true when the explorer failed to answer; every field then reads as unknown
- * @property {string[]} projects                         project ticks whose CURRENT roster includes this token (the "Official" banner data)
+ * @property {Array<{project:string, linkActionIndex:string|null, rosterActionIndex:string|null}>} projects project rosters whose CURRENT membership includes this token
+ * @property {{rosterActionIndex:string|null, membershipActionIndex:string|null, linkActionIndex:string|null, total:number}|null} registry this token's project roster, when it owns one
+ * @property {Array<Object>} linkedFiles                 owner-attached FILE+LINK rows read in one bulk request
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
  * @property {TisMediaEntry[]} audio                     audio tracks
@@ -368,15 +382,22 @@ const SOCIAL_SERVICE_HOSTS = {
 
 function normalizeSocialEntry(entry) {
     if (!entry || typeof entry !== 'object') return null;
+    const value = typeof entry.data === 'string' ? entry.data : '';
+    const claimedPlatform = String(entry.type || 'url').toLowerCase();
     const url = normalizeMediaUrl(entry.data);
-    if (!url) return null;
+    if (!url) return value ? {
+        platform: claimedPlatform,
+        claimedPlatform,
+        host: '',
+        url: null,
+        value,
+    } : null;
     let host;
     try {
         host = new URL(url).hostname.toLowerCase();
     } catch {
         return null;
     }
-    const claimedPlatform = String(entry.type || 'url').toLowerCase();
     const expectedHosts = SOCIAL_SERVICE_HOSTS[claimedPlatform] || [];
     const hostMatches = expectedHosts.some(
         (expected) => host === expected || host.endsWith(`.${expected}`),
@@ -398,13 +419,33 @@ function normalizeSocialEntry(entry) {
  * @returns {string | null}
  */
 export function descriptionJsonUrl(description) {
+    return tisDescriptionReference(description)?.url || null;
+}
+
+export const MAX_TIS_DOCUMENT_BYTES = 512 * 1024;
+const TIS_HASH_RE = /^[a-f0-9]{64}$/i;
+const ORDINALS_JSON_HOST = ['inscription-decoder', 'vercel', 'app'].join('.');
+const ORDINALS_JSON_BASE = `https://${ORDINALS_JSON_HOST}/api/image?type=json&tx=`;
+
+/**
+ * Resolve a supported TIS description pointer without accepting active or
+ * local schemes. The optional HTTPS suffix is a SHA-256 digest of the exact
+ * response bytes, not a display title.
+ *
+ * @param {string | null | undefined} description
+ * @returns {{ url: string, expectedHash: string | null } | null}
+ */
+export function tisDescriptionReference(description) {
     if (!description || typeof description !== 'string') return null;
     let t = description.trim();
     if (!t) return null;
-    // Strip ;title suffix used by the legacy shorthand
-    // ("https://.../JDOG.json;JDOG token info").
-    const semi = t.indexOf(';');
-    if (semi > 0 && /^https?:\/\//i.test(t)) {
+    let expectedHash = null;
+    const semi = t.lastIndexOf(';');
+    if (semi > 0 && /^https:\/\//i.test(t)) {
+        const suffix = t.slice(semi + 1).trim();
+        if (TIS_HASH_RE.test(suffix)) expectedHash = suffix.toLowerCase();
+        // Preserve the historical `;title` fetch form, but only a 64-hex
+        // suffix is security material and therefore enforced.
         t = t.slice(0, semi).trim();
     }
     // Arweave gateway "/x.json" suffix trick: drop it; the gateway 404s.
@@ -415,38 +456,54 @@ export function descriptionJsonUrl(description) {
             t = arweavePrefix + suffix.slice(0, -'/x.json'.length);
         }
     }
-    if (/^ipfs:\/\//i.test(t)) {
-        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
+    if (/^ipfs:/i.test(t)) {
+        const ref = t.replace(/^ipfs:(\/\/)?/i, '').trim();
+        return ref ? { url: `${IPFS_GATEWAY_BASE}/${ref}`, expectedHash: null } : null;
+    }
+    if (/^ord:/i.test(t)) {
+        let ref = t.replace(/^ord:/i, '').trim();
+        if (!ref) return null;
+        if (!TIS_HASH_RE.test(ref)) {
+            try {
+                const bytes = Uint8Array.from(atob(ref), (char) => char.charCodeAt(0));
+                ref = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+            } catch {
+                return null;
+            }
+        }
+        return TIS_HASH_RE.test(ref)
+            ? { url: `${ORDINALS_JSON_BASE}${ref.toLowerCase()}`, expectedHash: null, viaExplorer: true }
+            : null;
     }
     if (/^ar:/i.test(t)) {
-        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
+        const ref = t.replace(/^ar:/i, '').trim();
+        return ref ? { url: `${ARWEAVE_GATEWAY_BASE}/${ref}`, expectedHash: null } : null;
     }
-    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) return t;
-    if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
-    // Bare "host/path.json": promote to https.
-    if (isBareHostPathJsonUrl(t)) {
-        return 'https://' + t;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) {
+        return { url: t, expectedHash };
+    }
+    if (/^https:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) {
+        return { url: t, expectedHash };
     }
     return null;
 }
 
-// Replaces /^[^\s/]+\.[^\s/]+\/.+\.json(?:[?#]|$)/i (js/polynomial-redos).
-// Both `[^\s/]+` groups admit '.', so a string with many dots and no
-// slash forces the regex to try every way of splitting them before
-// failing: exponential backtracking. Since neither group may contain a
-// slash, the whole "host" portion is exactly the text before the
-// first '/', so this checks the same thing directly: that prefix has
-// no whitespace and a dot that isn't its very first or very last
-// character (equivalent to "some split point k with 0<k<len-1"), then
-// the remainder is matched with the original (unambiguous) suffix
-// regex.
-function isBareHostPathJsonUrl(t) {
-    const slash = t.indexOf('/');
-    if (slash <= 0) return false;
-    const hostPart = t.slice(0, slash);
-    if (/\s/.test(hostPart)) return false;
-    if (!hostPart.slice(1, -1).includes('.')) return false;
-    return /^\/.+\.json(?:[?#]|$)/i.test(t.slice(slash));
+function explorerRelayUrl(sdk, target) {
+    if (typeof sdk?.fileRawUrl !== 'function') return null;
+    try {
+        const relay = new URL(sdk.fileRawUrl('0'));
+        if (relay.protocol !== 'https:') return null;
+        const parts = relay.pathname.split('/').filter(Boolean);
+        const apiAt = parts.indexOf('api');
+        if (apiAt < 1) return null;
+        relay.pathname = `/${parts.slice(0, apiAt).join('/')}/relay`;
+        relay.search = '';
+        relay.hash = '';
+        relay.searchParams.set('url', target);
+        return relay.href;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -615,21 +672,30 @@ function classifyByExtension(url) {
 
 function tisEntryToMedia(entry) {
     if (!entry) return null;
-    const data = typeof entry === 'string' ? entry : entry.data;
+    const objectEntry = entry && typeof entry === 'object' ? entry : null;
+    const data = typeof entry === 'string' ? entry : objectEntry?.data;
     // On-chain media reference: "action:<index>" of a FILE action,
     // preferred over `data` when both are present (TIS File Entry
-    // Fields). Carried as `dataRef`; tokenInfoFor resolves it to the
-    // configured explorer's raw FILE URL.
-    const dataRef = (entry && typeof entry === 'object'
-        && typeof entry.data_ref === 'string' && entry.data_ref)
-        ? entry.data_ref : null;
-    const url = dataRef ? null : normalizeMediaUrl(data);
-    if (!url && !dataRef) return null;
+    // Fields). Carried as `dataRef`; tokenInfoFor resolves unlocked entries
+    // to the configured explorer's raw FILE URL.
+    const dataRef = (objectEntry
+        && typeof objectEntry.data_ref === 'string' && objectEntry.data_ref)
+        ? objectEntry.data_ref : null;
+    const normalizedUrl = dataRef ? null : normalizeMediaUrl(data);
+    const source = typeof data === 'string' ? data : null;
+    if (!normalizedUrl && !dataRef && !source) return null;
+    const locked = Boolean(objectEntry?.locked);
     return {
-        url,
+        url: locked ? null : normalizedUrl,
+        source,
         dataRef,
-        type: (entry && typeof entry === 'object' && entry.type) ? String(entry.type) : null,
-        name: (entry && typeof entry === 'object' && entry.name) ? String(entry.name) : null,
+        type: objectEntry?.type ? String(objectEntry.type) : null,
+        name: objectEntry?.name ? String(objectEntry.name) : null,
+        locked,
+        packId: objectEntry?.pack_id ? String(objectEntry.pack_id) : null,
+        title: objectEntry?.title ? String(objectEntry.title) : null,
+        hash: objectEntry?.hash ? String(objectEntry.hash) : null,
+        size: objectEntry?.size ? String(objectEntry.size) : null,
     };
 }
 
@@ -664,6 +730,7 @@ export function tisToMediaBundle(doc) {
         audio: /** @type {TisMediaEntry[]} */ ([]),
         video: /** @type {TisMediaEntry[]} */ ([]),
         website: null,
+        websiteText: null,
         websites: /** @type {string[]} */ ([]),
         socials: /** @type {TisSocialEntry[]} */ ([]),
         files: /** @type {TisFileEntry[]} */ ([]),
@@ -673,6 +740,7 @@ export function tisToMediaBundle(doc) {
         owner: /** @type {TisOwner | null} */ (null),
         contacts: /** @type {TisContact[]} */ ([]),
         pgpsig: null,
+        htmlAvailable: false,
         dns: /** @type {TisDnsRecord[]} */ ([]),
     };
     if (!doc || typeof doc !== 'object') return empty;
@@ -701,27 +769,32 @@ export function tisToMediaBundle(doc) {
             // String shorthand → plaintext URL file.
             if (typeof f === 'string') {
                 const url = normalizeMediaUrl(f);
-                if (!url) return null;
-                return { url, name: null, type: null, dataRef: null, locked: false, packId: null };
+                return { url, source: f, name: null, title: null, type: null, dataRef: null, hash: null, size: null, locked: false, packId: null };
             }
             // Object form supports: { data: <url>, data_ref: 'action:<index>',
             // name, type, locked, pack_id }. data_ref takes precedence over data
             // when both are present (on-chain reference wins over off-chain URL).
             const dataRef = typeof f.data_ref === 'string' && f.data_ref ? f.data_ref : null;
-            const url = dataRef ? null : normalizeMediaUrl(f.data);
-            if (!dataRef && !url) return null;
+            const normalizedUrl = dataRef ? null : normalizeMediaUrl(f.data);
+            const source = typeof f.data === 'string' ? f.data : null;
+            if (!dataRef && !normalizedUrl && !source) return null;
+            const locked = Boolean(f.locked);
             return {
-                url,
+                url: locked ? null : normalizedUrl,
+                source,
                 dataRef,
                 name: (f.name) ? String(f.name) : null,
+                title: (f.title) ? String(f.title) : null,
                 type: (f.type) ? String(f.type) : null,
-                locked: Boolean(f.locked),
+                hash: (f.hash) ? String(f.hash) : null,
+                size: (f.size) ? String(f.size) : null,
+                locked,
                 packId: (f.pack_id) ? String(f.pack_id) : null,
             };
         })
         .filter(Boolean);
     // Top-level `packs` map for display metadata of token-gated content packs.
-    // See xchain-documentation/protocol/Token_Information_Standard.md.
+    // See xchain-documentation/protocol/token-information-standard.md#json-field-definitions.
     const packs = {};
     const packsRaw = doc.packs && typeof doc.packs === 'object' ? doc.packs : {};
     for (const id of Object.keys(packsRaw)) {
@@ -735,7 +808,8 @@ export function tisToMediaBundle(doc) {
     const socials = (Array.isArray(doc.social) ? doc.social : [])
         .map(normalizeSocialEntry)
         .filter(Boolean);
-    const website = typeof doc.website === 'string' ? normalizeMediaUrl(doc.website) : null;
+    const websiteText = typeof doc.website === 'string' ? doc.website : null;
+    const website = websiteText ? normalizeMediaUrl(websiteText) : null;
     // Build the de-duplicated websites array. legacyJsonToTis lifts
     // legacy `website_alternate1/2` and native TIS `websites: []`
     // entries onto `doc.websites`; here we normalize each URL and drop
@@ -755,6 +829,9 @@ export function tisToMediaBundle(doc) {
     const description = typeof doc.description === 'string' ? doc.description : null;
     const name = typeof doc.name === 'string' && doc.name.trim() ? doc.name.trim() : null;
     const pgpsig = typeof doc.pgpsig === 'string' && doc.pgpsig.trim() ? doc.pgpsig.trim() : null;
+    // TIS `html` is deliberately never returned. The renderer receives only
+    // this presence bit and may offer the explorer's guarded presentation.
+    const htmlAvailable = typeof doc.html === 'string' && doc.html.trim().length > 0;
     const categoriesRaw = Array.isArray(doc.categories) ? doc.categories : [];
     const categories = categoriesRaw
         .map((c) => {
@@ -801,6 +878,7 @@ export function tisToMediaBundle(doc) {
         audio,
         video,
         website,
+        websiteText,
         websites,
         socials,
         files,
@@ -810,6 +888,7 @@ export function tisToMediaBundle(doc) {
         owner,
         contacts,
         pgpsig,
+        htmlAvailable,
         dns,
     };
 }
@@ -824,7 +903,10 @@ function extractMediaUrlsFromText(text) {
         if (!cls) continue;
         const url = normalizeMediaUrl(raw);
         if (!url) continue;
-        const entry = { url, type: cls.ext, name: null };
+        const entry = {
+            url, type: cls.ext, name: null, dataRef: null,
+            locked: false, packId: null, title: null,
+        };
         if (cls.kind === 'image') out.images.push(entry);
         else if (cls.kind === 'audio') out.audio.push(entry);
         else if (cls.kind === 'video') out.video.push(entry);
@@ -841,11 +923,11 @@ function extractMediaUrlsFromText(text) {
  * @param {string} tick
  * @param {any} raw                                     explorer row
  * @param {ReturnType<typeof tisToMediaBundle> | null} [tisBundle]
- * @param {{ allowRemoteMedia?: boolean }} [options]
+ * @param {{ allowRemoteMedia?: boolean, tisReadError?: boolean }} [options]
  * @returns {TokenInfo}
  */
 export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options = {}) {
-    const { allowRemoteMedia = true } = options;
+    const { allowRemoteMedia = true, tisReadError = false } = options;
     const row = Array.isArray(raw) ? raw[0] : raw;
     const onChainDescription = row?.info?.description ?? null;
     const creator = row?.info?.owner ?? null;
@@ -942,8 +1024,37 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // "just show it" (Project_Registry.md), so no extra filtering here.
     const projects = Array.isArray(row?.projects)
         ? row.projects
-            .map((p) => (p && typeof p.project === 'string' && p.project ? p.project.toUpperCase() : null))
+            .map((p) => (p && typeof p.project === 'string' && p.project ? {
+                project: p.project.toUpperCase(),
+                linkActionIndex: p.link_action_index == null ? null : String(p.link_action_index),
+                rosterActionIndex: p.roster_action_index == null ? null : String(p.roster_action_index),
+            } : null))
             .filter((p) => p !== null)
+        : [];
+    const registryRaw = row?.registry && typeof row.registry === 'object' ? row.registry : null;
+    const registry = registryRaw ? {
+        rosterActionIndex: registryRaw.roster_action_index == null ? null : String(registryRaw.roster_action_index),
+        membershipActionIndex: registryRaw.membership_action_index == null ? null : String(registryRaw.membership_action_index),
+        linkActionIndex: registryRaw.link_action_index == null ? null : String(registryRaw.link_action_index),
+        total: Number.isFinite(Number(registryRaw.total)) ? Number(registryRaw.total) : 0,
+    } : null;
+    const linkedFiles = Array.isArray(row?.linked_files)
+        ? row.linked_files.flatMap((file) => {
+            if (!file || file.action_index == null) return [];
+            return [{
+                actionIndex: String(file.action_index),
+                name: file.name == null ? null : String(file.name),
+                title: file.title == null ? null : String(file.title),
+                type: file.type == null ? null : String(file.type),
+                blockIndex: file.block_index == null ? null : String(file.block_index),
+                gated: file.gated === true || Number(file.gated) === 1,
+                gateTicker: file.gate_ticker == null ? null : String(file.gate_ticker),
+                gateMinAmount: file.gate_min_amount == null ? null : String(file.gate_min_amount),
+                keyHash: file.key_hash == null ? null : String(file.key_hash),
+                encryptionMethod: file.encryption_method == null ? null : Number(file.encryption_method),
+                url: typeof file.url === 'string' ? file.url : null,
+            }];
+        })
         : [];
     // TIS bundle (when fetched) supplies the richer description body and
     // media arrays. We keep the on-chain description string as a fallback
@@ -951,12 +1062,13 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // since it's usually the human-readable version. The hero `imageUrl`
     // falls back to the regex extractor for tokens that didn't bother
     // with a TIS document.
-    const description = tisBundle?.description || onChainDescription;
+    const description = tisBundle?.description || (tisReadError ? null : onChainDescription);
     const name = tisBundle?.name || null;
     const images = allowRemoteMedia ? (tisBundle?.images || []) : [];
     const audio = allowRemoteMedia ? (tisBundle?.audio || []) : [];
     const video = allowRemoteMedia ? (tisBundle?.video || []) : [];
     const website = tisBundle?.website || null;
+    const websiteText = tisBundle?.websiteText || null;
     const websites = tisBundle?.websites || [];
     const socials = tisBundle?.socials || [];
     const files = tisBundle?.files || [];
@@ -966,9 +1078,11 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     const owner = tisBundle?.owner || null;
     const contacts = tisBundle?.contacts || [];
     const pgpsig = tisBundle?.pgpsig || null;
+    const htmlAvailable = tisBundle?.htmlAvailable === true;
+    const tisAvailable = tisBundle != null;
     const dns = tisBundle?.dns || [];
     const imageUrl = allowRemoteMedia
-        ? ((images.length > 0 && images[0]?.url) || extractImageUrl(onChainDescription))
+        ? (images.find((image) => !image?.locked && image?.url)?.url || extractImageUrl(onChainDescription))
         : null;
     return {
         chainId,
@@ -1002,11 +1116,14 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         marketFloor,
         divisibility,
         projects,
+        registry,
+        linkedFiles,
         imageUrl,
         images,
         audio,
         video,
         website,
+        websiteText,
         websites,
         socials,
         files,
@@ -1016,6 +1133,9 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         owner,
         contacts,
         pgpsig,
+        htmlAvailable,
+        tisAvailable,
+        tisReadError,
         dns,
     };
 }
@@ -1031,6 +1151,155 @@ function truthyFlag(v) {
     return v === true || v === 1 || String(v).trim() === '1';
 }
 
+function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalString(record, key, maxLength) {
+    return record[key] === undefined
+        || (typeof record[key] === 'string' && record[key].length <= maxLength);
+}
+
+function uniqueJsonItems(items) {
+    const seen = new Set();
+    for (const item of items) {
+        let key;
+        try { key = JSON.stringify(item); } catch { return false; }
+        if (seen.has(key)) return false;
+        seen.add(key);
+    }
+    return true;
+}
+
+function validArray(record, key, validateItem, unique = false) {
+    if (record[key] === undefined) return true;
+    return Array.isArray(record[key])
+        && (!unique || uniqueJsonItems(record[key]))
+        && record[key].every(validateItem);
+}
+
+function validMediaEntry(kind, entry, requireData, validateGating) {
+    if (!isRecord(entry)) return false;
+    const enums = {
+        images: ['icon', 'standard', 'large', 'hires'],
+        audio: ['m4a', 'mp3', 'wav'],
+        video: ['mp4', 'mov', 'wmv'],
+    };
+    if (entry.type === undefined) return false;
+    if (enums[kind] && !enums[kind].includes(entry.type)) return false;
+    if (!optionalString(entry, 'data', 255)
+        || !optionalString(entry, 'name', 255)
+        || !optionalString(entry, 'hash', 64)) return false;
+    if (requireData) {
+        if (typeof entry.data !== 'string') return false;
+    } else if (typeof entry.data !== 'string' && typeof entry.data_ref !== 'string') {
+        return false;
+    }
+    if (!validateGating) return true;
+    return optionalString(entry, 'title', 255)
+        && optionalString(entry, 'data_ref', 255)
+        && (entry.locked === undefined || typeof entry.locked === 'boolean')
+        && optionalString(entry, 'pack_id', 255);
+}
+
+function validTisCore(doc) {
+    if (!isRecord(doc)
+        || typeof doc.tick !== 'string'
+        || typeof doc.name !== 'string'
+        || doc.name.length > 127
+        || !optionalString(doc, 'description', 2048)
+        || !optionalString(doc, 'html', 10_000)
+        || !optionalString(doc, 'website', 255)) return false;
+    if (doc.website !== undefined && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(doc.website)) return false;
+    if (doc.owner !== undefined) {
+        if (!isRecord(doc.owner)
+            || !optionalString(doc.owner, 'name', 128)
+            || !optionalString(doc.owner, 'title', 128)
+            || !optionalString(doc.owner, 'organization', 128)) return false;
+    }
+    if (!validArray(doc, 'contacts', (entry) => isRecord(entry)
+        && ['address', 'email', 'phone', 'fax', 'url'].includes(entry.type)
+        && typeof entry.data === 'string' && entry.data.length <= 255, true)) return false;
+    if (!validArray(doc, 'categories', (entry) => isRecord(entry)
+        && ['main', 'sub', 'other'].includes(entry.type)
+        && typeof entry.data === 'string' && entry.data.length <= 255, true)) return false;
+    if (!validArray(doc, 'social', (entry) => isRecord(entry)
+        && typeof entry.type === 'string'
+        && typeof entry.data === 'string' && entry.data.length <= 255)) return false;
+    if (!validArray(doc, 'dns', (entry) => isRecord(entry)
+        && ['A', 'AAAA', 'ALIAS', 'CAA', 'CNAME', 'NS', 'SRV', 'TXT', 'URL', 'MX', ''].includes(entry.type)
+        && typeof entry.host === 'string' && entry.host.length <= 255
+        && typeof entry.value === 'string' && entry.value.length <= 255
+        && (entry.priority === undefined || Number.isInteger(entry.priority))
+        && (entry.type !== 'MX' || Number.isInteger(entry.priority)), true)) return false;
+    if (doc.packs !== undefined) {
+        if (!isRecord(doc.packs)) return false;
+        for (const pack of Object.values(doc.packs)) {
+            if (!isRecord(pack)
+                || !optionalString(pack, 'name', 255)
+                || !optionalString(pack, 'description', 2048)) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Schema-equivalent validation for the published v1.0.0 through v1.1.2
+ * contracts. v1.0.0 requires `data` and leaves later gating keys open;
+ * v1.1.1 and v1.1.2 accept `data_ref` and type those keys. v1.1.2's
+ * corrected DNS requirements are enforced for every version.
+ */
+export function validateTisDocument(doc) {
+    if (!validTisCore(doc)) return false;
+    const kinds = ['images', 'audio', 'video', 'files'];
+    const validatesAs = (requireData, validateGating) => kinds.every((kind) => (
+        validArray(doc, kind, (entry) => validMediaEntry(kind, entry, requireData, validateGating), true)
+    ));
+    return validatesAs(false, true) || validatesAs(true, false);
+}
+
+async function responseTextWithinLimit(response) {
+    const announced = Number(response?.headers?.get?.('content-length'));
+    if (Number.isFinite(announced) && announced > MAX_TIS_DOCUMENT_BYTES) return null;
+    if (typeof response?.body?.getReader === 'function') {
+        const reader = response.body.getReader();
+        const chunks = [];
+        let length = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+            length += chunk.length;
+            if (length > MAX_TIS_DOCUMENT_BYTES) {
+                await reader.cancel();
+                return null;
+            }
+            chunks.push(chunk);
+        }
+        const bytes = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return { text: new TextDecoder().decode(bytes), bytes };
+    }
+    if (typeof response?.arrayBuffer === 'function') {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length > MAX_TIS_DOCUMENT_BYTES) return null;
+        return { text: new TextDecoder().decode(bytes), bytes };
+    }
+    const text = await response.text();
+    const bytes = new TextEncoder().encode(text);
+    return bytes.length <= MAX_TIS_DOCUMENT_BYTES ? { text, bytes } : null;
+}
+
+async function sha256Hex(bytes) {
+    if (!globalThis.crypto?.subtle) return null;
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Fetch a token's TIS document (or legacy CoinDaddy JSON) and convert it
  * into the wallet's media bundle. Returns null when the description
@@ -1042,16 +1311,24 @@ function truthyFlag(v) {
  * @param {string} args.description                      on-chain description string
  * @param {typeof fetch} args.fetch                      injected for testability
  * @param {AbortSignal} [args.signal]                    cancels in-flight fetch
+ * @param {any} [args.sdk]                              configured explorer client
  * @returns {Promise<ReturnType<typeof tisToMediaBundle> | null>}
  */
-export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) {
-    const jsonUrl = descriptionJsonUrl(description);
-    if (!jsonUrl || typeof fetchImpl !== 'function') return null;
+export async function fetchTisBundle({ description, fetch: fetchImpl, signal, sdk }) {
+    const reference = tisDescriptionReference(description);
+    if (!reference || typeof fetchImpl !== 'function') return null;
     try {
-        const resp = await fetchWithRetry(fetchImpl, jsonUrl, { signal, redirect: 'follow' });
+        const fetchUrl = reference.viaExplorer
+            ? explorerRelayUrl(sdk, reference.url)
+            : reference.url;
+        if (!fetchUrl) return null;
+        const resp = await fetchWithRetry(fetchImpl, fetchUrl, { signal, redirect: 'follow' });
         if (!resp || !resp.ok) return null;
-        const text = await resp.text();
-        return parseTisText(text);
+        if (resp.url && !/^https:\/\//i.test(resp.url)) return null;
+        const body = await responseTextWithinLimit(resp);
+        if (!body) return null;
+        if (reference.expectedHash && await sha256Hex(body.bytes) !== reference.expectedHash) return null;
+        return parseTisText(body.text);
     } catch {
         return null;
     }
@@ -1060,15 +1337,17 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
 // On-chain TIS document pointer: DESCRIPTION = "action:<index>" (same
 // chain) or "action:<COIN>:<index>" (sibling chain, base ticker, network
 // tier implied by the token's network) naming a FILE action whose raw
-// bytes are the TIS JSON (Token_Information_Standard.md, On-Chain
-// Format). Same syntax as a file entry's `data_ref`, one level up.
+// bytes are the TIS JSON
+// (xchain-documentation/protocol/token-information-standard.md#on-chain-format-action-index).
+// Same syntax as a file entry's `data_ref`, one level up.
 // Match groups: [1] = optional base coin, [2] = action index.
 export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 
 /**
  * Fetch + parse an on-chain TIS document via the explorer's raw FILE
- * endpoint. Never raises; resolves null on any miss so the renderer
- * falls back to the plain description string.
+ * endpoint. A FILE holding a bare image instead of JSON yields a bundle
+ * whose only content is that picture. Never raises; resolves null on any
+ * miss so the renderer falls back to the plain description string.
  *
  * @param {object} args
  * @param {any} args.sdk                     per-chain SDK (explorer client configured)
@@ -1081,16 +1360,45 @@ export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
     try {
         // The raw endpoint serves non-gated FILE bytes too; for a JSON
         // document those bytes ARE the TIS text.
-        const bytes = await sdk.getGatedFileRaw(String(actionIndex), coin);
-        if (!bytes || !bytes.length) return null;
+        const result = await readRawFile(sdk, String(actionIndex), coin);
+        if (result.state !== 'ready') return null;
+        const { bytes } = result;
         const u8 = bytes instanceof Uint8Array
             ? bytes
             : new Uint8Array(/** @type {any} */ (bytes));
-        const text = new TextDecoder().decode(u8);
-        return parseTisText(text);
+        const parsed = u8.length <= MAX_TIS_DOCUMENT_BYTES
+            ? parseTisText(new TextDecoder().decode(u8))
+            : null;
+        return parsed ?? rawImageBundle(u8, actionIndex, coin);
     } catch {
         return null;
     }
+}
+
+// Same ceiling the gated-file viewer puts on inline previews, so an
+// oversized FILE never becomes a token picture either.
+const MAX_RAW_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// A DESCRIPTION pointer may name a FILE that is the picture itself rather
+// than a TIS document. The bytes decide (the on-chain MIME is issuer text):
+// a raster image or an SVG becomes the token's single picture, and anything
+// else stays "no bundle". The picture travels as a data: URL built from the
+// bytes already in hand, because every shell's CSP admits data: images but
+// no remote image origin, and a string survives the token-info cache and a
+// messaging hop where a blob: URL would not. <img> keeps an SVG script-inert.
+// Typed `large` so it serves as header icon, hero and gallery entry at once.
+function rawImageBundle(bytes, actionIndex, coin) {
+    if (bytes.length > MAX_RAW_IMAGE_BYTES) return null;
+    const url = imagePreviewDataUrl(bytes);
+    if (!url) return null;
+    const bundle = tisToMediaBundle({});
+    bundle.images.push({
+        url,
+        dataRef: coin ? `action:${coin}:${actionIndex}` : `action:${actionIndex}`,
+        type: 'large',
+        name: null,
+    });
+    return bundle;
 }
 
 // Shared TIS text → media-bundle path for the off-chain (URL fetch) and
@@ -1100,11 +1408,8 @@ function parseTisText(text) {
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
     let parsed;
     try { parsed = JSON.parse(trimmed); } catch { return null; }
-    // The legacy adapter is idempotent for native TIS docs (already
-    // has images[]/audio[]/video[]/social[]), so we run it
-    // unconditionally to handle both shapes.
-    const tis = legacyJsonToTis(parsed);
-    return tisToMediaBundle(tis);
+    if (!validateTisDocument(parsed)) return null;
+    return tisToMediaBundle(parsed);
 }
 
 /**
@@ -1154,7 +1459,31 @@ export async function tokenInfoFor({
             readFailed = true;
         }
     }
+    // Owner-attached FILE+LINK content is one bulk token query, never one
+    // action read per tile. The token endpoint's embedded list is capped at
+    // ten rows, so this read is required for galleries with 25 or more files.
+    if (!demo && raw && typeof sdk?.getFiles === 'function') {
+        try {
+            const response = await sdk.getFiles(tick, 'token', { limit: 100 });
+            const files = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+            const row = Array.isArray(raw) ? raw[0] : raw;
+            if (row && typeof row === 'object') {
+                const linkedFiles = files.map((file) => ({
+                    ...file,
+                    url: file?.action_index != null && typeof sdk.fileRawUrl === 'function'
+                        ? sdk.fileRawUrl(String(file.action_index))
+                        : null,
+                }));
+                raw = Array.isArray(raw)
+                    ? [{ ...row, linked_files: linkedFiles }, ...raw.slice(1)]
+                    : { ...row, linked_files: linkedFiles };
+            }
+        } catch {
+            // Keep the token endpoint's bounded linked_files fallback.
+        }
+    }
     let tisBundle = null;
+    let tisAttempted = false;
     if (metadataFetchEnabled && !demo) {
         const row = Array.isArray(raw) ? raw[0] : raw;
         const description = row?.info?.description;
@@ -1164,13 +1493,16 @@ export async function tokenInfoFor({
         const resolvedFetch = fetchImpl
             || (typeof fetch === 'function' ? fetch : null);
         if (actionRef) {
+            tisAttempted = true;
             // On-chain TIS document; resolve through the same explorer
             // the token row came from (no external fetch).
             tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[2], coin: actionRef[1] || null });
-        } else if (description && resolvedFetch) {
+        } else if (description && resolvedFetch && tisDescriptionReference(description)) {
+            tisAttempted = true;
             tisBundle = await fetchTisBundle({
                 description,
                 fetch: resolvedFetch,
+                sdk,
             });
         }
     }
@@ -1183,6 +1515,7 @@ export async function tokenInfoFor({
     if (!demo) resolveMediaDataRefs(tisBundle, sdk);
     const info = normalizeTokenInfo(chainId, tick, raw, tisBundle, {
         allowRemoteMedia: metadataFetchEnabled && !demo,
+        tisReadError: tisAttempted && !tisBundle,
     });
     // Marks a record built without the explorer's answer, so callers neither
     // cache it nor present its empty fields as the token's real state.
@@ -1192,14 +1525,15 @@ export async function tokenInfoFor({
 
 // Resolve on-chain media references (dataRef = "action:<index>") across a
 // bundle's media arrays to the configured explorer's raw FILE URL so the
-// renderers get a plain `src`. Entries stay dataRef-annotated either way.
+// renderers get a plain `src`. Locked entries remain unresolved because their
+// raw FILE bytes are ciphertext. Entries stay dataRef-annotated either way.
 export function resolveMediaDataRefs(bundle, sdk) {
     if (!bundle || typeof sdk?.fileRawUrl !== 'function') return bundle;
     for (const key of ['images', 'audio', 'video', 'files']) {
         const arr = bundle[key];
         if (!Array.isArray(arr)) continue;
         for (const entry of arr) {
-            if (!entry || entry.url || !(entry.dataRef)) continue;
+            if (!entry || entry.locked || entry.url || !(entry.dataRef)) continue;
             const m = String(entry.dataRef).match(TIS_ACTION_REF_RE);
             if (!m) continue;
             try { entry.url = sdk.fileRawUrl(m[2], m[1] || null); } catch { /* leave unresolved */ }
@@ -1221,6 +1555,14 @@ function demoRowFor(tick) {
         market: demo.market || { price: null, floor: null },
     };
 }
+
+// Inline icon tile for a demo-issued token (no remote image, so the demo
+// stays offline and inside the app's img-src policy).
+function demoIssuedIcon(label, from, to) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${from}"/><stop offset="100%" stop-color="${to}"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><text x="100" y="118" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="#FFFFFF" text-anchor="middle">${label}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+const DEMO_OWNER_ADDRESS = 'bc1qdemowalletissuer0xchain0sunrise0roasters';
 
 // Hand-rolled demo TIS documents, keyed by ticker; mirrors the TIS v1.0.0
 // shape so they flow through `tisToMediaBundle` unchanged. URLs point at
@@ -1350,6 +1692,46 @@ const DEMO_TIS_BY_TICK = {
                 { type: 'github', data: 'https://github.com/XChain-Platform' },
             ],
             categories: [{ type: 'main', data: 'Showcase' }],
+        },
+    },
+    // Tokens the demo wallet itself issued (see synthesizeDemoOwnedTokens).
+    BEANCOIN: {
+        description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '1250000', max: '10000000' },
+        locks: { description: false, max_supply: false, mint: false, mint_supply: false },
+        market: { price: 0.00000084, floor: 0.00000071 },
+        tis: {
+            description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+            images: [{ type: 'icon', data: demoIssuedIcon('BEAN', '#B45309', '#78350F') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Loyalty and rewards' }],
+        },
+    },
+    STUDIOPASS: {
+        description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '500', max: '500' },
+        locks: { description: false, max_supply: true, mint: true, mint_supply: true },
+        market: { price: 0.0012, floor: 0.0009 },
+        tis: {
+            description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+            images: [{ type: 'icon', data: demoIssuedIcon('PASS', '#0E7490', '#1E3A8A') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Memberships' }],
+        },
+    },
+    HARBORFEST: {
+        description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '2000', max: '2000' },
+        locks: { description: false, max_supply: true, mint: false, mint_supply: false },
+        market: { price: 0.00048, floor: 0.0004 },
+        tis: {
+            description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+            images: [{ type: 'icon', data: demoIssuedIcon('HARBR', '#BE185D', '#6D28D9') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Events' }],
         },
     },
     XCP: {

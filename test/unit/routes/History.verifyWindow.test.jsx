@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Proof checks cover the rows the screen shows, not every filtered row. Each
-// check is two explorer reads, so a 250-row history checks the first page of
-// 100 and no more.
+// The History list shows no proof verdict and runs no proof checks (each is
+// two explorer reads); the detail page owns them.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, waitFor, cleanup } from '@testing-library/react';
@@ -58,23 +57,29 @@ function mountHistory(history, extra = {}) {
 
 afterEach(() => { cleanup(); });
 
-describe('History proof checks follow the rendered window', () => {
-    it('checks the first page of a 250-row history and no more', async () => {
+// Operator ruling 2026-11-14: a History row shows the action, its details,
+// the time and the status pill only. The proof verdict and the counterparty
+// address live on the action's detail page (ActionDetail), which owns the
+// proof check and its test pin (spv-verified-mode smoke), so the list runs no
+// proof checks at all.
+describe('History rows carry no verification or address pill', () => {
+    it('renders no verified badge and no address text, and runs no proof checks', async () => {
         const rows = [];
-        for (let i = 0; i < 250; i += 1) {
-            rows.push(explorerRow('SEND', 6000 + i, { tick: 'XCP', amount: '1', destination: 'rltc1qdest0000' }, 60 + i));
+        for (let i = 0; i < 12; i += 1) {
+            rows.push(explorerRow('SEND', 6000 + i, { tick: 'XCP', amount: '1', destination: 'rltc1qdest0000abcdefghijklmnop' }, 60 + i));
         }
         const verifyAction = vi.fn().mockResolvedValue({ status: 'verified', reason: null, trust: 'explorer' });
         const { view } = mountHistory(rows, { verifyAction });
-        await waitFor(() => expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(100),
+        await waitFor(() => expect(view.container.querySelectorAll('[data-history-row]').length).toBeGreaterThan(0),
             { timeout: 10_000 });
-        await waitFor(() => expect(verifyAction).toHaveBeenCalled(), { timeout: 10_000 });
-        // Let any queued checks drain before counting.
         await new Promise((resolve) => { setTimeout(resolve, 300); });
-        // Only this test's rows count: an earlier mount's checks can still land.
-        const checked = verifyAction.mock.calls
-            .map((call) => Number(call[0].actionIndex))
-            .filter((index) => index >= 6000);
-        expect(checked, 'proof checks ran for rows beyond the rendered page').toHaveLength(100);
+        const rowEls = [...view.container.querySelectorAll('[data-history-row]')];
+        for (const row of rowEls) {
+            expect(row.querySelector('[data-testid="verified-badge"]')).toBeNull();
+            expect(row.textContent).not.toMatch(/unverified/i);
+            expect(row.textContent).not.toContain('rltc1qdest');
+            expect(row.textContent).not.toContain(OURS.slice(0, 8));
+        }
+        expect(verifyAction.mock.calls.filter((call) => Number(call[0].actionIndex) >= 6000)).toHaveLength(0);
     });
 });

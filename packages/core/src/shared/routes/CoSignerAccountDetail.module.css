@@ -1,0 +1,145 @@
+/* Agent account page: a waiting request on top, then the identity card and
+   the Actions, Activity and Details tabs, on the token page's 8px rhythm. */
+
+/* A request waiting on the owner: an amber outlined card with what the agent
+   wants, why it waits, and Refuse beside Approve. */
+.pending {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    border-color: var(--xc-warning);
+    background: var(--xc-warning-bg);
+}
+
+.pendingTitle {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.pendingWhy {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
+.pendingActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--xc-space-2);
+}
+
+/* Status, network and allowed tokens as small pills under the name. */
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--xc-space-1);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: 999px;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.6;
+}
+
+.chipActive {
+    border-color: var(--xc-success);
+    color: var(--xc-success);
+    font-weight: 600;
+}
+
+.summary {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The Fund page's address card: the QR on top, the address and its copy
+   button under it, centred like the Receive page's QR. */
+.fundCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.fundAddress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    width: 100%;
+    min-width: 0;
+}
+
+/* Holdings and activity: one flush card of divider-separated rows. */
+.rows {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.rows > li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+}
+
+.rows > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.rowMain {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.rowTitle {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.rowNote {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.rowAmount {
+    flex: 0 0 auto;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.sectionLabel {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}

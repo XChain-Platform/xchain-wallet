@@ -56,7 +56,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/edit-expiry-fee.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -72,7 +72,11 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
+    FROM_ADDRESS_LABEL,
+    openMyDispensers,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One create plus two edits, one of them paying a real coin fee. */
@@ -255,7 +259,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -269,8 +273,7 @@ async function approveAndGetTxid(page) {
  * and re-entering is what an owner making a second change actually does.
  */
 async function openDispenserDetail(page, index) {
-    await openPaletteCommand(page, 'Dispensers');
-    const main = page.getByRole('main');
+    const main = await openMyDispensers(page);
     // The owner's list labels the row rather than printing the index in its
     // text ("Open XCHAIN dispenser #1699"), so filtering on visible text finds
     // nothing - campaign §"Dispensers", Session 31.
@@ -278,8 +281,9 @@ async function openDispenserDetail(page, index) {
     await expect(row, `dispenser #${index} is not in the owner's own list`)
         .toBeVisible({ timeout: 60_000 });
     await row.click();
-    await expect(main.getByRole('button', { name: 'Edit' }),
-        'the detail page has no enabled Edit control for the owner')
+    // Each setting is its own action row opening its own page (G104).
+    await expect(main.getByRole('button', { name: /^Change expiration/ }),
+        'the detail page has no enabled Change expiration row for the owner')
         .toBeEnabled({ timeout: 30_000 });
     return main;
 }
@@ -292,9 +296,9 @@ async function openDispenserDetail(page, index) {
  */
 async function submitExpirationEdit(page, index, targetUnix, { coinFee = false } = {}) {
     const main = await openDispenserDetail(page, index);
-    await main.getByRole('button', { name: 'Edit' }).click();
+    await main.getByRole('button', { name: /^Change expiration/ }).click();
 
-    const field = main.getByLabel('New expiration');
+    const field = fieldByLabel(main, 'New expiration');
     await expect(field, 'the edit form has no expiration field').toBeVisible({ timeout: 30_000 });
     await field.fill(unixToLocalInput(targetUnix));
 
@@ -302,19 +306,21 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
     // Bitcoin the coin lane is mandatory and the control is a statement, not a
     // switch, so there is nothing to turn on.
     if (coinFee && REGTEST_COIN === 'RBTC') {
-        const toggle = main.getByRole('switch', { name: /^Pay protocol fee in .* instead of XCHAIN/ })
-            .or(main.getByRole('checkbox', { name: /^Pay protocol fee in .* instead of XCHAIN/ })).first();
+        // The switch sits in the Speed and Fees section, closed by default.
+        await openFormSection(main, 'Speed and Fees');
+        const toggle = main.getByRole('switch', { name: /^Pay protocol fee in \S+/ })
+            .or(main.getByRole('checkbox', { name: /^Pay protocol fee in \S+/ })).first();
         await expect(toggle, 'Bitcoin did not offer its native-fee choice on the edit form')
             .toBeVisible({ timeout: 30_000 });
         if (!(await toggle.isChecked())) await toggle.click();
         await expect(toggle).toBeChecked();
     }
 
-    await main.getByRole('button', { name: 'Edit dispenser' }).click();
+    await main.getByRole('button', { name: 'Update Dispenser' }).click();
     await expectConfirmModal(page);
     await waitForIndexerAtTip();
-    await page.getByTestId('confirm-approve').click();
-    await expect(main.getByRole('heading', { name: 'Edit submitted' }),
+    await approveConfirm(page);
+    await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Edit submitted' }),
         'the edit never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 60_000 });
@@ -342,9 +348,9 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            owner = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -357,25 +363,29 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
             // A custom expiration, deliberately SHORT of the free window. The
             // default window is exactly 90 days, which leaves no room for an
             // extension that is still free - and that extension is this run's
             // control.
-            await main.getByRole('radio', { name: /Expire at a specific time/ }).check();
+            // Expiration is the icon dropdown (G44), not radio buttons, inside
+            // the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
+            await main.getByRole('combobox', { name: /Expiration/ }).click();
+            await page.getByRole('option', { name: /Expire at a specific time/ }).click();
             const nowSec = Math.floor(Date.now() / 1000);
-            await main.getByLabel('Expires').fill(
+            await fieldByLabel(main, 'Expires').fill(
                 unixToLocalInput(toMinute(nowSec + (CREATE_DAYS * 86_400) + MINUTE_MARGIN)),
             );
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.status), 'the chain rejected the dispenser create').toBe('valid');

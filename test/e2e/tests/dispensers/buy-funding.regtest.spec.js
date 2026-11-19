@@ -79,17 +79,22 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     selectVenueChain,
     REGTEST_COIN,
     expectConfirmModal,
     fundAddress,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     switchToRegtest,
     unlockAfterReload,
     selectPickerAsset,
+    approveConfirm as approveWhenReady,
+    FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
+    expectSubmitRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -173,13 +178,12 @@ async function approveConfirm(page, what = 'this action') {
     // from one that never ran. `expectConfirmModal` reads the screen's own
     // alert on the way out.
     await expectConfirmModal(page, what, 60_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** Fills a password field only when the form is asking for one. */
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -247,45 +251,22 @@ async function waitForDispenser(source, giveTick, timeoutMs = 420_000) {
     );
 }
 
-/** Navigates the BUYER from an unlocked Home to the fixture's dispenser. */
-async function openDispenserAsBuyer(page, sellerAddress) {
-    await openPaletteCommand(page, 'Browse dispensers');
-
-    // Anchored on a CONTROL, not on the page title: PageHeader renders its
-    // title as a plain <span>, so there is no heading role to wait for here.
-    const byAddress = page.getByRole('radio', { name: 'By address' });
-    await expect(byAddress).toBeVisible({ timeout: 30_000 });
-
-    // Pin the network filter. Left at its "All networks" default this form fans
-    // the query out over EVERY registered chain in parallel, mainnet Bitcoin,
-    // Litecoin and Dogecoin included - which is both slower and a live
-    // mainnet call from a regtest test. Narrowing it keeps the run entirely
-    // on the regtest venue.
-    // THE VENUE'S chain id, not Bitcoin's. This was hardcoded, and it is a
-    // chain pin that every earlier sweep of this suite missed: it is neither a
-    // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
-    // nothing here while the browse filter still asked Bitcoin for a dispenser
-    // this run had just created on Litecoin.
-    // Scoped to main and matched by exact role name: getByLabel substring-matches, and
-    // the app header carries controls whose labels contain "network", so an
-    // unscoped or partial lookup is a strict-mode violation. Only reachable once the
-    // earlier chain fixes let the spec get this far.
-    await page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true })
-        .selectOption(REGTEST_CHAIN_ID);
-
-    // Search by the SELLER's address rather than by ticker: the ticker lane
-    // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
-    // in every unrelated dispenser on this shared chain.
-    await byAddress.check();
-    await page.getByLabel('Address', { exact: true }).fill(sellerAddress);
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
-
-    // The row's label leads with the give tick, which is unique to this run.
-    const row = page.getByRole('button', { name: new RegExp(`^${GIVE_TICK}\\b`) });
-    await expect(row).toBeVisible({ timeout: 60_000 });
-    await row.click();
-
-    await expect(page.getByText('Buy from this dispenser')).toBeVisible({ timeout: 60_000 });
+/**
+ * Opens the fixture's dispenser as the BUYER, on its full page's Buy form, and
+ * runs `check` there.
+ *
+ * Only the full page prints the payment-token balance (`buy-balance`), so
+ * openDispenserForBuy narrows the viewport to reach it. The search is the
+ * SELLER's address rather than a ticker: a token search for XCHAIN would drag
+ * in every unrelated dispenser on this shared chain, while this seller is
+ * fresh for the run. The Explorer searches only the active network's chains,
+ * so the query stays on the regtest venue.
+ */
+async function withBuyForm(page, sellerAddress, index, check) {
+    return openDispenserForBuy(page, { seller: sellerAddress, tick: GIVE_TICK, index }, async (main) => {
+        await expect(main.getByText('Buy from this dispenser')).toBeVisible({ timeout: 60_000 });
+        return check(main.getByTestId('dispenser-buy-form'));
+    });
 }
 
 test.describe('dispenser buy funding gate on regtest', () => {
@@ -330,9 +311,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-            sellerAddress = await seller.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            sellerAddress = await readIssueSource(seller.getByRole('main'));
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative happens to pass on Litecoin (both accept `[mn2]`)
             // and hides a wrong-chain address on a chain that does not.
@@ -357,20 +336,18 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-
             const main = seller.getByRole('main');
             // The address that signs must still be the one that was funded.
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await readIssueSource(main),
                 'the issue form still signs with the funded address').toBe(sellerAddress);
 
-            await main.getByLabel('Ticker', { exact: true }).fill(GIVE_TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(GIVE_SUPPLY);
+            await fieldByLabel(main, 'Ticker').fill(GIVE_TICK);
+            await fieldByLabel(main, 'Max supply').fill(GIVE_SUPPLY);
             // "Initial mint" left blank mints the whole supply now, and
             // "Divisible" is unchecked by default, so the token carries 0
             // decimals and every amount below stays a whole number.
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await approveConfirm(seller, `the ISSUE of the throwaway give token ${GIVE_TICK}`);
 
             // The chain's answer, not the app's.
@@ -388,7 +365,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // which the next assertion then reports as the form signing with
             // the wrong address, several steps after the real cause.
             await selectVenueChain(main, 'Network');
-            expect(await main.getByLabel('Source', { exact: true }).inputValue(),
+            expect(await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue(),
                 'the dispenser form still signs with the funded address').toBe(sellerAddress);
 
             // The give tick comes from a picker, so it can only ever be one
@@ -404,13 +381,19 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // THE FIXTURE'S WHOLE POINT: token-priced, not coin-priced. A
             // native-coin dispenser renders the pay-here panel, which has no
             // funding check, and every assertion below would be vacuous.
-            await main.getByRole('radio', { name: 'A token' }).check();
-            await main.getByLabel('Payment token', { exact: true }).fill('XCHAIN');
-            await main.getByLabel('Payment amount per fill', { exact: true })
+            // Buyers pay with is an asset picker (a token field), so the
+            // payment token is picked on it, never typed.
+            await main.getByRole('button', { name: /^Buyers pay with:/ }).click();
+            // The picker opens on the seller's own page, not the buyer's.
+            await searchTokenPicker(seller, 'XCHAIN');
+            await seller.getByRole('button', { name: /^Select XCHAIN on / }).first().click({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Buyers pay with: XCHAIN on / }))
+                .toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Payment amount per fill')
                 .fill(PRICE_PER_FILL);
 
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Create', exact: true }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await approveConfirm(seller, `the DISPENSER create for ${GIVE_TICK}`);
 
             dispenserRow = await waitForDispenser(sellerAddress, GIVE_TICK);
@@ -438,9 +421,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(page.getByRole('main'), 'Network');
-            buyerAddress = await page.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            buyerAddress = await readIssueSource(page.getByRole('main'));
             expect(buyerAddress, 'the buyer wallet has a signing address')
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyerAddress, 'the buyer is a different wallet from the seller')
@@ -457,45 +438,35 @@ test.describe('dispenser buy funding gate on regtest', () => {
         });
 
         await test.step('the buy is blocked, and the panel says exactly why', async () => {
-            await openDispenserAsBuyer(page, sellerAddress);
+            await withBuyForm(page, sellerAddress, dispenserRow?.action_index, async (form) => {
+                // The Buy form exists at all, which is itself the `canBuyWithSend`
+                // assertion: a token-priced dispenser this wallet does NOT own.
+                await expect(form.getByTestId('buy-balance'))
+                    .toHaveText('0 XCHAIN available', { timeout: 60_000 });
 
-            // The buy panel exists at all, which is itself the `canBuyWithSend`
-            // assertion: a token-priced dispenser this wallet does NOT own.
-            const footer = page.getByTestId('buy-balance');
-            await expect(footer).toHaveText('0 XCHAIN available', { timeout: 60_000 });
+                // §4.2: the finding is the component's own authored sentence,
+                // with the real numbers in it. Dispenses defaults to 1, so the
+                // total is one dispense's price. It is the form's warning notice.
+                const finding = `This buy pays ${PRICE_PER_FILL} XCHAIN, but this address holds 0 XCHAIN.`;
+                await expect(form.getByRole('alert').filter({ hasText: finding }).first(),
+                    'the underfunded buyer is not told what one dispense costs against what they hold')
+                    .toBeVisible({ timeout: 30_000 });
 
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel).toHaveAttribute('data-verdict', 'fail', { timeout: 30_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
+                // NOT overridable, unlike the network-sourced findings on Send.
+                // This one is arithmetic the wallet did itself against a balance it
+                // read, so there is no censorship risk to trade against - and an
+                // acknowledged override here would only buy the user a rejected
+                // action and a wasted network fee. No ack control and no "Sign
+                // anyway" sit anywhere in the form.
+                await expect(form.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
+                await expect(form.getByText('Sign anyway')).toHaveCount(0);
 
-            // §4.2: the finding is the component's own authored sentence, with
-            // the real numbers in it. Fills defaults to 1, so the total is one
-            // fill's price.
-            await expect(panel).toContainText(
-                `This buy pays ${PRICE_PER_FILL} XCHAIN, but this address holds 0 XCHAIN.`,
-            );
-
-            // The check is funding-only and says so, rather than implying it
-            // predicted the fill would land.
-            await expect(page.getByTestId('preflight-restricted')).toHaveText('Partial check');
-            await expect(panel).toContainText(/Only your payment-token balance was checked/i);
-
-            // NOT overridable, unlike the network-sourced findings on Send.
-            // This one is arithmetic the wallet did itself against a balance it
-            // read, so there is no censorship risk to trade against - and an
-            // acknowledged override here would only buy the user a rejected
-            // action and a wasted network fee.
-            //
-            // The id follows the finding CODE, which the panel derives through
-            // preflightFindingKey. Absent-by-code is the weaker half of this
-            // pair (it would also pass on a typo'd id), so the line below it -
-            // no "Sign anyway" control anywhere in the panel - is the one that
-            // actually holds the gate.
-            await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
-            await expect(panel.getByText('Sign anyway')).toHaveCount(0);
-
-            // `buyUnderfunded` blocking the buy, which is the fix itself.
-            await expect(page.getByRole('button', { name: /^Buy 1 fill$/ })).toBeDisabled();
+                // `buyUnderfunded` blocking the buy, which is the fix itself. The
+                // button is never disabled (G130): a tap draws the same finding
+                // and no Confirm screen opens.
+                await expectSubmitRefused(page, form.getByRole('button', { name: /^Buy 1 Dispense$/ }),
+                    finding, 'an underfunded dispenser buy');
+            });
         });
 
         await test.step('funding the buyer flips the same screen to pass', async () => {
@@ -507,26 +478,28 @@ test.describe('dispenser buy funding gate on regtest', () => {
             await mintXchain(page, BUYER_MINT);
             await waitForToken(buyerAddress, 'XCHAIN', BUYER_MINT);
             await remount(page);
-            await openDispenserAsBuyer(page, sellerAddress);
 
-            // The footer now reports the real balance, thousands separator and
-            // all, so this is not a cached string. The optional zero tail is
-            // tolerated because the amount's precision comes from the read path
-            // rather than from this spec (a 0-decimal tick reads back as "1000"
-            // today, but an aggregate lane could hand back "1000.00000000");
-            // the separator and the magnitude are what carry the assertion.
-            await expect(page.getByTestId('buy-balance'))
-                .toHaveText(/^1,000(\.0+)? XCHAIN available$/, { timeout: 60_000 });
+            await withBuyForm(page, sellerAddress, dispenserRow?.action_index, async (form) => {
+                // The footer reports the real balance, thousands separator and
+                // all, so this is not a cached string. The optional zero tail is
+                // tolerated because the amount's precision comes from the read
+                // path rather than from this spec (a 0-decimal tick reads back
+                // as "1000", while an aggregate lane can hand back
+                // "1000.00000000"); the separator and the magnitude are what
+                // carry the assertion.
+                await expect(form.getByTestId('buy-balance'))
+                    .toHaveText(/^1,000(\.0+)? XCHAIN available$/, { timeout: 60_000 });
 
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel).toHaveAttribute('data-verdict', 'pass', { timeout: 30_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+                await expect(form.getByRole('alert'),
+                    'a buyer holding 1,000 XCHAIN is still warned they cannot pay for one dispense')
+                    .toHaveCount(0);
 
-            // Still restricted: funding was all it ever checked, and a pass
-            // must not start claiming the fill will land.
-            await expect(page.getByTestId('preflight-restricted')).toHaveText('Partial check');
-
-            await expect(page.getByRole('button', { name: /^Buy 1 fill$/ })).toBeEnabled();
+                // The same tap that was refused above reaches the Confirm
+                // screen. It is left unapproved: the spec measures the gate, not
+                // the fill.
+                await form.getByRole('button', { name: /^Buy 1 Dispense$/ }).click();
+                await expectConfirmModal(page, 'a funded dispenser buy');
+            });
         });
     });
 });

@@ -53,7 +53,7 @@ const chainRegistry = {
     supportedChains: () => [descriptor],
 };
 
-function fakeVault() {
+function fakeVault(settings = { activeNetwork: 'regtest', blockedOrigins: [] }) {
     const site = {
         id: 'site-1',
         origin: ORIGIN,
@@ -61,7 +61,7 @@ function fakeVault() {
     };
     const pending = new Map();
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }), put: async () => {} },
+        settings: { get: async () => settings, put: async () => {} },
         connectedSites: {
             findBy: async (field, value) => [site].filter((s) => s[field] === value),
             put: async () => site,
@@ -120,10 +120,12 @@ function fakeSdkRegistry({ outputs, decoded }) {
     return { sdk, sdkRegistry: { get: () => sdk } };
 }
 
-function signAction({ action, params, sdkRegistry }) {
-    const approvals = { signAction: async () => ({ approved: true, password: 'pw', walletId: 'wallet-1' }) };
-    const host = new MessageHost({ vault: fakeVault(), chainRegistry, sdkRegistry });
-    registerBridgeHandlers(host, { approvals });
+function signAction({ action, params, sdkRegistry, settings, approvals, vault }) {
+    const approvalSource = approvals ?? {
+        signAction: async () => ({ approved: true, password: 'pw', walletId: 'wallet-1' }),
+    };
+    const host = new MessageHost({ vault: vault ?? fakeVault(settings), chainRegistry, sdkRegistry });
+    registerBridgeHandlers(host, { approvals: approvalSource });
     return host.handle({
         type: 'bridge.signAction',
         request: { origin: ORIGIN, chainId: descriptor.id, action, params },
@@ -137,6 +139,106 @@ beforeEach(() => {
 });
 
 describe('bridge.signAction checks the built transaction before signing', () => {
+    it('refuses an inactive network before prompting or signing', async () => {
+        const approvals = { signAction: vi.fn() };
+        const { sdkRegistry } = fakeSdkRegistry({ outputs: [pay(TO, '10000'), CHANGE] });
+        const resp = await signAction({
+            action: 'SEND',
+            params: { fromAddress: FROM, toAddress: TO, asset: 'BTC', amountRaw: '10000' },
+            sdkRegistry,
+            settings: { activeNetwork: 'mainnet', blockedOrigins: [] },
+            approvals,
+        });
+
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(approvals.signAction).not.toHaveBeenCalled();
+        expect(signer.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the network changes during approval', async () => {
+        const settings = { activeNetwork: 'regtest', blockedOrigins: [] };
+        const approvals = {
+            signAction: vi.fn(async () => {
+                settings.activeNetwork = 'mainnet';
+                return { approved: true, password: 'pw', walletId: 'wallet-1' };
+            }),
+        };
+        const { sdkRegistry } = fakeSdkRegistry({ outputs: [pay(TO, '10000'), CHANGE] });
+        const resp = await signAction({
+            action: 'SEND',
+            params: { fromAddress: FROM, toAddress: TO, asset: 'BTC', amountRaw: '10000' },
+            sdkRegistry,
+            settings,
+            approvals,
+        });
+
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(signer.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the network after signing and before broadcast', async () => {
+        const settings = { activeNetwork: 'regtest', blockedOrigins: [] };
+        const { sdk, sdkRegistry } = fakeSdkRegistry({ outputs: [pay(TO, '10000'), CHANGE] });
+        signer.signPsbt.mockImplementationOnce(async ({ psbtHex }) => {
+            settings.activeNetwork = 'mainnet';
+            return { txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` };
+        });
+        const resp = await signAction({
+            action: 'SEND',
+            params: { fromAddress: FROM, toAddress: TO, asset: 'BTC', amountRaw: '10000' },
+            sdkRegistry,
+            settings,
+        });
+
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(signer.signPsbt).toHaveBeenCalledOnce();
+        expect(sdk.encoder.broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the network before a SWEEP broadcast and fails its pending row', async () => {
+        const settings = { activeNetwork: 'regtest', blockedOrigins: [] };
+        const vault = fakeVault(settings);
+        const { sdk, sdkRegistry } = fakeSdkRegistry({ outputs: [OPRETURN, CHANGE] });
+        signer.signPsbt.mockImplementationOnce(async ({ psbtHex }) => {
+            settings.activeNetwork = 'mainnet';
+            return { txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` };
+        });
+        const resp = await signAction({
+            action: 'SWEEP',
+            params: { fromAddress: FROM, toAddress: TO },
+            sdkRegistry,
+            vault,
+        });
+
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(signer.signPsbt).toHaveBeenCalledOnce();
+        expect(sdk.encoder.broadcastTx).not.toHaveBeenCalled();
+        const rows = await vault.pendingTxs.list();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe('failed');
+    });
+
+    it('answers an unsupported action with UNSUPPORTED_ACTION on an inactive network', async () => {
+        const approvals = { signAction: vi.fn() };
+        const { sdkRegistry } = fakeSdkRegistry({ outputs: [OPRETURN, CHANGE] });
+        const resp = await signAction({
+            action: 'ISSUE',
+            params: { fromAddress: FROM },
+            sdkRegistry,
+            settings: { activeNetwork: 'mainnet', blockedOrigins: [] },
+            approvals,
+        });
+
+        expect(resultOf(resp)).toMatchObject({ ok: false, error: 'UNSUPPORTED_ACTION' });
+        expect(resultOf(resp).supportedActions).toEqual(['SEND', 'SWEEP']);
+        expect(approvals.signAction).not.toHaveBeenCalled();
+        expect(signer.signPsbt).not.toHaveBeenCalled();
+    });
+
     it('signs an honest native SEND, exactly the bytes the encoder returned', async () => {
         const { sdkRegistry } = fakeSdkRegistry({ outputs: [pay(TO, '10000'), CHANGE] });
         const resp = await signAction({

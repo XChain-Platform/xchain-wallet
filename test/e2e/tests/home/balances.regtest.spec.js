@@ -62,6 +62,7 @@
 
 import { createWallet, expect, gotoSection, test, unlockedShell } from '../../fixtures/wallet.js';
 import {
+    chooseReceiveChain,
     EXPLORER_URL,
     REGTEST_COIN,
     fundAddress,
@@ -158,6 +159,10 @@ async function displayedQuantity(page, key) {
 /**
  * The wallet's own receive address FOR A NAMED CHAIN, via the real picker.
  *
+ * Receive's Asset picker lists only the shown chain's coin and tokens, so
+ * the chain is changed through the address picker (`chooseReceiveChain`),
+ * and the Asset field is then read to prove the screen followed.
+ *
  * Receive opens on the first chain the wallet lists, so on any venue but that
  * one the address it shows belongs to a different chain - and on regtest every
  * chain's P2PKH addresses share a shape, so nothing about the string itself
@@ -172,22 +177,16 @@ async function receiveAddressFor(page, chain) {
     await expect(field, 'Receive rendered no Address field').toBeVisible({ timeout: 30_000 });
     await expect(field).toHaveValue(/^[a-zA-Z0-9]{20,}$/, { timeout: 30_000 });
 
-    // Receive's asset control is the hero icon button, named
-    // "Change asset (currently <tick> on <chain>)".
-    const assetButton = page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / });
-    await expect(assetButton, 'Receive rendered no Change asset button to pick a chain with')
+    // Receive's asset control is the Asset field, named "Asset: <tick> on <chain>".
+    const assetButton = page.getByRole('main').getByRole('button', { name: /^Asset: / });
+    await expect(assetButton, 'Receive rendered no Asset field naming the shown chain')
         .toBeVisible({ timeout: 30_000 });
 
-    if (!((await assetButton.getAttribute('aria-label')) || '').endsWith(`on ${chain.label})`)) {
+    if (!((await assetButton.getAttribute('aria-label')) || '').endsWith(`on ${chain.label}`)) {
         const before = await field.inputValue();
-        await assetButton.click();
+        await chooseReceiveChain(page, chain.label);
 
-        const pick = coinRow(page, chain);
-        await expect(pick, `the receive picker offered no ${chain.tick} row on ${chain.label}`)
-            .toBeVisible({ timeout: 30_000 });
-        await pick.getByRole('button', { name: /^Select / }).first().click();
-
-        await expect(assetButton).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}\\)$`), { timeout: 30_000 });
+        await expect(assetButton).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}$`), { timeout: 30_000 });
         // The address is fetched per chain AFTER the switch lands, so reading
         // it too early hands back the previous chain's address - the wrong-chain
         // funding failure above, arrived at from the other direction. Every

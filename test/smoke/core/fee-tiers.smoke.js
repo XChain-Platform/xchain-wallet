@@ -61,13 +61,13 @@ assert.equal(btcUnknown.sats, btcNormal.sats);
 const dogeNormal = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry, speed: 'normal' });
 assert.equal(dogeNormal.unit, 'DOGE/kB');
 assert.match(dogeNormal.rate, /DOGE\/kB/);
-// 100_000 koinu/byte × 250 bytes = 25_000_000 koinu = 0.25 DOGE.
-assert.equal(dogeNormal.sats, 25_000_000);
+// 2_000 koinu/byte x 250 bytes = 500_000 koinu = 0.005 DOGE.
+assert.equal(dogeNormal.sats, 500_000);
 // §44.7: DOGE rateValue is the displayed value (DOGE/kB), not
-// the internal koinu/byte. 100_000 koinu/byte × 1000 / 1e8 = 1 DOGE/kB.
-assert.equal(dogeNormal.rateValue, 1, 'DOGE rateValue is in DOGE/kB');
+// the internal koinu/byte. 2_000 koinu/byte x 1000 / 1e8 = 0.02 DOGE/kB.
+assert.equal(dogeNormal.rateValue, 0.02, 'DOGE rateValue is in DOGE/kB');
 const dogeFast = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry, speed: 'fast' });
-assert.equal(dogeFast.rateValue, 2);
+assert.equal(dogeFast.rateValue, 0.05);
 
 // BTC rateValue is unchanged (sat/vB IS the displayed unit).
 assert.equal(btcNormal.rateValue, 6);

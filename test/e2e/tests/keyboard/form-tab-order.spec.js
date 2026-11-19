@@ -12,9 +12,11 @@ import {
     createWallet,
     expect,
     gotoSection,
+    openIssueSection,
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { dropdownValue, expectDropdownValue } from '../../fixtures/pickOption.js';
 
 const VIEWPORT = { width: 1280, height: 800 };
 const INTERACTIVE_SELECTOR = [
@@ -55,7 +57,10 @@ async function expectVisualTabOrderAndFocusRings(page, form, label) {
             const marker = `${index}`;
             const rect = element.getBoundingClientRect();
             element.dataset.e2eFormControl = marker;
-            return { marker, top: rect.top, left: rect.left };
+            // Rows are read by vertical centre, not top edge: a row centres
+            // controls of different heights, such as a 24px help button
+            // beside a 44px switch hit area, whose tops differ by 10px.
+            return { marker, middle: rect.top + rect.height / 2, left: rect.left };
         });
     });
     expect(controls.length, `${label}: the form has no keyboard controls`).toBeGreaterThan(0);
@@ -140,13 +145,13 @@ async function expectVisualTabOrderAndFocusRings(page, form, label) {
     for (let index = 1; index < controls.length; index += 1) {
         const previous = controls[index - 1];
         const current = controls[index];
-        const movesDown = current.top >= previous.top - 3;
-        const staysLeftToRight = Math.abs(current.top - previous.top) > 3
+        const movesDown = current.middle >= previous.middle - 3;
+        const staysLeftToRight = Math.abs(current.middle - previous.middle) > 3
             || current.left >= previous.left - 3;
         expect(
             movesDown && staysLeftToRight,
-            `${label}: Tab moves from control ${previous.marker} at (${previous.left}, ${previous.top}) `
-                + `to control ${current.marker} at (${current.left}, ${current.top})`,
+            `${label}: Tab moves from control ${previous.marker} centred at (${previous.left}, ${previous.middle}) `
+                + `to control ${current.marker} centred at (${current.left}, ${current.middle})`,
         ).toBe(true);
     }
     expect(missingRings, `${label}: every keyboard-focused control paints a visible ring`)
@@ -198,10 +203,10 @@ async function expectHeaderMenuEscapeKeepsForm(page, form, label) {
     const trigger = page.getByRole('button', { name: 'Open menu' });
     await expect(trigger).toBeVisible();
     await trigger.click();
-    const menu = page.getByRole('menu', { name: 'Header actions' });
+    const menu = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(menu).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(menu).toHaveCount(0);
+    await expect(menu).toBeHidden();
     await expect(form, `${label}: Escape must leave the current form mounted`).toBeVisible();
 }
 
@@ -216,11 +221,11 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             // A new wallet has no contacts; save one so the recipient field
             // has a suggestion to offer.
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Create first contact' }).click();
+            await page.getByRole('button', { name: 'Add contact', exact: true }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
             await page.getByRole('textbox', { name: 'Address', exact: true })
                 .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
-            await page.getByRole('button', { name: 'Save', exact: true }).click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).click();
             await expect(page.getByRole('list', { name: 'Contacts' })
                 .getByText('Erin', { exact: true })).toBeVisible();
 
@@ -251,20 +256,12 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             const form = page.getByRole('form', { name: 'Receive payment' });
             await expect(form).toBeVisible();
             await expect(form.getByRole('textbox', { name: /^Amount/ })).toBeVisible();
-            await expect(form.getByRole('textbox', { name: 'Address label' })).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Receive request amount');
-
-            const addressType = form.getByLabel('Address type');
-            const originalType = await addressType.inputValue();
-            await addressType.focus();
-            await page.keyboard.press('Alt+ArrowDown');
-            await page.keyboard.press('Escape');
-            await expect(addressType).toHaveValue(originalType);
-            await expect(form).toBeVisible();
 
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByRole('textbox', { name: 'Address label' }),
+                // The address is the form's first field; the type picker and label field are retired.
+                firstField: form.getByLabel('Address', { exact: true }),
                 lastField: form.getByRole('textbox', { name: /^Amount/ }),
                 label: 'Receive request amount',
             });
@@ -272,56 +269,68 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
         await test.step('Create token', async () => {
             await gotoSection(page, 'Home');
-            const createToken = page.getByRole('main').getByRole('button', { name: 'Create token' });
+            // Home has no action grid at 834px and wider (ruling U45), so the
+            // Create token form is reached through the wallet menu at this width.
+            await page.keyboard.press('ControlOrMeta+k');
+            const palette = page.getByRole('dialog', { name: 'Wallet menu' });
+            await expect(palette).toBeVisible();
+            const paletteInput = palette.getByRole('combobox').first();
+            await expect(paletteInput).toBeEditable();
+            await paletteInput.fill('Create a token');
+            const createToken = page.getByRole('option', { name: /^Create a token\b/ }).first();
             await expect(createToken).toBeVisible();
             await createToken.click();
-            const custom = page.getByRole('button', { name: /^Custom/ });
-            await expect(custom).toBeVisible();
-            await custom.click();
-
-            const chainForm = page.getByRole('form', { name: 'Choose token network' });
-            await expect(chainForm).toBeVisible();
-            const network = chainForm.getByRole('button', { name: /^Network:/ });
-            await expect(network).toBeVisible();
-            await network.click();
-            await expect(chainForm.getByRole('listbox', { name: 'Network' })).toBeVisible();
-            await page.keyboard.press('Escape');
-            await expect(chainForm.getByRole('listbox', { name: 'Network' })).toHaveCount(0);
-            await expect(chainForm).toBeVisible();
-            const next = chainForm.getByRole('button', { name: 'Next' });
-            await expect(next).toBeEnabled();
-            await next.click();
-
-            const form = page.getByRole('form', { name: 'Token details' });
+            await expect(palette).toBeHidden();
+            // Issue Token is one form; its network sits in the From section,
+            // which starts closed.
+            const form = page.getByRole('form', { name: 'Issue Token' });
             await expect(form).toBeVisible();
+            await openIssueSection(page.getByRole('main'), 'From');
+            const network = form.getByRole('button', { name: /^Network:/ });
+            await expect(network).toBeVisible();
+            // The Network field opens the full network-picker screen (ruling
+            // U59); Escape closes it and returns to the form it came from.
+            await network.click();
+            const picker = page.getByRole('dialog', { name: 'Network' });
+            await expect(picker).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(picker).toHaveCount(0);
+            await expect(form).toBeVisible();
+
             await expectVisualTabOrderAndFocusRings(page, form, 'Create token');
+            // The Issue Token button stays off until a ticker is typed, and a
+            // disabled default button blocks Enter submission, so the two
+            // fields are filled before the Enter boundaries are walked.
+            await form.getByRole('textbox', { name: 'Ticker', exact: true }).fill('TABORDER');
+            await form.getByRole('textbox', { name: /^Max supply/ }).fill('1000');
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByRole('textbox', { name: 'Token name (ticker)' }),
-                lastField: form.getByRole('textbox').last(),
-                submitButton: form.getByRole('button', { name: 'Review token' }),
+                firstField: form.getByRole('textbox', { name: 'Ticker', exact: true }),
+                lastField: form.getByRole('textbox', { name: /^Max supply/ }),
+                submitButton: form.getByRole('button', { name: 'Issue Token', exact: true }),
                 label: 'Create token',
             });
         });
 
         await test.step('Settings password security', async () => {
             await openSettings(page);
-            const walletRow = page.getByRole('main').getByRole('button', { name: /^This wallet/ });
-            await expect(walletRow).toBeVisible();
-            await walletRow.click();
-            const changePassword = page.getByRole('main').getByRole('button', { name: 'Change…' });
-            await expect(changePassword).toBeVisible();
-            await changePassword.click();
+            const securityRow = page.getByRole('main').getByRole('button', { name: /^Security/ }).first();
+            await expect(securityRow).toBeVisible();
+            await securityRow.click();
+            // The Wallet password page opens straight on its form.
+            const passwordRow = page.getByRole('main').getByRole('button', { name: /^Wallet password\b/ }).first();
+            await expect(passwordRow).toBeVisible();
+            await passwordRow.click();
 
-            const heading = page.getByRole('heading', { name: 'Change wallet password' });
-            const form = heading.locator('xpath=ancestor::form');
+            // The direct page has no section heading, so the form is found by its label.
+            const form = page.getByRole('form', { name: 'Change wallet password' });
             await expect(form).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Settings password security');
             await expectHeaderMenuEscapeKeepsForm(page, form, 'Settings password security');
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByLabel('Current wallet password'),
-                lastField: form.getByLabel('Confirm new wallet password'),
+                firstField: form.getByLabel('Current wallet password', { exact: true }),
+                lastField: form.getByLabel('Confirm new wallet password', { exact: true }),
                 submitButton: form.getByRole('button', { name: 'Change password' }),
                 label: 'Settings password security',
             });

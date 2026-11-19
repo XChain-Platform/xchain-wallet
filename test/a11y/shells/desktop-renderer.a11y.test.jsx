@@ -98,7 +98,6 @@ function DesktopRendererHarness() {
                                 onSelect={setView}
                                 onOpenSettings={() => setView('settings')}
                                 onOpenWalletPicker={() => {}}
-                                onCommandPalette={() => {}}
                                 onLock={() => {}}
                                 walletName={WALLET.name}
                                 hasVmAddress
@@ -144,7 +143,7 @@ describe('desktop renderer accessibility', () => {
 
         await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' });
         screen.getByRole('navigation', { name: 'Primary navigation' });
-        screen.getByRole('status', { name: 'Watch-only wallet' });
+        screen.getByRole('status', { name: 'Another phone signs for this wallet' });
         screen.getByRole('heading', { name: 'Home' });
         await expectNoSeriousAxeViolations(container);
     });
@@ -156,7 +155,8 @@ describe('desktop renderer accessibility', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
         await screen.findByRole('heading', { name: 'Settings' });
-        await screen.findAllByText('Desktop Wallet');
+        // Settings lists groups now, so the page is loaded once its search box is.
+        await screen.findByRole('button', { name: 'Filter settings' });
         await expectNoSeriousAxeViolations(container);
     });
 });

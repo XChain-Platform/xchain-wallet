@@ -60,9 +60,9 @@ assert.ok(/export function ReachabilityBanner\b/.test(banner),
     'ReachabilityBanner is a named export');
 assert.ok(/useReachability/.test(banner),
     'ReachabilityBanner consumes useReachability');
-// Must hide when overall is normal: otherwise normal users see a banner forever.
-assert.ok(/overall === ['"]degraded['"] \|\| overall === ['"]offline['"]/.test(banner) && /!unreachable\) return null/.test(banner),
-    'ReachabilityBanner hides when overall is normal');
+// Only a true offline verdict gets a banner. Normal and degraded verdicts are silent.
+assert.ok(/overall === ['"]offline['"]/.test(banner) && /!unreachable\) return null/.test(banner),
+    'ReachabilityBanner hides unless overall is offline');
 assert.ok(/<StatusMessage\b/.test(banner) && /<ReachabilityLine\b/.test(banner) && /role="status"/.test(line),
     'ReachabilityBanner renders through StatusMessage with role="status" for screen readers');
 assert.ok(/aria-atomic="true"/.test(line),
@@ -70,8 +70,8 @@ assert.ok(/aria-atomic="true"/.test(line),
 assert.ok(/t\(['"]common\.tryAgain['"]\)/.test(banner)
     && /t\(['"]common\.checking['"]\)/.test(banner),
     'ReachabilityBanner exposes translated retry button labels');
-assert.ok(/const variant = overall === 'offline' \? 'error' : 'warning'/.test(banner) && /variant=\{variant\}/.test(banner),
-    'ReachabilityBanner takes its tone from the shared StatusMessage variants');
+assert.ok(/const variant = 'error'/.test(banner) && /variant=\{variant\}/.test(banner),
+    'ReachabilityBanner uses the shared StatusMessage error tone for offline');
 
 const css = readFileSync(cssPath, 'utf8');
 assert.ok(!/\.degraded\b|\.offline\b/.test(css), 'CSS leaves the tone styles to StatusMessage');

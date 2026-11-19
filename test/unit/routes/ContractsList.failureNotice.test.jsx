@@ -45,7 +45,7 @@ describe('ContractsList failure notice', () => {
         mount();
         await screen.findByRole('alert');
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Try Again' })).toHaveLength(1);
         expect(screen.queryByText('No published contracts')).toBeNull();
         expect(screen.queryByText('No indexed contracts')).toBeNull();
     });
@@ -54,7 +54,7 @@ describe('ContractsList failure notice', () => {
         const messaging = mount();
         await screen.findByRole('alert');
         const before = messaging.getContractsBrowseAll.mock.calls.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await screen.findByRole('alert');
         expect(messaging.getContractsBrowseAll.mock.calls.length).toBeGreaterThan(before);
     });

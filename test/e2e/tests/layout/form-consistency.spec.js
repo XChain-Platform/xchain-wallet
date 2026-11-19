@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Every form and button looks the same: walk each form route reachable from
-// the command palette and Settings at a phone and a desktop size and measure
+// the wallet menu and Settings at a phone and a desktop size and measure
 //   - every text, number, select and textarea field draws a solid 1px border
 //     in the shared control-border colour (on itself or on its wrapper),
 //   - inputs, selects and buttons that share a row share one height,
@@ -17,47 +17,60 @@
 //     shortcuts), and Max sits inside the amount field it acts on,
 //   - primary, secondary and danger buttons keep the shared Button colours
 //     (secondary keeps its 1px outline) and a button drawn like one is a Button,
-//   - disabled buttons use the shared disabled colours,
+//   - a disabled button never looks disabled: it keeps its variant's colours,
+//     full opacity and no filter (ruling G130, 2026-11-16),
 //   - a label sits above its field, one label-gap token away.
 
 import { writeFileSync } from 'node:fs';
 import {
     dismissIntroCarousel,
+    backToSettingsList,
     expect,
     gotoSection,
+    openAutomaticDonations,
     openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
+import { installFontScale } from '../../layout/sweep.js';
 
 const VIEWPORTS = [
     { width: 360, height: 800 },
+    { width: 375, height: 800 },
     { width: 1440, height: 900 },
+    // Large text at phone width: the shells scale the root font by 1.3 and 1.5.
+    // FORM_TEXT_SCALE=1 adds these two; they hold a wrapped field label over
+    // an address field's icon button and the fee readout's rate figure.
+    ...(process.env.FORM_TEXT_SCALE ? [
+        { width: 360, height: 800, fontScale: 1.3 },
+        { width: 360, height: 800, fontScale: 1.5 },
+    ] : []),
 ];
+const sizeKey = (v) => `${v.width}x${v.height}${v.fontScale ? `-text${v.fontScale}` : ''}`;
 
 /** Palette destinations that open a form (or a form-bearing list). */
 const PALETTE_ROUTES = [
-    'Issue a token directly', 'Add to an existing token', 'Burn supply', 'Move balances, ownerships',
-    'Post a message on-chain', 'Price a token in a currency', 'Sell a token at a fixed rate',
-    'Distribute to holders', 'Send to many recipients', 'Publish an address or token list',
-    'Public or token-gated on-chain file', 'Route this address', 'Send a token to another chain',
-    'Choose which chains a token', 'Author any action by hand', 'Trade one token for another',
-    'Trade at the price you set', 'Settle a matched order', 'Swap across chains',
-    'Limit order across chains', 'Check a signed message',
-    'Guided issuance wizard', 'Your saved addresses', 'Manage your addresses', 'Your staking positions',
-    'Polls and voting', 'Browse betting markets', 'Smart contracts', 'Encrypted inbox', 'Markets and orders',
-    'Address and token lists', 'Coin payments you still owe', 'Find open dispensers',
+    'Mint supply', 'Destroy tokens', 'Sweep address',
+    'Broadcast', 'My oracle', 'Create dispenser',
+    'Pay a dividend', 'Airdrop', 'Create a list',
+    'Publish file', 'Bind a controller', 'Move across chains',
+    'Bridge settings', 'Advanced action', 'Swap tokens',
+    'Create order', 'Pay an order', 'Cross-chain swap',
+    'Cross-chain order', 'Verify signature',
+    'Create a token', 'Contacts', 'Addresses', 'Staking',
+    'Governance polls', 'Prediction markets', 'Contracts', 'Messaging', 'DEX',
+    'Lists', 'Payments due', 'Browse dispensers',
 ];
 
 const SETTINGS_SECTIONS = [
-    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety', 'Wallet mode',
-    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Automatic donation system', 'Developer', 'About',
+    'About', 'Wallets', 'Security', 'Backup and Recovery', 'Privacy and Sites',
+    'Appearance', 'Notifications', 'Network and Fees', 'Advanced',
 ];
 
 async function palette(page, destination) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').fill(destination);
     const option = dialog.getByRole('option').filter({ hasText: destination }).first();
@@ -101,6 +114,7 @@ function formFaults() {
     const strongBorder = resolve('border-color', '--xc-border-strong');
     const accent = resolve('background-color', '--xc-accent-primary');
     const danger = resolve('background-color', '--xc-danger');
+    const successFill = resolve('background-color', '--xc-success-fill');
     const disabledBg = resolve('background-color', '--xc-control-disabled-bg');
     const disabledBorder = resolve('border-color', '--xc-control-disabled-border');
     const disabledText = resolve('color', '--xc-control-disabled-text');
@@ -144,6 +158,11 @@ function formFaults() {
 
     // A TokenField trigger is a field, not a button.
     const tokenTrigger = (el) => el.tagName === 'BUTTON' && sharedClass(el, 'control') && el.querySelector('[class*="caret"]');
+    // The Quick Give/Get cards (G31) are their own ruled design: a large
+    // amount, an asset chip beside it and a round flip button between the
+    // cards. They are not Form Standard fields and buttons, so the walk skips
+    // them; giveGet unit tests pin their geometry.
+    const giveGetQuickPart = (el) => ['bigAmount', 'assetChip', 'flip'].some((part) => sharedClass(el, part));
     const inFieldSizes = [];
     const styles = { labels: [], fields: [] };
     const faults = [];
@@ -151,7 +170,8 @@ function formFaults() {
 
     // Fields, and the box that draws each one's border (itself or a wrapper).
     const fieldSel = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=file]):not([type=color]):not([type=button]):not([type=submit]), select, textarea';
-    const fields = [...document.querySelectorAll(fieldSel), ...[...document.querySelectorAll('button')].filter(tokenTrigger)].filter(visible);
+    const fields = [...document.querySelectorAll(fieldSel), ...[...document.querySelectorAll('button')].filter(tokenTrigger)]
+        .filter((el) => visible(el) && !giveGetQuickPart(el));
     const boxOf = (el) => {
         if (borderOf(el)) return el;
         for (let a = el.parentElement, depth = 0; a && depth < 3; a = a.parentElement, depth += 1) {
@@ -201,7 +221,7 @@ function formFaults() {
     // Page-header actions and the shared notice's own action are measured by
     // their own specs.
     const buttons = [...document.querySelectorAll('button, [role="button"]')].filter((el) => visible(el)
-        && !el.closest('header, [data-variant]') && !tokenTrigger(el));
+        && !el.closest('header, [data-variant]') && !tokenTrigger(el) && !giveGetQuickPart(el));
     for (const btn of buttons) {
         const label = (btn.getAttribute('aria-label') || btn.innerText || '').trim();
         if (/^paste\b/i.test(label)) {
@@ -218,6 +238,27 @@ function formFaults() {
         if (box) {
             const cs = getComputedStyle(btn);
             inFieldSizes.push({ el: name(btn), height: Math.round(r.height * 10) / 10, fontSize: cs.fontSize, inset: Math.round((r.top - rect(box).top) * 10) / 10 });
+        }
+    }
+
+    // A button drawn over a field (an address field's picker icon, say) sits
+    // inside the field box it acts on: one that crosses the box edge has left
+    // the field it belongs to, and its transparent in-field chrome reads as a
+    // broken outline. A long label that wraps under large text is the usual
+    // way an icon anchored to a one-line label slips out of its field. Only a
+    // button inside the field's own component counts (three levels up from
+    // the control); page chrome such as the tab bar floats over fields freely.
+    for (const btn of buttons) {
+        const r = rect(btn);
+        for (const [el, box] of boxes) {
+            if (box === btn || btn.contains(box)) continue;
+            if (!el.parentElement?.parentElement?.parentElement?.contains(btn)) continue;
+            const b = rect(box);
+            const across = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+            const down = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+            if (across <= 2 || down <= 2 || contains(b, r) || contains(r, b)) continue;
+            faults.push(`${name(btn)}: crosses the edge of field ${name(el)}`);
+            break;
         }
     }
 
@@ -275,12 +316,20 @@ function formFaults() {
         const text = (btn.innerText || '').trim();
         if (isShared) {
             counts.buttons += 1;
-            if (btn.disabled && !sharedClass(btn, 'link')) {
+            if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') {
                 counts.disabled += 1;
-                if (cs.backgroundColor !== disabledBg || cs.borderTopColor !== disabledBorder || cs.color !== disabledText) {
+                // G130: a button never looks disabled. It keeps its variant's
+                // colours, full opacity and no filter; the variant checks below
+                // then hold it to the same colours as an enabled button.
+                if (cs.opacity !== '1' || (cs.filter && cs.filter !== 'none')) {
+                    faults.push(`${name(btn)}: disabled button greyed (opacity ${cs.opacity}, filter ${cs.filter})`);
+                }
+                if (!sharedClass(btn, 'link') && cs.backgroundColor === disabledBg && cs.color === disabledText) {
                     faults.push(`${name(btn)}: disabled look bg ${cs.backgroundColor} border ${cs.borderTopColor} text ${cs.color}`);
                 }
-                continue;
+                if (sharedClass(btn, 'success') && cs.backgroundColor !== successFill) {
+                    faults.push(`${name(btn)}: disabled main action fill ${cs.backgroundColor}, token ${successFill}`);
+                }
             }
             if (sharedClass(btn, 'secondary')) {
                 if (cs.borderTopWidth !== '1px' || cs.borderTopStyle !== 'solid' || cs.borderTopColor !== strongBorder) {
@@ -288,8 +337,17 @@ function formFaults() {
                 }
             }
             // The asset and market pickers draw a Button as a card (a design call).
-            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector');
-            if (sharedClass(btn, 'primary') && !asCard && cs.backgroundColor !== accent) {
+            // Import FreeWallet wears the FreeWallet character's colour (U69).
+            // The blue chart hero's icon actions (the balance eye, the DEX
+            // watchlist star and reverse pair) wear the hero's `eye` style.
+            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton')
+                || sharedClass(btn, 'eye');
+            // Connect Hardware Wallet is slate #334155, as the welcome picture draws it (hw-1, 2026-11-15).
+            const hardwareSlate = sharedClass(btn, 'hardwareButton');
+            if (hardwareSlate && cs.backgroundColor !== 'rgb(51, 65, 85)') {
+                faults.push(`${name(btn)}: hardware wallet fill ${cs.backgroundColor}, ruled slate rgb(51, 65, 85)`);
+            }
+            if (sharedClass(btn, 'primary') && !asCard && !hardwareSlate && cs.backgroundColor !== accent) {
                 faults.push(`${name(btn)}: primary fill ${cs.backgroundColor}, token ${accent}`);
             }
             if (sharedClass(btn, 'danger') && cs.backgroundColor !== danger) {
@@ -350,13 +408,22 @@ async function walk(page, size, out) {
         if (!(await palette(page, dest))) { results.push({ route: dest, skipped: true, faults: [], counts: {} }); continue; }
         await record(dest);
     }
+    // The Issue Token entry opens the full Issue form; the template is now an
+    // optional Select template field at its top, not a wizard step.
+    for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
+    if (await palette(page, 'Issue Token')) {
+        await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
+        await record('Issue token');
+    } else {
+        results.push({ route: 'Issue token', skipped: true, faults: [], counts: {} });
+    }
     // Screens reached from the navigation rather than the palette, and the
     // forms their add buttons open.
     for (const section of ['Send', 'Receive', 'DEX', 'Messaging']) {
         await gotoSection(page, section);
         await record(section);
     }
-    for (const [dest, add] of [['Your saved addresses', 'Add contact'], ['Manage your addresses', 'Add or import address']]) {
+    for (const [dest, add] of [['Contacts', 'Add contact'], ['Addresses', 'Add or import address']]) {
         await palette(page, dest);
         const button = page.getByRole('button', { name: add, exact: true }).first();
         if (await button.count() === 0) continue;
@@ -385,15 +452,21 @@ async function walk(page, size, out) {
             if (await cancel.count()) await cancel.click().catch(() => {});
         }
     }
+    // Automatic Donations is nested under Network and Fees, not a Settings
+    // landing-page row.
+    await openAutomaticDonations(page);
+    await record('Settings Automatic Donations');
+    await backToSettingsList(page);
     return results;
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`forms and buttons are consistent at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`forms and buttons are consistent at ${sizeKey(viewport)}`, async ({ page }) => {
         test.setTimeout(20 * 60 * 1000);
-        await page.setViewportSize(viewport);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await installFontScale(page, viewport.fontScale);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        const size = `${viewport.width}x${viewport.height}`;
+        const size = sizeKey(viewport);
         const results = await walk(page, size, process.env.FORM_SWEEP_OUT);
         if (process.env.FORM_SWEEP_OUT) writeFileSync(`${process.env.FORM_SWEEP_OUT}/${size}.json`, JSON.stringify(results, null, 1));
         const measured = results.reduce((n, r) => n + (r.counts.fields || 0), 0);
@@ -409,19 +482,20 @@ for (const viewport of VIEWPORTS) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`onboarding forms are consistent at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`onboarding forms are consistent at ${sizeKey(viewport)}`, async ({ page }) => {
         test.setTimeout(4 * 60 * 1000);
-        await page.setViewportSize(viewport);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await installFontScale(page, viewport.fontScale);
         await page.goto('/', { waitUntil: 'commit' });
         await dismissIntroCarousel(page);
         const results = [];
         const record = async (route) => {
             await settle(page);
             results.push({ route, ...(await page.evaluate(formFaults)) });
-            if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${viewport.width}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
+            if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${sizeKey(viewport)}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
         };
         await record('Welcome');
-        for (const name of ['Create new wallet', 'Import wallet', 'From FreeWallet', 'Pair a watcher or signer']) {
+        for (const name of ['Create new wallet', 'Import wallet', 'Import FreeWallet', 'Connect Hardware Wallet']) {
             const button = page.getByRole('button', { name }).first();
             if (await button.count() === 0) continue;
             await button.click();

@@ -44,11 +44,14 @@ for (const field of ['chainId', 'fromAddressId', 'action', 'paramsJson', 'status
         `ParallelComposer rows carry ${field}`);
 }
 
-// Spec warning + acknowledgment gate before starting the sign loop.
+// Spec warning on Review, repeated as a confirm-screen notice in place of an
+// acknowledgement checkbox.
 assert.ok(/No rollback:/i.test(src),
     'ParallelComposer surfaces the no-rollback warning');
-assert.ok(/acknowledgedNoRollback/.test(src),
-    'ParallelComposer requires explicit ack before signing');
+assert.ok(/notice: t\('parallelComposer\.confirmNotice'\)/.test(src),
+    'ParallelComposer passes the no-rollback fact to the confirm screen');
+assert.ok(!/acknowledgedNoRollback/.test(src),
+    'ParallelComposer carries no acknowledgement gate');
 assert.ok(/Sign all/.test(src),
     'ParallelComposer renders the "Sign all" submit button');
 
@@ -88,14 +91,14 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ParallelComposer`);
     assert.ok(app.includes("'parallel-compose'"),
         `${shell} tracks 'parallel-compose' sub-route`);
-    assert.ok(/onParallel: \(\) => setUnlockedView\('parallel-compose'\)/.test(app),
-        `${shell} ActionsMenu wires onParallel → 'parallel-compose'`);
+    assert.ok(/onNavigateToActionQueue=\{\(\) => setUnlockedView\('parallel-compose'\)\}/.test(app),
+        `${shell} Settings wires Action queue to 'parallel-compose'`);
     assert.ok(/<ParallelComposer\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <ParallelComposer> with the active walletId`);
-    assert.ok(surfacesEntry(app, 'parallel', 'Parallel cross-chain actions'),
-        `${shell} ActionsMenu surfaces the "Parallel cross-chain actions" entry`);
+    assert.ok(!surfacesEntry(app, 'parallel', 'Action queue'),
+        `${shell} keeps Action queue out of All actions`);
 }
 
 console.log(
-    'OK: parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
+    'OK: parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + Settings entry)',
 );

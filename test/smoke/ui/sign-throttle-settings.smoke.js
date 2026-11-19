@@ -46,6 +46,10 @@ const sectionSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'ConnectedSitesSection.jsx'),
     'utf8',
 );
+const panelSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'SignThrottlePanel.jsx'),
+    'utf8',
+);
 
 // ─── 1. schema fields + bounds ──────────────────────────────────────────
 
@@ -119,32 +123,38 @@ assert.match(
 // ─── 4. ConnectedSitesSection panel ────────────────────────────────────
 
 assert.match(sectionSrc, /<SignThrottlePanel/,
-    'SignThrottlePanel mounted at the bottom of ConnectedSitesSection');
-assert.match(sectionSrc, /function SignThrottlePanel\(\)/,
+    'SignThrottlePanel mounted as the Options view of ConnectedSitesSection');
+assert.match(panelSrc, /export function SignThrottlePanel\(\)/,
     'SignThrottlePanel defined');
 // The panel shows its own save error, so it mounts the hook with reportsOwnError
 // and the hook adds no second message.
-assert.match(sectionSrc, /const \{ settings, update \} = useSettings\(\{ reportsOwnError: true \}\)/,
+assert.match(panelSrc, /const \{ settings, update \} = useSettings\(\{ reportsOwnError: true \}\)/,
     'panel reads + writes settings via useSettings and reports its own error');
+assert.match(panelSrc, /<Select\b/, 'the limit rows use the shared themed Select, never a native select');
+assert.ok(!/<select\b/.test(panelSrc), 'no native select');
+assert.match(panelSrc, /update\(\{ signThrottle: next \}\)/,
+    'each choice writes the signThrottle pair via update, with no Save button');
+assert.ok(!/type="submit"/.test(panelSrc), 'no submit button: choices apply at once');
+assert.match(panelSrc, /messaging\.getSignThrottleStatus\(\)/,
+    'the live per-site status is one host read');
+// The smoke loader reads source with English copy in place of t() keys.
+assert.match(panelSrc, /throttleInEffect|In effect now/, 'panel shows the In effect now card');
+
+// ─── 5. the one bulk host read ──────────────────────────────────────────
+assert.match(flowSrc, /function status\(\)/, 'throttle exposes a read-only status()');
 assert.match(
-    sectionSrc,
-    /aria-label="Sign-throttle burst/,
-    'burst input has an aria-label',
+    hostSrc,
+    /host\.register\('sites\.throttleStatus', async \(\) => signThrottle\.status\(\)\)/,
+    'host registers sites.throttleStatus returning signThrottle.status()',
 );
-assert.match(
-    sectionSrc,
-    /aria-label="Sign-throttle window in seconds"/,
-    'window input has an aria-label',
-);
-assert.match(
-    sectionSrc,
-    /update\(\{ signThrottle: (?:next|patch) \}\)/,
-    'Apply writes the validated signThrottle patch via update',
-);
-assert.match(
-    sectionSrc,
-    /Currently in effect:/,
-    'panel shows the live-effective values',
-);
+for (const shim of [
+    ['extension', 'src', 'popup', 'messaging.js'],
+    ['web', 'src', 'messaging.js'],
+    ['desktop', 'renderer', 'messaging.js'],
+]) {
+    const src = readFileSync(join(wsRoot, 'packages', ...shim), 'utf8');
+    assert.match(src, /export function getSignThrottleStatus\(\)[\s\S]+?sendMessage\('sites\.throttleStatus'\)/,
+        `${shim[0]} messaging exposes getSignThrottleStatus`);
+}
 
 console.log('sign-throttle-settings smoke OK');

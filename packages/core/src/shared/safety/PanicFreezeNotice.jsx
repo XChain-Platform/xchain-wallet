@@ -99,27 +99,19 @@ export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME }) {
     const notice = usePanicFreeze(surface);
     if (!notice || !notice.disclose) return null;
     return (
-        <FormNotice variant="error" lead={notice.title}>
+        <FormNotice variant="error" title={notice.title}>
             {notice.detail}
         </FormNotice>
     );
 }
 
 /**
- * Sign-screen replacement for the "Wallet unlocked. No password needed."
- * note. Three outcomes:
- *
- *   not frozen        renders `children` (the caller's usual reassurance)
- *   self-armed        renders the freeze, in its place
- *   duress-armed      renders nothing: the claim is withdrawn without giving
- *                     an observer a cue
- *
- * @param {object} props
- * @param {import('react').ReactNode} [props.children]
+ * Shows the sign-screen freeze statement only for a self-armed freeze.
+ * Renders nothing when signing is allowed or the freeze is duress-armed.
  */
-export function SigningReadyNote({ children }) {
+export function SigningReadyNote() {
     const notice = usePanicFreeze(PANIC_SURFACE_SIGN);
-    if (!notice) return children ?? null;
+    if (!notice) return null;
     if (!notice.disclose) return null;
     return <PanicSignStatus notice={notice} />;
 }
@@ -153,8 +145,8 @@ export function PanicPasswordGate({ children, rejectLabel }) {
  */
 export function PanicSignStatus({ notice, testId, role }) {
     return (
-        <StatusMessage variant="error" testId={testId} role={role}>
-            <strong>{notice.title}</strong>{' '}{notice.detail}
+        <StatusMessage variant="error" testId={testId} role={role} title={notice.title}>
+            {notice.detail}
         </StatusMessage>
     );
 }

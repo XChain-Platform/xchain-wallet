@@ -41,7 +41,7 @@ assert.deepEqual(
 
 assert.match(
     isEntryReplaceable({ blockIndex: 0, action: 'ISSUE', txHash: 'abc' }).reason,
-    /aren't RBF-replaceable/,
+    /can't have their fee raised/,
 );
 
 const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } }, btc);

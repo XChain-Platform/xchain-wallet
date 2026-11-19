@@ -1,0 +1,29 @@
+/* The badge between two linked cards reuses the Swap form's flip geometry:
+   the zero-height row that sits in the pair's 8px gap and the 44px circle
+   with a surface-coloured ring that overlaps the bottom of the first card and
+   the top of the second. Only what makes it a badge rather than a button is
+   restated here. */
+
+.row {
+    composes: flipRow from './giveGet/GiveGet.module.css';
+}
+
+.badge {
+    composes: flip from './giveGet/GiveGet.module.css';
+}
+
+/* The flip button shows a pointer, turns its arrows sideways and lights up on
+   hover; the badge is upright and inert. Scoped under .row so these outrank
+   the composed rules whatever order the two stylesheets load in. */
+.row .badge {
+    cursor: default;
+}
+
+.row .badge:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.row .badge svg {
+    display: block;
+    transform: none;
+}

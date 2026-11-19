@@ -216,7 +216,7 @@ test.describe('forced-colors: onboarding', () => {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
-        await expect(page.getByRole('heading', { name: 'Create a new wallet' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Create a New Wallet' })).toBeVisible();
         // The password fields are the widest instance of the box-shadow ring
         // that this item started from: `Input.module.css` styles every text
         // input in the wallet.
@@ -227,7 +227,7 @@ test.describe('forced-colors: onboarding', () => {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
-        await expect(page.getByRole('heading', { name: 'Import an existing wallet' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Import Wallet', level: 1 })).toBeVisible();
         await inspect(page, 'Import wallet');
     });
 });

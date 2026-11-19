@@ -25,7 +25,10 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     getSettings: vi.fn(async () => ({ walletMode: 'full' })),
     getAddressesByChain: vi.fn(async () => ({ 'bitcoin-regtest': [] })),
     parsePsbt: vi.fn(async () => ({
-        decomposed: { inputs: [], outputs: [] },
+        decomposed: {
+            inputs: [{ address: 'bcrt1qsource', value: 1000 }],
+            outputs: [{ address: 'bcrt1qrecipient', value: 900 }],
+        },
         action: null,
         actionDecodeReason: 'NO_OP_RETURN',
     })),

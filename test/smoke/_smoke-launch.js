@@ -24,11 +24,22 @@ export const RAW_SOURCE_SMOKES = new Set([
     'audits/scan-route.smoke.js',
     'core/i18n.smoke.js',
     'markets/place-order.smoke.js',
+    // Audits each Compose message copy key against its English locale text.
+    'messaging/compose-message.smoke.js',
     'ui/ads-onboarding-notice.smoke.js',
+    'ui/blocklist-wildcards.smoke.js',
     'ui/demo-disclosure-on-home.smoke.js',
+    'ui/fee-selector.smoke.js',
     'ui/input-capslock-warning.smoke.js',
+    // Audits queued result copy keys before combining them with the English dictionary.
+    'ui/queued-broadcast-copy.smoke.js',
     'ui/reachability-banner.smoke.js',
+    // Audits which locale key each Receive button label reads.
+    'ui/receive-request-share.smoke.js',
     'ui/send-autocomplete.smoke.js',
+    'ui/send-watcher-mode.smoke.js',
+    // Audits which locale key the empty Token field placeholder reads.
+    'ui/token-field.smoke.js',
     'ui/verify-signature.smoke.js',
 ]);
 

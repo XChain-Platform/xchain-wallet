@@ -106,6 +106,27 @@ function deferred() {
 afterEach(cleanup);
 
 describe('wallet import flow', () => {
+    it('keeps every import action enabled in the success style with no standing hint (G22)', () => {
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <ImportWallet mode="fresh" onBack={() => {}} onImported={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const expectEnabledSuccessAction = (name) => {
+            const action = screen.getByRole('button', { name });
+            expect(action).toBeEnabled();
+            expect(action.className).toMatch(/success/);
+            expect(screen.queryByText(/to continue\.$/)).toBeNull();
+        };
+
+        expectEnabledSuccessAction('Import');
+        fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
+        expectEnabledSuccessAction('Import');
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+        expectEnabledSuccessAction('Restore');
+    });
+
     it('keeps the action label stable and blocks repeat import while busy', async () => {
         const pending = deferred();
         const importMnemonic = vi.fn(() => pending.promise);
@@ -132,8 +153,8 @@ describe('wallet import flow', () => {
         const messaging = mountFlow();
         fillPhrase(PHRASE.replace(/about$/, 'notaword'));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Word 12 ("notaword") is not in the recovery phrase word list. Check its spelling.',
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
+            'Word 12 ("notaword") is not in the BIP39 word list. Check its spelling.',
         );
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });
@@ -142,7 +163,7 @@ describe('wallet import flow', () => {
         const messaging = mountFlow();
         fillPhrase(PHRASE.split(' ').slice(0, 11).join(' '));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Expected 12, 15, 18, 21, or 24 words, got 11.',
         );
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
@@ -152,7 +173,7 @@ describe('wallet import flow', () => {
         const messaging = mountFlow();
         fillPhrase(PHRASE.replace(/about$/, 'abandon'));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Every word is in the BIP39 list, but the checksum does not match.',
         );
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
@@ -177,7 +198,7 @@ describe('wallet import flow', () => {
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByText('Automatic Donation System')).toBeInTheDocument();
+        expect(await screen.findByText('Automatic Donations')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
         expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
@@ -200,6 +221,7 @@ describe('wallet import flow', () => {
             password: PASSWORD,
             wif: WIF,
             chainId: 'bitcoin-mainnet',
+            addressType: 'p2sh-p2wpkh',
             name: 'Paper Wallet',
         }, {
             storageBackend: {
@@ -218,6 +240,7 @@ describe('wallet import flow', () => {
             password: PASSWORD,
             wif: WIF,
             chainId: 'bitcoin-mainnet',
+            addressType: 'p2sh-p2wpkh',
             name: 'Paper Wallet',
         }));
         expect(result).toMatchObject({

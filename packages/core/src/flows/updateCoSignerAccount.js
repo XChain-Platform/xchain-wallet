@@ -26,7 +26,7 @@ import { withAccountLock } from '../cosigner/accountLock.js';
 
 export class CoSignerAccountNotFoundError extends Error {
     constructor(id) {
-        super(`co-signer account not found: ${id}`);
+        super(`cosigner account not found: ${id}`);
         this.name = 'CoSignerAccountNotFoundError';
         this.id = id;
     }
@@ -75,7 +75,10 @@ async function applyUpdate(vault, id, patch) {
     }
 
     // Keep the spending window across a policy edit (a reset would re-open the
-    // budget, and the entries are the approval record).
+    // budget, and the entries are the approval record). The kept entries are
+    // re-read against the hours in force at the next decision, so a longer window
+    // counts only what is still stored: an entry the old, shorter window already
+    // pruned is gone, and approvals made while no cap was set were never recorded.
     const next = { ...existing, updatedAt: new Date().toISOString() };
 
     if (patch.name !== undefined) {

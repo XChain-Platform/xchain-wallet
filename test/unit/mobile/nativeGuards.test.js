@@ -43,6 +43,7 @@ import {
     clearPanicModeState,
     PANIC_STORAGE_KEY,
 } from '../../../packages/core/src/flows/index.js';
+import * as erase from '../../../packages/core/src/flows/eraseSchedule.js';
 
 /** In-memory stand-in for localStorage, so a test can evict it wholesale. */
 function fakeLocalStorage(seed = {}) {
@@ -317,5 +318,45 @@ describe('the shared blob', () => {
         const persisted = readBlob(plugin.state.guards);
         expect(persisted.duress).toBeUndefined();
         expect(persisted.lockout.failedAttempts).toBe(1);
+    });
+});
+
+// Security review of the Forgot Password recovery, 2026-11-16: a due erase
+// trusts only what the guard slot holds when it runs.
+describe('the erase hold on a native shell', () => {
+
+    function dueRecord() {
+        const dueAt = Date.now() - 60_000;
+        return { scheduledAt: dueAt - erase.ERASE_HOLD_MS, dueAt };
+    }
+
+    // The installs above leave the erase view wired; start each case unwired.
+    beforeEach(async () => {
+        await erase.configureEraseSchedulePersistence(null);
+        erase.__resetEraseScheduleForTests();
+    });
+    afterEach(async () => {
+        await erase.configureEraseSchedulePersistence(null);
+        erase.__resetEraseScheduleForTests();
+    });
+
+    it('a boot whose guard slot failed to load never runs a due erase', async () => {
+        const plugin = fakePlugin();
+        plugin.loadGuards = vi.fn(async () => { throw new Error('keystore is locked'); });
+        onNativeShell(plugin, fakeLocalStorage({ [erase.ERASE_SCHEDULE_STORAGE_KEY]: JSON.stringify(dueRecord()) }));
+
+        expect(await installNativeGuardPersistence()).toBe(false);
+        expect(erase.isEraseDue(erase.getEraseSchedule())).toBe(true);
+        expect(await erase.shouldRunDueErase()).toBe(false);
+    });
+
+    it('re-reads the slot itself, not the boot cache, before a due erase', async () => {
+        const plugin = fakePlugin(asBlob({ erase: dueRecord() }));
+        onNativeShell(plugin);
+        expect(await installNativeGuardPersistence()).toBe(true);
+        expect(await erase.shouldRunDueErase()).toBe(true);
+        // Another context cleared the record after this boot hydrated.
+        plugin.state.guards = asBlob({});
+        expect(await erase.shouldRunDueErase()).toBe(false);
     });
 });

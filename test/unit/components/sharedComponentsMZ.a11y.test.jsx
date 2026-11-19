@@ -13,13 +13,11 @@ import { NetworkFilter } from '../../../packages/core/src/shared/components/Netw
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { OpenOrdersPanel } from '../../../packages/core/src/shared/components/OpenOrdersPanel.jsx';
-import { OperatorPublisherMode } from '../../../packages/core/src/shared/components/OperatorPublisherMode.jsx';
 import { OrderbookPanel } from '../../../packages/core/src/shared/components/OrderbookPanel.jsx';
 import { OriginIdentity } from '../../../packages/core/src/shared/components/OriginIdentity.jsx';
 import { OwnAddressPickerScreen } from '../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx';
 import { OwnerWithdrawWarning } from '../../../packages/core/src/shared/components/OwnerWithdrawWarning.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
-import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import { PortfolioChart } from '../../../packages/core/src/shared/components/PortfolioChart.jsx';
 import { PreflightPanel } from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
@@ -31,7 +29,6 @@ import { RawPsbtViewer } from '../../../packages/core/src/shared/components/RawP
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
 import { RelativeTime } from '../../../packages/core/src/shared/components/RelativeTime.jsx';
-import { ResumeConfirmCard } from '../../../packages/core/src/shared/components/ResumeConfirmCard.jsx';
 import { RouteErrorBoundary } from '../../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
 import { SignCredentials } from '../../../packages/core/src/shared/components/SignCredentials.jsx';
 import { Sparkline } from '../../../packages/core/src/shared/components/Sparkline.jsx';
@@ -46,6 +43,7 @@ import { TxStatusTimeline } from '../../../packages/core/src/shared/components/T
 import { UndoSendToast } from '../../../packages/core/src/shared/components/UndoSendToast.jsx';
 import { UpdateNoticeBanner } from '../../../packages/core/src/shared/components/UpdateNoticeBanner.jsx';
 import { WatchOnlyBadge } from '../../../packages/core/src/shared/components/WatchOnlyBadge.jsx';
+import { WarningCard, WarningLine } from '../../../packages/core/src/shared/components/WarningCard.jsx';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 vi.mock('lightweight-charts', () => ({
@@ -157,24 +155,6 @@ const RENDER_CASES = [
         />,
         { getAddressesByChain: pending, getMarketOrders: pending },
     )],
-    ['OperatorPublisherMode', () => {
-        const messaging = {
-            getSettings: vi.fn().mockResolvedValue({}),
-            getAddressesByChain: pending,
-            signerReady: vi.fn().mockResolvedValue({ ready: false }),
-        };
-        return withMessaging(
-            <OperatorPublisherMode
-                walletId="wallet-1"
-                chainId="bitcoin-mainnet"
-                address="bc1qowner"
-                feed={{ action_index: 7 }}
-                messaging={messaging}
-                variant="full"
-            />,
-            messaging,
-        );
-    }],
     ['OrderbookPanel', () => withMessaging(
         <OrderbookPanel chainId="bitcoin-mainnet" tick1="XCHAIN" tick2="BTC" />,
         { getOrderbook: pending },
@@ -294,18 +274,6 @@ const RENDER_CASES = [
         { getMarketHistory: pending },
     )],
     ['RelativeTime', () => <RelativeTime timestamp={Date.now() - 60_000} />],
-    ['ResumeConfirmCard', () => (
-        <ResumeConfirmCard
-            sessions={[{
-                id: 'resume-1',
-                createdAt: Date.now(),
-                composed: { psbt: 'deadbeef', actionString: 'SEND|0|BTC|1|bc1qrecipient' },
-                dispatch: { software: 'sendToken', label: 'Send 1 BTC', base: {} },
-            }]}
-            onResume={noop}
-            onDiscard={noop}
-        />
-    )],
     ['SignCredentials', () => (
         <SignCredentials
             fromAddress={{ address: 'bc1qsource', source: 'hd' }}
@@ -369,6 +337,12 @@ const RENDER_CASES = [
         <UndoSendToast status="counting" remaining={5} onCancel={noop} />
     )],
     ['WatchOnlyBadge', () => <WatchOnlyBadge visible />],
+    ['WarningCard', () => (
+        <WarningCard>
+            <WarningLine>You are about to see the recovery phrase for this wallet.</WarningLine>
+            <WarningLine critical>Never share your recovery phrase.</WarningLine>
+        </WarningCard>
+    )],
     ['ResultScreen unsigned', () => (
         <ResultScreen state="unsigned" result={{ psbtHex: 'deadbeef' }} onDone={noop} />
     )],
@@ -384,7 +358,7 @@ describe('shared components M to Z accessibility', () => {
         const { container } = render(
             <NetworkFilterDropdown value="all" onChange={noop} />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Filter by network' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -398,12 +372,6 @@ describe('shared components M to Z accessibility', () => {
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
-        await expectNoSeriousAxeViolations(container);
-    });
-
-    it('PlatformSwitcher has no serious axe violations while open', async () => {
-        const { container } = render(<PlatformSwitcher current="wallet" />);
-        fireEvent.click(screen.getByRole('button', { name: 'XChain platform sites' }));
         await expectNoSeriousAxeViolations(container);
     });
 

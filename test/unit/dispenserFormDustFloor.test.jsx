@@ -98,20 +98,20 @@ describe('DispenserForm dust-floor guard', () => {
         const { utils, calls } = await mountFilled('0.000001');
         expect(utils.container.textContent).toContain('nobody can buy a single fill');
         expect(utils.container.textContent).toContain('6 fills (0.000006 BTC)');
-        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create' })));
+        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' })));
         expect(composed(calls)).toHaveLength(0);
         expect(utils.container.textContent).toContain('below the smallest payment buyers can send');
     });
 
     it('rewrites the fields to the bundle on one click, and that dispenser composes', async () => {
         const { utils, calls } = await mountFilled('0.000001');
-        const fix = utils.getByRole('button', { name: 'Sell 60 per fill at 0.000006 BTC' });
+        const fix = utils.getByRole('button', { name: 'Sell 60 Per Fill at 0.000006 BTC' });
         expect(fix.closest('[data-field-note="error"]')).toBeTruthy();
         await flush(() => fireEvent.click(fix));
         expect(utils.getByLabelText(/^Give amount/).value).toBe('60');
         expect(utils.getByLabelText(/^Trigger price/).value).toBe('0.000006');
         expect(utils.container.textContent).not.toContain('nobody can buy a single fill');
-        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create' })));
+        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' })));
         expect(composed(calls)).toHaveLength(1);
         expect(composed(calls)[0].args.actionData.params)
             .toMatchObject({ GIVE_AMOUNT: '60', GET_AMOUNT: '0.000006' });
@@ -119,7 +119,7 @@ describe('DispenserForm dust-floor guard', () => {
 
     it('retracts the Create refusal once the price is raised by hand', async () => {
         const { utils, set } = await mountFilled('0.000001');
-        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create' })));
+        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' })));
         expect(utils.container.textContent).toContain('below the smallest payment buyers can send');
         await flush(() => set(/^Trigger price/, '0.001'));
         expect(utils.container.textContent).not.toContain('below the smallest payment buyers can send');

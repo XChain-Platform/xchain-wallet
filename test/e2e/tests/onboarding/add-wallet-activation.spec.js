@@ -23,7 +23,7 @@
 // No chain, no funds, no signing: this is a shell-state question, so it runs on
 // the dev-server venue.
 
-import { createWallet, expect, test, unlockedShell } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 // Every wait below sits on the far side of an Argon2id derivation (a create or
@@ -34,22 +34,26 @@ const KDF_STEP_MS = kdfStepTimeout();
 
 const PASSWORD = 'add-wallet-activation';
 
-// The condensed header names the active wallet as text, not as a button.
-function activeWallet(page, name) {
-    return page.getByRole('region', { name: 'App header' }).getByText(`Wallet: ${name}`);
+// Home's balance card is a region named for the active wallet; the header no
+// longer carries the name.
+async function expectActiveWallet(page, name, message) {
+    await gotoSection(page, 'Home');
+    await expect(page.getByRole('main').getByRole('region', { name, exact: true }), message || `the app did not switch to ${name}`)
+        .toBeVisible({ timeout: 30_000 });
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+// A wallet row opens that wallet's page, where Set as active wallet is its
+// own action (absent when the wallet is already active).
+async function switchToWallet(page, name) {
+    await openWalletPicker(page);
+    await page.getByRole('main')
+        .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${name}`) })
+        .first()
+        .click();
+    const setActive = page.getByRole('button', { name: /^Set as active wallet/ });
+    await expect(page.getByRole('button', { name: /^Remove wallet/ }).or(setActive).first()).toBeVisible({ timeout: 30_000 });
+    if (await setActive.count() > 0) await setActive.click();
+    await expectActiveWallet(page, name);
 }
 
 test.describe('adding a second wallet', () => {
@@ -57,7 +61,7 @@ test.describe('adding a second wallet', () => {
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
         await expect(unlockedShell(page)).toBeVisible();
 
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
@@ -65,19 +69,10 @@ test.describe('adding a second wallet', () => {
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
         // THE FACT: the app is now on the wallet it just added.
-        await expect(activeWallet(page, 'Second Wallet'),
-            'after adding a wallet the app should show the new one as active')
-            .toBeVisible({ timeout: 30_000 });
+        await expectActiveWallet(page, 'Second Wallet', 'after adding a wallet the app should show the new one as active');
 
         // ...and the first wallet is still there to switch back to.
-        await gotoPalette(page, 'Switch wallet');
-        await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
-            'the original wallet is missing from the picker')
-            .toBeVisible({ timeout: 30_000 });
-        await page.getByRole('button', { name: /First Wallet/ }).first().click();
-        await expect(activeWallet(page, 'First Wallet'),
-            'switching back to the first wallet did not take')
-            .toBeVisible({ timeout: 30_000 });
+        await switchToWallet(page, 'First Wallet');
     });
 
     test('the active wallet survives a page reload', async ({ page }) => {
@@ -93,17 +88,14 @@ test.describe('adding a second wallet', () => {
         // to, not the one whose name was last on screen.
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
 
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
-        await gotoPalette(page, 'Switch wallet');
-        await page.getByRole('button', { name: /Second Wallet/ }).first().click();
-        await expect(activeWallet(page, 'Second Wallet'))
-            .toBeVisible({ timeout: 30_000 });
+        await switchToWallet(page, 'Second Wallet');
 
         await page.reload();
         // Unlock again: a reload drops the in-memory session key on the web
@@ -116,8 +108,6 @@ test.describe('adding a second wallet', () => {
             await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
         }
 
-        await expect(activeWallet(page, 'Second Wallet'),
-            'after a reload the app is no longer on the wallet the user switched to')
-            .toBeVisible({ timeout: 30_000 });
+        await expectActiveWallet(page, 'Second Wallet', 'after a reload the app is no longer on the wallet the user switched to');
     });
 });

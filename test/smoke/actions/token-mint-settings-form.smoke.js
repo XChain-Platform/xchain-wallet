@@ -133,10 +133,11 @@ assert.ok(/buildActionPsbtRequest/.test(src), 'reuses the watcher-mode encode-on
 
 // --- 7. ManageToken owner-gated entry ------------------------------------
 
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
-assert.ok(/onMintSettings/.test(manageSrc), 'ManageToken accepts onMintSettings');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
+assert.ok(/onMintSettings/.test(manageSrc), 'the issuer groups accept onMintSettings');
 assert.ok(
-    /id:\s*'mint-settings'[\s\S]{0,120}onSelect:\s*blockIssuerActions \? undefined : onMintSettings/.test(manageSrc),
+    /id:\s*'mint-settings'[^\n]*\.\.\.ownerAction\(options\.onMintSettings\)/.test(manageSrc),
     'ManageToken hides Mint settings from non-owners (blockIssuerActions gate, same as Description/Transfer)',
 );
 
@@ -149,8 +150,8 @@ for (const [shell, appPath] of [
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(
-        /onMintSettings=\{\(\)\s*=>\s*openForm\('mint-settings'\)\}/.test(app),
-        `${shell} App.jsx wires ManageToken onMintSettings -> 'mint-settings'`,
+        /onMintSettings: \(ctx\)\s*=>\s*openOwnerForm\('mint-settings', ctx\)/.test(app),
+        `${shell} App.jsx wires the asset page's onMintSettings -> 'mint-settings'`,
     );
     assert.ok(
         /unlockedView === 'mint-settings'/.test(app),

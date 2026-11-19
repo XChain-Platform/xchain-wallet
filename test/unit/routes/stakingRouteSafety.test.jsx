@@ -7,8 +7,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { openSection } from '../../helpers/openFormSections.js';
+// The staking routes render the one Staking form on their target and action.
+import {
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 
 const MAINNET = 'bitcoin-mainnet';
@@ -35,11 +40,15 @@ function deferred() {
     return { promise, resolve };
 }
 
-function methods(overrides = {}) {
+// Wallet `w` is watch-only unless a case passes `walletMode`; the mode is
+// published the way the shell does from the wallet list, not read from settings.
+function methods({ walletMode = 'watcher', ...overrides } = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET]: [MAIN_ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         getStakesForAddress: vi.fn().mockResolvedValue([]),
         getDelegationsForAddress: vi.fn().mockResolvedValue([]),
         getRewardsForAddress: vi.fn().mockResolvedValue([]),
@@ -65,6 +74,7 @@ function app(child, messaging) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.clearAllMocks();
 });
 
@@ -85,10 +95,11 @@ describe('staking route request safety', () => {
         view.rerender(app(<StakeForm {...props} chainId={TESTNET} />, messaging));
 
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
-        expect(await screen.findByLabelText('From')).toHaveValue(TEST_ADDRESS.address);
+        await openSection('From');
+        expect(await screen.findByLabelText('From address')).toHaveValue(TEST_ADDRESS.address);
 
         await act(async () => { oldLoad.resolve({ [MAINNET]: [MAIN_ADDRESS] }); });
-        expect(screen.getByLabelText('From')).toHaveValue(TEST_ADDRESS.address);
+        expect(screen.getByLabelText('From address')).toHaveValue(TEST_ADDRESS.address);
     });
 
     it('keeps the reviewed stake request stable and starts one watcher build', async () => {
@@ -98,7 +109,7 @@ describe('staking route request safety', () => {
 
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Review Stake' }));
         expect(await screen.findByText(/Stake 1 XCHAIN for signing public key/)).toBeInTheDocument();
 
         await act(async () => {
@@ -106,7 +117,7 @@ describe('staking route request safety', () => {
         });
         expect(screen.getByText('New stake')).toBeInTheDocument();
 
-        const submit = screen.getByRole('button', { name: 'Create unsigned transaction' });
+        const submit = screen.getByRole('button', { name: 'Create Unsigned Transaction' });
         act(() => {
             submit.click();
             submit.click();
@@ -116,6 +127,28 @@ describe('staking route request safety', () => {
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toEqual({
             VERSION: '1',
             AMOUNT: '1',
+            SIGNING_PUBKEY: PUBKEY,
+        });
+    });
+
+    it('sends VERSION 2 and shows Top up in the review when Top up is chosen in the Mode dropdown', async () => {
+        const messaging = methods({ getStakesForAddress: vi.fn().mockResolvedValue([]) });
+        render(app(<StakeForm walletId="w" chainId={MAINNET} onBack={() => {}} />, messaging));
+
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+        await screen.findByText(/No existing stake for this public key/);
+        fireEvent.click(screen.getByRole('button', { name: 'Mode: New stake' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Top up an existing stake' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Stake' }));
+        expect(await screen.findByText('Top up an existing stake')).toBeInTheDocument();
+        expect(screen.getByText(/Top up 2 XCHAIN for signing public key/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toEqual({
+            VERSION: '2',
+            AMOUNT: '2',
             SIGNING_PUBKEY: PUBKEY,
         });
     });
@@ -131,14 +164,14 @@ describe('staking route request safety', () => {
         const view = render(app(child, first));
 
         await screen.findByText('10 XCHAIN available');
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Claim Rewards' }));
         expect(await screen.findByText('10 XCHAIN (full pending rewards)')).toBeInTheDocument();
 
         view.rerender(app(child, second));
         await waitFor(() => expect(second.getRewardsForAddress).toHaveBeenCalledTimes(1));
         expect(screen.getByText('10 XCHAIN (full pending rewards)')).toBeInTheDocument();
 
-        const submit = screen.getByRole('button', { name: 'Create unsigned transaction' });
+        const submit = screen.getByRole('button', { name: 'Create Unsigned Transaction' });
         act(() => {
             submit.click();
             submit.click();
@@ -151,7 +184,7 @@ describe('staking route request safety', () => {
 
     it('surfaces an unexpected fan-out rejection instead of leaving the list loading', async () => {
         const messaging = methods({
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            walletMode: 'full',
             getContractStakesForAddress: vi.fn(() => { throw new TypeError('Cannot read properties of undefined'); }),
         });
         render(app(

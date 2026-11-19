@@ -99,10 +99,95 @@ export class FileBroadcastQueueStorage {
     }
 }
 
+/** Persist wallet removals independently from the queue file whose IO may fail. */
+export class FileBroadcastQueuePrunedLedger {
+    /**
+     * @param {string} filePath
+     * @param {{ warn?: Function }} [logger]
+     */
+    constructor(filePath, logger = console) {
+        if (typeof filePath !== 'string' || !filePath) {
+            throw new Error('FileBroadcastQueuePrunedLedger: filePath is required');
+        }
+        this._filePath = filePath;
+        this._tmpPath = `${filePath}.tmp`;
+        this._logger = logger;
+        this._mutation = Promise.resolve();
+    }
+
+    list() {
+        return this._mutation.catch(() => {}).then(() => this.#readIds());
+    }
+
+    add(id) {
+        if (typeof id !== 'string' || !id) {
+            return Promise.reject(new Error('FileBroadcastQueuePrunedLedger.add: id is required'));
+        }
+        return this.#mutate(async () => {
+            const ids = await this.#readIds();
+            if (ids === null) throw new Error('FileBroadcastQueuePrunedLedger.add: ledger is unreadable');
+            if (!ids.includes(id)) await this.#writeIds([...ids, id]);
+        });
+    }
+
+    remove(ids) {
+        if (!Array.isArray(ids) || ids.length === 0) return Promise.resolve();
+        const removed = new Set(ids.filter((id) => typeof id === 'string' && id));
+        return this.#mutate(async () => {
+            const stored = await this.#readIds();
+            if (stored === null) throw new Error('FileBroadcastQueuePrunedLedger.remove: ledger is unreadable');
+            const kept = stored.filter((id) => !removed.has(id));
+            if (kept.length !== stored.length) await this.#writeIds(kept);
+        });
+    }
+
+    clear() {
+        return this.#mutate(() => this.#writeIds([]));
+    }
+
+    async #readIds() {
+        try {
+            const raw = await fs.readFile(this._filePath, 'utf8');
+            const ids = JSON.parse(raw);
+            if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !id)) {
+                throw new Error('pruned ledger must be an array of wallet ids');
+            }
+            return [...new Set(ids)];
+        } catch (err) {
+            if (err?.code === 'ENOENT') return [];
+            this._logger?.warn?.(
+                '[xchain] broadcast queue pruned ledger is unreadable; refusing to load the queue:',
+                err,
+            );
+            return null;
+        }
+    }
+
+    async #writeIds(ids) {
+        await fs.mkdir(dirname(this._filePath), { recursive: true });
+        await fs.writeFile(this._tmpPath, JSON.stringify(ids), { encoding: 'utf8', mode: 0o600 });
+        await fs.rename(this._tmpPath, this._filePath);
+    }
+
+    #mutate(operation) {
+        const mutation = this._mutation.catch(() => {}).then(operation);
+        this._mutation = mutation;
+        return mutation;
+    }
+}
+
 /** @param {string} userDataDir */
 export function broadcastQueuePathFor(userDataDir) {
     if (typeof userDataDir !== 'string' || !userDataDir) {
         throw new Error('broadcastQueuePathFor: userDataDir is required');
     }
     return join(userDataDir, 'broadcast-queue.json');
+}
+
+/** @param {string} userDataDir */
+export function broadcastQueuePrunedPathFor(userDataDir) {
+    if (typeof userDataDir !== 'string' || !userDataDir) {
+        throw new Error('broadcastQueuePrunedPathFor: userDataDir is required');
+    }
+    return join(userDataDir, 'broadcast-queue.pruned.json');
 }

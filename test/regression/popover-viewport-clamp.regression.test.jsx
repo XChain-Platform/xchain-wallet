@@ -25,7 +25,6 @@ vi.mock('../../packages/core/src/shared/hooks/useReachability.js', () => ({
     useReachability: () => reachability.value,
 }));
 
-import { HeaderSettingsButton } from '../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NetworkStatusIndicator } from '../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
 import { VIEWPORT_CLAMP_MARGIN } from '../../packages/core/src/shared/hooks/useViewportClamp.js';
 import { preloadOnDemandOverlays } from '../../packages/core/src/shared/components/onDemandOverlays.js';
@@ -98,20 +97,4 @@ describe('regression/popover-viewport-clamp', () => {
         expectInsidePageGutter(screen.getByRole('dialog', { name: 'Network status' }), edge);
     });
 
-    it.each([
-        ['left', { left: 1 }],
-        ['right', { left: VIEWPORT_WIDTH - 39 }],
-    ])('[REGRESSION P1] keeps the header settings popover inside the %s gutter', (edge, trigger) => {
-        mockLayout({ triggerName: 'Settings', trigger, popoverWidth: 320 });
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'wallet-1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-
-        expectInsidePageGutter(screen.getByRole('dialog', { name: 'Wallet settings' }), edge);
-    });
 });

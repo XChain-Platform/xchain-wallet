@@ -63,7 +63,7 @@ describe.each(SHELLS)('%s route outlet', (shell, source) => {
 
         expect(screen.getByRole('navigation', { name: `${shell} shell` })).toBeTruthy();
         expect(screen.getByText(/Something went wrong while showing this screen/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Wallet menu' }));
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));

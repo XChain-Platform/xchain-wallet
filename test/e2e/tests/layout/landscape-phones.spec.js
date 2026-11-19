@@ -13,7 +13,7 @@
 // their heights trip the short-landscape rules in Screen.module.css. The
 // spec holds the shell invariants there: nothing scrolls sideways, the page
 // gutter stays at the 16px rail tier, the app header and navigation stay put while the
-// route scrolls, a footer route fits without the screen itself scrolling,
+// route scrolls, compact action routes fit without the screen itself scrolling,
 // and a primary action stays reachable above a soft keyboard.
 
 import {
@@ -61,6 +61,7 @@ function shellGeometry(page) {
             sideScroll: doc.scrollWidth - doc.clientWidth,
             gutterStart: parseFloat(style.paddingLeft),
             gutterEnd: parseFloat(style.paddingRight),
+            frameScrollbar: parseFloat(style.getPropertyValue('--xc-frame-scrollbar')) || 0,
             screenOverflow: screen.scrollHeight - screen.clientHeight,
         };
     });
@@ -71,9 +72,18 @@ async function scrollRouteToEnd(page) {
     await settle(page);
 }
 
-async function openSettingsRow(page, name) {
+// Settings groups its rows; the Wallets group page lists My Wallets and My
+// Accounts. Settings may reopen on the last sub-page, so step back to the
+// landing first.
+async function openWalletsGroupRow(page, name) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name }).first().click();
+    const landing = page.getByRole('heading', { level: 1, name: 'Settings', exact: true });
+    for (let i = 0; i < 5 && !(await landing.isVisible().catch(() => false)); i += 1) {
+        await page.getByRole('banner').getByRole('button', { name: /^Back\b/ }).first().click();
+    }
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: /^Wallets\b/ }).click();
+    await main.getByRole('button', { name }).click();
 }
 
 for (const phone of LANDSCAPE_PHONES) {
@@ -84,7 +94,7 @@ for (const phone of LANDSCAPE_PHONES) {
             hasTouch: true,
         });
 
-        test('keeps the shell fixed, the gutter even and footer routes unscrolled', async ({ page }) => {
+        test('keeps the shell fixed, the gutter even and action routes unscrolled', async ({ page }) => {
             test.slow();
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
             await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
@@ -97,25 +107,29 @@ for (const phone of LANDSCAPE_PHONES) {
                     const before = await chromeBoxes(page);
                     const geometry = await shellGeometry(page);
                     expect(geometry.sideScroll, 'nothing scrolls the page sideways').toBe(0);
-                    expect(geometry.gutterStart, 'start gutter').toBe(16);
-                    expect(geometry.gutterEnd, 'end gutter').toBe(16);
+                    expect(geometry.gutterStart, 'start gutter').toBe(8);
+                    // Screen.module.css ends the padding two optical pixels early and
+                    // gives a classic scrollbar lane back, so rows end on the header buttons' line.
+                    expect(geometry.gutterEnd, 'end gutter').toBe(Math.max(0, 8 - 2 - geometry.frameScrollbar));
                     await scrollRouteToEnd(page);
                     expect(await chromeBoxes(page), 'app header and navigation stay put').toEqual(before);
                 });
             }
 
-            // Footer routes: header + body floor + footer must fit, or the
-            // screen scrolls a sliver of the title row away.
+            // Compact action routes: header + body floor + actions must fit, or
+            // the screen scrolls a sliver of the title row away.
             await test.step('Accounts', async () => {
-                await openSettingsRow(page, /Accounts/);
-                await expect(page.locator('footer').first()).toBeVisible();
+                // My Accounts lists the accounts; its create action is the title bar plus.
+                await openWalletsGroupRow(page, /^My Accounts\b/);
+                await expect(page.getByRole('banner').getByRole('button', { name: /^Add Account$/ })).toBeVisible();
+                // U48 keeps page actions directly under their content, never in a pinned footer.
+                await expect(page.locator('footer')).toHaveCount(0);
                 await settle(page);
                 expect((await shellGeometry(page)).screenOverflow).toBe(0);
             });
             await test.step('Wallets', async () => {
-                await openSettingsRow(page, /This wallet/);
-                await page.getByRole('button', { name: /Switch/ }).first().click();
-                await expect(page.getByRole('button', { name: /Add wallet/ })).toBeVisible();
+                await openWalletsGroupRow(page, /^My Wallets\b/);
+                await expect(page.getByRole('banner').getByRole('button', { name: /^Add Wallet$/ })).toBeVisible();
                 await settle(page);
                 expect((await shellGeometry(page)).screenOverflow).toBe(0);
             });
@@ -126,21 +140,28 @@ for (const phone of LANDSCAPE_PHONES) {
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
             await gotoSection(page, 'Messaging');
             await page.getByRole('main').getByRole('button').filter({ hasText: 'Got it, thanks!' }).first().click();
-            const footer = page.locator('footer').first();
-            await expect(footer.getByRole('textbox')).toBeVisible();
+            // Narrow shells dock the reply bar in the Screen footer; a two-panel
+            // split (G128) docks it at the bottom of the conversation panel.
+            const reply = page.getByRole('textbox', { name: /^Reply/ });
+            await expect(reply).toBeVisible();
+            const footer = reply.locator('xpath=ancestor::form/..');
             await settle(page);
             const geometry = await footer.evaluate((el) => {
                 const bar = el.firstElementChild.getBoundingClientRect();
                 const box = el.getBoundingClientRect();
                 return {
+                    inFooter: el.tagName === 'FOOTER',
                     start: bar.left - box.left,
                     end: box.right - bar.right,
                     top: bar.top - box.top,
                     bottomGap: window.innerHeight - bar.bottom,
                 };
             });
-            expect(geometry.start, 'composer start gutter').toBe(16);
-            expect(geometry.end, 'composer end gutter').toBe(16);
+            // The page gutter in the Screen footer; the conversation panel of a
+            // two-panel split insets the bar by one space-1 step (MessagingInbox.module.css).
+            const gutter = geometry.inFooter ? 8 : 4;
+            expect(geometry.start, 'composer start gutter').toBe(gutter);
+            expect(geometry.end, 'composer end gutter').toBe(gutter);
             expect(geometry.top, 'composer clears the footer border').toBeGreaterThan(1);
             expect(geometry.bottomGap, 'composer clears the bottom edge').toBeGreaterThan(0);
         });

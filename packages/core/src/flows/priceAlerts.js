@@ -21,6 +21,25 @@ import {
 } from '../schemas/priceAlert.js';
 
 const alertOperationTails = new WeakMap();
+const PRICE_ALERT_TICK_RE = /^[A-Z0-9._-]+$/;
+
+function normalizeAlertTick(tick) {
+    if (tick == null) return undefined;
+    if (typeof tick !== 'string') throw new Error('saveAlert: tick must be a string');
+    const normalized = tick.trim().toUpperCase();
+    if (!normalized) return undefined;
+    if (!PRICE_ALERT_TICK_RE.test(normalized)) {
+        throw new Error('saveAlert: tick may only contain letters, numbers, dot, underscore, or hyphen');
+    }
+    return normalized;
+}
+
+function withAlertTick(record, tick) {
+    if (tick) return { ...record, tick };
+    const withoutTick = { ...record };
+    delete withoutTick.tick;
+    return withoutTick;
+}
 
 /**
  * Fired on the window once the watcher disarms an alert, so an open alerts list
@@ -47,38 +66,45 @@ export async function listAlertsForWallet({ vault, walletId }) {
 }
 
 /**
- * Add a price alert. Idempotent by (walletId, chainId, direction,
+ * Add a price alert. Idempotent by (walletId, chainId, tick, direction,
  * targetFiat, fiatCurrency): an existing match is returned as-is when armed, or re-armed
  * (status → 'armed', triggeredAt → null) when it had already fired, so
  * re-adding the same alert "resets" it rather than stacking duplicates.
  *
- * Passing an id updates that wallet's existing alert in place and re-arms it.
+ * Passing an id updates that wallet's existing alert in place and re-arms it,
+ * except that a paused alert stays paused when it is edited, and `status:
+ * 'paused'` pauses the alert (Resume is rearmAlert). A paused match found by
+ * the add path is resumed, like a fired one.
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, id?: string, walletId: string, chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }} params
+ * @param {{ vault: import('../storage/Vault.js').Vault, id?: string, walletId: string, chainId: string, tick?: string | null, direction: 'above'|'below', targetFiat: number, fiatCurrency: string, status?: 'armed' | 'paused' }} params
  */
-export async function saveAlert({ vault, id, walletId, chainId, direction, targetFiat, fiatCurrency }) {
+export async function saveAlert({ vault, id, walletId, chainId, tick, direction, targetFiat, fiatCurrency, status }) {
     if (!vault) throw new Error('saveAlert: vault is required');
     if (!walletId) throw new Error('saveAlert: walletId is required');
     if (!chainId) throw new Error('saveAlert: chainId is required');
     if (direction !== 'above' && direction !== 'below') {
         throw new Error('saveAlert: direction must be "above" or "below"');
     }
+    if (status !== undefined && status !== 'armed' && status !== 'paused') {
+        throw new Error('saveAlert: status must be "armed" or "paused"');
+    }
     if (typeof targetFiat !== 'number' || !Number.isFinite(targetFiat) || targetFiat <= 0) {
         throw new Error('saveAlert: targetFiat must be a positive number');
     }
+    const normalizedTick = normalizeAlertTick(tick);
     const existing = await vault.priceAlerts.findBy('walletId', walletId);
     if (id) {
         const current = (existing || []).find((alert) => alert.id === id);
         if (!current) throw new Error('saveAlert: alert was not found for this wallet');
-        const edited = {
+        const edited = withAlertTick({
             ...current,
             chainId,
             direction,
             targetFiat,
             fiatCurrency: String(fiatCurrency || 'usd').toLowerCase(),
-            status: 'armed',
+            status: status ?? (current.status === 'paused' ? 'paused' : 'armed'),
             triggeredAt: null,
-        };
+        }, normalizedTick);
         const duplicate = (existing || []).find((alert) => (
             alert.id !== id && priceAlertKey(alert) === priceAlertKey(edited)
         ));
@@ -86,10 +112,10 @@ export async function saveAlert({ vault, id, walletId, chainId, direction, targe
         await vault.priceAlerts.put(edited);
         return edited;
     }
-    const record = buildAlert({ walletId, chainId, direction, targetFiat, fiatCurrency });
+    const record = buildAlert({ walletId, chainId, tick: normalizedTick, direction, targetFiat, fiatCurrency });
     const match = (existing || []).find((e) => priceAlertKey(e) === priceAlertKey(record));
     if (match) {
-        if (match.status === 'triggered') {
+        if (match.status === 'triggered' || match.status === 'paused') {
             const rearmed = { ...match, status: 'armed', triggeredAt: null };
             await vault.priceAlerts.put(rearmed);
             return rearmed;
@@ -129,6 +155,8 @@ export async function markAlertTriggered({ vault, id, at, terms }) {
     const result = await withAlertOperation(vault, id, async () => {
         const alert = await vault.priceAlerts.get(id);
         if (!alert) return null;
+        // A pause that landed while the alert was being delivered stands.
+        if (alert.status === 'paused') return null;
         if (terms !== undefined && priceAlertKey(alert) !== terms) return null;
         const updated = { ...alert, status: 'triggered', triggeredAt: at || new Date().toISOString() };
         await vault.priceAlerts.put(updated);

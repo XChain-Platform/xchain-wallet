@@ -63,7 +63,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/collectible-one-of-one.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, expectManageTokenView, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -79,7 +79,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One ISSUE, paying a real coin fee. */
@@ -212,9 +214,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -236,9 +236,14 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(probe, 'From');
             await selectVenueChain(probe);
-            owner = await probe.getByLabel('From').inputValue();
+            await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+                .toMatch(REGTEST_ADDRESS_RE);
+            owner = await fieldByLabel(probe, 'From address').inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -255,23 +260,24 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Collectible/ }).click();
+            await pickIssuePreset(main, /^Collectible/);
+            // The network and the signer sit in the From section, closed until opened.
+            await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect.poll(async () => main.getByLabel('Fee paid by').inputValue().catch(() => ''),
-                { timeout: 30_000, message: 'the wizard names no signing address' })
+            await expect.poll(async () => fieldByLabel(main, 'From address').inputValue().catch(() => ''),
+                { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-            // The template exposes only these three: every number is the
-            // composer's, which is the whole point of the template and the
-            // reason the chain record is checked field by field below.
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(TICK);
-            await main.getByLabel('Image URL').fill(IMAGE_URL);
-            expect(await main.getByLabel('Supply').count(),
-                'the Collectible template offered a Supply field, so its 1-of-1 is no longer fixed '
-                + 'by the composer')
-                .toBe(0);
+            // The template fills every number and the locks itself; the user
+            // adds a name and a picture. The form shows the filled supply and
+            // indivisibility, and the chain record is checked field by field below.
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await expect(fieldByLabel(main, 'Max supply'),
+                'the Collectible template did not fill a supply of exactly 1')
+                .toHaveValue('1');
+            await openIssueSection(main, 'Description');
+            await fieldByLabel(main, 'Image URL').fill(IMAGE_URL);
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);
@@ -388,24 +394,22 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(row, `${TICK} is on chain but My Tokens does not list it`)
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            // Manage Token splits its actions between page BUTTONS and the More
-            // menu, so both are checked; and the lookup is scoped to `main`
-            // because the shell's own chrome carries same-named controls
-            // (§3.5, Session 39).
-            expect(await main.getByRole('button', { name: /^Mint$/ }).count(),
+            // The owner groups always list Mint under Supply; a token whose
+            // LOCK_MINT is set shows that row locked (aria-disabled, its
+            // reason in place of the description), so a locked row is "no
+            // way to mint". Scoped to `main` because the shell's own chrome
+            // carries same-named controls (§3.5, Session 39).
+            const mintAction = main.locator('[data-action-id="mint"]');
+            await expect(mintAction, 'the owner\'s page lists no Mint action at all').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
                 'the owner\'s page offers Mint on a token whose LOCK_MINT the chain enforces')
-                .toBe(0);
-            const more = main.getByRole('button', { name: /^More/ });
-            if (await more.count() > 0) {
-                await more.first().click();
-                expect(await page.getByRole('menuitem', { name: /^Mint$/ }).count(),
-                    'the More menu offers Mint on a token whose LOCK_MINT the chain enforces')
-                    .toBe(0);
-            }
+                .toHaveAttribute('aria-disabled', 'true', { timeout: 30_000 });
+            // A row is also locked while the owner read is pending, so the
+            // reason pins it to the mint lock itself.
+            await expect(mintAction, 'the locked Mint row does not name the mint lock as its reason')
+                .toContainText(/permanently locked/i, { timeout: 60_000 });
         });
     });
 });

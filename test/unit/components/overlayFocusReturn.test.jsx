@@ -8,11 +8,8 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
     useReachability: () => ({ overall: 'normal', perChain: [] }),
 }));
 
-import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkStatusIndicator } from '../../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
-import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import { ChainPicker } from '../../../packages/core/src/ui/ChainPicker.jsx';
 import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
 import { resetBackStackForTests, useBackHandler } from '../../../packages/core/src/ui/backStack.js';
@@ -51,14 +48,17 @@ describe('overlay focus return', () => {
         );
         const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
 
+        // ChainPicker opens the full-screen network list; its Back and
+        // Escape close only the list, never the parent layer.
         fireEvent.click(trigger);
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Back/ }));
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
 
         fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
         expect(onParentBack).not.toHaveBeenCalled();
     });
@@ -106,79 +106,19 @@ describe('overlay focus return', () => {
         );
         const trigger = screen.getByRole('button', { name: /All networks/ });
 
+        // The filter opens the full-screen network list; its Back and Escape
+        // close only the list, never the parent layer.
         fireEvent.click(trigger);
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Back/ }));
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
 
         fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
         expect(onParentBack).not.toHaveBeenCalled();
-    });
-
-    it('closes a nested network list before the settings dialog', async () => {
-        render(
-            <HeaderSettingsButton
-                chainRegistry={chainRegistry}
-                coinFamilies={['bitcoin', 'litecoin']}
-                networkFilter="all"
-                onNetworkFilterChange={() => {}}
-            />,
-        );
-        const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
-        fireEvent.click(settingsTrigger);
-        // The chain filter is a lazy chunk inside the popover.
-        const filterTrigger = await screen.findByRole('button', { name: /All networks/ });
-        fireEvent.click(filterTrigger);
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-
-        expect(screen.queryByRole('listbox')).toBeNull();
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-        expect(settingsTrigger).toHaveAttribute('aria-expanded', 'true');
-        expect(filterTrigger).toHaveFocus();
-    });
-
-    it('returns header action menu focus after an outside press and an action', () => {
-        const onScan = vi.fn();
-        render(<AppHeader onScan={onScan} />);
-        // Scan lives in the header action menu, which replaced the scan menu.
-        const trigger = screen.getByRole('button', { name: 'Open menu' });
-
-        fireEvent.click(trigger);
-        screen.getByRole('menuitem', { name: 'Scan' }).focus();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(trigger).toHaveFocus();
-
-        fireEvent.click(trigger);
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Scan' }));
-        expect(onScan).toHaveBeenCalledOnce();
-        expect(trigger).toHaveFocus();
-    });
-
-    it('returns settings-popover focus after an outside press and an action', () => {
-        const onOpenWalletPicker = vi.fn();
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
-                onOpenWalletPicker={onOpenWalletPicker}
-            />,
-        );
-        const trigger = screen.getByRole('button', { name: 'Settings' });
-
-        fireEvent.click(trigger);
-        screen.getByRole('button', { name: 'Main wallet' }).focus();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(trigger).toHaveFocus();
-
-        fireEvent.click(trigger);
-        fireEvent.click(screen.getByRole('button', { name: 'Main wallet' }));
-        expect(onOpenWalletPicker).toHaveBeenCalledOnce();
-        expect(trigger).toHaveFocus();
     });
 
     it('returns network-status focus after an outside press and an action', () => {
@@ -196,23 +136,6 @@ describe('overlay focus return', () => {
         fireEvent.click(trigger);
         fireEvent.click(screen.getByRole('button', { name: 'Network settings' }));
         expect(onOpenNetworkSettings).toHaveBeenCalledOnce();
-        expect(trigger).toHaveFocus();
-    });
-
-    it('returns platform-menu focus after an outside press and an action', () => {
-        render(<PlatformSwitcher current="wallet" />);
-        const trigger = screen.getByRole('button', { name: 'XChain platform sites' });
-
-        fireEvent.click(trigger);
-        screen.getAllByRole('menuitem').find((item) => item.tagName === 'A').focus();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(trigger).toHaveFocus();
-
-        fireEvent.click(trigger);
-        const destination = screen.getAllByRole('menuitem').find((item) => item.tagName === 'A');
-        fireEvent.click(destination);
-        expect(screen.queryByRole('menu')).toBeNull();
         expect(trigger).toHaveFocus();
     });
 });

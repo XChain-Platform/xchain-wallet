@@ -45,6 +45,7 @@ const shellRequires = SDK_ANCHOR_SHELLS.map((shell) =>
  */
 export const SDK_DEEP_PATHS = {
     coins: ['src/coins/index.js'],
+    decoder: ['src/decoder/index.js'],
     derivation: ['src/protocol/derivation.js', 'src/derivation.js'],
     endpoints: ['src/utils/endpoints.js', 'src/endpoints.js'],
     formats: ['src/protocol/formats.js', 'src/formats.js'],
@@ -52,14 +53,19 @@ export const SDK_DEEP_PATHS = {
     explorerClient: ['src/clients/explorer.js'],
     gatedFile: ['src/gatedFile.js'],
     musig2: ['src/musig2.js'],
+    policyEvaluator: ['src/cosigner/policy_evaluator.js'],
     networks: ['src/networks.js'],
+    preflightAmountFormat: ['src/preflight/checks/amount_format.js'],
+    preflightNumeric: ['src/preflight/numeric.js'],
     preflightConstants: ['src/preflight/constants.js'],
+    preflightEngine: ['src/preflight/index.js'],
     preflightTier1Findings: ['src/preflight/index/tier1_findings.js'],
     protocolConstants: ['src/protocol/constants.js'],
     protocolNetworks: ['src/protocol/networks.js', 'src/networks.js'],
     protocolValidator: ['src/protocol/validator.js', 'src/validator.js'],
     utility: ['src/utils/utility.js', 'src/utility.js'],
     wallet: ['src/wallet.js'],
+    xchainSdkIndex: ['index.js'],
 };
 
 /** Is the SDK installed at all? Asked of package.json, the one path a

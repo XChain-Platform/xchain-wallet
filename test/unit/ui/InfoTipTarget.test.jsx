@@ -125,7 +125,121 @@ describe('InfoTip target (slice 2)', () => {
         expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-51px)');
         expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.placementBottom)).toBe(true);
         expect(screen.getByRole('tooltip').style.maxHeight).toBe('200px');
-        expect(screen.getByRole('tooltip').style.maxWidth).toBe('260px');
+        expect(screen.getByRole('tooltip').style.maxWidth).toBe('304px');
+    });
+
+    it('opens below when the app header occupies the preferred space above', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 800 });
+        render(
+            <>
+                <div role="region" aria-label="App header" />
+                <InfoTip aria="More info" label="Explanation" placement="top" />
+            </>,
+        );
+        const header = screen.getByRole('region', { name: 'App header' });
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        header.getBoundingClientRect = () => ({ bottom: 106 });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 120, bottom: 144, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 80 });
+
+        fireEvent.focus(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(infoTipStyles.placementBottom);
+        expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '642px' });
+    });
+
+    it('opens below the lowest visible app and page header edge', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 800 });
+        render(
+            <>
+                <div role="region" aria-label="App header" />
+                <header><h1>Create multisig</h1></header>
+                <InfoTip aria="Network help" label="Explanation" placement="top" />
+            </>,
+        );
+        const appHeader = screen.getByRole('region', { name: 'App header' });
+        const pageHeader = screen.getByRole('banner');
+        const trigger = screen.getByRole('button', { name: 'Network help' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        appHeader.getBoundingClientRect = () => ({ top: 0, bottom: 53 });
+        pageHeader.getBoundingClientRect = () => ({ top: 53, bottom: 110 });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 120, bottom: 144, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 50 });
+
+        fireEvent.focus(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(infoTipStyles.placementBottom);
+        expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '642px' });
+    });
+
+    it('does not count a page header that has scrolled out of view', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 800 });
+        render(
+            <>
+                <div role="region" aria-label="App header" />
+                <header><h1>Create multisig</h1></header>
+                <InfoTip aria="Network help" label="Explanation" placement="top" />
+            </>,
+        );
+        const appHeader = screen.getByRole('region', { name: 'App header' });
+        const pageHeader = screen.getByRole('banner');
+        const trigger = screen.getByRole('button', { name: 'Network help' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        appHeader.getBoundingClientRect = () => ({ top: 0, bottom: 53 });
+        pageHeader.getBoundingClientRect = () => ({ top: -62, bottom: -5 });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 120, bottom: 144, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 50 });
+
+        fireEvent.focus(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(infoTipStyles.placementTop);
+        expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '53px' });
+    });
+
+    it('opens above when the bottom navigation occupies the preferred space below', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 800 });
+        render(
+            <>
+                <InfoTip aria="More info" label="Explanation" placement="bottom" />
+                <nav aria-label="Bottom navigation" />
+            </>,
+        );
+        const bottomBar = screen.getByRole('navigation', { name: 'Bottom navigation' });
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        bottomBar.getBoundingClientRect = () => ({ top: 700 });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 650, bottom: 674, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 80 });
+
+        fireEvent.focus(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(infoTipStyles.placementTop);
+        expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '636px' });
+    });
+
+    it('keeps window-edge placement when shell landmarks are absent', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 800 });
+        render(<InfoTip aria="More info" label="Explanation" placement="top" />);
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        wrap.getBoundingClientRect = () => ({ left: 140, right: 164, top: 120, bottom: 144, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ width: 130, height: 80 });
+
+        fireEvent.focus(trigger);
+
+        expect(screen.getByRole('tooltip')).toHaveClass(infoTipStyles.placementTop);
+        expect(screen.getByRole('tooltip')).toHaveStyle({ maxHeight: '106px' });
     });
 
     it('keeps the bubble margin when the trigger is against the left edge', () => {
@@ -181,7 +295,7 @@ describe('InfoTip target (slice 2)', () => {
     });
 
     it('lets long tooltip text wrap inside the viewport', () => {
-        expect(infoTipCss).toMatch(/max-width:\s*min\(260px,\s*calc\(100vw/);
+        expect(infoTipCss).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw/);
         expect(infoTipCss).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
@@ -211,7 +325,10 @@ describe('StatusMessage semantics and presentation', () => {
 
     it('maps each variant class to its semantic colour tokens', () => {
         expect(statusCss).toMatch(/\.row\.status,\s*\.row\.info\s*\{[^}]*background:\s*var\(--xc-info-bg\)[^}]*color:\s*var\(--xc-info-text\)/s);
-        expect(statusCss).toMatch(/\.row\.error\s*\{[^}]*background:\s*var\(--xc-danger\)[^}]*color:\s*var\(--xc-on-danger\)/s);
+        // Notice Standard (2026-11-15): warning and error are one danger look,
+        // a light red tint with a thin red border, never a solid red fill.
+        expect(statusCss).toMatch(/\.row\.warning,\s*\.row\.error\s*\{[^}]*background:\s*var\(--xc-danger-bg\)[^}]*color:\s*var\(--xc-danger-text\)[^}]*border:\s*1px solid var\(--xc-danger\)/s);
+        expect(statusCss).not.toMatch(/--xc-on-danger/);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg,\s*rgba\(20, 111, 52, 0\.10\)\)/s);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success,/s);
     });

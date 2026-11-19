@@ -17,6 +17,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import rowStyles from '../../../packages/core/src/shared/components/ActivityRow.module.css';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -34,7 +35,7 @@ function explorerRow(action, actionIndex, details, secondsAgo) {
     };
 }
 
-function mountHistory(history, extra = {}) {
+function mountHistory(history, extra = {}, walletId = 'w1') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OURS }] }),
         getAddressHistory: vi.fn().mockResolvedValue(history),
@@ -50,7 +51,7 @@ function mountHistory(history, extra = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(History, { walletId: 'w1', accountId: 'a1' }),
+            React.createElement(History, { walletId, accountId: 'a1' }),
         ),
     );
     return { messaging, view };
@@ -72,5 +73,24 @@ describe('History row labels for actions outside the filter buckets', () => {
         expect(text).toContain('Contract call');
         expect(text).toContain('Order cancelled');
         expect(screen.queryByText('Other'), 'a curated action rendered as the bare "Other" bucket').toBeNull();
+    });
+
+    it('shows paid-side amounts, tickers and action icons for market records', async () => {
+        const { view } = mountHistory([
+            explorerRow('ORDER', 5101, { give_tick: 'XCP', give_amount: '2.5' }, 100),
+            explorerRow('SWAP', 5102, { give_tick: 'AAA', give_amount: '1.25' }, 200),
+            explorerRow('DIVIDEND', 5103, {
+                tick: 'SHARES', dividend_tick: 'XCP', amount: '0.5',
+            }, 300),
+        // A wallet of its own: History keeps the previous case's rows cached per wallet.
+        ], {}, 'w-market');
+        await waitFor(() => expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(3),
+            { timeout: 10_000 });
+
+        const rows = [...view.container.querySelectorAll('[data-history-row]')];
+        expect(rows.some((row) => row.textContent.includes('2.5 XCP'))).toBe(true);
+        expect(rows.some((row) => row.textContent.includes('1.25 AAA'))).toBe(true);
+        expect(rows.some((row) => row.textContent.includes('0.5 XCP per unit'))).toBe(true);
+        expect(rows.every((row) => row.querySelector(`.${rowStyles.actionIcon} svg[data-xc-icon]`))).toBe(true);
     });
 });

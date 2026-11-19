@@ -22,7 +22,7 @@
 // the cheapest robust path to a fully consistent post-switch UI.
 
 import { useState } from 'react';
-import { Select } from '@xchain-wallet/core/ui';
+import { Icon, InfoTip, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -33,12 +33,12 @@ import {
     persistActiveNetwork,
 } from '../../utils/activeNetworkSwitch.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { ROW, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_VALUE, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
-export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
+export function NetworkSection({ activeWallet, onActiveNetworkChange, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
@@ -73,10 +73,13 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
         setSwitchError(null);
         setSwitching(true);
         try {
-            // Prepare destination addresses before reloading so every
-            // balance, history, and chain picker mounts against usable data.
-            await persistActiveNetwork({ messaging, update, walletId, network: next });
-            reload();
+            if (typeof onActiveNetworkChange === 'function') {
+                await onActiveNetworkChange(next);
+            } else {
+                // Embedded Settings callers retain the shared persistence fallback.
+                await persistActiveNetwork({ messaging, update, walletId, network: next });
+                reload();
+            }
         } catch (err) {
             setSwitchError(userFacingMessage(err, t('settings.network.switchError')));
         } finally {
@@ -87,7 +90,11 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     return (
         <>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>{t('settings.network.label')}</span>
+                {/* Full-strength label like every other Settings field label. */}
+                <span style={ROW_VALUE}>
+                    {t('settings.network.label')}{' '}
+                    <InfoTip aria={t('settings.help.network.networkLabel')} label={t('settings.help.network.network')} />
+                </span>
                 <div data-settings-control="">
                     <Select
                         value={current}
@@ -96,7 +103,7 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
                         disabled={switching || Boolean(confirmDialog.request)}
                     >
                         {options.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <Select.Option key={opt.value} value={opt.value} icon={opt.value === 'mainnet' ? <Icon.BroadcastIcon /> : <Icon.ForkIcon />}>{opt.label}</Select.Option>
                         ))}
                     </Select>
                 </div>

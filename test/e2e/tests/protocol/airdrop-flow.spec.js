@@ -7,7 +7,10 @@ import {
     expect,
     test,
     createWallet,
+    openFromSection,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -38,7 +41,7 @@ async function settle(page) {
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('combobox').fill(title);
     const option = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
@@ -132,14 +135,16 @@ async function fillAirdrop(page) {
     await expect(main.getByRole('form', { name: 'Token airdrop' })).toBeVisible({ timeout: 30_000 });
 
     await main.getByRole('button', { name: /^Token to drop:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAINGOV');
+    await searchTokenPicker(page, 'XCHAINGOV');
+    // The open filter panel covers the first result row, so collapse it.
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     // Picker rows are named "Select <token name> on <chain>, <balance>, <value>".
     const token = page.getByRole('button', { name: /^Select XChain Governance on Bitcoin\b/ }).first();
     await expect(token, 'the dev wallet did not expose its XCHAINGOV balance').toBeVisible({ timeout: 30_000 });
     await token.click();
 
     await main.getByRole('textbox', { name: /^Per-recipient amount/ }).fill('7');
-    await main.getByLabel('Recipients').fill(RECIPIENTS.join('\n'));
+    await main.getByLabel('Recipients', { exact: true }).fill(RECIPIENTS.join('\n'));
     await expect(main).toContainText('3 valid addresses');
     await expect(main).toContainText('total ~21 XCHAINGOV');
     return main;
@@ -158,18 +163,20 @@ async function fillBatch(page) {
     const step = (number) => main.getByRole('region', { name: `Step ${number}`, exact: true });
 
     await expect(main.getByRole('form', { name: 'Batch composer' })).toBeVisible({ timeout: 30_000 });
-    // The Batch composer's Network field is a ChainPicker (a popover listbox),
-    // not a native select, so it is driven by its trigger and an option.
+    // The Batch composer's Network field sits in the closed From section and
+    // opens the full-screen picker.
+    await openFromSection(main);
     const network = main.getByRole('button', { name: /^Network:/ });
     await expect(network).toBeVisible({ timeout: 30_000 });
     if (!((await network.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await network.click();
-        await main.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: /^Select Bitcoin\b/ }).first().click();
     }
     await expect(network).toHaveAttribute('aria-label', /Bitcoin/);
 
     const first = step(1);
-    await picker(first, 'Action').selectOption('SEND');
+    await pickOption(picker(first, 'Action'), 'SEND');
     await params(first).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '2', DESTINATION: BATCH_RECIPIENTS[0],
     }));
@@ -177,7 +184,7 @@ async function fillBatch(page) {
     await main.getByRole('button', { name: '+ Add action', exact: true }).click();
     const second = step(2);
     await expect(second).toBeVisible();
-    await picker(second, 'Action').selectOption('SEND');
+    await pickOption(picker(second, 'Action'), 'SEND');
     await params(second).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '3', DESTINATION: BATCH_RECIPIENTS[1],
     }));
@@ -195,18 +202,18 @@ for (const viewport of VIEWPORTS) {
         await test.step('airdrop compose and review', async () => {
             const main = await fillAirdrop(page);
             const label = `airdrop compose at ${viewport.width}x${viewport.height}`;
-            await expectScreenLayout(page, 'Airdrop tokens', label);
+            await expectScreenLayout(page, 'Airdrop Tokens', label);
             await scrollMainToBottom(page, label);
-            await main.getByRole('button', { name: 'Review recipients', exact: true }).click();
+            await main.getByRole('button', { name: 'Review Recipients', exact: true }).click();
 
-            await expect(main.getByRole('form', { name: 'Review recipient list' }))
+            await expect(main.getByText('Create address list of 3 items', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             await expectReviewAtTop(page, 'airdrop review');
             await expect(main).toContainText(/recipients\s*3\b/i, { useInnerText: true });
             await expect(main.getByText('~21 XCHAINGOV', { exact: true })).toBeVisible();
             await expectScreenLayout(
                 page,
-                'Review address list',
+                'Confirm',
                 `airdrop review at ${viewport.width}x${viewport.height}`,
             );
         });

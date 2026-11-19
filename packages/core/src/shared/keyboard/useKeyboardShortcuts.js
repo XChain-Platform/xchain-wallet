@@ -9,17 +9,17 @@
 // contact legal@dankest.llc.
 
 // §34 keyboard-shortcut dispatcher. Installs one window keydown listener that
-// maps the SHORTCUTS table onto shell handlers. Cmd/Ctrl+K is NOT handled here
-// (useCommandPalette owns it); this covers the rest of the core set plus the
-// `g`-leader navigation.
+// maps the SHORTCUTS table onto shell handlers. Cmd/Ctrl+K opens the wallet
+// menu and stays with useCommandPalette; this covers the rest of the core set
+// plus the `g`-leader navigation.
 //
 // Focus rules (§34.4 / the "when no input has focus" caveat): all shortcuts
 // are suppressed while an editable element (input/textarea/select/
 // contenteditable) has focus, so typing never triggers a wallet action.
 //
 // `enabled` gates the whole listener: shells pass false while locked, while the
-// command palette is open (its own input owns the keys), and while the shortcut
-// help modal is open (so nav keys can't fire behind it).
+// wallet menu is open (its own input owns the keys), and while the shortcut help
+// modal is open (so nav keys can't fire behind it).
 
 import { useEffect, useMemo, useRef } from 'react';
 import { isEditableTarget, parseBinding, resolveBindings } from './shortcuts.js';

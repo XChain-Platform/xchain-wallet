@@ -11,11 +11,13 @@
 // external xpubs must derive the public key shown in the review.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { HDKey } from '@scure/bip32';
-import { MultisigCreate } from '../../../packages/core/src/shared/routes/MultisigCreate.jsx';
+import { clampThreshold, MultisigCreate } from '../../../packages/core/src/shared/routes/MultisigCreate.jsx';
+import { openSelectListbox, selectOption, selectOptionDetails, selectOptionLabels } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
 const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
@@ -61,6 +63,17 @@ const MAINNET_ADDRESS = {
     derivationPath: "m/84'/0'/0'/0/0",
 };
 
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ chainId, onPick }) => (
+        <button
+            type="button"
+            onClick={() => onPick(chainId === 'bitcoin-mainnet' ? MAINNET_ADDRESS : ADDRESS)}
+        >
+            Pick local address
+        </button>
+    ),
+}));
+
 const INFO = {
     fingerprint: '73c5da0a',
     derivationPath: "m/84'/1'/0'/0/0",
@@ -80,28 +93,37 @@ function mkMessaging(overrides = {}) {
     };
 }
 
-async function mount(messaging) {
+async function mount(messaging, props = {}) {
     await act(async () => {
         render(React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(MultisigCreate, { walletId: 'w-1', onBack: () => {} }),
+            React.createElement(MultisigCreate, {
+                walletId: 'w-1',
+                onBack: () => {},
+                onShare: () => {},
+                ...props,
+            }),
         ));
     });
 }
 
 async function pickLocalAddress() {
-    await act(async () => {
-        fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), { target: { value: 'addr-1' } });
+    fireEvent.click(screen.getByRole('button', { name: "Choose one of this wallet's addresses" }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pick local address' }));
+    await waitFor(() => {
+        const fingerprint = screen.getAllByLabelText(/Master fingerprint/i)[0];
+        const fallback = screen.queryByText(/Enter it by hand/);
+        expect(Boolean(fingerprint.value) || Boolean(fallback)).toBe(true);
     });
 }
 
 async function fillExternalCosigner(key = EXTERNAL) {
-    const publicKeys = screen.getAllByLabelText(/Public key \(hex/i);
+    const publicKeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
-    const paths = screen.getAllByLabelText(/^Derivation path/i);
+    const paths = screen.getAllByLabelText(/^Account path/i);
     await act(async () => {
-        fireEvent.change(screen.getByLabelText(/^xpub$/i), { target: { value: key.xpub } });
+        fireEvent.change(screen.getByLabelText(/^Account public key$/i), { target: { value: key.xpub } });
         fireEvent.change(publicKeys[1], { target: { value: key.pubkey } });
         fireEvent.change(fingerprints[1], { target: { value: '11223344' } });
         fireEvent.change(paths[1], { target: { value: key.path } });
@@ -116,15 +138,210 @@ async function fillValidDraft(messaging) {
 
 afterEach(() => cleanup());
 
+// The cosigner sections, in order, and the header button that folds one.
+const cosignerSections = () => Array.from(document.querySelectorAll('section[data-form-section^="cosigner-"]'));
+const toggleOf = (section) => section.querySelector('[data-form-section-toggle]');
+const thresholdTrigger = () => screen.getByRole('button', { name: /^Signatures required:/ });
+const thresholdLabels = () => selectOptionDetails(thresholdTrigger()).map((option) => option.label);
+
+describe('clampThreshold', () => {
+    it('keeps 2 when the cosigner count grows from 3 to 4', () => {
+        expect(clampThreshold({ chosen: 2, cosignerCount: 4, scheme: 'p2wsh-multisig' })).toBe(2);
+    });
+
+    it('drops 3 to 2 when the cosigner count falls from 3 to 2', () => {
+        expect(clampThreshold({ chosen: 3, cosignerCount: 2, scheme: 'p2wsh-multisig' })).toBe(2);
+    });
+
+    it('returns the cosigner count for Taproot', () => {
+        expect(clampThreshold({ chosen: 1, cosignerCount: 4, scheme: 'taproot-musig2' })).toBe(4);
+    });
+});
+
 describe('MultisigCreate local cosigner', () => {
-    it('keeps setup guidance in a compact disclosure', async () => {
+    it('uses the named success action and shows field-specific help and optional state', async () => {
         await mount(mkMessaging());
-        const summary = screen.getByText('How multisig setup works');
-        const disclosure = summary.closest('details');
-        expect(disclosure).not.toHaveAttribute('open');
-        expect(disclosure).toHaveTextContent(/available only on Bitcoin networks/i);
-        expect(screen.queryByText(/§10\.3/)).toBeNull();
-        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+
+        const create = screen.getByRole('button', { name: 'Create Multisig' });
+        expect(create).toHaveClass(buttonStyles.success);
+        expect(create.querySelector('svg')).not.toBeNull();
+        expect(create.querySelector('circle[cx="7.5"][cy="15.5"]')).not.toBeNull();
+        expect(document.querySelectorAll(`button.${buttonStyles.success}`)).toHaveLength(1);
+
+        expect(screen.getByRole('button', { name: 'About Signatures required' })).toBeTruthy();
+        for (const label of [
+            'Name',
+            "Use one of this wallet's addresses",
+            'Public key',
+            'Master fingerprint',
+            'Account path',
+            'Shared cosigner setup',
+            'Account public key',
+        ]) {
+            expect(screen.getAllByRole('button', { name: `About ${label}` }).length).toBeGreaterThan(0);
+        }
+        for (const help of [
+            'Choose how many cosigners must approve each payment. Taproot requires every cosigner to approve.',
+            'This label is visible only to you and helps you tell cosigners apart.',
+            "Choose the address whose key this wallet adds as a cosigner.",
+            "Enter the cosigner's compressed public key.",
+            "Enter the 8-character fingerprint of the cosigner's wallet, used by signers to find their key.",
+            "Enter the account path for the cosigner's key.",
+            'Paste the setup another wallet shared to fill the fields below.',
+            'Enter the xpub from the other wallet.',
+        ]) {
+            expect(screen.getAllByText(help).length).toBeGreaterThan(0);
+        }
+
+        const sharedSetup = screen.getByLabelText('Shared cosigner setup');
+        const optionalPill = sharedSetup.closest('div').querySelector('[data-optional-pill]');
+        expect(optionalPill).toHaveTextContent('Optional');
+        expect(screen.queryByText(/\(optional\)/i)).toBeNull();
+
+        const share = screen.getByRole('button', { name: 'Share Wallet as Cosigner' });
+        expect(share.querySelector('svg')).not.toBeNull();
+        expect(share).toHaveAttribute('title', 'Share Wallet as Cosigner');
+        expect(screen.getByRole('button', { name: 'Import Shared Setup' }).querySelector('svg')).not.toBeNull();
+        for (const remove of screen.getAllByRole('button', { name: 'Remove' })) {
+            expect(remove.querySelector('svg')).not.toBeNull();
+            expect(remove).toHaveClass(buttonStyles.danger);
+            expect(remove).toHaveClass(buttonStyles.block);
+        }
+    });
+
+    it('shows the Type dropdown and removes the setup disclosure', async () => {
+        await mount(mkMessaging());
+        const type = screen.getByLabelText('Type');
+        expect(selectOptionLabels(type)).toEqual(expect.arrayContaining(['Classic', 'SegWit', 'Taproot']));
+        expect(screen.queryByText('How multisig setup works')).toBeNull();
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+    });
+
+    it('offers one "N of M" option per signer and follows the signer count', async () => {
+        await mount(mkMessaging());
+        expect(thresholdLabels()).toEqual(['1 of 2', '2 of 2']);
+        // Every option carries an icon.
+        const trigger = thresholdTrigger();
+        const listbox = openSelectListbox(trigger);
+        expect(Array.from(listbox.querySelectorAll('[role="option"]')).every((o) => o.querySelector('svg'))).toBe(true);
+        fireEvent.click(trigger);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Cosigner' }));
+        expect(thresholdLabels()).toEqual(['1 of 3', '2 of 3', '3 of 3']);
+        // The default choice of 2 stays while the group grows.
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 2 of 3');
+
+        for (let i = 0; i < 2; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Add Cosigner' }));
+        expect(thresholdLabels()).toEqual(['1 of 5', '2 of 5', '3 of 5', '4 of 5', '5 of 5']);
+    });
+
+    it('clamps the signatures-required choice to the new signer count', async () => {
+        await mount(mkMessaging());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Cosigner' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Cosigner' }));
+        selectOption(thresholdTrigger(), '4');
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 4 of 4');
+
+        // Drop two signers: 4 of 4 becomes 2 of 2.
+        await act(async () => {
+            fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[3]);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[2]);
+        });
+        expect(thresholdLabels()).toEqual(['1 of 2', '2 of 2']);
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 2 of 2');
+    });
+
+    it('shows each cosigner kind in its section summary and ends with Add cosigner', async () => {
+        await mount(mkMessaging());
+        const [first, second] = cosignerSections();
+        fireEvent.click(toggleOf(first));
+        fireEvent.click(toggleOf(second));
+        expect(toggleOf(first)).toHaveTextContent('You');
+        expect(toggleOf(second)).toHaveTextContent('Someone else');
+
+        fireEvent.click(toggleOf(second));
+        selectOption(within(second).getByLabelText('Origin'), 'external-hardware');
+        fireEvent.click(toggleOf(second));
+        expect(toggleOf(second)).toHaveTextContent('Hardware');
+
+        const list = screen.getByTestId('cosigners-list');
+        const actions = list.nextElementSibling;
+        expect(actions.firstElementChild).toBe(screen.getByRole('button', { name: 'Add Cosigner' }));
+        expect(actions.lastElementChild).toBe(screen.getByRole('button', { name: 'Create Multisig' }));
+    });
+
+    it('draws Add Cosigner as the kit ghost Button, full width with a plus icon and no overriding class', async () => {
+        await mount(mkMessaging());
+        const add = screen.getByRole('button', { name: 'Add Cosigner' });
+        expect(add.querySelector('svg')).not.toBeNull();
+        const classes = add.className.split(/\s+/).filter(Boolean);
+        expect(classes.some((c) => /ghost/i.test(c))).toBe(true);
+        expect(classes.some((c) => /block/i.test(c))).toBe(true);
+        expect(classes.some((c) => /rowAction/i.test(c))).toBe(false);
+        // Only the kit's own classes: base, size, variant, block.
+        expect(classes.every((c) => !/cosigner|styles/i.test(c))).toBe(true);
+    });
+
+    it('titles each section with the signer name and shows its address or key when collapsed', async () => {
+        await mount(mkMessaging());
+        await pickLocalAddress();
+        await fillExternalCosigner();
+        const [first, second] = cosignerSections();
+
+        expect(toggleOf(first)).toHaveTextContent('My signer');
+        expect(toggleOf(second)).toHaveTextContent('Cosigner B');
+        fireEvent.click(toggleOf(first));
+        fireEvent.click(toggleOf(second));
+        // The summary address fits its line (jsdom has no width, so it shows
+        // the first and last six); both ends of each key name the signer.
+        for (const [section, key] of [[first, ADDRESS.address], [second, EXTERNAL.xpub]]) {
+            expect(toggleOf(section)).toHaveTextContent(key.slice(0, 6));
+            expect(toggleOf(section)).toHaveTextContent(key.slice(-6));
+        }
+    });
+
+    it('collapses and reopens any signer without touching the others', async () => {
+        await fillValidDraft(mkMessaging());
+        const [first, second] = cosignerSections();
+        // Every signer starts open, and nothing folds when its last field becomes valid.
+        expect(toggleOf(first)).toHaveAttribute('aria-expanded', 'true');
+        expect(toggleOf(second)).toHaveAttribute('aria-expanded', 'true');
+        expect(within(second).getByLabelText('Origin')).toBeVisible();
+
+        fireEvent.click(toggleOf(first));
+        expect(toggleOf(first)).toHaveAttribute('aria-expanded', 'false');
+        expect(toggleOf(second)).toHaveAttribute('aria-expanded', 'true');
+        expect(within(first).getByLabelText('Origin')).not.toBeVisible();
+        expect(within(second).getByLabelText('Origin')).toBeVisible();
+        // The folded signer keeps what was typed.
+        expect(within(first).getAllByLabelText(/Master fingerprint/i)[0]).toHaveValue('73c5da0a');
+
+        fireEvent.click(toggleOf(first));
+        expect(within(first).getByLabelText('Origin')).toBeVisible();
+    });
+
+    it('opens a folded signer that still has a problem when Create is refused', async () => {
+        await mount(mkMessaging());
+        const [first, second] = cosignerSections();
+        fireEvent.click(toggleOf(first));
+        fireEvent.click(toggleOf(second));
+        expect(toggleOf(second)).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.submit(screen.getByRole('button', { name: 'Create Multisig' }).closest('form'));
+        expect(toggleOf(first)).toHaveAttribute('aria-expanded', 'true');
+        expect(toggleOf(second)).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('opens a new signer and holds no card inside a card', async () => {
+        await mount(mkMessaging());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Cosigner' }));
+        const added = cosignerSections()[2];
+        expect(toggleOf(added)).toHaveAttribute('aria-expanded', 'true');
+        expect(toggleOf(added)).toHaveTextContent('Cosigner C');
+        expect(screen.queryByTestId('cosigners-card')).toBeNull();
+        expect(added.parentElement.closest('section[data-form-section]')).toBeNull();
     });
 
     it('auto-fills the master fingerprint from the unlocked wallet', async () => {
@@ -135,7 +352,7 @@ describe('MultisigCreate local cosigner', () => {
         expect(messaging.getMultisigCosignerInfo).toHaveBeenCalledWith({ walletId: 'w-1', addressId: 'addr-1' });
         const [localFingerprint] = screen.getAllByLabelText(/Master fingerprint/i);
         expect(localFingerprint.value).toBe('73c5da0a');
-        const [localPubkey] = screen.getAllByLabelText(/Public key \(hex/i);
+        const [localPubkey] = screen.getAllByLabelText(/^Public key$/i);
         expect(localPubkey.value).toBe(ADDRESS.publicKey);
     });
 
@@ -154,9 +371,8 @@ describe('MultisigCreate local cosigner', () => {
     it('refuses a second local cosigner in the form', async () => {
         await mount(mkMessaging());
         const origins = screen.getAllByLabelText(/^Origin/i);
-        await act(async () => {
-            fireEvent.change(origins[1], { target: { value: 'local' } });
-        });
+        selectOption(origins[1], 'local');
+        await act(async () => {});
         expect(screen.getByText(/Only one cosigner can be this wallet's own key/)).toBeTruthy();
     });
 
@@ -168,16 +384,12 @@ describe('MultisigCreate local cosigner', () => {
             })),
         });
         await mount(messaging);
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), {
-                target: { value: 'addr-mainnet' },
-            });
-        });
+        await pickLocalAddress();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getByRole('option', { name: 'Bitcoin testnet BTC' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Select Bitcoin testnet BTC' }));
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();
@@ -197,15 +409,15 @@ describe('MultisigCreate key validation', () => {
             fingerprint: 'AABBCCDD',
             derivationPath: EXTERNAL.path,
         });
-        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+        fireEvent.change(screen.getByLabelText('Shared cosigner setup'), {
             target: { value: payload },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Import Shared Setup/ }));
 
-        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
-        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('aabbccdd');
-        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+        expect(screen.getAllByLabelText(/^Account path/i)[1]).toHaveValue(EXTERNAL.path);
     });
 
     it('refuses a shared cosigner setup for another network with plain copy', async () => {
@@ -219,35 +431,47 @@ describe('MultisigCreate key validation', () => {
             fingerprint: 'aabbccdd',
             derivationPath: MAINNET_EXTERNAL.path,
         });
-        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+        fireEvent.change(screen.getByLabelText('Shared cosigner setup'), {
             target: { value: payload },
         });
-        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Import Shared Setup/ }));
 
         expect(screen.getByText('Shared cosigner setup is for a different network than this wallet.')).toBeTruthy();
     });
 
-    it.each([
-        ['', /Threshold is required/i],
-        ['0', /Threshold must be at least 1/i],
-        ['-1', /Threshold must be at least 1/i],
-        ['1.5', /Threshold must be a whole number/i],
-    ])('explains an invalid threshold of %j before review', async (value, message) => {
+    it('keeps the signatures-required choice within 1 and the cosigner count', async () => {
         await mount(mkMessaging());
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value } });
-        });
-
-        expect(screen.getByText(message)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 2 of 2');
+        selectOption(thresholdTrigger(), '1');
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 1 of 2');
+        expect(selectOptionDetails(thresholdTrigger()).map((option) => option.value)).toEqual(['1', '2']);
     });
 
-    it('opens without an error message and keeps Review disabled', async () => {
-        await mount(mkMessaging());
+    it('opens without an error, then reports missing cosigner fields when Create is tapped', async () => {
+        const messaging = mkMessaging();
+        await mount(messaging);
 
-        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByText(/public key must be 66 characters starting with 02 or 03/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        const create = screen.getByRole('button', { name: 'Create Multisig' });
+        expect(create).not.toBeDisabled();
+        fireEvent.click(create);
+
+        await waitFor(() => expect(document.querySelector('[data-form-errors]'))
+            .toHaveTextContent(/public key must be 66 characters starting with 02 or 03/i));
+        expect(screen.getAllByLabelText(/^Public key$/i)[0]).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
+    });
+
+    it('describes an invalid account path without derivation jargon', async () => {
+        await mount(mkMessaging());
+        await fillExternalCosigner();
+        const path = screen.getAllByLabelText(/^Account path/i)[1];
+        fireEvent.change(path, { target: { value: 'not-a-path' } });
+        fireEvent.blur(path);
+
+        expect(await screen.findByText(/enter a valid account path starting with m/i)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/derivation path/i);
     });
 
     it('keeps the errors of untouched fields silent while another field is typed', async () => {
@@ -255,14 +479,14 @@ describe('MultisigCreate key validation', () => {
         await act(async () => {
             fireEvent.change(screen.getAllByLabelText(/^Name/i)[0], { target: { value: 'Alice' } });
         });
-        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByText(/public key must be 66 characters starting with 02 or 03/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(false);
 
         await act(async () => {
-            fireEvent.blur(screen.getAllByLabelText(/Public key \(hex/i)[0]);
+            fireEvent.blur(screen.getAllByLabelText(/^Public key$/i)[0]);
         });
-        expect(screen.getByText(/Cosigner 1: public key must be a 33-byte compressed key/i)).toBeTruthy();
+        expect(screen.getByText(/Cosigner 1: public key must be 66 characters starting with 02 or 03/i)).toBeTruthy();
     });
 
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
@@ -270,7 +494,7 @@ describe('MultisigCreate key validation', () => {
         await pickLocalAddress();
         await fillExternalCosigner({ ...EXTERNAL, pubkey: '03'.padEnd(66, 'b') });
 
-        expect(screen.getByText(/public key must be a 33-byte compressed key/i)).toBeTruthy();
+        expect(screen.getByText(/public key must be 66 characters starting with 02 or 03/i)).toBeTruthy();
     });
 
     it('rejects duplicate public keys before review', async () => {
@@ -279,7 +503,7 @@ describe('MultisigCreate key validation', () => {
         await fillExternalCosigner({ ...EXTERNAL, pubkey: ADDRESS.publicKey });
 
         expect(screen.getByText(/Two cosigners share the same public key/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(false);
     });
 
     it('rejects another key owned by the current wallet as external', async () => {
@@ -308,29 +532,30 @@ describe('MultisigCreate key validation', () => {
         await pickLocalAddress();
         await fillExternalCosigner({ ...EXTERNAL, pubkey: UNRELATED_EXTERNAL.pubkey });
 
-        expect(screen.getByText(/Public key does not match the xpub and derivation path/i)).toBeTruthy();
+        expect(screen.getByText(/Public key differs from the one this account public key and account path give/i)).toBeTruthy();
     });
 
-    it('enforces M no greater than N', async () => {
+    it('locks Taproot signatures to the cosigner count', async () => {
         await mount(mkMessaging());
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '3' } });
-        });
-
-        expect(screen.getByText(/Threshold must be ≤ cosigner count/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        selectOption(thresholdTrigger(), '1');
+        selectOption(screen.getByLabelText('Type'), 'taproot-musig2');
+        expect(thresholdTrigger()).toHaveAccessibleName('Signatures required: 2 of 2');
+        const options = selectOptionDetails(thresholdTrigger());
+        expect(options.map((option) => option.disabled)).toEqual([true, false]);
     });
 
     it('enforces the classic script limit on N', async () => {
         await mount(mkMessaging());
-        const add = screen.getByRole('button', { name: /Add cosigner/i });
+        const add = screen.getByRole('button', { name: /Add Cosigner/ });
         await act(async () => {
             for (let i = 0; i < 14; i += 1) fireEvent.click(add);
-            fireEvent.click(screen.getByRole('radio', { name: /^Classic multi-signature/i }));
         });
+        // The pick opens the list and clicks an option, so it runs outside act.
+        selectOption(screen.getByLabelText('Type'), 'p2sh-multisig');
+        await act(async () => {});
 
         expect(screen.getByText(/supports at most 15 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: /Add cosigner/i }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /Add Cosigner/ }).disabled).toBe(true);
     });
 });
 
@@ -339,7 +564,7 @@ describe('MultisigCreate review', () => {
         const messaging = mkMessaging();
         await fillValidDraft(messaging);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
         });
         expect(screen.getByRole('form', { name: 'Review multisig' })).toBeTruthy();
 
@@ -368,17 +593,22 @@ describe('MultisigCreate review', () => {
         await fillValidDraft(messaging);
 
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
         });
 
         expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
-        expect(screen.getByText(/2-of-2 SegWit multi-signature/i)).toBeTruthy();
+        expect(screen.getByText(/2-of-2 SegWit/i)).toBeTruthy();
         const reviewedXpub = screen.getByText(EXTERNAL.xpub);
-        expect(reviewedXpub.style.overflowWrap).toBe('anywhere');
+        expect(reviewedXpub.className).toContain('reviewKey');
         expect(screen.getByText(EXTERNAL.pubkey)).toBeTruthy();
 
+        const confirm = screen.getByRole('button', { name: 'Confirm Multisig' });
+        expect(confirm).toHaveClass(buttonStyles.success);
+        expect(confirm.querySelector('svg')).not.toBeNull();
+        expect(document.querySelectorAll(`button.${buttonStyles.success}`)).toHaveLength(1);
+
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Confirm Multisig' }));
         });
 
         expect(messaging.createMultisigConfig).toHaveBeenCalledTimes(1);
@@ -391,27 +621,31 @@ describe('MultisigCreate review', () => {
 
     it('returns from review with every entered value kept', async () => {
         await fillValidDraft(mkMessaging());
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+        // The sections come back as the user left them: open, with every value kept.
+        expect(cosignerSections().map((section) => toggleOf(section).getAttribute('aria-expanded')))
+            .toEqual(['true', 'true']);
 
-        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
-        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('11223344');
-        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+        expect(screen.getAllByLabelText(/^Account path/i)[1]).toHaveValue(EXTERNAL.path);
     });
 
     it('review display matches the built config by showing canonical keys and numeric threshold', async () => {
         await fillValidDraft(mkMessaging());
-        fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '02' } });
-        fireEvent.change(screen.getAllByLabelText(/Public key \(hex/i)[1], {
+        selectOption(thresholdTrigger(), '1');
+        selectOption(thresholdTrigger(), '2');
+        fireEvent.change(screen.getAllByLabelText(/^Public key$/i)[1], {
             target: { value: EXTERNAL.pubkey.toUpperCase() },
         });
         fireEvent.change(screen.getAllByLabelText(/Master fingerprint/i)[1], {
             target: { value: 'AABBCCDD' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
 
-        expect(await screen.findByText(/2-of-2 SegWit multi-signature/i)).toBeTruthy();
+        expect(await screen.findByText(/2-of-2 SegWit/i)).toBeTruthy();
         expect(screen.queryByText(/02-of-2/)).toBeNull();
         expect(screen.getByText(EXTERNAL.pubkey)).toBeTruthy();
         expect(screen.getByText('aabbccdd')).toBeTruthy();
@@ -425,8 +659,8 @@ describe('MultisigCreate review', () => {
             }),
         });
         await fillValidDraft(messaging);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Confirm multisig' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Multisig' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Confirm Multisig' }));
 
         const alert = await screen.findByRole('alert');
         consoleError.mockRestore();
@@ -438,17 +672,14 @@ describe('MultisigCreate review', () => {
 });
 
 describe('MultisigCreate share as cosigner', () => {
-    it('shows the xpub, pubkey, fingerprint and path for a chosen address', async () => {
+    it('removes the disclosure and opens the dedicated page from the header action', async () => {
         const messaging = mkMessaging();
-        await mount(messaging);
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText(/Address to share/i), { target: { value: 'addr-1' } });
-        });
+        const onShare = vi.fn();
+        await mount(messaging, { onShare });
 
-        expect(screen.getByTestId('cosigner-share-xpub').textContent).toBe(INFO.xpub);
-        expect(screen.getByTestId('cosigner-share-public-key').textContent).toBe(INFO.pubkey);
-        expect(screen.getByTestId('cosigner-share-master-fingerprint').textContent).toBe('73c5da0a');
-        expect(screen.getByTestId('cosigner-share-derivation-path').textContent).toBe(INFO.derivationPath);
-        expect(screen.getByRole('button', { name: 'Copy xpub' })).toBeTruthy();
+        expect(screen.queryByText(/Joining someone else's multisig/i)).toBeNull();
+        expect(screen.queryByLabelText('Address to share')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Share Wallet as Cosigner' }));
+        expect(onShare).toHaveBeenCalledTimes(1);
     });
 });

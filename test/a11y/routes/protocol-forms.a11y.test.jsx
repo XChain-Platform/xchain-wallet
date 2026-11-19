@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -54,7 +54,7 @@ describe('protocol form accessibility', () => {
         const { container } = renderRoute(
             <IssueTokenForm walletId="wallet-1" onBack={() => {}} />,
         );
-        await screen.findByRole('form', { name: 'Issue token' });
+        await screen.findByRole('form', { name: 'Issue Token' });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -93,11 +93,53 @@ describe('protocol form accessibility', () => {
             <BetFeedDetail walletId="wallet-1" chainId={CHAIN} feedIndex={17} onBack={() => {}} />,
             host,
         );
-        await screen.findByRole('form', { name: 'Place a bet' });
+        // The Bet tab holds one list row per outcome, and tapping one opens
+        // the Buy a position form with it.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
+        const outcomes = await screen.findByRole('list', { name: 'Outcome to back' });
+        await expectNoSeriousAxeViolations(container);
+        const yes = within(outcomes).getByRole('button', { name: /^Buy Yes,/ });
+        await waitFor(() => expect(yes).toBeEnabled());
+        fireEvent.click(yes);
+        await screen.findByRole('form', { name: 'Buy a position' });
         await expectNoSeriousAxeViolations(container);
     });
 
-    it('scans the loaded poll voting form', async () => {
+    it('scans a five-outcome market\'s outcome list and its Activity marks', async () => {
+        const outcomes = ['Under 65°F', '65 to 70°F', '70 to 75°F', '75 to 80°F', '80°F or more'];
+        const host = messaging({
+            betFeed: vi.fn().mockResolvedValue({
+                action_index: 18,
+                source: 'bc1qoracleoracleoracleoracleoracleoraclex',
+                label: 'What will the high be in Los Angeles today?',
+                outcomes: outcomes.join(','),
+                tick: 'A11Y',
+                min_amount: '1',
+                fee: '0',
+                feed_status: 'open',
+                pools: outcomes.map((_, i) => ({ outcome: i, pool: String(100 + i * 50), bet_count: 2 })),
+                timeline: [],
+            }),
+            bets: vi.fn().mockResolvedValue({
+                data: outcomes.map((_, i) => ({
+                    action_index: 900 + i, outcome: i, amount: '10', source: 'bc1qsomeoneelse', bet_status: 'open',
+                })),
+            }),
+        });
+        const { container } = renderRoute(
+            <BetFeedDetail walletId="wallet-1" chainId={CHAIN} feedIndex={18} onBack={() => {}} />,
+            host,
+        );
+        const list = await screen.findByRole('list', { name: 'Outcome to back' });
+        expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+        expect(within(list).getByRole('button', { name: /^Buy 70 to 75°F, \d+ percent, 200 A11Y total$/ })).toBeTruthy();
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        await waitFor(() => expect(container.querySelectorAll('[data-outcome-activity] [data-outcome-mark]')).toHaveLength(5));
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    it('scans the poll page ballot and the Cast Vote form', async () => {
         const host = messaging({
             governancePoll: vi.fn().mockResolvedValue({
                 action_index: 23,
@@ -117,7 +159,16 @@ describe('protocol form accessibility', () => {
             <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={23} onBack={() => {}} />,
             host,
         );
-        await screen.findByRole('form', { name: 'Vote' });
+        // The poll page: the identity card, then the Vote | Activity |
+        // Details strip on Vote, the choice list, once this wallet's own
+        // vote read settles.
+        await screen.findByRole('tabpanel', { name: 'Vote' });
+        await waitFor(() => expect(host.governanceVotes).toHaveBeenCalledWith(expect.objectContaining({ type: 'address' })));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Vote for Yes' })).toBeEnabled());
+        await expectNoSeriousAxeViolations(container);
+        // A choice row opens the Cast Vote form with that choice.
+        fireEvent.click(screen.getByRole('button', { name: 'Vote for Yes' }));
+        await screen.findByRole('form', { name: 'Cast Vote' });
         await expectNoSeriousAxeViolations(container);
     });
 });

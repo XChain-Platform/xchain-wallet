@@ -1,22 +1,30 @@
-.container {
-    margin: 0 0 var(--xc-space-3);
+.card {
+    composes: card from '../../ui/Card.module.css';
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
 }
 
 .revealAction {
+    position: absolute;
+    inset: 0;
     display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    margin: 0 0 var(--xc-space-2);
+    gap: var(--xc-help-gap);
+    padding: var(--xc-card-pad);
 }
 
-.concealedMessage {
-    composes: card from '../../ui/Card.module.css';
-    margin: 0;
-    color: var(--xc-text-muted);
+.revealError {
+    color: var(--xc-danger-fg);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
     text-align: center;
 }
 
 .gridPopup {
-    composes: card from '../../ui/Card.module.css';
     list-style: none;
     box-sizing: border-box;
     width: 100%;
@@ -28,7 +36,6 @@
 }
 
 .gridFull {
-    composes: card from '../../ui/Card.module.css';
     list-style: none;
     box-sizing: border-box;
     width: 100%;
@@ -37,6 +44,17 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-2);
+}
+
+.concealedGrid {
+    opacity: 0.85;
+}
+
+.concealedTappable {
+    /* The whole hidden grid is the tap target; its rows make it far taller,
+       and this keeps the WCAG 2.5.8 floor stated on the target itself. */
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
 }
 
 @media (min-width: 480px) {
@@ -76,6 +94,23 @@
     font-weight: 500;
     white-space: nowrap;
     word-break: keep-all;
+}
+
+/* Concealed, the cells keep their shape and the placeholder words and numbers
+   blur past reading, so the box reads as "your words go here, hidden". The
+   words are filler, never the phrase. The blur token is static, unlike
+   --xc-privacy-filter, which reduced motion and low power turn off. */
+.concealedGrid .index,
+.concealedGrid .word {
+    filter: var(--xc-secret-placeholder-filter);
+    user-select: none;
+}
+
+/* The grid's 0.85 dimming over the muted numbers measured 3.75:1, under the
+   4.5:1 AA floor a contrast check holds them to; the body text colour keeps
+   them above it while the blur still hides them. */
+.concealedGrid .index {
+    color: var(--xc-text);
 }
 
 @media not all and (min-width: 360px) {

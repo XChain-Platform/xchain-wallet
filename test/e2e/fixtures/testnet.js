@@ -59,9 +59,9 @@ import { joinEndpoint } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { gotoSection, openSettings } from './wallet.js';
 import {
     REGTEST_COIN,
-    activeNetworkControl,
     expectConfirmModal,
     mintXchain,
+    networkOption,
     unlockAfterReload,
 } from './regtest.js';
 import { priceVerdict } from './priceSeed.js';
@@ -635,12 +635,18 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
 /**
  * Flips the wallet onto testnet and waits for it to come back up. Testnet is
  * listed without Developer Mode (only Regtest is held behind it), so this is
- * one select on the Settings index; the switch then asks for confirmation,
- * reloads and re-locks the vault.
+ * one click on the Testnet row of the Network page; the switch then asks for
+ * confirmation, reloads and re-locks the vault.
+ *
+ * Settings is a list of group rows, and each group page a list of setting
+ * rows (G08), so the environment rows sit on Network and Fees > Network. A row's
+ * accessible name is its title followed by its summary.
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
-    await activeNetworkControl(page).selectOption('testnet');
+    await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+    await page.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
+    await networkOption(page, 'testnet').click();
     const confirm = page.getByRole('dialog', { name: 'Switch to Testnet?' });
     await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
     await unlockAfterReload(page, password);

@@ -16,6 +16,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const LEGACY_PHRASE = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'correct-horse-battery';
 
 async function importAs(typedName, props = {}) {
@@ -25,7 +26,8 @@ async function importAs(typedName, props = {}) {
             <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" {...props} />
         </MessagingProvider>,
     );
-    fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
+    const phrase = props.variant === 'freewallet' ? LEGACY_PHRASE : PHRASE;
+    fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: phrase } });
     fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: typedName } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
@@ -47,7 +49,7 @@ describe('wallet name on import', () => {
         expect(await importAs('  Savings  ')).toBe('Savings');
     });
 
-    it('falls back to FreeWallet on the FreeWallet variant', async () => {
-        expect(await importAs('   ', { variant: 'freewallet' })).toBe('FreeWallet');
+    it('keeps the standard default name on the legacy deep route', async () => {
+        expect(await importAs('   ', { variant: 'freewallet' })).toBe('Imported Wallet');
     });
 });

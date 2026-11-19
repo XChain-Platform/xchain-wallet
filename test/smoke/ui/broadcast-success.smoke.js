@@ -61,12 +61,14 @@ assert.ok(/target="_blank"/.test(send) && /rel="noopener noreferrer"/.test(send)
 
 assert.ok(/Your action was broadcast but is not confirmed yet/.test(broadcast),
     'BROADCAST success explains that confirmation is still pending');
-assert.ok(/<CopyButton value=\{txid\} label="Copy transaction ID" \/>/.test(broadcast),
+assert.ok(/<CopyButton value=\{txid\} label="Copy Transaction ID" \/>/.test(broadcast),
     'BROADCAST success makes the transaction ID copyable');
 assert.ok(/explorerPageUrl\(\{[\s\S]*?kind: 'transaction',[\s\S]*?value: txid/.test(broadcast),
     'BROADCAST success builds a chain-scoped transaction explorer URL');
-assert.ok(/Broadcast another/.test(broadcast),
+assert.ok(/Announce Another/.test(broadcast),
     'BROADCAST success offers a repeat path');
+assert.ok(!/Signed transaction code|Feed name|Prepend UTC timestamp/.test(broadcast),
+    'BROADCAST success belongs to the plain-message-only form');
 
 // --- 5. Shell completion callbacks return Home -------------------------
 

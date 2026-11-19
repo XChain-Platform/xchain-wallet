@@ -160,6 +160,7 @@ const runtime = vi.hoisted(() => ({
 const updater = vi.hoisted(() => ({
     attachUpdater: vi.fn(),
     checkForUpdates: vi.fn(),
+    desktopInstallChannel: vi.fn(() => 'desktop-direct'),
     downloadAndInstall: vi.fn(),
     restartAndInstall: vi.fn(),
 }));
@@ -216,6 +217,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
 }));
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
     attachUpdater: updater.attachUpdater,
+    desktopInstallChannel: updater.desktopInstallChannel,
 }));
 vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn(), applyProxyToSession: vi.fn(async () => {}) }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
@@ -429,6 +431,7 @@ describe('desktop main entry point', () => {
         };
 
         await expect(handlers.get('xchain:updater-state')(event)).resolves.toBeNull();
+        await expect(handlers.get('xchain:updater-channel')(event)).resolves.toBe('desktop-direct');
         await expect(handlers.get('xchain:updater-install')(event, 'check')).resolves.toEqual({
             ok: false,
             reason: 'desktop: updater unavailable',
@@ -1112,6 +1115,33 @@ describe('desktop main entry point', () => {
         // A floor below 1 shows the page zoomed out, so the fixed-height shell
         // fills part of the window and the whole document scrolls.
         expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(1, 3);
+    });
+
+    it('titles the window from the document title each page-title-updated event finds', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        const win = createWindow();
+        const page = { title: 'Create wallet' };
+        let windowTitle = 'XChain Wallet';
+        win.webContents.executeJavaScript = vi.fn(async (code) => (code === 'document.title' ? page.title : undefined));
+        win.getTitle = vi.fn(() => windowTitle);
+        win.setTitle = vi.fn((title) => { windowTitle = title; });
+        const onTitle = win.webContents.bridgeListeners.get('page-title-updated');
+        expect(onTitle).toBeTypeOf('function');
+
+        const first = { preventDefault: vi.fn() };
+        onTitle(first, 'Create wallet');
+        expect(first.preventDefault).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(win.setTitle).toHaveBeenLastCalledWith('Create wallet'));
+
+        // The page returns to Welcome; the event can still carry the screen
+        // it left, so the window follows the document, not the event.
+        page.title = 'Welcome';
+        const second = { preventDefault: vi.fn() };
+        onTitle(second, 'Create wallet');
+        expect(second.preventDefault).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(win.setTitle).toHaveBeenLastCalledWith('Welcome'));
+        expect(win.setTitle).toHaveBeenCalledTimes(2);
+        expect(windowTitle).toBe('Welcome');
     });
 
     it('contains a renderer load rejection and reveals a recoverable window', async () => {

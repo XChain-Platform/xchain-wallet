@@ -67,7 +67,6 @@ const PARSER_PLUGINS = [
 // only exit. If one of these is ever refactored onto PageHeader, drop it from
 // here and delete its bottom button in the same change.
 const HEADER_LESS_SCREENS = new Set([
-    'packages/core/src/shared/routes/CreateWallet.jsx',
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
 ]);
 
@@ -78,16 +77,10 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
     'packages/core/src/shared/routes/AttachContentForm.jsx',
     'packages/core/src/shared/routes/BatchComposerForm.jsx',
-    'packages/core/src/shared/routes/ContractFundsForm.jsx',
-    'packages/core/src/shared/routes/CreateWallet.jsx',
-    'packages/core/src/shared/routes/GatedPublishForm.jsx',
-    'packages/core/src/shared/routes/LinkForm.jsx',
+    // The one List form; its Fork and Edit review keeps Fork's Back step.
     'packages/core/src/shared/routes/ListCreateForm.jsx',
-    'packages/core/src/shared/routes/ListForkForm.jsx',
     'packages/core/src/shared/routes/MultisigSigningSession.jsx',
-    'packages/core/src/shared/routes/OnboardingCarousel.jsx',
     'packages/core/src/shared/routes/ParallelComposer.jsx',
-    'packages/core/src/shared/routes/PollDetail.jsx',
     'packages/core/src/shared/routes/ProjectRosterForm.jsx',
     'packages/core/src/shared/routes/PublishFileForm.jsx',
 ];

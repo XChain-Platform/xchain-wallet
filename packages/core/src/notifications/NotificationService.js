@@ -51,6 +51,7 @@
 
 import { isWithinQuietHours } from './quietHours.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
@@ -176,6 +177,7 @@ export class NotificationService {
         getSdkForChain,
         getSettings,
         notify,
+        recordAlert,
         getPendingTxids,
         onTxConfirmed,
         onMempoolSeen,
@@ -190,7 +192,7 @@ export class NotificationService {
         this._getActiveAddresses = getActiveAddresses;
         this._getSdkForChain = getSdkForChain;
         this._getSettings = getSettings;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert, now });
         this._getPendingTxids = typeof getPendingTxids === 'function' ? getPendingTxids : null;
         this._onTxConfirmed = typeof onTxConfirmed === 'function' ? onTxConfirmed : null;
         this._onMempoolSeen = typeof onMempoolSeen === 'function' ? onMempoolSeen : null;

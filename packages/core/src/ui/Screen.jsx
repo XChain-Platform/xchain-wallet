@@ -123,6 +123,7 @@ export function WalletRouteScope({ walletId, routeKey, children }) {
  * @param {import('react').RefObject<HTMLDivElement>} [props.rootRef]
  * @param {string} [props.scrollKey]   independently restored view within a route
  * @param {boolean} [props.restoreScroll]
+ * @param {string} [props.bodyClassName]   extra class for the scrolling body, for a route that lays it out itself
  * @param {import('react').ReactNode} props.children
  */
 export function Screen({
@@ -131,6 +132,7 @@ export function Screen({
     variant = 'small',
     bodyAs: Body = 'main',
     bodyLabelledBy,
+    bodyClassName,
     rootRef,
     scrollKey,
     restoreScroll = true,
@@ -287,7 +289,7 @@ export function Screen({
                 ref={mainRef}
                 id={Body === 'main' ? MAIN_ID : undefined}
                 tabIndex={-1}
-                className={styles.body}
+                className={bodyClassName ? `${styles.body} ${bodyClassName}` : styles.body}
                 aria-labelledby={bodyLabelledBy}
             >
                 {ownsNotices ? <div ref={noticesSlotRef} /> : null}

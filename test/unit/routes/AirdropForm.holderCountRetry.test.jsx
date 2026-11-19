@@ -44,6 +44,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 vi.mock('../../../packages/core/src/shared/utils/listTickItems.js', async () => {
@@ -147,8 +148,9 @@ async function flushTimers() {
 /** Puts the form in 'Token holders' mode with one tick listed. */
 async function listOneTick() {
     await flushTimers();
-    const mode = screen.getByDisplayValue('Paste addresses');
-    fireEvent.change(mode, { target: { value: 'holders' } });
+    const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
+    expect(mode).toHaveTextContent('Addresses');
+    selectOption(mode, 'holders');
     const ticks = screen.getByLabelText('Tokens (one per line)');
     fireEvent.change(ticks, { target: { value: LISTED } });
 }
@@ -248,10 +250,23 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), {
             target: { value: '1' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review recipients' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/i }));
         await flushTimers();
-        expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-buttons')).toHaveTextContent('RejectApprove');
         expect(document.body.textContent).toMatch(/~0 HDR550816/);
+    });
+
+    it('reads an unparseable holder reply as unavailable, never as zero holders', async () => {
+        const holders = mountAirdrop(async () => '<html>502 Bad Gateway</html>');
+
+        await listOneTick();
+        await flushTimers();
+
+        expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
+        expect(preview()?.textContent).not.toMatch(/~0 holders/);
+        expect(holders).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('button', { name: 'Retry holder counts' })).toBeTruthy();
     });
 
     it('lists the token and reason for every failed lookup in a partial preview', async () => {
@@ -261,8 +276,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         });
 
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
-        fireEvent.change(mode, { target: { value: 'holders' } });
+        const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
+        expect(mode).toHaveTextContent('Addresses');
+        selectOption(mode, 'holders');
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
             target: { value: `${LISTED}\n${OTHER}` },
         });
@@ -296,8 +312,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
             { tick, total: 1, data: [{ address: 'a' }] }
         ));
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
-        fireEvent.change(mode, { target: { value: 'holders' } });
+        const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
+        expect(mode).toHaveTextContent('Addresses');
+        selectOption(mode, 'holders');
         const ticks = screen.getByLabelText('Tokens (one per line)');
         fireEvent.change(ticks, { target: { value: `${SYMBOL_TICK}\nmixed!\nA..B` } });
         await flushTimers();
@@ -314,8 +331,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
     it('keeps a symbol ticker spelling selected for the holder list', async () => {
         mountAirdrop(async ({ tick }) => ({ tick, total: 1, data: [{ address: 'a' }] }));
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
-        fireEvent.change(mode, { target: { value: 'holders' } });
+        const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
+        expect(mode).toHaveTextContent('Addresses');
+        selectOption(mode, 'holders');
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         await flushTimers();
         fireEvent.click(screen.getByLabelText(/^Select MiXeD!(?:[\s,]|$)/));

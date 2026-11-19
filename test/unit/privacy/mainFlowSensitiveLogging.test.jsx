@@ -188,7 +188,7 @@ describe('main flow logging privacy', () => {
         );
         const receiveAmount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         fireEvent.change(receiveAmount, { target: { value: RECEIVE_AMOUNT } });
-        await waitFor(() => expect(screen.getByText(RECEIVE_ADDRESS)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByDisplayValue(RECEIVE_ADDRESS)).toBeInTheDocument());
         cleanup();
 
         const revealMnemonicRequest = vi.fn(async () => ({
@@ -205,7 +205,7 @@ describe('main flow logging privacy', () => {
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
         await screen.findByText(MNEMONIC);
         expect(revealMnemonicRequest).toHaveBeenCalledWith({
             walletId: WALLET_ID,

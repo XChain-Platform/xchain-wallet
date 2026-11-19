@@ -7,6 +7,7 @@ import {
     createWallet,
     dismissIntroCarousel,
     expect,
+    openFromAddress,
     test,
 } from '../../fixtures/wallet.js';
 import {
@@ -32,7 +33,7 @@ async function settle(page) {
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible({ timeout: 15_000 });
     await palette.getByRole('combobox').fill(title);
     const option = palette.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
@@ -44,9 +45,12 @@ async function gotoPalette(page, title) {
 async function expectMatchingInlineControlHeights(page, label) {
     const mismatches = await page.getByRole('main').evaluate((main) => {
         // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        // Skip the "?" help tip on a field label (U57): it is part of the label, held to
+        // the tap minimum rather than a control height, not a control in a row.
+        const isHelpTip = (el) => el.tagName === 'BUTTON' && el.textContent.trim() === '?';
         const controls = [...Array.from(main.querySelectorAll(
             'button, input:not([type="hidden"]), select, textarea',
-        )).filter((el) => !el.closest('[aria-hidden="true"]'))].flatMap((element) => {
+        )).filter((el) => !el.closest('[aria-hidden="true"]') && !isHelpTip(el))].flatMap((element) => {
             const style = getComputedStyle(element);
             const box = element.getBoundingClientRect();
             if (style.display === 'none' || style.visibility === 'hidden'
@@ -105,22 +109,28 @@ async function expectScreenLayout(page, heading, label) {
     await expectMatchingInlineControlHeights(page, label);
 }
 
+// The label carries a help tip button named after it (U57), so the field is
+// found by its textbox role.
+function wifField(page) {
+    return page.getByRole('textbox', { name: 'WIF private key', exact: true });
+}
+
 async function checkPrivateKeyScrubbing(page, label) {
     await page.goto('/');
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
     await page.getByRole('tab', { name: 'Private key' }).click();
-    await expectScreenLayout(page, /Import (?:a )?private key/, `${label} private-key import`);
+    await expectScreenLayout(page, /Import (?:a )?Private Key/, `${label} private-key import`);
 
-    await page.getByLabel('WIF private key').fill(TEST_WIF);
+    await wifField(page).fill(TEST_WIF);
     await page.getByRole('tab', { name: 'Recovery phrase' }).click();
     await page.getByRole('tab', { name: 'Private key' }).click();
 
-    const keyIsCleared = await page.getByLabel('WIF private key').inputValue() === '';
+    const keyIsCleared = await wifField(page).inputValue() === '';
     expect(keyIsCleared, `${label}: the WIF remains in the field after leaving its import lane`)
         .toBe(true);
     await page.getByRole('button', { name: 'Back to wallet setup' }).click();
-    await expect(page.getByRole('button', { name: 'Try in demo mode' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Try Demo' })).toBeVisible();
     // Leave the app entirely so the demo entry starts from a blank page, as in
     // every other spec; a second load of the same URL straight from the setup
     // screen is aborted intermittently.
@@ -128,20 +138,6 @@ async function checkPrivateKeyScrubbing(page, label) {
     // leaves by itself and the test waits for the blank URL.
     await page.evaluate(() => window.location.replace('about:blank'));
     await page.waitForURL('about:blank');
-}
-
-async function setWatcherMode(page, label) {
-    await gotoPalette(page, 'Settings');
-    const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Wallet mode/i }).click();
-    await expectScreenLayout(page, 'Wallet mode', `${label} wallet mode`);
-
-    const watcher = main.getByRole('radio', { name: /^Watcher/ });
-    await watcher.click();
-    const confirmation = page.getByRole('dialog', { name: 'Switch to Watcher (watch-only) mode?' });
-    await confirmation.getByRole('button', { name: 'Confirm mode change' }).click();
-    await expect(confirmation).toBeHidden();
-    await expect(watcher).toBeChecked();
 }
 
 function detailValue(review, label) {
@@ -154,26 +150,33 @@ for (const viewport of VIEWPORTS) {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await checkPrivateKeyScrubbing(page, viewport.name);
-        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
-        await createWallet(page);
-        await setWatcherMode(page, viewport.name);
+        // Demo wallets hide the create commands, so this walk uses a real dev
+        // wallet, created in watch-only mode (the mode is chosen at create).
+        await createWallet(page, { walletMode: 'watcher' });
 
         await gotoPalette(page, 'Sweep address');
         const main = page.getByRole('main');
         await expect(main.getByRole('form', { name: 'Sweep address' }))
             .toBeVisible({ timeout: 30_000 });
-        await expectScreenLayout(page, 'Sweep address', `${viewport.name} sweep form`);
+        await expectScreenLayout(page, 'Sweep Address', `${viewport.name} sweep form`);
 
-        const source = await main.getByRole('textbox', { name: 'From', exact: true }).inputValue();
+        const source = await (await openFromAddress(main)).inputValue();
         expect(source.length, `${viewport.name}: sweep source is empty`).toBeGreaterThan(0);
         await main.getByRole('textbox', { name: 'Destination address' }).fill(DESTINATION);
 
-        await expect(main.getByRole('checkbox', { name: /^Token balances \(\d+\)$/ }))
+        // What to sweep is a card of switch rows (G118).
+        await expect(main.getByRole('switch', { name: /^Token balances \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
-        await expect(main.getByRole('checkbox', { name: /^Token ownerships \(\d+\)$/ }))
+        await expect(main.getByRole('switch', { name: /^Token ownerships \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
-        await expect(main.getByText(/PEPECASH/).first()).toBeVisible();
-        await expectScreenLayout(page, 'Sweep address', `${viewport.name} populated sweep preview`);
+        // Each category shows only its checkbox, count and description, with
+        // no item list (ruling U83), so the held tokens are not named here.
+        await expect(main.getByText(/PEPECASH/)).toHaveCount(0);
+        // The "counts are a snapshot" fact now lives in the field's ? tip
+        // (U57), not in a loose notice on the form.
+        await expect(main.getByText('The counts are a snapshot; the sweep moves whatever the address holds when it confirms.'))
+            .toHaveCount(0);
+        await expectScreenLayout(page, 'Sweep Address', `${viewport.name} populated sweep preview`);
 
         const scrolled = await main.evaluate((element) => {
             element.scrollTop = element.scrollHeight;
@@ -181,20 +184,19 @@ for (const viewport of VIEWPORTS) {
         });
         expect(scrolled, `${viewport.name}: the populated sweep form did not scroll`)
             .toBeGreaterThan(0);
-        await main.getByRole('button', { name: 'Preview', exact: true }).click();
+        await main.getByRole('button', { name: 'Sweep', exact: true }).click();
 
-        const review = main.getByRole('form', { name: 'Review sweep' });
+        // The sweep reviews on the shared Confirm page (G127).
+        const review = page.getByTestId('confirm-modal');
         await expect(review).toBeVisible({ timeout: 30_000 });
         await settle(page);
         expect(await main.evaluate((element) => element.scrollTop),
             `${viewport.name}: sweep review did not open at the top`).toBeLessThanOrEqual(1);
-        // The chain shows as its icon badge, named for screen readers.
-        await expect(detailValue(review, 'Network').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
+        await expect(detailValue(review, 'Network')).toHaveText('Bitcoin');
         // Addresses are middle-truncated on screen; the accessible name is the full value.
         await expect(detailValue(review, 'From').getByLabel(source, { exact: true })).toBeVisible();
-        await expect(detailValue(review, 'Destination').getByLabel(DESTINATION, { exact: true })).toBeVisible();
-        await expect(detailValue(review, 'Sweeps'))
-            .toHaveText('Token balances, Token ownerships');
-        await expectScreenLayout(page, 'Review sweep', `${viewport.name} sweep review`);
+        await expect(detailValue(review, 'To').getByLabel(DESTINATION, { exact: true })).toBeVisible();
+        await expect(detailValue(review, 'Sweeps')).toHaveText('balances, ownerships');
+        await expectScreenLayout(page, 'Confirm', `${viewport.name} sweep review`);
     });
 }

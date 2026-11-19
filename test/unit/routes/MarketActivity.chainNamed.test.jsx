@@ -9,11 +9,12 @@
 // contact legal@dankest.llc.
 
 // The same dispenser, order, dispense and swap on several chains share
-// title and subtitle text, so only the chain icon tells them apart. A
-// section that spans chains names each row's chain in the row's own text.
+// title and subtitle text. The row never names its network in text (U12):
+// the token icon carries the chain badge, and its accessible name names the
+// chain, so identical rows still read differently to a screen reader.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
@@ -48,26 +49,39 @@ function renderMarket() {
 }
 
 describe('Marketplace rows spanning several chains', () => {
-    it('gives every identical row distinct title and subtitle text that names its chain', async () => {
+    it('shows no network name as row text and names the chain through the token icon', async () => {
         renderMarket();
         await screen.findByRole('region', { name: 'Marketplace activity' });
-        await screen.findByRole('region', { name: 'Open dispensers' });
-        await vi.waitFor(() => {
-            expect(document.querySelectorAll('section[aria-label="Recent DEX swaps"] li').length).toBeGreaterThan(1);
-        });
-        for (const label of ['Open dispensers', 'Open DEX orders', 'Recent dispenses', 'Recent DEX swaps']) {
+        // Offers (dispensers and orders together), Swaps and Trades are tabs; each
+        // shows one list card.
+        for (const [tab, label] of [
+            ['Offers', 'Offers'],
+            ['Swaps', 'Recent DEX swaps'],
+            ['Trades', 'Recent trades'],
+        ]) {
+            fireEvent.click(await screen.findByRole('tab', { name: tab }));
+            await vi.waitFor(() => {
+                expect(document.querySelectorAll(`section[aria-label="${label}"] li`).length).toBeGreaterThan(1);
+            });
             const section = screen.getByRole('region', { name: label });
             const rows = [...section.querySelectorAll('li')];
             expect(rows.length, label).toBeGreaterThan(1);
-            const titles = rows.map((li) => li.querySelector('[class*="title"]')?.textContent);
-            const subtitles = rows.map((li) => li.querySelector('[class*="subtitle"]')?.textContent);
-            expect(new Set(titles).size, `${label} titles`).toBe(rows.length);
-            // An order row carries no subtitle; its title names the chain.
-            const shown = subtitles.filter((text) => text != null);
-            expect(new Set(shown).size, `${label} subtitles`).toBe(shown.length);
             for (const li of rows) {
-                expect(li.textContent).toMatch(/Bitcoin|Litecoin|Dogecoin/);
+                expect(li.textContent, label).not.toMatch(/Bitcoin|Litecoin|Dogecoin/);
             }
+            const iconNames = rows.map((li) => li.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label'));
+            for (const name of iconNames) expect(name, label).toMatch(/ on (Bitcoin|Litecoin|Dogecoin)/);
+            // Offers lists a dispenser and an order per chain, told apart by their
+            // Dispenser or Order tag; within one tag, each chain's icon name is its own.
+            const identities = rows.map((li, i) => `${iconNames[i]}|${/Dispenser/.test(li.textContent) ? 'dispenser' : 'other'}`);
+            expect(new Set(identities).size, `${label} icon names`).toBe(rows.length);
         }
+    });
+
+    it('draws the market selector chevron as an icon', async () => {
+        renderMarket();
+        const selector = await screen.findByRole('button', { name: /Change market/ });
+        expect(selector.textContent).not.toContain('\u203a');
+        expect(selector.querySelectorAll('svg').length).toBeGreaterThan(0);
     });
 });

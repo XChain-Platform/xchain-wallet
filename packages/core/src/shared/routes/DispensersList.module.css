@@ -1,4 +1,4 @@
-/* My dispensers: one flat card list across every network, styled after the
+/* Dispensers: one flat card list across every network, styled after the
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
@@ -15,6 +15,46 @@
     border-top: 1px solid var(--xc-border);
 }
 
+.toolbarStack {
+    display: grid;
+    width: 100%;
+    gap: var(--xc-space-2);
+}
+
+.marketChoiceCard {
+    position: relative;
+    min-width: 0;
+}
+
+.marketChoiceCard > div {
+    position: relative;
+}
+
+.marketChoiceCard input {
+    display: none;
+}
+
+.marketChoiceCard button[aria-label^='Market asset:'] {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    max-width: calc(100% - 52px);
+}
+
+.marketChoiceCard > div > div {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: 50%;
+    inset-inline-end: var(--xc-space-3);
+    height: auto;
+    margin: 0;
+    transform: translateY(-50%);
+}
+
+.marketChoiceCard > div > div > button {
+    margin: 0;
+}
+
+.marketRow,
 .row {
     min-width: 0;
     padding: var(--xc-space-3);
@@ -24,10 +64,14 @@
     color: inherit;
 }
 
-.row:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .marketRow:hover,
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
+.marketRow:focus-visible,
 .row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
@@ -78,40 +122,80 @@
     display: block;
 }
 
-.body {
-    flex: 1 1 auto;
+.rowSummary {
+    display: grid;
+    gap: var(--xc-space-1);
     min-width: 0;
+    font-weight: 400;
+}
+
+.primaryLine,
+.secondaryLine {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
-.name {
-    font-weight: 600;
+.rowAmount,
+.priceText {
+    overflow-wrap: break-word;
+    word-break: normal;
+    min-width: 0;
+}
+
+.rowAmount {
     color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
+    font-weight: 700;
 }
 
-.subtitle {
-    font-size: var(--xc-text-sm);
+.priceText {
     color: var(--xc-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 400;
 }
 
-/* Status chip on the row's trailing edge; tinted per state. */
+.priceText strong {
+    color: var(--xc-text);
+    font-weight: 700;
+}
+
+.stockCount {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+    text-align: end;
+    white-space: nowrap;
+}
+
+.stockTrack {
+    display: block;
+    width: 100%;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+}
+
+.stockFill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--xc-success);
+}
+
+/* Status chip on the price line's end edge; tinted per state. */
 .status {
     flex: 0 0 auto;
     white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    /* Sentence case like every other status pill (PollStatusPill). */
+    text-transform: none;
+    letter-spacing: normal;
     padding: 2px var(--xc-space-2);
     border-radius: 999px;
     background: var(--xc-bg-muted);
@@ -138,25 +222,19 @@
     color: var(--xc-text-muted);
 }
 
-/* Right-hand column keeps the status chip aligned to the row's trailing edge. */
-.trailing {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--xc-space-1);
-}
-
 .status_cancelling {
     background: var(--xc-warning-bg);
     color: var(--xc-warning-text);
 }
 
+/* Phones keep the icon, two-line summary and chevron in fixed columns while
+   the words inside the summary wrap without being cut. */
 @media not all and (min-width: 400px) {
+    .marketRow,
     .row {
         display: grid;
-        grid-template-columns: 40px minmax(0, 1fr);
-        align-items: start;
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        align-items: center;
         gap: var(--xc-space-2);
         padding: var(--xc-space-2);
     }
@@ -167,29 +245,16 @@
         height: 40px;
     }
 
-    .name,
-    .subtitle {
-        white-space: normal;
-        overflow: visible;
-        overflow-wrap: anywhere;
-    }
-
-    .trailing {
-        grid-column: 2;
-        min-width: 0;
-        max-width: 100%;
-        align-items: flex-start;
-    }
-
+    /* The chevron keeps its own end column, centred on the row (G07, G97). */
+    .marketRow > :last-child,
     .row > :last-child {
-        grid-column: 2;
-        max-width: 100%;
-        justify-content: flex-start;
+        grid-column: 3;
+        align-self: center;
     }
 
     .status {
         box-sizing: border-box;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         line-height: 1.3;
     }
 }

@@ -21,6 +21,7 @@
 // guaranteed lock in `finally`.
 
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertNoDeceptiveCharacters, assertNoHiddenControls } from './signRiskClassifier.js';
 
@@ -37,6 +38,7 @@ export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
  * @property {string} chainId
  * @property {string} [path]        BIP32 path (HD key)
  * @property {string} [addressId]   Address record id (imported-WIF key)
+ * @property {string} [addressType] Script type recorded for the signing address
  * @property {string} message
  * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (pooled SoftwareSigner for an unlocked session, or RemoteSigner for HW). When supplied, the flow skips unlockWallet (no password KDF) and does not call `.lock()` (signer lifecycle is the caller's responsibility).
  */
@@ -55,6 +57,7 @@ export async function signMessageFlow({
     chainId,
     path,
     addressId,
+    addressType,
     message,
     signer: injectedSigner,
 }) {
@@ -79,6 +82,8 @@ export async function signMessageFlow({
     assertNoDeceptiveCharacters({ chainId, path, addressId, message }, 'signMessageFlow');
     assertNoHiddenControls(message, 'signMessageFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet signs only on its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
         throw new Error('signMessageFlow: either `password` or `signer` is required');
     }
     // §26.5 panic-mode freeze.
@@ -93,7 +98,7 @@ export async function signMessageFlow({
             sdkRegistry,
         });
     try {
-        return await signer.signMessage({ message, chainId, path, addressId });
+        return await signer.signMessage({ message, chainId, path, addressId, addressType });
     } finally {
         if (!injectedSigner && typeof signer.lock === 'function') {
             signer.lock();
@@ -144,6 +149,8 @@ export async function signPsbtFlow({
     // Refuse text whose visual form can conceal the bytes the signer receives.
     assertNoDeceptiveCharacters({ chainId, psbtHex, signingPaths }, 'signPsbtFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet signs only on its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
         throw new Error('signPsbtFlow: either `password` or `signer` is required');
     }
     // §26.5 panic-mode freeze.

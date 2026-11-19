@@ -42,19 +42,20 @@ assert.ok(/initialSubpageId\s*=\s*null/.test(settingsSrc),
 assert.ok(/useState\([^)]*initialSubpageId\s*\|\|\s*null\)/.test(settingsSrc),
     'Settings seeds subpageId state with the initialSubpageId prop');
 
-// --- 2. LeftNav VIEW_GROUPS: settings + connected-sites ----------------
+// --- 2. LeftNav VIEW_GROUPS: settings, connected-sites, pair-partner ----
+// The two-phone pairing opens from Settings, Advanced, so it lights Settings.
 
 const navSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites'],
-    'VIEW_GROUPS.settings covers settings + connected-sites');
+assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites', 'pair-partner'],
+    'VIEW_GROUPS.settings covers settings, connected-sites and pair-partner');
 
 // --- 3. Settings footer button gets aria-current ------------------------
 
 assert.ok(
-    /onOpenSettings\s*\?[\s\S]*?activeItem === 'settings'[\s\S]*?aria-current=\{activeItem === 'settings' \? 'page' : undefined\}/.test(navSrc),
+    /onOpenSettings\s*\?[\s\S]*?activeItem === settingsItem\.id[\s\S]*?aria-current=\{activeItem === settingsItem\.id \? 'page' : undefined\}/.test(navSrc),
     'LeftNav Settings button receives aria-current="page" when on the settings route',
 );
 
@@ -82,16 +83,18 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
     );
     assert.ok(/initialSubpageId=\{[\s\S]*?'connected-sites'[\s\S]*?\}/.test(src),
         `${label} App threads initialSubpageId through to Settings on the connected-sites alias`);
-    assert.ok(/const handleOpenSettings = \(\)\s*=>\s*setUnlockedView\('settings'\)/.test(src),
-        `${label} App declares handleOpenSettings → setUnlockedView('settings')`);
+    // Settings is a tab-bar root, so opening it starts the history over and
+    // Back from it lands on Home.
+    assert.ok(/const handleOpenSettings = \(\)\s*=>\s*\{[^}]*resetNav\('settings'\);\s*\}/.test(src),
+        `${label} App declares handleOpenSettings → resetNav('settings')`);
     assert.ok(/onOpenSettings=\{handleOpenSettings\}/.test(src),
         `${label} App passes onOpenSettings into both LeftNav and BottomTabBar`);
     assert.ok(
-        /const activeWalletName\s*=\s*\n?\s*walletList\.find\(\(w\)\s*=>\s*w\.id === activeWalletId\)\?\.name \|\| undefined/.test(src),
-        `${label} App derives activeWalletName from walletList`,
+        /walletList\.find\(\(w\) => w\.id === activeWalletId\)/.test(src),
+        `${label} App derives the active wallet from walletList`,
     );
-    assert.ok(/walletName=\{activeWalletName\}/.test(src),
-        `${label} App passes walletName into LeftNav`);
+    assert.ok(/<(?:Shell)?AppHeader[\s\S]*?activeWallet=\{[^}]+\}[\s\S]*?\/>/.test(src),
+        `${label} App passes the active wallet into AppHeader as its plain name label`);
 }
 
 console.log(

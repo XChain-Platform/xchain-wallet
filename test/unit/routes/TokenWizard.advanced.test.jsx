@@ -65,35 +65,61 @@ function mountWizard({ divisibility = null } = {}) {
     );
 }
 
-// template -> chain -> details, on the Custom template (the only one
-// that carries the advanced disclosure).
+// "Max supply" also names a lock switch, so the amount field is read by id.
+const supplyInput = () => screen.getByLabelText('Max supply', { selector: '#issue-supply' });
+
+// The wizard route is the one Issue Token form: ticker and max supply sit
+// in the open Token section, every other group in a closed section whose
+// fields are still mounted (hidden) until it is opened.
 async function driveToCustomDetails() {
-    fireEvent.click(await screen.findByText('Custom'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+    fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'ADVANCED' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+    fireEvent.change(supplyInput(), { target: { value: '1000' } });
 }
 
+// The Limited edition preset fills the supply and per-address limit; the
+// tests then set the same sizes the old edition template asked for.
 async function driveToEditionDetails() {
-    fireEvent.click(await screen.findByText('Limited edition'));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Limited edition/ }));
+    fireEvent.change(screen.getByLabelText('Ticker'), {
         target: { value: 'EDITION' },
     });
-    fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '1000' } });
-    fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '10' } });
+    fireEvent.change(supplyInput(), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Max per transaction'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Max per address'), { target: { value: '10' } });
+    // An edition carries its artwork as the Image URL, which it requires.
+    fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/prints.png' } });
 }
 
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}`), expanded: false }));
+}
+
+// The Callback fields (token, payout per unit, allowed-from block) live in
+// the form's own optional Callback section.
 function openAdvanced() {
-    fireEvent.click(screen.getByRole('button', { name: /Advanced settings/i }));
+    openSection('Callback');
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    const confirm = screen.queryByRole('button', { name: 'Continue to confirmation' });
-    if (confirm) fireEvent.click(confirm);
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
+}
+
+// The form error standard (Notice Standard, 2026-11-15): a refused press
+// shows the "Form errors" notice listing every problem and a line under each
+// failing field, so several alerts can be on the page at once. A refusal is
+// found in any of them.
+async function findAlertWith(message) {
+    let found = null;
+    await waitFor(() => {
+        found = screen.getAllByRole('alert').find((alert) => (
+            message instanceof RegExp ? message.test(alert.textContent) : alert.textContent.includes(message)
+        )) || null;
+        expect(found, `an alert saying ${message}`).not.toBeNull();
+    });
+    return found;
 }
 
 afterEach(() => cleanup());
@@ -102,67 +128,65 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
     it('rejects malformed supply text before composing', async () => {
         mountWizard();
         await driveToCustomDetails();
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1,000' } });
+        // Thousands separators are accepted by the amount field now, so the
+        // malformed text is a non-number.
+        fireEvent.change(supplyInput(), { target: { value: 'Infinity' } });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply must be a positive number.');
+        // The amount field names its own refusal.
+        await findAlertWith('Enter a valid decimal amount');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it.each([
-        ['Copies per mint', 'Infinity', 'Copies per mint must be a positive number.'],
-        ['Limit per address (optional)', 'many', 'Limit per address must be a positive number'],
-        ['Minting opens at block (optional)', '10.5', 'Minting start must be a whole block number.'],
-        ['Minting closes at block (optional)', 'later', 'Minting close must be a whole block number.'],
+        // The amount fields name their own refusal.
+        ['Max per transaction', 'Infinity', 'Enter a valid decimal amount'],
+        ['Max per address', 'many', 'Enter a valid decimal amount'],
+        ['Start block', '10.5', 'Start block must be a whole block height.'],
+        ['Stop block', 'later', 'Stop block must be a whole block height.'],
     ])('rejects malformed edition text in %s', async (label, value, message) => {
         mountWizard();
         await driveToEditionDetails();
         fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        await findAlertWith(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('rejects an edition address limit below its per-mint amount', async () => {
         mountWizard();
         await driveToEditionDetails();
-        fireEvent.change(screen.getByLabelText('Limit per address (optional)'), {
+        fireEvent.change(screen.getByLabelText('Max per address'), {
             target: { value: '5' },
         });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Limit per address must be at least the copies per mint.',
-        );
+        await findAlertWith('Max mint per address cannot be less than max mint per transaction.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it.each([
-        'Transfer ownership to (optional)',
-        'Send the initial mint to (optional)',
-    ])('rejects an invalid %s address before composing', async (label) => {
+        ['New owner address', /Transfer ownership address is not valid for the active network/i],
+        ['Send initial mint to', /Initial mint destination is not valid for the active network/i],
+    ])('rejects an invalid %s address before composing', async (label, message) => {
         mountWizard();
         await driveToCustomDetails();
         fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i);
+        await findAlertWith(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('is collapsed by default and absent from the preset templates', async () => {
-        mountWizard();
-        fireEvent.click(await screen.findByText('Meme token'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.queryByRole('button', { name: /Advanced settings/i })).toBeNull();
-
-        cleanup();
+    it('keeps the optional sections collapsed by default, with the Token section open', async () => {
         mountWizard();
         await driveToCustomDetails();
-        const toggle = screen.getByRole('button', { name: /Advanced settings/i });
-        expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        expect(screen.queryByLabelText('Callback token (optional)')).toBeNull();
+        expect(screen.getByRole('button', { name: /^Token/ }).getAttribute('aria-expanded')).toBe('true');
+        for (const title of ['Initial mint', 'Public minting', 'Description', 'Locks']) {
+            const toggle = screen.getByRole('button', { name: new RegExp(`^${title}`) });
+            expect(toggle.getAttribute('aria-expanded'), title).toBe('false');
+        }
     });
 
     it('carries locks and a callback into ONE ISSUE v0 compose', async () => {
@@ -173,10 +197,11 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         // compare against (the form must not block while it is null).
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        // Exact match: "Description (optional)" is the free-text field,
-        // "Description" on its own is the lock-matrix row.
-        fireEvent.click(screen.getByLabelText(/^Description$/));
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        // Description names both the free-text field and the lock-matrix row.
+        fireEvent.click(screen.getByLabelText(/^Description$/, {
+            selector: 'input[type="checkbox"]',
+        }));
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'xchain' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2.5' } });
@@ -212,7 +237,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
@@ -221,7 +246,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         });
 
         submit();
-        await screen.findByText(/must be in the future/i);
+        await findAlertWith(/must be in the future/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -229,12 +254,12 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard();
         await driveToCustomDetails();
         openAdvanced();
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
 
         submit();
-        await screen.findByText(/all three/i);
+        await findAlertWith(/all three/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -247,7 +272,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'GHOST' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '0.5' } });
@@ -258,8 +283,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         submit();
         // Assert on the error region specifically: the payout hint also
         // says "whole numbers only" while divisibility is unproven.
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/whole number/i);
+        await findAlertWith(/whole number/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -267,37 +291,42 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard();
         await driveToCustomDetails();
         openAdvanced();
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
-        // Collapse the panel, then submit: the error names a field the
-        // user cannot see, so the panel must come back open.
-        fireEvent.click(screen.getByRole('button', { name: /Hide advanced settings/i }));
-        expect(screen.queryByLabelText('Callback token (optional)')).toBeNull();
+        // Collapse the section, then submit: the error names a field the
+        // user cannot see, so the section must come back open.
+        const header = () => screen.getByRole('button', { name: /^Callback/ });
+        fireEvent.click(header());
+        expect(header().getAttribute('aria-expanded')).toBe('false');
 
         submit();
-        await screen.findByText(/all three/i);
-        expect(screen.getByLabelText('Callback token (optional)')).toBeTruthy();
+        await findAlertWith(/all three/i);
+        await waitFor(() => expect(header().getAttribute('aria-expanded')).toBe('true'));
+        expect(screen.getByRole('textbox', { name: 'Callback token' })).toBeVisible();
+        expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('does not offer two controls for one lock field', async () => {
-        // The flat "Lock supply + minting immediately" checkbox already
-        // commits LOCK_MAX_SUPPLY + LOCK_MINT, so the matrix shows those
-        // two rows checked and disabled rather than contradicting it.
+        // The Issue Token form has no flat "Lock supply + minting
+        // immediately" switch beside the lock list: each lock field has
+        // exactly one control, so none can contradict another.
         mountWizard();
         await driveToCustomDetails();
-        fireEvent.click(screen.getByLabelText(/Lock supply \+ minting immediately/));
-        openAdvanced();
+        expect(screen.queryByLabelText(/Lock supply \+ minting immediately/)).toBeNull();
+        openSection('Locks');
 
-        const maxSupplyRow = screen.getByLabelText(/^Max supply \(set by/);
-        const mintRow = screen.getByLabelText(/^Minting \(set by/);
-        expect(maxSupplyRow.checked).toBe(true);
-        expect(maxSupplyRow.disabled).toBe(true);
-        expect(mintRow.checked).toBe(true);
-        expect(mintRow.disabled).toBe(true);
+        const maxSupplyRows = screen.getAllByRole('switch', { name: /^Max supply/ });
+        const mintRows = screen.getAllByRole('switch', { name: /^Minting/ });
+        expect(maxSupplyRows).toHaveLength(1);
+        expect(mintRows).toHaveLength(1);
+        expect(maxSupplyRows[0].checked).toBe(false);
+        expect(maxSupplyRows[0].disabled).toBe(false);
 
-        // An unrelated flag stays freely checkable.
-        const sleepRow = screen.getByLabelText(/^Pausing$/);
+        // Turning one lock on leaves an unrelated flag freely checkable.
+        fireEvent.click(maxSupplyRows[0]);
+        expect(screen.getByRole('switch', { name: /^Max supply/ }).checked).toBe(true);
+        const sleepRow = screen.getByRole('switch', { name: /^Pause/ });
         expect(sleepRow.disabled).toBe(false);
     });
 });

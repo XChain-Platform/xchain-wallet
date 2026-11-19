@@ -38,7 +38,11 @@ const EXTRA_CONTACTS = 40;
 const CONTACTS_DELAY_MS = 600;
 
 const main = (page) => page.locator('#xc-main');
-const scrollTop = (page) => main(page).evaluate((el) => Math.round(el.scrollTop));
+const scrollTop = (page, panel = main(page)) => panel.evaluate((el) => Math.round(el.scrollTop));
+
+// At desktop width History and Contacts are two-panel: the list scrolls in its
+// own region and a row opens its detail beside it, so there is no Back.
+const isWide = (viewport) => viewport.width >= 1000;
 
 /** Pads the contact list and delays its answer through the web messaging seam. */
 async function installLongContactList(page) {
@@ -75,30 +79,29 @@ async function installLongContactList(page) {
 }
 
 /** Scrolls the route body with the mouse wheel, the way a user does, and waits for it to settle. */
-async function wheelScroll(page, deltaY) {
-    const box = await main(page).boundingBox();
+async function wheelScroll(page, deltaY, panel = main(page)) {
+    const box = await panel.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + Math.min(box.height / 2, 200));
-    const start = await scrollTop(page);
+    const start = await scrollTop(page, panel);
     await page.mouse.wheel(0, deltaY);
     // The wheel scroll lands a frame or more later: wait for it to move, then
     // for two equal readings in a row.
     let last = -1;
     await expect.poll(async () => {
-        const now = await scrollTop(page);
+        const now = await scrollTop(page, panel);
         const settled = now !== start && now === last;
         last = now;
         return settled;
     }, { intervals: [150] }).toBe(true);
-    return scrollTop(page);
+    return scrollTop(page, panel);
 }
 
 /**
  * Picks the element matching `selector` whose middle sits closest to the
  * middle of the visible route body, so the opened row is one the user saw.
  */
-async function nearestVisible(page, selector) {
-    const index = await page.evaluate((sel) => {
-        const body = document.getElementById('xc-main');
+async function nearestVisible(page, selector, panel = main(page)) {
+    const index = await panel.evaluate((body, sel) => {
         const view = body.getBoundingClientRect();
         const middle = (view.top + view.bottom) / 2;
         let best = -1;
@@ -115,17 +118,17 @@ async function nearestVisible(page, selector) {
         return best;
     }, selector);
     expect(index, `no ${selector} fully inside the scrolled body`).toBeGreaterThanOrEqual(0);
-    return main(page).locator(selector).nth(index);
+    return panel.locator(selector).nth(index);
 }
 
 /** Back lands on the saved offset, stays there, and focuses the opened row. */
-async function expectRestored(page, saved, row, label) {
-    await expect.poll(() => scrollTop(page), { message: `${label}: offset after Back` })
+async function expectRestored(page, saved, row, label, panel = main(page)) {
+    await expect.poll(() => scrollTop(page, panel), { message: `${label}: offset after Back` })
         .toBeGreaterThanOrEqual(saved - 2);
-    expect(Math.abs(await scrollTop(page) - saved), `${label}: offset after Back`).toBeLessThanOrEqual(2);
+    expect(Math.abs(await scrollTop(page, panel) - saved), `${label}: offset after Back`).toBeLessThanOrEqual(2);
     // The late half of the bug: no jump once the content finishes loading.
     await page.waitForTimeout(800);
-    expect(Math.abs(await scrollTop(page) - saved), `${label}: offset moved after it was restored`)
+    expect(Math.abs(await scrollTop(page, panel) - saved), `${label}: offset moved after it was restored`)
         .toBeLessThanOrEqual(2);
     await expect(row, `${label}: focus did not return to the opened row`).toBeFocused();
 }
@@ -142,23 +145,39 @@ for (const viewport of VIEWPORTS) {
             await gotoSection(page, 'History');
             await expect(page.locator('[data-history-row]')).toHaveCount(27);
 
-            const saved = await wheelScroll(page, 1000);
+            const panel = isWide(viewport)
+                ? page.getByRole('region', { name: 'History entries' })
+                : main(page);
+            const saved = await wheelScroll(page, 1000, panel);
             expect(saved, 'History did not scroll').toBeGreaterThan(300);
-            const row = await nearestVisible(page, '[data-history-key] button[data-history-row]');
+            const row = await nearestVisible(page, '[data-history-key] button[data-history-row]', panel);
             const key = await row.evaluate((el) => el.closest('[data-history-key]').getAttribute('data-history-key'));
             await row.click();
+            if (isWide(viewport)) {
+                // The detail opens beside the list, which keeps its place and the row.
+                await expect(row, 'History: the opened row is not selected').toBeFocused();
+                await page.waitForTimeout(800);
+                expect(Math.abs(await scrollTop(page, panel) - saved), 'History: the list moved when a row opened')
+                    .toBeLessThanOrEqual(2);
+                return;
+            }
             const back = page.getByRole('button', { name: 'Back to history', exact: true });
             await expect(back).toBeVisible();
             await back.click();
 
             const returned = main(page).locator(`[data-history-key="${key}"] button[data-history-row]`);
-            await expectRestored(page, saved, returned, `${viewport.name} History`);
+            await expectRestored(page, saved, returned, `${viewport.name} History`, panel);
         });
 
         test('a Settings section returns to the list row, and Settings still opens at the top', async ({ page }) => {
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+            // The grouped Settings list is only a little taller than a tall phone, so
+            // a short window makes it scroll the way a small screen does.
+            await page.setViewportSize({ width: viewport.width, height: Math.min(viewport.height, 400) });
             await openSettings(page);
-            const about = main(page).getByRole('button', { name: /^About/ });
+            // About moved to the top of Settings (2026-11-15), so the row at the
+            // end of the list, Advanced, is the one a scrolled list returns to.
+            const about = main(page).getByRole('button', { name: /^Advanced\b/ });
             await expect(about).toBeVisible();
 
             const saved = await wheelScroll(page, 5000);
@@ -175,7 +194,7 @@ for (const viewport of VIEWPORTS) {
             await gotoSection(page, 'History');
             await expect(page.locator('[data-history-row]').first()).toBeVisible();
             await openSettings(page);
-            await expect(main(page).getByRole('button', { name: /^About/ })).toBeAttached();
+            await expect(main(page).getByRole('button', { name: /^About\b/ })).toBeAttached();
             await page.waitForTimeout(500);
             expect(await scrollTop(page), 'Settings reopened part way down').toBe(0);
         });
@@ -187,16 +206,27 @@ for (const viewport of VIEWPORTS) {
             const list = page.getByRole('list', { name: 'Contacts' });
             await expect(list.getByRole('button')).toHaveCount(5 + EXTRA_CONTACTS);
 
-            const saved = await wheelScroll(page, 1400);
+            const panel = isWide(viewport)
+                ? page.getByRole('region', { name: 'Contacts' }).first()
+                : main(page);
+            const saved = await wheelScroll(page, 1400, panel);
             expect(saved, 'Contacts did not scroll').toBeGreaterThan(300);
-            const row = await nearestVisible(page, 'ul[aria-label="Contacts"] button');
+            const row = await nearestVisible(page, 'ul[aria-label="Contacts"] button', panel);
             const name = await row.getAttribute('aria-label');
             await row.click();
+            if (isWide(viewport)) {
+                // The contact opens beside the list, which keeps its place.
+                await expect(page.getByRole('button', { name: 'Send', exact: false }).first()).toBeVisible();
+                await page.waitForTimeout(800);
+                expect(Math.abs(await scrollTop(page, panel) - saved), 'Contacts: the list moved when a contact opened')
+                    .toBeLessThanOrEqual(2);
+                return;
+            }
             await expect(page.getByRole('heading', { name: 'View Contact' })).toBeVisible();
             await page.getByRole('button', { name: 'Back to previous screen', exact: true }).click();
 
             const returned = list.getByRole('button', { name, exact: true });
-            await expectRestored(page, saved, returned, `${viewport.name} Contacts`);
+            await expectRestored(page, saved, returned, `${viewport.name} Contacts`, panel);
         });
     });
 }

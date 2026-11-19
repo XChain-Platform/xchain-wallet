@@ -53,9 +53,17 @@ function renderDetail({ history, quantity = '100', onBuy = vi.fn(), withHistory 
     return { messaging, onBuy };
 }
 
+function revealSupplyHistory() {
+    // Supply over time is a row at the foot of the Details tab.
+    fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Supply over time' }));
+}
+
 describe('TokenDetail supply chart', () => {
     it('draws the chart from getSupplyHistory', async () => {
         const { messaging } = renderDetail({ history: [{ height: 1, supply: 10 }, { height: 2, supply: 50 }, { height: 3, supply: 80 }] });
+        expect(screen.queryByText('Supply over time')).toBeNull();
+        revealSupplyHistory();
         const chart = await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ });
         expect(chart.querySelector('path').getAttribute('d')).toMatch(/^M0\.0 80\.0 L150\.0 /);
         expect(messaging.getSupplyHistory).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'SUPPLYPROBE' });
@@ -63,6 +71,7 @@ describe('TokenDetail supply chart', () => {
 
     it('labels decimal supply history as whole-token units', async () => {
         renderDetail({ history: [{ height: 1, supply: '1.25' }, { height: 2, supply: '2.5' }] });
+        revealSupplyHistory();
 
         expect(await screen.findByRole('img', {
             name: 'Supply of SUPPLYPROBE over time, latest 2.5',
@@ -71,6 +80,7 @@ describe('TokenDetail supply chart', () => {
 
     it('hides the chart for fewer than two points or a missing lookup', async () => {
         const first = renderDetail({ history: [{ height: 1, supply: 10 }] });
+        revealSupplyHistory();
         await waitFor(() => expect(first.messaging.getSupplyHistory).toHaveBeenCalled());
         expect(screen.queryByRole('img', { name: /Supply of/ })).toBeNull();
         cleanup();
@@ -105,11 +115,13 @@ describe('TokenDetail supply chart', () => {
             </MessagingProvider>
         );
         const view = render(tree('OLD'));
+        revealSupplyHistory();
         expect(await screen.findByRole('img', { name: /Supply of OLD over time/ })).toBeTruthy();
 
         view.rerender(tree('NEW'));
         expect(screen.queryByRole('img', { name: /Supply of OLD over time/ })).toBeNull();
         expect(screen.queryByRole('img', { name: /Supply of NEW over time/ })).toBeNull();
+        revealSupplyHistory();
 
         await act(async () => {
             resolveNext([{ height: 3, supply: 30 }, { height: 4, supply: 40 }]);
@@ -148,25 +160,30 @@ describe('TokenDetail supply chart', () => {
             </MessagingProvider>,
         );
         await waitFor(() => expect(getNativePricesRequest).toHaveBeenCalled());
-        expect(screen.getByText('No market data available for this network.')).toBeTruthy();
+        // The market figures are rows of the Details tab.
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+        expect(await screen.findByText('No market data for this network')).toBeTruthy();
     });
 });
 
-describe('TokenDetail Trade action', () => {
+describe('TokenDetail Exchange action', () => {
     it('opens trading regardless of whether the current balance is zero', () => {
         const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(onBuy).toHaveBeenCalledTimes(1);
 
         cleanup();
         const zero = renderDetail({ history: [], quantity: '0' });
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(zero.onBuy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
+    // A shell with no trading surface gets no Exchange row at all (absent,
+    // not greyed), as the store builds drop the DEX rows.
     it('is absent when the shell has no trading surface', () => {
         renderDetail({ history: [], onBuy: null });
-        expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Send\b/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Exchange\b/ })).toBeNull();
     });
 });

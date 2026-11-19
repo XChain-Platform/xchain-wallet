@@ -15,11 +15,12 @@ const fullyDeferred = new Map([
     ['packages/core/src/shared/components/BalanceList.jsx', 0],
     ['packages/core/src/shared/components/CollectiblesView.jsx', 2],
     ['packages/core/src/shared/components/GatedFileViewer.jsx', 1],
-    ['packages/core/src/shared/components/HomeTabs.jsx', 4],
+    ['packages/core/src/shared/components/HomeTabs.jsx', 0],
+    ['packages/core/src/shared/components/ActivityRow.jsx', 0],
     ['packages/core/src/ui/AssetMark.jsx', 3],
     ['packages/core/src/shared/routes/AttachContentForm.jsx', 2],
     ['packages/core/src/shared/routes/DispensersList.jsx', 2],
-    ['packages/core/src/shared/routes/GatedPublishForm.jsx', 2],
+    ['packages/core/src/shared/routes/GatedPublishForm.jsx', 1],
     ['packages/core/src/shared/routes/PublishFileForm.jsx', 2],
 ]);
 
@@ -71,13 +72,6 @@ describe('shared image loading audit', () => {
                 expect(literalValue(attrs.get('decoding')), relativePath).toBe('async');
             }
         }
-
-        const mediaImage = imageTags('packages/core/src/shared/routes/TokenDetail.jsx')
-            .find((image) => image.source.includes('className={styles.heroImage}'));
-        expect(mediaImage).toBeDefined();
-        const attrs = attributes(mediaImage);
-        expect(literalValue(attrs.get('loading'))).toBe('lazy');
-        expect(literalValue(attrs.get('decoding'))).toBe('async');
     });
 
     it('reserves layout space for variable-size content images', () => {
@@ -95,9 +89,5 @@ describe('shared image loading audit', () => {
 
         const gatedImage = imageTags('packages/core/src/shared/components/GatedFileViewer.jsx')[0];
         expect(gatedImage.source).toContain("aspectRatio: '1 / 1'");
-
-        const mediaImage = imageTags('packages/core/src/shared/routes/TokenDetail.jsx')
-            .find((image) => image.source.includes('className={styles.heroImage}'));
-        expect(mediaImage.source).toContain("aspectRatio: '1 / 1'");
     });
 });

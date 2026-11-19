@@ -17,7 +17,8 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import * as branding from '../../branding/branding.js';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { NetworkOptionList } from '../../ui/NetworkPicker.jsx';
 import { t } from '../../i18n/index.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import '../../i18n/locales/en/stakeNew.js';
@@ -87,6 +88,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
 
     const header = (
         <PageHeader
+            nested={step === 'chain'}
             onBack={step === 'chain' ? () => setStep('options') : onBack}
             backLabel={step === 'chain' ? t('common.back') : t('stakeNew.backToStaking')}
             title={t('stakeNew.title')}
@@ -119,26 +121,14 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
         return wrap(
             <>
                 <p className={local.lede}>{t('stakeNew.chooseNetwork')}</p>
-                <div className={local.chainList}>
-                    {/* Network entries stay native buttons because each control is the complete clickable row. */}
-                    {stakingChains.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        const iconUrl = branding.chainIconSmallUrl(cid);
-                        return (
-                            <button
-                                key={cid}
-                                type="button"
-                                className={styles.entry}
-                                onClick={() => onPickValidator(cid)}
-                            >
-                                {iconUrl ? (
-                                    <img src={iconUrl} alt="" aria-hidden="true" className={local.chainIcon} />
-                                ) : null}
-                                <span className={local.chainLabel}>{d?.displayName || cid}</span>
-                            </button>
-                        );
-                    })}
-                </div>
+                {/* The standard network rows, drawn like token rows: icon,
+                    name, ticker and network kind, right chevron (operator
+                    ruling 2026-11-13). */}
+                <NetworkOptionList
+                    chainIds={stakingChains}
+                    chainRegistry={chainRegistry}
+                    onSelect={onPickValidator}
+                />
             </>,
         );
     }
@@ -152,40 +142,26 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                     {t('stakeNew.bitcoinOnly')}
                 </p>
             ) : null}
-            <div className={local.options}>
-                {/* Staking choices stay native buttons because each control is the complete clickable row. */}
-                <button
-                    type="button"
-                    className={styles.entry}
+            {/* The shared action list (G101): bare icon, title, description, right chevron. */}
+            <ActionList label={t('stakeNew.title')}>
+                <ActionListItem
                     disabled={noStakingChain}
                     onClick={() => {
                         if (stakingChains.length === 1) onPickValidator(stakingChains[0]);
                         else setStep('chain');
                     }}
-                >
-                    <span className={local.optionIcon} aria-hidden="true"><Icon.StakeIcon /></span>
-                    <span className={local.optionBody}>
-                        <span className={local.optionTitle}>{t('stakeNew.validatorTitle')}</span>
-                        <span className={local.optionDesc}>
-                            {t('stakeNew.validatorDescription')}
-                        </span>
-                    </span>
-                </button>
-                <button
-                    type="button"
-                    className={styles.entry}
+                    icon={<Icon.StakeIcon />}
+                    title={t('stakeNew.validatorTitle')}
+                    description={t('stakeNew.validatorDescription')}
+                />
+                <ActionListItem
                     disabled={noStakingChain}
                     onClick={() => onPickContract()}
-                >
-                    <span className={local.optionIcon} aria-hidden="true"><Icon.ContractIcon /></span>
-                    <span className={local.optionBody}>
-                        <span className={local.optionTitle}>{t('stakeNew.contractTitle')}</span>
-                        <span className={local.optionDesc}>
-                            {t('stakeNew.contractDescription')}
-                        </span>
-                    </span>
-                </button>
-            </div>
+                    icon={<Icon.ContractIcon />}
+                    title={t('stakeNew.contractTitle')}
+                    description={t('stakeNew.contractDescription')}
+                />
+            </ActionList>
         </>,
     );
 }

@@ -1,94 +1,17 @@
-.tabs {
-    box-sizing: border-box;
-    display: flex;
-    align-items: stretch;
-    width: 100%;
-    min-width: 0;
-    min-height: var(--xc-control-h-md);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-control-border);
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.tabs::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-}
-
-.tab {
-    appearance: none;
-    box-sizing: border-box;
-    display: inline-flex;
-    /* Tabs keep their natural width but may shrink to their longest word and
-       wrap their labels at spaces, so a short row of tabs fits a 320px phone
-       without a nested scroller; a row that still cannot fit scrolls. */
-    flex: 0 1 auto;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    min-height: var(--xc-control-h-md);
-    padding: 0 var(--xc-space-3);
-    /* A transparent 1px edge on every tab lets the selected and hovered tab,
-       which fill near white on a white page, show an outline without
-       shifting the row. */
-    border: 1px solid transparent;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    white-space: normal;
-    text-align: center;
-    cursor: pointer;
-    transition: background var(--xc-transition), color var(--xc-transition), border-color var(--xc-transition);
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .tab:hover:not([aria-selected='true']) {
-        background: var(--xc-control-bg-hover);
-        border-color: var(--xc-control-border);
-        border-bottom-color: transparent;
-        color: var(--xc-text);
-    }
-}
-
-.tab:active:not([aria-selected='true']) {
-    background: var(--xc-control-bg-hover);
-    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
-    color: var(--xc-text);
-}
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-control-focus-ring);
-    outline-offset: -2px;
-}
-
-.tab[aria-selected='true'] {
-    background: var(--xc-control-bg-hover);
-    color: var(--xc-accent-text);
-    border-color: var(--xc-control-border);
-    border-bottom-color: var(--xc-control-selected);
-}
-
-/* Forced colors paints a transparent border in CanvasText, which would outline
-   every tab. Idle tabs take the canvas colour and the selected tab takes the
-   selection colour, so only the current tab shows an edge. */
-@media (forced-colors: active) {
-    .tab {
-        border-color: Canvas;
-    }
-
-    .tab[aria-selected='true'] {
-        border-color: Highlight;
-    }
-}
+/* Tabs draw the one view-toggle look from SegmentedControl.module.css
+   (.segmented and .segment); this sheet holds only what a tab adds: the
+   label wrapper and the optional count badge. */
 
 .label {
-    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.icon {
+    display: inline-flex;
+    flex: 0 0 auto;
 }
 
 .count {
@@ -102,7 +25,9 @@
     letter-spacing: 0.03em;
 }
 
+/* On the selected fill the badge inverts: the fill's text colour behind the
+   fill's own colour. */
 .tab[aria-selected='true'] .count {
-    background: var(--xc-control-selected);
-    color: var(--xc-control-selected-text);
+    background: var(--xc-control-selected-text);
+    color: var(--xc-control-selected);
 }

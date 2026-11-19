@@ -19,6 +19,8 @@ import {
 const CONTACT_NAME = 'K51 recipient';
 const CONTACT_ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const ENTERED_AMOUNT = '0.01';
+// BTC is divisible, so the field re-formats to its exact 8 decimals (U61).
+const FORMATTED_AMOUNT = '0.01000000';
 
 async function expectFitsWithReachableAction(page, label, action) {
     await action.scrollIntoViewIfNeeded();
@@ -46,14 +48,23 @@ async function expectFitsWithReachableAction(page, label, action) {
     expect(await page.evaluate(() => window.scrollX), `${label}: the page moved sideways`).toBe(0);
 }
 
+/** The exact fee sits in the Speed and Fees section, which opens on demand. */
+async function readFormFee(page) {
+    const feeButton = page.getByRole('button', { name: 'Edit exact fee amount' });
+    if (!(await feeButton.isVisible())) {
+        await page.getByRole('main').getByRole('button', { name: /^Speed and Fees\b/ }).click();
+    }
+    return feeButton.innerText();
+}
+
 async function expectReviewAndReject(page, expectedAmount, expectedFee, label) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible();
-    await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
-
-    const fee = page.getByTestId('confirm-fee');
+    const fee = page.getByTestId('confirm-fee-network');
     // The dev SDK quotes a rate-table fee, which review labels as an estimate.
-    await expect(fee).toHaveText(`Network fee: ${expectedFee} BTC (estimate)`);
+    await expect(page.getByText('Network fee (estimate)', { exact: true })).toBeVisible();
+    // The review adds the fiat value after the coin amount.
+    await expect(fee).toHaveText(new RegExp(`^${expectedFee.replace(/\./g, '\\.')} BTC\\b`));
     const feeAmount = Number((await fee.innerText()).match(/[\d.]+/)?.[0]);
     expect(feeAmount, `${label}: review shows no positive network fee`).toBeGreaterThan(0);
 
@@ -96,15 +107,16 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await createWallet(page);
 
         await gotoSection(page, 'Contacts');
-        // A fresh wallet has no contacts, so the empty list offers the create action.
-        await page.getByRole('button', { name: 'Create first contact' }).click();
+        // Add contact is the title bar plus (G95); the empty list is text only.
+        await page.getByRole('button', { name: 'Add contact', exact: true }).click();
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
         await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        await page.getByRole('button', { name: 'Create contact', exact: true }).click();
         await expect(page.getByText(CONTACT_NAME).first()).toBeVisible();
 
         await gotoSection(page, 'Home');
-        const homeSend = mainButton(page, 'Send');
+        // Home has no Send button of its own; the bottom navigation carries it.
+        const homeSend = page.getByRole('navigation', { name: 'Bottom navigation' }).getByRole('button', { name: 'Send', exact: true });
         await expectFitsWithReachableAction(page, 'Home', homeSend);
         await homeSend.click();
 
@@ -115,20 +127,20 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
 
         const send = mainButton(page, 'Send');
         await expectFitsWithReachableAction(page, 'Send with entered amount', send);
-        const enteredFee = await page.getByRole('button', { name: 'Edit exact fee amount' }).innerText();
+        const enteredFee = await readFormFee(page);
         await send.click();
-        await expectReviewAndReject(page, ENTERED_AMOUNT, enteredFee, 'entered amount');
+        await expectReviewAndReject(page, FORMATTED_AMOUNT, enteredFee, 'entered amount');
 
         const max = page.getByRole('button', { name: 'Use max available amount' }).first();
         await expect(max).toBeEnabled();
         await max.click();
-        await expect.poll(() => page.locator('#send-amount').inputValue()).not.toBe(ENTERED_AMOUNT);
+        await expect.poll(() => page.locator('#send-amount').inputValue()).not.toBe(FORMATTED_AMOUNT);
         const maxAmount = await page.locator('#send-amount').inputValue();
         expect(Number(maxAmount.replace(/,/g, '')), 'Max did not produce a positive amount')
             .toBeGreaterThan(0);
 
         await expectFitsWithReachableAction(page, 'Send with Max', send);
-        const maxFee = await page.getByRole('button', { name: 'Edit exact fee amount' }).innerText();
+        const maxFee = await readFormFee(page);
         await send.click();
         await expectReviewAndReject(page, maxAmount, maxFee, 'Max');
 

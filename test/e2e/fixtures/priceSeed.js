@@ -755,9 +755,9 @@ export function readStateScript(coinPairs) {
  * coin_pair) key, which is what lets this move an existing sentinel forward
  * rather than stacking a new round beside it.
  */
-export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_MARKER_FLOOR) {
+export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_MARKER_FLOOR, skippedPairs = []) {
     const liveRows = await query(
-        `SELECT validator_count, source_action_index FROM price_snapshots
+        `SELECT coin_pair, validator_count, source_action_index FROM price_snapshots
          WHERE status = 'finalized' AND round_number < ?
            AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
         [markerFloor],
@@ -772,9 +772,16 @@ export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_M
             + 'clamp reference.',
         );
     }
-    if (liveRows.length) return 0;
+    // Stand aside per pair: a hub that prices BTC/USD every minute can still skip
+    // XCHAIN/USD (a fresh genesis has no XCHAIN market, so its rounds finalize
+    // "without XCHAIN/USD"), and that pair still needs the fixture's row.
+    const livePairs = new Set(liveRows.map((row) => row.coin_pair));
+    for (const pair of new Set(rows.map((row) => row.coinPair))) {
+        if (livePairs.has(pair)) skippedPairs.push(pair);
+    }
+    const toWrite = rows.filter((row) => !livePairs.has(row.coinPair));
 
-    for (const row of rows) {
+    for (const row of toWrite) {
         await query(
             'INSERT INTO price_snapshots'
             + ' (round_number, coin_pair, price, reference_block, reference_chain,'
@@ -787,7 +794,7 @@ export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_M
             [row.roundNumber, row.coinPair, row.price, row.blockTimestamp],
         );
     }
-    return rows.length;
+    return toWrite.length;
 }
 
 /**
@@ -816,15 +823,16 @@ export async function clearStaleSeedRows(query, { pairs, rounds, staleBefore }) 
 export function writeRowsScript(rows, { chainTime } = {}) {
     return containerScript(`
         const query = (sql, params) => priceConn.query(sql, params);
-        const written = await writePriceSeedRows(query, ROWS, PRICE_SEED_MARKER_FLOOR);
-        // Zero written for planned rows means the venue's own oracle prices it; clear
-        // only the stale fixture rounds that would outrank that oracle's live rows.
-        const cleared = (written === 0 && ROWS.length && STALE_BEFORE !== null)
+        const skippedPairs = [];
+        const written = await writePriceSeedRows(query, ROWS, PRICE_SEED_MARKER_FLOOR, skippedPairs);
+        // A skipped pair is one the venue's own oracle prices; clear only the stale
+        // fixture rounds that would outrank that oracle's live rows for it.
+        const cleared = (skippedPairs.length && STALE_BEFORE !== null)
             ? await clearStaleSeedRows(query, {
-                pairs: [...new Set(ROWS.map((r) => r.coinPair))], rounds: SYNTHETIC_ROUNDS, staleBefore: STALE_BEFORE,
+                pairs: skippedPairs, rounds: SYNTHETIC_ROUNDS, staleBefore: STALE_BEFORE,
             })
             : 0;
-        out = { written, cleared, network: process.env.INDEXER_NETWORK };
+        out = { written, cleared, skippedPairs, network: process.env.INDEXER_NETWORK };
     `, {
         ROWS: rows,
         PRICE_SEED_MARKER_FLOOR,

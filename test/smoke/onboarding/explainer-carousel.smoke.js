@@ -58,8 +58,10 @@ assert.ok(
     'carousel renders a dot tablist for pagination',
 );
 assert.ok(
-    /Get started/.test(carousel) && /Skip/.test(carousel),
-    'carousel exposes both a finish (Get started) and an early-exit (Skip) affordance',
+    /className=\{index <= 0 \? styles\.hiddenBack[\s\S]{0,300}?onClick=\{\(\) => goTo\(index - 1\)\}/.test(carousel)
+        && /onClick=\{handleSkip\}/.test(carousel)
+        && /onClick=\{atLast \? handleFinish : \(\) => goTo\(index \+ 1\)\}[\s\S]{0,200}?Next/.test(carousel),
+    'carousel exposes Back, Skip, and Next together, with Next finishing the last slide',
 );
 
 // --- 4. Onboarding wires the carousel behind a one-shot seen-flag -----
@@ -85,7 +87,7 @@ assert.ok(
 console.log(
     'OK: onboarding explainer-carousel smoke (Cluster J FOLLOWUP 3):'
     + 'OnboardingCarousel exports + honours prefers-reduced-motion (subscription '
-    + '+ stacked branch); dot tablist pagination with Get started + Skip; '
+    + '+ stacked branch); dot tablist pagination with Back + Skip + Next; '
     + 'Onboarding imports and renders it behind the xc:onboardingExplainerSeenAt '
     + 'one-shot flag, gated off the unlocked-vault onBack lane',
 );

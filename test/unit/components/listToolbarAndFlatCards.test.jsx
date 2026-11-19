@@ -20,7 +20,7 @@ const route = (name) => read(`packages/core/src/shared/routes/${name}.jsx`);
 afterEach(() => cleanup());
 
 describe('ListToolbar', () => {
-    it('renders the search box first and each filter in its own equal-share field', () => {
+    it('renders the search box first and each filter in its own field', () => {
         const onQueryChange = vi.fn();
         render(
             <ListToolbar query="" onQueryChange={onQueryChange} searchLabel="Search things">
@@ -41,32 +41,48 @@ describe('ListToolbar', () => {
 });
 
 describe('list screens share one toolbar', () => {
-    it.each(['DispensersList', 'ContactsList', 'MyLists', 'MessagingInbox'])('%s uses ListToolbar', (name) => {
+    // G95: a list page's search and filters live behind the title bar filter.
+    it.each(['ContactsList', 'MyLists', 'SharedListDirectory', 'MessagingInbox'])('%s draws its search in the title bar filter panel', (name) => {
         const source = route(name);
-        expect(source).toMatch(/<ListToolbar\b/);
+        expect(source).toMatch(/<ListFilter(Menu|Popover)\b/);
+        expect(source).not.toMatch(/<ListToolbar\b/);
+        expect(source).not.toMatch(/type="search"/);
+    });
+
+    it('DispensersList draws its search in the title-line filter menu, not a page toolbar', () => {
+        const source = route('DispensersList');
+        expect(source).toMatch(/<ListFilterMenu\b/);
+        expect(source).not.toMatch(/<ListToolbar\b/);
         expect(source).not.toMatch(/type="search"/);
     });
 });
 
 describe('Dispensers icon', () => {
     it('keeps the menu icon in the left navigation', () => {
+        expect(read('packages/core/src/shared/walletMenu.js'))
+            .toMatch(/id: 'dispensers-list'[^\n]*icon: 'DollarIcon'/);
         expect(read('packages/core/src/shared/components/LeftNav.jsx'))
-            .toMatch(/dispensers-list[^\n]*Icon\.DollarIcon/);
+            .toMatch(/walletMenuRow\(id\)[\s\S]*Icon\[row\.icon\]/);
     });
 });
 
-describe('Automatic donation system settings layout', () => {
+describe('Automatic Donations settings layout', () => {
     const source = read('packages/core/src/shared/components/settings/AdsSection.jsx');
     const css = read('packages/core/src/shared/components/settings/AdsSection.module.css');
 
-    it('draws one card per chain from the shared card class and no inner tiles', () => {
-        expect(css).toMatch(/\.chain\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/\.\.\/ui\/Card\.module\.css'/);
+    // One wallet-wide setting (ruling 2026-11-14): the header is the shared
+    // card, and the rows are the shared inline rows in group cards. The header
+    // is now the G120 Notice with a large heart icon (operator request).
+    it('draws the header from the shared Notice and no inner tiles', () => {
+        expect(source).toMatch(/<Notice\b[^>]*icon=\{<Icon\.HeartIcon \/>\}/s);
+        expect(css).toMatch(/\.heroNotice > span:first-child svg\s*\{[^}]*width:\s*var\(--xc-space-8\)/s);
         expect(source).not.toMatch(/ROW\b/);
         expect(css).not.toMatch(/border:/);
     });
 
-    it('shows the donation address in the shared Input like the other fields', () => {
-        expect(source.match(/<Input\b[^>]*\n?[^>]*readOnly/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    it('shows no per-network donation address fields', () => {
+        expect(source).not.toMatch(/readOnly/);
+        expect(source).toMatch(/<SettingsInlineRow\b/);
         expect(source).not.toMatch(/width: 140/);
     });
 });
@@ -81,9 +97,11 @@ describe('camera explainer', () => {
 });
 
 describe('reachability notice', () => {
-    it('renders through StatusMessage with the warning and error tones', () => {
+    it('renders only the offline verdict through an error StatusMessage', () => {
         const source = read('packages/core/src/shared/components/ReachabilityBanner.jsx');
         expect(source).toMatch(/<StatusMessage\b/);
-        expect(source).toMatch(/overall === 'offline' \? 'error' : 'warning'/);
+        expect(source).toMatch(/overall === 'offline'/);
+        expect(source).toMatch(/const variant = 'error'/);
+        expect(source).not.toMatch(/const variant = .*warning/);
     });
 });

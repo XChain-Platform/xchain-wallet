@@ -22,12 +22,12 @@
 //   - segwit: boolean
 //   - additionals: string[]             e.g. ['bech32'] for native segwit
 //
-// For p2wpkh inputs the PSBT only carries a witnessUtxo (scriptPubKey
-// + value). Ledger still wants a prev-transaction structure to
-// compute BIP143 sighashes, so the converter synthesizes a minimal
-// valid raw tx for each segwit input that places the right output at
-// the right vout. The caller passes the resulting `inputs[i].prevTxHex`
-// to the signer, which runs `app.splitTransaction` on it at call time.
+// Ledger needs the full previous transaction for every input, including
+// p2wpkh, because it takes the signed outpoint from those bytes. The
+// converter therefore requires `nonWitnessUtxoHex` and refuses an input
+// that carries only `witnessUtxo`. The caller passes the resulting
+// `inputs[i].prevTxHex` to the signer, which runs `app.splitTransaction`
+// on it at call time.
 
 import {
     enablesRelativeLock, isDeviceTxVersion, isValidSequence,
@@ -39,34 +39,82 @@ import {
 // it, see the guard in toLedgerCreatePayment.
 const SIGHASH_ALL = 1;
 
-// Name the refused networks the way the UI does ("Bitcoin testnet"), never by
-// chainId; trezorFormat.js keeps the same two labels so the wording matches.
-const REFUSED_NETWORK_LABELS = Object.freeze({
+// Name networks the way the UI does ("Bitcoin testnet"), never by chainId;
+// trezorFormat.js keeps the same labels so the wording matches.
+const NETWORK_LABELS = Object.freeze({
+    'bitcoin-mainnet': 'Bitcoin',
     'bitcoin-testnet': 'Bitcoin testnet',
     'bitcoin-regtest': 'Bitcoin regtest',
+    'litecoin-mainnet': 'Litecoin',
+    'litecoin-testnet': 'Litecoin testnet',
+    'litecoin-regtest': 'Litecoin regtest',
+    'dogecoin-mainnet': 'Dogecoin',
+    'dogecoin-testnet': 'Dogecoin testnet',
+    'dogecoin-regtest': 'Dogecoin regtest',
+});
+
+// Which networks Ledger signs (operator ruling 2026-11-15: a hardware wallet
+// uses each device's own native test derivation). Sources, read 2026-11-15:
+// LedgerHQ/app-bitcoin-new and LedgerHQ/app-bitcoin-legacy Makefiles, and
+// @ledgerhq/hw-app-btc 10.21.1 (Btc.js, BtcNew.js).
+//   - Bitcoin testnet and regtest sign in the Bitcoin Test app, which the
+//     device OS restricts to coin type 1' paths (PATH_APP_LOAD_PARAMS "*/1'").
+//     LedgerSigner derives both networks there, so the device's own addresses
+//     are the account's addresses. hw-app-btc takes 'bitcoin_testnet' and
+//     'bitcoin_regtest' as currencies and speaks the new protocol for both.
+//   - The Test app writes addresses with Bitcoin testnet parameters. Regtest
+//     shares its base58 versions (111, 196) and differs only in the segwit
+//     prefix (tb vs bcrt), which LedgerSigner rewrites; see regtestAddress.
+//   - Litecoin (*/2') and Dogecoin (*/3') ship as mainnet apps only; the
+//     legacy repo builds no Litecoin or Dogecoin testnet variant, and routing a
+//     test network through a mainnet app would show mainnet-form addresses
+//     (ltc1, D...), so those networks stay refused.
+const NO_TEST_APP_REASON = (coin) => `Ledger has no ${coin} test network app.`;
+
+/**
+ * Per-network support for Ledger, one row per XChain network: whether the
+ * device can derive and sign it (mainnet at the wallet's mainnet paths, the
+ * Bitcoin test networks at the Bitcoin Test app's 1' paths) and the one-line
+ * reason when it cannot. core/src/flows/hardwareWallet.js builds
+ * HARDWARE_NETWORK_SUPPORT, the connect flow's red-X / green-check table,
+ * from this.
+ *
+ * @type {Readonly<Record<string, { supported: boolean, reason: string|null }>>}
+ */
+export const LEDGER_NETWORK_SUPPORT = Object.freeze({
+    'bitcoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-testnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-regtest': Object.freeze({ supported: true, reason: null }),
+    'litecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'litecoin-testnet': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Litecoin') }),
+    'litecoin-regtest': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Litecoin') }),
+    'dogecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'dogecoin-testnet': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Dogecoin') }),
+    'dogecoin-regtest': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Dogecoin') }),
 });
 
 /**
- * The refusal for bitcoin-testnet and bitcoin-regtest, worded like Trezor's
- * (trezorFormat.js chainIdToTrezorCoin) so both vendors say the same thing.
- *
- * The chain descriptors pin SLIP-44 coin-type 0' on every Bitcoin network for
- * software-signer parity, but the Bitcoin Test app forces 1', so a device
- * derivation there yields addresses the rest of the wallet cannot see. Do not
- * "fix" this by mapping either network to the Test app.
+ * The refusal for a network Ledger cannot sign, worded like Trezor's
+ * (trezorFormat.js chainIdToTrezorCoin) so both vendors say the same thing,
+ * with `err.code` 'HW_NETWORK_UNSUPPORTED' for callers to branch on. The name
+ * predates the Litecoin and Dogecoin rows; it serves every refused network.
  *
  * @param {string} chainId
  * @returns {Error}
  */
 export function unsupportedBitcoinNetworkError(chainId) {
-    const label = Object.prototype.hasOwnProperty.call(REFUSED_NETWORK_LABELS, chainId)
-        ? REFUSED_NETWORK_LABELS[chainId]
+    const label = Object.prototype.hasOwnProperty.call(NETWORK_LABELS, chainId)
+        ? NETWORK_LABELS[chainId]
         : 'this network';
-    return new Error(
-        `This hardware device can't be used on ${label} - use a software wallet for this network. `
-        + '(On this network the device would derive a different set of addresses than the '
-        + 'rest of the wallet, so any funds would appear missing.)',
+    const row = Object.prototype.hasOwnProperty.call(LEDGER_NETWORK_SUPPORT, chainId)
+        ? LEDGER_NETWORK_SUPPORT[chainId]
+        : null;
+    const why = row?.reason ?? 'No Ledger app signs this network.';
+    const err = new Error(
+        `This hardware device can't be used on ${label} - use a software wallet for this network. (${why})`,
     );
+    err.code = 'HW_NETWORK_UNSUPPORTED';
+    return err;
 }
 
 /**
@@ -79,25 +127,23 @@ export function unsupportedBitcoinNetworkError(chainId) {
  */
 export function chainIdToLedgerCurrency(chainId) {
     // Ledger currencies map to installed device apps. There are Bitcoin,
-    // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin-testnet,
-    // Dogecoin-testnet, or regtest apps. Those chainIds fall through to the
-    // throw, and the wallet uses a software signer for them.
-    //
-    // Refuse bitcoin-testnet and bitcoin-regtest for derivation parity, not for
-    // a missing app (see unsupportedBitcoinNetworkError above).
+    // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin or Dogecoin
+    // test network app. Bitcoin testnet and regtest both run in the Bitcoin
+    // Test app; every other test network is refused with a typed error naming
+    // the vendor reason (LEDGER_NETWORK_SUPPORT).
     switch (chainId) {
         case 'bitcoin-mainnet': return 'bitcoin';
+        case 'bitcoin-testnet': return 'bitcoin_testnet';
+        case 'bitcoin-regtest': return 'bitcoin_regtest';
         case 'litecoin-mainnet': return 'litecoin';
         case 'dogecoin-mainnet': return 'dogecoin';
-        case 'bitcoin-testnet':
-        case 'bitcoin-regtest':
-            throw unsupportedBitcoinNetworkError(chainId);
         default:
-            throw new Error(
-                `ledgerFormat: unsupported chainId "${chainId}". No Ledger app `
-                + 'exists for Litecoin/Dogecoin testnet or regtest; use a software '
-                + 'wallet for this network.',
-            );
+            if (Object.prototype.hasOwnProperty.call(LEDGER_NETWORK_SUPPORT, chainId)) {
+                throw unsupportedBitcoinNetworkError(chainId);
+            }
+            throw Object.assign(new Error(
+                `ledgerFormat: unsupported chainId "${chainId}"; use a software wallet for this network.`,
+            ), { code: 'HW_NETWORK_UNSUPPORTED' });
     }
 }
 
@@ -177,11 +223,12 @@ export function serializeOutputs(outputs) {
 }
 
 /**
- * Build a minimal valid raw transaction hex placing the given output
- * at `vout`. Used for segwit inputs where the PSBT only carries a
- * witnessUtxo (no full prev-tx). Ledger treats the synthesized tx as
- * a carrier for scriptPubKey + value at the given vout; the inputs
- * and surrounding outputs are zeroed.
+ * Build a minimal raw transaction hex placing the given output at
+ * `vout`, with the other inputs and outputs zeroed. This helper remains
+ * useful for deterministic fixtures and explicit carrier construction,
+ * but its output is not the previous transaction of a real PSBT input.
+ * Hardware signing must receive the transaction whose hash is the
+ * outpoint named by the PSBT, never a structure synthesized from its output.
  *
  * Layout (non-segwit): version(4 LE) + inputCount(varint) + inputs +
  * outputCount(varint) + outputs + locktime(4 LE).
@@ -229,19 +276,20 @@ export function synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex) {
 }
 
 /**
- * Resolve the prev-tx hex to feed into Ledger's splitTransaction for
- * an input. Prefer the real nonWitnessUtxoHex (legacy lane); fall
- * back to a synthesized minimal tx when the PSBT only carries a
- * witnessUtxo (segwit lane).
+ * Resolve the full previous transaction to feed into Ledger's
+ * splitTransaction. Every input requires its real nonWitnessUtxoHex.
+ * A witnessUtxo alone is refused because a synthesized transaction
+ * would make the device sign a different outpoint.
  *
  * @param {import('../../core/src/signers/types.js').DecomposedPsbtInput} inp
  * @returns {string}
+ * @throws {Error} when the full previous transaction is unavailable
  */
 function prevTxHexForInput(inp) {
     if (inp.nonWitnessUtxoHex) return inp.nonWitnessUtxoHex;
 
-    // A synthesized prev tx CANNOT be used to build a spend, and this used
-    // to do exactly that for every witnessUtxo-only input.
+    // A synthesized prev tx cannot build a valid spend for a witnessUtxo-only
+    // input.
     // Ledger derives the outpoint it signs from the bytes of the prev tx it
     // is handed, and a synthesized tx hashes to a different txid than the
     // real one by construction. The device happily produced a fully-formed,
@@ -249,12 +297,12 @@ function prevTxHexForInput(inp) {
     // exist, so it could never be broadcast. Verified on a real device: the
     // signed input matched the synthesized txid, not the PSBT's.
     //
-    // This is the wallet's DEFAULT path, not an edge case: the encoder
-    // builds segwit inputs with witnessUtxo only (XChainEncoder.js), and
-    // p2wpkh is the default address type. Fail closed; refusing to sign is
-    // strictly better than emitting an invalid signature over the wrong
-    // outpoint. See test/README-hardware.md for the completing fix, which
-    // has to supply the real prev tx.
+    // The encoder emits witnessUtxo alone unless attachPrevTx is requested.
+    // Wallet device compose paths request it at build time, but an external
+    // PSBT may not. Fail closed instead of signing the wrong outpoint. See
+    // test/README-hardware.md for the compose-time requirement and device
+    // verification procedure. The check belongs here as the final boundary
+    // because imported PSBTs can bypass wallet composition entirely.
     if (inp.witnessUtxoScriptHex) {
         throw new Error(
             'ledgerFormat: input has only a witnessUtxo, so the previous transaction is '

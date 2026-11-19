@@ -36,7 +36,7 @@
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,9 +54,10 @@ import {
     resolveProdFeed,
     RECORD_VERSION,
     deviceInstalledArch,
+    laneDeviceCannotWitness,
     swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
-import { LANES, ALL_OS_TRIGGER_PACKAGES } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, ALL_OS_TRIGGER_PACKAGES, deviceNamesCiRunner } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -637,6 +638,92 @@ const check = (over) => assertRecord({
     }
 }
 
+// ------------------------------------- a runner is never where a swap is watched
+
+{
+    assert.equal(deviceNamesCiRunner('linux-x86_64 CI runner (Ubuntu 24.04)'), true);
+    assert.equal(deviceNamesCiRunner('a GitHub-hosted runner'), true);
+    assert.equal(deviceNamesCiRunner('Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop)'), false);
+    assert.equal(deviceNamesCiRunner('MacBook Pro M3 Max (clean user profile, not the release machine)'), false);
+    assert.equal(deviceNamesCiRunner(null), false);
+    for (const lane of LANES.filter((l) => l.os === 'linux' && l.arch === 'arm64')) {
+        assert.equal(deviceNamesCiRunner(lane.device), false,
+            `${lane.id} must name a desktop a person can watch the swap on`);
+    }
+
+    // A record that says a person watched a swap on a runner contradicts itself, and the gate refuses it.
+    const onRunner = check({ swaps: [...baseRecord.swaps,
+        { lane: 'linux-x64-deb', device: 'linux-x86_64 CI runner (Ubuntu 24.04)', from: '0.333.0' }] });
+    assert.ok(!onRunner.ok, 'a swap recorded on a CI runner must not pass assert');
+    assert.match(onRunner.problems.join(' '), /linux-x64-deb names linux-x86_64 CI runner.*not a witnessed swap/);
+    assert.ok(check({ swaps: [...baseRecord.swaps,
+        { lane: 'linux-arm64-deb', device: 'Ubuntu 24.04 arm64 Parallels VM', from: '0.333.0' }] }).ok,
+    'the same lane on a desktop device passes');
+
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-runner-'));
+    try {
+        const recordFile = join(work, 'REHEARSAL-test.json');
+        writeFileSync(recordFile, JSON.stringify({ ...baseRecord, swaps: [] }));
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '', BUILDKITE: '', GITLAB_CI: '' };
+        const rehearse = (args, opts = {}) => spawnSync(process.execPath,
+            [join(root, 'tools/release/rehearse.mjs'), ...args], { encoding: 'utf8', env, ...opts });
+
+        // Every lane whose named device is a runner is refused by attest and reported blocked by coverage.
+        for (const lane of LANES.filter((l) => deviceNamesCiRunner(l.device))) {
+            const refused = rehearse(['attest', '--record', recordFile, '--lane', lane.id,
+                '--from', '0.333.0', '--by', 'Test Person']);
+            assert.notEqual(refused.status, 0, `attest must refuse ${lane.id}: its device is a runner`);
+            assert.match(refused.stderr, /is a CI runner, which cannot be where a\s+person watches a swap/);
+            const cover = rehearse(['coverage', '--records', join(work, 'none')]);
+            assert.match(cover.stdout, new RegExp(`${lane.id}\\s+device .*BLOCKED, the named device is a CI runner`));
+            assert.match(cover.stdout, new RegExp(`never had an observed swap: .*${lane.id}`));
+        }
+        assert.equal(JSON.parse(readFileSync(recordFile, 'utf8')).swaps.length, 0, 'a refused attest writes nothing');
+
+        // A swap filed against a runner is not counted by coverage, so it cannot turn the lane green.
+        const lanes = LANES.filter((l) => deviceNamesCiRunner(l.device));
+        const recs = join(work, 'recs');
+        mkdirSync(recs);
+        writeFileSync(join(recs, 'REHEARSAL-v1.json'), JSON.stringify({ ...baseRecord, swaps: lanes
+            .map((l) => ({ lane: l.id, device: l.device, at: '2026-10-01T00:00:00Z' })) }));
+        const filed = rehearse(['coverage', '--records', recs]);
+        for (const lane of lanes) {
+            assert.doesNotMatch(filed.stdout, new RegExp(`✅ ${lane.id}\\b`),
+                `${lane.id} swap on a runner must not count as covered`);
+        }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// The default records directory is anchored at the wallet root like the lane list, never at the cwd, and
+// a missing records directory is said out loud instead of reading as every lane never rehearsed.
+{
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-cwd-'));
+    try {
+        const stray = join(work, 'release-artifacts');
+        mkdirSync(stray);
+        writeFileSync(join(stray, 'REHEARSAL-v1.json'), JSON.stringify({
+            ...baseRecord, swaps: [{ lane: 'mac-arm64', device: 'bench', at: '2026-10-01T00:00:00Z' }],
+        }));
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '' };
+        const fromElsewhere = spawnSync(process.execPath, [join(root, 'tools/release/rehearse.mjs'), 'coverage'],
+            { encoding: 'utf8', env, cwd: work });
+        const fromRoot = spawnSync(process.execPath, [join(root, 'tools/release/rehearse.mjs'), 'coverage'],
+            { encoding: 'utf8', env, cwd: root });
+        assert.equal(fromElsewhere.stdout, fromRoot.stdout,
+            'coverage must answer the same from any cwd, the way --lanes-file already does');
+        assert.doesNotMatch(fromElsewhere.stdout, /✅ mac-arm64/,
+            'a release-artifacts directory under the cwd must not be read by default');
+        if (!existsSync(join(root, 'release-artifacts'))) {
+            assert.ok(fromElsewhere.stderr.includes(join(root, 'release-artifacts')),
+                `a missing records directory must be named by absolute path: ${fromElsewhere.stderr}`);
+        }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
 // ------------------------------------------------------ the requirement
 
 {
@@ -853,21 +940,20 @@ const check = (over) => assertRecord({
         assert.match(short.stdout, /never had an observed swap: mac-arm64\./);
     }
 
-    // THIS ASSERTION IS THE INVERSE OF WHAT IT USED TO BE, and the reason is
-    // worth keeping. It used to require that "NO DEVICE NAMED (DD4)" APPEAR
-    // in the output, which encoded the UNANSWERED state as an invariant: the
-    // day the operator answered DD4, a correct matrix would have failed this
-    // smoke. A test that fails when the open question gets closed is testing
-    // the calendar, not the code.
+    // This assertion rejects "NO DEVICE NAMED (DD4)" because encoding an open
+    // decision as an invariant makes the correct answer fail when it arrives.
+    // The durable contract is that every lane has an explicit witness target,
+    // while capability checks decide whether that target can observe its swap.
+    // This keeps the smoke tied to the matrix contract instead of a calendar
+    // state and makes a newly added unnamed lane fail immediately.
     //
-    // DD4 was answered for all eight lanes on 2026-08-03, so the useful claim
-    // is the opposite one: no lane may be unnamed. A lane added later with
-    // `device: null` would otherwise inherit the old state in silence, and
-    // `rehearse.mjs attest` would refuse it at release time - which is a much
-    // worse place to discover it than here.
+    // Every lane received a non-null device on 2026-08-03, so no lane may be
+    // unnamed. A runner or a device that installs another lane's artifact is
+    // named but cannot witness this lane, and is checked separately below.
+    // The distinction prevents a placeholder name from satisfying the gate.
+    // It also keeps hardware waivers visible in each coverage report.
     assert.doesNotMatch(coverage.stdout, /NO DEVICE NAMED \(DD4\)/,
-        'every lane must name a smoke device: DD4 is answered for all eight, so an '
-        + 'unnamed lane is a new gap rather than a leftover');
+        'every lane must name a smoke device; an unnamed lane is a new gap rather than a leftover');
     for (const lane of LANES) {
         assert.ok(lane.device, `lane ${lane.id} names no DD4 device`);
         assert.match(coverage.stdout, new RegExp(`${lane.id}\\s+device `),
@@ -879,8 +965,7 @@ const check = (over) => assertRecord({
         const readme = readFileSync(join(root, 'tools/release/README.md'), 'utf8');
         for (const stale of [/blocked on DD4 for [a-z]+ of/i, /only lane with hardware/i]) {
             assert.doesNotMatch(readme, stale,
-                'tools/release/README.md says DD4 still blocks lanes, but every lane in '
-                + 'rehearsal-matrix.mjs names a device. Re-state the README status bullet from the '
+                'tools/release/README.md uses obsolete blanket DD4 wording. Re-state the status from the '
                 + 'matrix rather than editing this assertion.');
         }
         // Hold the two tool sources' prose to the same answer; a pattern spans wrapped `//` lines.
@@ -889,8 +974,31 @@ const check = (over) => assertRecord({
             for (const stale of [/DD4[\s/*]+is[\s/*]+the[\s/*]+open[\s/*]+question/i,
                 /before[\s/*]+DD4[\s/*]+lands/i, /still[\s/*]+blocked[\s/*]+on[\s/*]+DD4/i]) {
                 assert.doesNotMatch(src, stale,
-                    `${file} says DD4 is still open, but every lane in rehearsal-matrix.mjs names a device. `
+                    `${file} uses obsolete blanket DD4 wording. Re-state the prose from the LANES data `
+                    + 'and each device\'s witness capability rather than editing this assertion.');
+            }
+        }
+    }
+
+    const unwitnessable = LANES.filter((lane) => deviceNamesCiRunner(lane.device)
+        || laneDeviceCannotWitness(lane));
+    if (unwitnessable.length) {
+        const prose = new Map([
+            ['tools/release/rehearsal-matrix.mjs', readFileSync(join(root, 'tools/release/rehearsal-matrix.mjs'), 'utf8')],
+            ['tools/release/rehearse.mjs', readFileSync(join(root, 'tools/release/rehearse.mjs'), 'utf8')],
+            ['tools/release/README.md', readFileSync(join(root, 'tools/release/README.md'), 'utf8')],
+        ]);
+        for (const [file, src] of prose) {
+            for (const stale of [/answered[\s/*]+for[\s/*]+all[\s/*]+eight/i,
+                /named[\s/*]+a[\s/*]+device[\s/*]+for[\s/*]+every[\s/*]+desktop[\s/*]+lane/i]) {
+                assert.doesNotMatch(src, stale,
+                    `${file} claims every device can witness while the matrix has unwitnessable lanes. `
                     + 'Re-state the prose from the LANES data rather than editing this assertion.');
+            }
+        }
+        for (const lane of unwitnessable) {
+            for (const file of ['tools/release/rehearsal-matrix.mjs', 'tools/release/README.md']) {
+                assert.ok(prose.get(file).includes(lane.id), `${file} must name unwitnessable lane ${lane.id}`);
             }
         }
     }

@@ -8,27 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The first onboarding screen's Skip was 24px tall with no touch hit area,
-// the smallest target on the screen. It keeps its quiet text look but takes
-// a kit control's size and, on a touch screen, a kit Button's hit area.
+// The first onboarding screen's Skip is one of three equal kit buttons
+// (Back, Skip, Next) under the progress dots, never a lone 24px text link in
+// the top right, so it gets the kit button's size and hit area.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('onboarding Skip target', () => {
     const css = readFileSync('packages/core/src/shared/routes/OnboardingCarousel.module.css', 'utf8');
+    const source = readFileSync('packages/core/src/shared/routes/OnboardingCarousel.jsx', 'utf8');
     const rule = (selector) => css.match(new RegExp(`${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`))?.[1] || '';
 
-    it('sizes Skip from the control scale, above the tap floor', () => {
-        const skip = rule('.skipBtn');
-        expect(skip).toMatch(/min-block-size:\s*var\(--xc-tap-min\)/);
-        expect(skip).toMatch(/min-height:\s*max\(var\(--xc-tap-min\),\s*var\(--xc-control-h-sm\)\)/);
-        expect(skip).toMatch(/position:\s*relative/);
+    it('has no top-right Skip row or text-link Skip rules left', () => {
+        expect(css).not.toMatch(/\.skipRow|\.skipBtn/);
+        expect(source).not.toMatch(/skipRow|skipBtn|skipAction/);
     });
 
-    it('gives Skip the touch hit area a kit Button has', () => {
-        const coarse = css.slice(css.indexOf('@media (pointer: coarse), (hover: none)'));
-        expect(coarse).toMatch(/\.skipBtn::before\s*\{[^}]*width:\s*max\(100%,\s*var\(--xc-control-hit-min/);
-        expect(coarse).toMatch(/\.skipBtn::before\s*\{[^}]*height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+    it('lays Back, Skip and Next out as three equal columns with 8px gaps', () => {
+        const nav = rule('.nav');
+        expect(nav).toMatch(/display:\s*grid/);
+        expect(nav).toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+        expect(nav).toMatch(/gap:\s*var\(--xc-space-2\)/);
     });
 });

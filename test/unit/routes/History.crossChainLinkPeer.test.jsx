@@ -112,6 +112,9 @@ function clickRow(view, key) {
  * un-collapses it so a test can assert on each side's own row.
  */
 async function switchToFlatMode() {
+    // The Grouped | Flat switch lives in the History filters popover.
+    const trigger = await screen.findByRole('button', { name: 'History filters' });
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
     const radio = await screen.findByRole('radio', { name: 'Flat' });
     fireEvent.click(radio);
     await waitFor(() => expect(radio.getAttribute('aria-checked')).toBe('true'));
@@ -248,7 +251,8 @@ describe('History keeps same-chain links out of the cross-chain view', () => {
             `${BTC_CHAIN}:340:${BTC_ADDR}`,
         ])));
 
-        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
+        // The History filters popover is still open from switchToFlatMode, and
+        // the special-filter picker sits in it.
         const trigger = screen.getByRole('button', { name: /^No special filters$/ });
         fireEvent.click(trigger);
         fireEvent.click(screen.getByRole('option', { name: 'Cross-chain only' }));

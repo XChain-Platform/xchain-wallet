@@ -13,7 +13,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 const feeFiat = vi.hoisted(() => ({
-    formatNativeFee: vi.fn((amount) => (amount === '0.000015' ? '≈ $1.50 USD' : null)),
+    formatNativeFee: vi.fn((amount) => (amount === '0.000015' ? '~$1.50' : null)),
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
@@ -83,26 +83,30 @@ describe('SignApproval network fee summary', () => {
         renderAction('SEND', { fee: 1500, feePerKb: 6000 });
 
         await screen.findByText('Send 1 BTC.');
-        expect(screen.getByTestId('sign-approval-fee')).toHaveTextContent('Network fee');
-        expect(screen.getByTestId('sign-approval-fee'))
-            .toHaveTextContent('0.000015 BTC (≈ $1.50 USD)');
+        // No Total block (G127 revised 2026-11-16): the fee is one row in the
+        // facts card with its fiat value.
+        expect(screen.queryByTestId('confirm-total-main')).toBeNull();
+        const fee = screen.getByTestId('confirm-fee-network');
+        expect(fee).toHaveTextContent('0.000015 BTC ($1.50)');
+        expect(fee.closest('[data-testid="confirm-facts"]')).not.toBeNull();
+        expect(screen.queryByTestId('sign-approval-fee')).toBeNull();
         expect(feeFiat.formatNativeFee).toHaveBeenCalledWith('0.000015');
     });
 
-    it('states that the site sets a SWEEP fee and shows its known rate', async () => {
+    it('names an unknown SWEEP network fee by the site\'s rate, in one row', async () => {
         renderAction('SWEEP', { feePerKb: 12000 });
 
         await screen.findByText('Sweep this account.');
-        expect(screen.getByTestId('sign-approval-fee'))
-            .toHaveTextContent('Set by the site (12 sat/vB)');
+        expect(screen.getAllByTestId('confirm-fee-network')).toHaveLength(1);
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/^Set by the site/);
         expect(feeFiat.formatNativeFee).not.toHaveBeenCalled();
     });
 
-    it('states that the site sets a SEND fee when neither amount nor rate is known', async () => {
+    it('names an unknown SEND network fee once', async () => {
         renderAction('SEND', {});
 
         await screen.findByText('Send 1 BTC.');
-        expect(screen.getByTestId('sign-approval-fee')).toHaveTextContent('Set by the site');
-        expect(screen.getByTestId('sign-approval-fee')).not.toHaveTextContent('sat/vB');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('Set by the site');
+        expect(screen.getByTestId('confirm-fee-network')).not.toHaveTextContent('sat/vB');
     });
 });

@@ -36,16 +36,7 @@ const SHELLS = {
 };
 
 const SHELL_ONLY = {
-    routes: {
-        menu: {
-            shells: ['web'],
-            reason: 'The compact web layout uses a full-screen overflow menu; desktop and popup expose its destinations directly.',
-        },
-        alerts: {
-            shells: ['web'],
-            reason: 'The alerts screen belongs to the compact web overflow menu; desktop and popup surface alerts on Home.',
-        },
-    },
+    routes: {},
     messaging: {
         reportAutoLock: {
             shells: ['desktop', 'extension'],
@@ -83,100 +74,15 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to advanced actions.',
         },
-        'AppHeader.accountNonDefault': {
-            shells: ['web'],
+        'ExportWalletBackup.onExportInTab': {
+            shells: ['extension'],
             kind: 'intended',
-            reason: 'The web shell header presents account context that other shells place in their native layout.',
-        },
-        'AppHeader.activeAccount': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header presents account context that other shells place in their native layout.',
-        },
-        'AppHeader.chainRegistry': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header builds its network selector from the chain registry.',
-        },
-        'AppHeader.coinFamilies': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header builds its network selector from coin-family metadata.',
-        },
-        'AppHeader.developerMode': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header adapts its network selector for developer mode.',
-        },
-        'AppHeader.networkFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network filter.',
-        },
-        'AppHeader.onActiveNetworkChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network selector.',
-        },
-        'AppHeader.onManageAddresses': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes compact-layout address management.',
-        },
-        'AppHeader.onMenuOpen': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'Only the compact web layout uses the overflow menu.',
-        },
-        'AppHeader.onNetworkFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network filter.',
-        },
-        'AppHeader.onOpenAccountPicker': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the compact-layout account picker.',
-        },
-        'AppHeader.onOpenSettings': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes settings in its compact layout.',
-        },
-        'AppHeader.onOpenWalletPicker': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the compact-layout wallet picker.',
-        },
-        'AppHeader.onScan': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes scanning in its compact layout.',
-        },
-        'AppHeader.onViewAddress': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the active address in its compact layout.',
-        },
-        'AppHeader.platformCurrent': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header marks the current platform network.',
-        },
-        'AppHeader.walletNonDefault': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header presents wallet context that other shells place in their native layout.',
+            reason: 'The extension toolbar popup closes when the download takes focus, so only it continues the export in a tab.',
         },
         'BatchComposerForm.hasDexSurface': {
             shells: ['web'],
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to batch composition.',
-        },
-        'BottomTabBar.badges': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'The popup tab bar omits badges to fit its constrained layout.',
         },
         'ContactsList.onScanPrefillConsumed': {
             shells: ['web'],
@@ -192,6 +98,34 @@ const SHELL_ONLY = {
             shells: ['desktop', 'web'],
             kind: 'intended',
             reason: 'The extension popup uses its compact tab bar instead of the full navigation layout.',
+        },
+        // Wide Home (G115): only the windowed shells reach the widths where
+        // Home splits into the list and the chosen item's detail panel; the
+        // extension popup and side panel and the phone keep one-column Home.
+        'Home.detailSelection': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Wide Home (G115) splits into the list and a detail panel only in the windowed shells; the shell holds the selected row.',
+        },
+        'Home.onDetailSelect': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Wide Home (G115) splits into the list and a detail panel only in the windowed shells; the shell holds the selected row.',
+        },
+        'Home.renderDetail': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Wide Home (G115) draws the chosen coin, token or DeFi row through the shell\'s own detail route only in the windowed shells.',
+        },
+        'TokenDetail.embedded': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Only the windowed shells embed the coin and token page as wide Home\'s detail panel (G115).',
+        },
+        'ActionDetail.embedded': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Only the windowed shells embed an action\'s detail as wide Home\'s DeFi detail panel (G115).',
         },
         'Home.networkFilter': {
             shells: ['web'],
@@ -222,26 +156,6 @@ const SHELL_ONLY = {
             shells: ['web'],
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to parallel composition.',
-        },
-        'ReceivePicker.kindFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.networkFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.onKindFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
-        },
-        'ReceivePicker.onNetworkFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web receive picker shares the compact-layout asset filters.',
         },
         'RenameAccountForm.refreshKey': {
             shells: ['desktop', 'extension'],
@@ -303,11 +217,6 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The web route outlet supplies its compact-layout fallback directly.',
         },
-        'Loading.onRetry': {
-            shells: ['desktop', 'extension'],
-            kind: 'known-gap',
-            reason: 'The web loading screen does not yet expose the recovery action that desktop and extension show.',
-        },
         'Locked.lockReason': {
             shells: ['desktop', 'extension'],
             kind: 'intended',
@@ -318,6 +227,11 @@ const SHELL_ONLY = {
             kind: 'known-gap',
             reason: 'Web and extension vault errors do not yet expose the desktop recovery action.',
         },
+        'MyTokens.renderToken': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Desktop and web can dock token detail beside the list, while the extension keeps compact route navigation.',
+        },
         'AppInner.canOpenInTab': {
             shells: ['extension'],
             kind: 'intended',
@@ -327,46 +241,6 @@ const SHELL_ONLY = {
             shells: ['extension'],
             kind: 'intended',
             reason: 'The extension popup controls whether its constrained layout shows the title.',
-        },
-        'BottomTabBar.currentView': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tab bar performs its own route selection.',
-        },
-        'BottomTabBar.hasDexSurface': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations to available surfaces.',
-        },
-        'BottomTabBar.hasVmAddress': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations to the active address capabilities.',
-        },
-        'BottomTabBar.isSignerMode': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations for signer mode.',
-        },
-        'BottomTabBar.onLock': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts its lock action in the compact tab bar.',
-        },
-        'BottomTabBar.onOpenSettings': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts settings in the compact tab bar.',
-        },
-        'BottomTabBar.onOpenWalletPicker': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts wallet selection in the compact tab bar.',
-        },
-        'BottomTabBar.onSelect': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tab bar performs its own route selection.',
         },
         'Home.onCommandPalette': {
             shells: ['extension'],
@@ -397,6 +271,11 @@ const SHELL_ONLY = {
             shells: ['extension'],
             kind: 'intended',
             reason: 'Only the extension background announces an unlock to the window whose own import caused it.',
+        },
+        'HardwareFirstRun.onOpenInTab': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup can move Connect Hardware Wallet into a full browser tab, where WebHID can prompt.',
         },
         'PairPartnerWallet.ownWriteGuard': {
             shells: ['extension'],
@@ -560,6 +439,34 @@ describe('shell route parity', () => {
         }
     });
 
+    it('routes every shell token creation entry through the template wizard', () => {
+        for (const [shellName, shell] of Object.entries(SHELLS)) {
+            // A fresh Issue clears the form source, so the wizard is never
+            // read as opened from the asset page it last left.
+            expect(shell.app, `${shellName} My tokens`).toContain(
+                "onIssue={() => { setFormSource(null); setUnlockedView('wizard'); }}",
+            );
+            expect(shell.app, `${shellName} All actions`).toContain(
+                "onIssue: () => { setFormSource(null); setUnlockedView('wizard'); }",
+            );
+            // Issue subtoken is an issuer action on the one asset page.
+            expect(shell.app, `${shellName} Issue subtoken`).toContain(
+                "onIssueSubtoken: (ctx) => openOwnerForm('wizard', ctx)",
+            );
+            expect(shell.app, `${shellName} Custom template`).toContain(
+                "onCustom={() => setUnlockedView('issue')}",
+            );
+            // The Custom form opens on top of the wizard, so Back through the
+            // navigation history returns to it.
+            expect(shell.app, `${shellName} Custom form Back`).toMatch(
+                /<IssueTokenForm[\s\S]*?onBack=\{goBack\}/,
+            );
+            expect(shell.app, `${shellName} direct issue entry`).not.toMatch(
+                /onIssue(?::|=).*setUnlockedView\('issue'\)/,
+            );
+        }
+    });
+
     it('keeps reachable unlocked views aligned or explicitly shell-only', () => {
         const routes = Object.fromEntries(Object.entries(SHELLS).map(([name, shell]) => [
             name,
@@ -595,7 +502,8 @@ describe('shell route parity', () => {
     });
 
     it('reports a prop removed from one shell', () => {
-        const mutatedDesktopSource = desktopAppSource.replace(/\n\s+onAddAccount=\{[^\n]*\n/, '\n');
+        // AccountPicker's onAddAccount, not an earlier route's prop of the same name.
+        const mutatedDesktopSource = desktopAppSource.replace(/(<AccountPicker\b[^>]*?)\n\s+onAddAccount=\{[^\n]*\n/, '$1\n');
         expect(mutatedDesktopSource).not.toBe(desktopAppSource);
         const { flattened } = sharedComponentProps({
             web: SHELLS.web.routeSources,
@@ -621,13 +529,13 @@ describe('shell route parity', () => {
     });
 
     it.each([
-        ['Home', ['onResumeConfirm']],
         ['History', ['onReceive', 'onSelectEntry']],
-        ['ManageToken', ['onViewActivity']],
         ['ContactsList', ['onOpenBackup']],
         ['ExecuteContractForm', ['initialMethod', 'initialParamsText']],
         ['Settings', ['onNavigateToMint']],
-        ['TokenDetail', ['onBuy']],
+        // The one asset page also serves My Tokens (the former ManageToken):
+        // the issuer's handlers and the owner view ride on the same call site.
+        ['TokenDetail', ['onBuy', 'onViewActivity', 'manageActions', 'ownerView']],
     ])('wires shared %s actions in every shell', (component, callbacks) => {
         for (const [shellName, shell] of Object.entries(SHELLS)) {
             const props = componentProps(shell.app, component);

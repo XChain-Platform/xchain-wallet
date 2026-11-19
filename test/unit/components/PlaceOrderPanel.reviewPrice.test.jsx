@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -16,6 +17,7 @@ const ADDRESS = {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
 });
 
@@ -66,12 +68,13 @@ describe('PlaceOrderPanel review price', () => {
         ['.5', '0.5'],
         ['1.50', '1.5'],
     ])('shows the typed price %s as %s', async (typed, shown) => {
-        const messaging = messagingFor({ getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) });
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+        const messaging = messagingFor();
         render(panel(messaging));
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: typed } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
 
         const label = await screen.findByText('Price', { selector: 'dt' });
         expect(label.nextElementSibling).toHaveTextContent(`${shown} BTC/XCHAIN`);

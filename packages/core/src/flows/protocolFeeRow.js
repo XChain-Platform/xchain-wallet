@@ -11,10 +11,9 @@
 // protocolFeeRow. The words the authoring fee row says, derived from
 // what the form actually knows about the fee.
 //
-// The row used to be written as if every action it appears on charges a
-// protocol fee. On LTC/DOGE, where a later change turns it into a statement rather
-// than a choice, that read "Protocol fee is paid in LTC ... The fee is sent
-// on-chain and is not refunded if the network rejects this transaction" on
+// Written as if every action it appears on charges a protocol fee, the row
+// would, on LTC/DOGE where it is a statement rather than a choice, read
+// "Protocol fee is paid in LTC ... The fee is sent on-chain and is not refunded if the network rejects this transaction" on
 // MINT, BROADCAST, DESTROY, SLEEP, SWEEP, LIST create/fork, LINK, PUBLISH,
 // ATTACH and address preferences, none of which have a gas-schedule entry, and
 // on ORDER/SWAP/DISPENSER under UNIFIED_EXPIRATION_FEE_FREE_DAYS, which is the
@@ -23,12 +22,9 @@
 // handles that correctly (`applyNativeFeePreflight` builds no fee output for a
 // zero quote); only the screen was claiming a charge.
 //
-// The client is deliberately NOT given a list of unpriced actions to check
-// against. That list is consensus knowledge (the indexer's gas schedule plus
-// the expiration free-days rule), it changes without the wallet, and a stale
-// copy of it would go on lying in the confident voice. Instead the row takes
-// the fee the FORM already holds, when it holds one, and otherwise speaks
-// conditionally:
+// feeBearingActions.js is the wallet's one list of actions whose forms receive
+// the Fees card. This row still takes the quote the form holds and describes
+// that result instead of deriving a price from membership in the list:
 //
 //   free    the form quoted the action and the answer was zero  -> say so, and
 //           drop the forfeiture warning: there is nothing to forfeit
@@ -37,9 +33,8 @@
 //   unknown no quote in hand -> state the RULE ("protocol fees are paid in
 //           LTC ... if this action charges one") instead of asserting a charge
 //
-// The unknown voice is the one every un-quoted surface lands in, and it is the
-// point of the fix: it is true whether or not the action turns out to be
-// priced, so no surface has to be enumerated for it to stop over-promising.
+// The unknown voice is for fee-bearing actions whose quote is not available.
+// Feeless actions show only their Network fee field and never render this row.
 // The exact figure still arrives at the confirm screen, which quotes for real
 // (protocolFeeDisclosure / the native pre-flight).
 

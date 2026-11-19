@@ -23,10 +23,16 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const tipSrc = read('packages/core/src/ui/InfoTip.jsx');
 const indexSrc = read('packages/core/src/ui/index.js');
 const sendSrc = read('packages/core/src/shared/routes/Send.jsx');
+// Send's Advanced section (with the RBF help tip) is the shared Form Standard
+// AdvancedSection, which FeeSection mounts from its `advanced` prop.
+const advancedSrc = read('packages/core/src/shared/components/formStandard/AdvancedSection.jsx');
+const feeSectionSrc = read('packages/core/src/shared/components/formStandard/FeeSection.jsx');
 const feeSelSrc = read('packages/core/src/ui/FeeSelector.jsx');
 const createSrc = read('packages/core/src/shared/routes/CreateWallet.jsx');
 const dpSrc = read('packages/core/src/shared/components/DerivationPathCrossCheck.jsx');
 const adsSrc = read('packages/core/src/shared/components/settings/AdsSection.jsx');
+// Settings rows carry their help through the shared row frame, which mounts the InfoTip.
+const settingsRowSrc = read('packages/core/src/shared/components/settings/SettingsInlineRow.jsx');
 
 // 1. Primitive is exported and accepts the documented props.
 assert.ok(/export function InfoTip\(/.test(tipSrc),
@@ -62,17 +68,39 @@ assert.ok(/export \{ InfoTip \} from '\.\/InfoTip\.jsx'/.test(indexSrc),
 
 // 6. Five integration sites import + invoke <InfoTip ...>.
 const integrations = [
-    { src: sendSrc, file: 'Send.jsx', match: /aria=(?:\{(?:t\('send\.rbf\.helpLabel'\)|'[^']+')\}|"[^"]+")/ },
+    { src: advancedSrc, file: 'AdvancedSection.jsx (Send RBF)', match: /<InfoTip\s+aria=\{t\('send\.rbf\.helpLabel'\)\}/ },
+    { src: sendSrc, file: 'Send.jsx', match: /<InfoTip\s+label=\{help\}\s+aria=\{t\('ui\.field\.about'/ },
     // Match any aria string: the point is that FeeSelector MOUNTS an InfoTip, not
     // what that tip's aria label happens to be worded as this month.
     { src: feeSelSrc, file: 'FeeSelector.jsx', match: /<InfoTip\s+aria=(?:"[^"]+"|\{)/ },
-    { src: createSrc, file: 'CreateWallet.jsx', match: /aria=(?:"(BIP39 )?[Pp]assphrase help"|\{'[^']*assphrase help'\})/ },
-    { src: dpSrc, file: 'DerivationPathCrossCheck.jsx', match: /aria=(?:"Derivation path help"|\{'Derivation path help'\})/ },
-    { src: adsSrc, file: 'AdsSection.jsx', match: /aria=(?:"Trigger threshold help"|\{'Trigger threshold help'\})/ },
 ];
 for (const { src, file, match } of integrations) {
     assert.ok(/InfoTip/.test(src), `${file} imports InfoTip`);
     assert.ok(match.test(src), `${file} mounts <InfoTip aria="…">`);
 }
+// CreateWallet's extra-passphrase Switch mounts the kit InfoTip through its own
+// `help` prop (2026-11-14, Extra Passphrase form section), named "About <label>".
+assert.ok(
+    /<Switch[\s\S]{0,200}?help=(?:\{t\('createWallet\.thisExtraSecretCombinesWith'\)\}|"This extra secret combines)/.test(createSrc),
+    'CreateWallet.jsx gives its passphrase Switch the help tip',
+);
+// Automatic Donations uses the shared settings help pattern rather than its own
+// InfoTip: the Send at row (the trigger threshold) names its help text, hands
+// it to the shared row frame, and that frame mounts the InfoTip with it.
+// The help interpolates the formatted release default into the shared copy.
+assert.ok(/help:\s*t\('settings\.help\.ads\.sendAt',\s*\{\s*sendAt:\s*money\(ADS_DEFAULT_SEND_AT, currency\)\s*\}\)/.test(adsSrc),
+    'AdsSection.jsx gives the Send at row its help text');
+assert.ok(/<InlineRowFrame\b[\s\S]*?help=\{row\.help\}/.test(adsSrc),
+    'AdsSection.jsx hands row help to the shared InlineRowFrame');
+assert.ok(/import \{[^}]*\bInfoTip\b[^}]*\} from '@xchain-wallet\/core\/ui'/.test(settingsRowSrc),
+    'SettingsInlineRow.jsx imports InfoTip');
+assert.ok(/<InfoTip\s+label=\{help\}\s+aria=\{t\('ui\.field\.about'/.test(settingsRowSrc),
+    'SettingsInlineRow.jsx mounts <InfoTip> from the row help');
+// Send still reaches the RBF tip: its fee row passes `advanced`, and the fee
+// section mounts the shared Advanced slot from it.
+assert.ok(/<FeeSection\b[\s\S]*?advanced=\{\{/.test(sendSrc),
+    'Send.jsx passes its Advanced options to FeeSection');
+assert.ok(/<AdvancedSlot\b[^>]*advanced=\{advanced\}/.test(feeSectionSrc),
+    'FeeSection mounts the shared AdvancedSlot');
 
 console.log('OK: InfoTip primitive + 5 integration smoke');

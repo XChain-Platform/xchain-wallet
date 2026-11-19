@@ -28,7 +28,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
@@ -43,32 +42,15 @@ function draw(node) {
 
 afterEach(cleanup);
 
-describe('the main menu', () => {
-    it('offers the DEX rows when the shell wires them', () => {
-        draw(<MenuRoute onBack={() => {}} onMarkets={() => {}} onMarketActivity={() => {}} />);
-        expect(screen.queryByText('Decentralized exchange')).toBeTruthy();
-        expect(screen.queryByText('Marketplace')).toBeTruthy();
-    });
-
-    it('renders neither row when it does not', () => {
-        // A surface-stripped build passes no handler, because the destination
-        // is not in the bundle. MenuRoute has always filtered on handler
-        // presence; this pins that, since it is load-bearing rather than tidy.
-        draw(<MenuRoute onBack={() => {}} onTokens={() => {}} />);
-        expect(screen.queryByText('Decentralized exchange')).toBeNull();
-        expect(screen.queryByText('Marketplace')).toBeNull();
-    });
-});
-
 describe('the sidebar', () => {
     it('shows a DEX tab by default', () => {
         draw(<LeftNav currentView="home" onSelect={() => {}} />);
-        expect(screen.queryByText('DEX')).toBeTruthy();
+        expect(screen.queryByText('Exchange (DEX)')).toBeTruthy();
     });
 
     it('shows no DEX tab, disabled or otherwise, when the surface is absent', () => {
         draw(<LeftNav currentView="home" onSelect={() => {}} hasDexSurface={false} />);
-        expect(screen.queryByText('DEX')).toBeNull();
+        expect(screen.queryByText('Exchange (DEX)')).toBeNull();
         // The rest of the nav is untouched: this hides one surface, not a shell.
         expect(screen.queryByText('Home')).toBeTruthy();
         expect(screen.queryByText('Dispensers')).toBeTruthy();
@@ -94,7 +76,8 @@ describe('the command palette', () => {
         // a trade, and one seed spans shells: it stays on every build.
         expect(list).toContain('trade-coinpay');
         expect(list).toContain('nav-obligations');
-        expect(list).toContain('trade-xchain-templates');
+        // The Cross chain templates page is retired, so no build carries its row.
+        expect(list).not.toContain('nav-cross-chain-templates');
     });
 
     it('keeps the DEX when a shell says nothing, rather than losing it silently', () => {
@@ -103,12 +86,10 @@ describe('the command palette', () => {
     });
 });
 
-// The same failure one level down. Home's quick-action row hides
-// Exchange on a surface-stripped build, but kept its "More" button, whose only
-// entry is the DEX-gated Swap. The button survived into a build with nothing
-// behind it, so tapping it opened a menu whose single row read
-// "No additional actions".
-describe("Home's quick-action overflow menu", () => {
+// Home hides Exchange and All actions on a surface-stripped build. The only
+// All actions entry on this surface is the DEX-gated Swap, so no empty menu
+// trigger renders.
+describe("Home's quick-action fallback", () => {
     const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
     const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
 
@@ -131,33 +112,24 @@ describe("Home's quick-action overflow menu", () => {
         );
     }
 
-    // Scoped to the quick-action row itself: Home carries other "Send" and
-    // "More" affordances, and an unscoped query answers about the wrong one.
-    const quickActions = () => screen.findByRole('group', { name: 'Quick actions' });
-
-    it('offers Swap directly, with no one-item More menu, when the shell wires Swap', async () => {
+    it('draws no Swap or More button on Home when the shell wires Swap', async () => {
         const onSwap = vi.fn();
         drawHome({ onSend: () => {}, onReceive: () => {}, onSwap });
 
-        const row = within(await quickActions());
-        expect(row.queryByRole('button', { name: /More/ })).toBeNull();
-        fireEvent.click(row.getByRole('button', { name: /Swap/ }));
-        expect(onSwap).toHaveBeenCalledTimes(1);
+        await screen.findAllByRole('tablist');
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(Swap|More)/ })).toBeNull();
+        expect(onSwap).not.toHaveBeenCalled();
     });
 
-    it('renders no More button at all when nothing is behind it', async () => {
+    it('draws no More button at all when nothing is behind it', async () => {
         // A surface-stripped build wires no Swap handler, because SwapForm is
-        // not in the bundle. Absent beats disabled and both beat an empty menu:
-        // a control that opens onto "No additional actions" is a dead
-        // affordance sitting in the wallet's primary quick-action row.
+        // not in the bundle. Home has no action row, so there is no empty menu.
         drawHome({ onSend: () => {}, onReceive: () => {} });
 
-        const row = within(await quickActions());
-        // Send and Receive prove the row itself rendered, so a missing More is
-        // evidence rather than an unrendered quick-action row.
-        expect(row.getByRole('button', { name: /Send/ })).toBeTruthy();
-        expect(row.getByRole('button', { name: /Receive/ })).toBeTruthy();
-        expect(row.queryByRole('button', { name: /More/ })).toBeNull();
+        await screen.findAllByRole('tablist');
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(Send|Receive|More)/ })).toBeNull();
         expect(screen.queryByText('No additional actions')).toBeNull();
     });
 });

@@ -15,4 +15,17 @@ describe('HwSignBlock error copy', () => {
         const text = statusCopy('disconnected', 'trezor', 'bitcoin-mainnet', 'Reconnect the USB cable.');
         expect(text).toBe('Device not detected. Reconnect the USB cable.');
     });
+
+    // The Bitcoin test networks sign in the Ledger Bitcoin Test app
+    // (operator ruling 2026-11-15), so the wrong-app line names that app.
+    it('names the Ledger app each chain signs in', () => {
+        expect(statusCopy('wrong-app', 'ledger', 'bitcoin-mainnet'))
+            .toBe('Open the Bitcoin app on your Ledger and try again.');
+        for (const chainId of ['bitcoin-testnet', 'bitcoin-regtest']) {
+            expect(statusCopy('wrong-app', 'ledger', chainId))
+                .toBe('Open the Bitcoin Test app on your Ledger and try again.');
+        }
+        expect(statusCopy('wrong-app', 'ledger', 'litecoin-mainnet'))
+            .toBe('Open the Litecoin app on your Ledger and try again.');
+    });
 });

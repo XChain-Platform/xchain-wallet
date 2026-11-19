@@ -122,7 +122,7 @@ assert.match(poolSrc, /evict\(walletId\)/, 'SignerPool.evict added');
 const src = readFileSync(sectionPath, 'utf8');
 assert.match(src, /export function ThisWalletSection\(/, 'named export');
 assert.match(src, /messaging\.removeWallet\(\{\s*walletId:\s*activeWallet\.id\s*\}\)/, 'wires removeWallet messaging');
-assert.match(src, /Type the wallet name/, 'typed-name confirmation copy');
+assert.match(src, /(?:t\('settings\.thisWallet\.itsAccountsAddressesSignersAnd'|Type the wallet name)/, 'typed-name confirmation copy');
 assert.match(src, /matches = typed === walletName/, 'typed-name match check');
 assert.match(src, /onConfirmRemove/, 'confirm handler defined');
 

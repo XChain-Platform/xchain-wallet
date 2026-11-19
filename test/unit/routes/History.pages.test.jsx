@@ -9,8 +9,9 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { readAllListPages } from '../../../packages/core/src/shared/utils/historyPages.js';
+import { EXPORT_ITEM, chooseHistoryMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -82,12 +83,12 @@ describe('History follows every page of an address', () => {
         await waitFor(() => {
             expect(screen.getByText('100 of 250 history items shown')).toBeInTheDocument();
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        chooseHistoryMenuItem(EXPORT_ITEM);
         expect(screen.getByText('250 history items will be exported.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show more history' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show More History' }));
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-history-key]')).toHaveLength(250);
         });
@@ -107,7 +108,7 @@ describe('History follows every page of an address', () => {
         expect(read).toHaveBeenCalledTimes(3);
 
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(read).toHaveBeenCalledTimes(4));
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -126,7 +127,7 @@ describe('History follows every page of an address', () => {
 
         rows = rows.filter((row) => row.action_index !== '200');
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => {
             expect(screen.getByText('100 of 249 history items shown')).toBeInTheDocument();

@@ -138,7 +138,7 @@ describe('Send release tells the shell how the user left', () => {
         const onHoldLinks = vi.fn();
         const { messaging, view } = mount({ onHoldLinks, sendToken });
         await approveToResult(messaging);
-        fireEvent.click(screen.getAllByRole('button', { name: /Back to Home/i })[0]);
+        fireEvent.click(screen.getAllByRole('button', { name: /Back to previous screen/i })[0]);
         view.unmount();
         expect(onHoldLinks).toHaveBeenLastCalledWith(false, { open: true });
     });

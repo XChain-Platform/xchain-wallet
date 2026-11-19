@@ -56,9 +56,9 @@ import {
     fundAddress,
     readReceiveAddress,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -66,6 +66,7 @@ import {
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One FILE publish (miner fees only) plus one native send that never broadcasts. */
@@ -96,9 +97,9 @@ async function importFromPhrase(page, words, name) {
     await page.goto(BASE_URL);
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
-    await page.getByLabel('Recovery phrase', { exact: true }).fill(words.join(' '));
-    await page.getByLabel('Wallet name').fill(name);
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    await fieldByLabel(page, 'Recovery phrase').fill(words.join(' '));
+    await fieldByLabel(page, 'Wallet name').fill(name);
+    await fieldByLabel(page, 'Password').fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
     await acknowledgeDonationNotice(page, 'off');
@@ -130,7 +131,7 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
             await page.getByRole('textbox', { name: 'Name' }).fill(CONTACT_CANARY);
             await page.getByRole('textbox', { name: 'Address' }).fill(owner);
-            await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).first().click();
             await expect(page.getByText(CONTACT_CANARY).first(), 'the contact was never saved')
                 .toBeVisible({ timeout: 30_000 });
 
@@ -142,20 +143,27 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await expect(nudge).toContainText(/only on this device/);
             await nudge.getByRole('button', { name: 'Open Backup' }).click();
 
+            // Open Backup lands on the whole Backup section (the 'backup'
+            // subpage, as the palette's Backup entry does), not on the Backup
+            // and Recovery row list: one card per action, Publish labels
+            // on-chain among them with its own Publish Now button.
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: 'Publish now…', exact: true }),
+            await expect(main.getByRole('heading', { name: 'Publish labels on-chain', exact: true }),
                 'Open Backup did not land on the Backup section')
                 .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('publish the labels from Backup and wait for the chain to accept the FILE', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Publish now…', exact: true }).click();
-            const chain = page.getByLabel('Publish network');
-            await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-            await chain.selectOption(REGTEST_CHAIN_ID);
-            await page.getByLabel('Wallet password').fill(PASSWORD);
-            await page.getByRole('button', { name: 'Publish', exact: true }).click();
+            // Publish Now opens the publish form in place of its card.
+            await main.getByRole('button', { name: /^Publish Now\b/ }).click();
+            // The network is the standard Network field and its full-screen list.
+            await selectVenueChain(main, 'Network');
+            // An unlocked session publishes with its pooled signer and asks no
+            // password (2026-11-14); fill it only when the form shows it.
+            const password = fieldByLabel(page, 'Wallet password');
+            if (await password.count()) await password.fill(PASSWORD);
+            await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
             // The publish signs through the shared confirm screen, which opens
             // in place of the form. When it never opens, the fixture reports
             // the error the form put above it instead of a missing locator.
@@ -197,11 +205,11 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await gotoSection(page, 'Send');
             await selectVenueSendAsset(page);
             await failBroadcast(page, 'permanent');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('alert').first(), 'the rejected broadcast raised no error')
                 .toBeVisible({ timeout: 120_000 });
             await page.unroute(/.*/);
@@ -212,20 +220,26 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
                 .toBeVisible({ timeout: 60_000 });
             await expect(failedRow).toContainText(/failed, never sent/);
 
-            // Open it: the reason in plain words, the node's own text behind
-            // Technical details, and the way out.
+            // Open it: the action detail states the reason in plain words as
+            // its error notice, keeps the node's own text in the Details
+            // view's Failure details row, and offers the way out as the
+            // Actions view's "Remove from history" row (G101 rows are
+            // sentence case).
             await failedRow.locator('xpath=ancestor::button[1]').click();
-            const failedPanel = page.getByRole('region', { name: 'Failed transaction' });
-            await expect(failedPanel.getByText(/The network rejected this transaction\./),
+            const failedPanel = page.getByRole('region', { name: 'Transaction details' });
+            await expect(failedPanel.getByRole('alert').filter({ hasText: /The network rejected this transaction\./ }),
                 'the failed detail shows no reason')
                 .toBeVisible({ timeout: 30_000 });
             await expect(failedPanel.getByText(/^Reason: /), 'the raw reason is still in the prose')
                 .toHaveCount(0);
-            await failedPanel.getByText('Technical details', { exact: true }).click();
-            await expect(failedPanel.getByText(/bad-txns-inputs-missingorspent/),
-                'the technical details are not the node\'s rejection')
+            const views = failedPanel.getByRole('tablist', { name: 'Action View' });
+            await views.getByRole('tab', { name: 'Details' }).click();
+            await expect(failedPanel.getByRole('tabpanel', { name: 'Details' }).getByText(/bad-txns-inputs-missingorspent/),
+                'the Failure details row is not the node\'s rejection')
                 .toBeVisible();
-            await page.getByRole('button', { name: 'Remove from history', exact: true }).click();
+            await views.getByRole('tab', { name: 'Actions' }).click();
+            await failedPanel.getByRole('tabpanel', { name: 'Actions' })
+                .getByRole('button', { name: /^Remove from history\b/ }).click();
 
             // Gone from the list, and only that row.
             await expect(page.locator('[data-pending-state="failed"]'),

@@ -18,24 +18,25 @@
 //   - Test a newly generated seed before deleting the old wallet.
 //   - Sanity-check a restore before committing.
 //
-// This flow is FORMAT-AWARE (BIP39 vs Counterwallet). The caller picks
-// a format up-front (matching how the user entered their words on the
-// "Test your backup" screen); we do NOT auto-detect, because the same
-// 12 words can be valid BIP39 AND valid Counterwallet in pathological
-// cases and silently choosing one would mask a mismatch.
+// This flow is FORMAT-AWARE (BIP39 vs Counterwallet). The stored wallet
+// format is authoritative: an omitted format uses it, while a supplied
+// format must match it. We do NOT auto-detect because the same 12 words
+// can be valid in both formats and silently choosing one would mask a
+// mismatch.
 
 import {
     bip39MnemonicToSeed,
     counterwalletMnemonicToSeedBytes,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
     derive,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
     validateCounterwalletMnemonic,
     zeroDerivedKey,
 } from '../crypto/index.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import { isUnknownAddressTypeError } from './sdkAddressTypes.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
+import { refuseHardwareWallet } from './hardwareWallet.js';
 
 export const DEFAULT_DRY_RUN_GAP = 10;
 
@@ -70,7 +71,7 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId                    current wallet whose addresses we compare against
  * @property {string} mnemonic
- * @property {'bip39' | 'counterwallet-legacy'} [format]   defaults to the stored wallet format
+ * @property {'bip39' | 'counterwallet-legacy'} [format]   optional, but must match the stored wallet format
  * @property {string} [bip39Passphrase]           ignored for counterwallet-legacy
  * @property {string[]} [activeChainIds]          default: every descriptor in the registry
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -154,6 +155,7 @@ export async function dryRunRestore({
     if (!sdkRegistry) throw new Error('dryRunRestore: sdkRegistry is required');
     const wallet = await vault.wallets?.get?.(walletId);
     if (!wallet) throw new Error(`dryRunRestore: wallet "${walletId}" was not found`);
+    refuseHardwareWallet(wallet, 'a phrase check');
     if (wallet.format !== 'bip39' && wallet.format !== 'counterwallet-legacy') {
         throw new Error(`dryRunRestore: unsupported stored format "${wallet.format}"`);
     }
@@ -246,9 +248,7 @@ export async function dryRunRestore({
             if (!descriptor) {
                 throw new Error(`dryRunRestore: unknown chainId "${chainId}"`);
             }
-            const addressType = format === 'counterwallet-legacy'
-                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-                : descriptor.defaultAddressType;
+            const addressType = defaultAddressTypeForFormat(descriptor, format);
             const sdk = sdkRegistry.get(chainId);
 
             const main = deriveAndCompare(chainId, descriptor, sdk, addressType, change, gapLimit);

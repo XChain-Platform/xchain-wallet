@@ -112,15 +112,12 @@ const surfaceGuardPlugin = {
 // pins WHAT they contain, so a tampered bundle on the asset host cannot execute
 // in a page that holds the user's decrypted seed. Build-only, like the CSP.
 import { sriPlugin } from './sri.js';
-// HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. The wallet's crypto
-// surfaces (`crypto.subtle.*` for KDF + AEAD, `navigator.clipboard.*`,
-// `getUserMedia` for the camera scanner, WebUSB / WebHID for hardware
-// signers) require a secure context; `localhost` qualifies natively,
-// so plain HTTP is fine when someone hits the wallet directly on the
-// machine that's serving it. For LAN / VM-hostname access, set
-// VITE_HTTPS=1 and `@vitejs/plugin-basic-ssl` generates a self-signed
-// cert. The wallet also surfaces an in-app banner when it detects an
-// insecure context, so the page never silently breaks.
+// HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. Core crypto does not depend
+// on SubtleCrypto, but the wallet refuses non-secure origins because a
+// seed-holding page must not load through a replaceable network channel.
+// Camera, clipboard and hardware-signer APIs also require a secure context.
+// Loopback origins qualify natively. For other development origins, set
+// VITE_HTTPS=1 and `@vitejs/plugin-basic-ssl` generates a self-signed cert.
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1';
@@ -344,6 +341,9 @@ const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
     .resolve('uint8array-tools');
 
 export default defineConfig({
+    ...(process.env.XCHAIN_VITE_CACHE_DIR
+        ? { cacheDir: process.env.XCHAIN_VITE_CACHE_DIR }
+        : {}),
     define: {
         'require.main': 'undefined',
         'import.meta.env.XCHAIN_TREZOR_PAIRING': JSON.stringify(
@@ -431,8 +431,10 @@ export default defineConfig({
     // only WalletUtils (pure PSBT helpers), never an explorer or encoder
     // client, so pre-bundling it hands the dev shell no path to a live SDK and
     // the flag above still decides that alone.
+    // The real-SDK venue also pre-bundles the pre-flight amount validators that
+    // hostBridge loads by path; off the flag that load fails and reports pass through.
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
-        ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
+        ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js', 'xchain-sdk/src/preflight/numeric.js', 'xchain-sdk/src/preflight/checks/amount_format.js'] }
         : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
     // Old-but-capable WebViews (below the soft floor in
     // src/platform/webviewFloor.js) drop any declaration that uses
@@ -501,9 +503,8 @@ export default defineConfig({
         host: '0.0.0.0',
         // Vite blocks unlisted Host headers, so a LAN dev host has to be
         // allowed explicitly; set VITE_DEV_ALLOWED_HOST to demo over the LAN
-        // instead of localhost. Reach it over HTTPS (VITE_HTTPS=1) so the
-        // non-localhost origin is still a secure context for crypto.subtle
-        // (see the secure-context note above).
+        // instead of localhost. Reach it over HTTPS (VITE_HTTPS=1) because
+        // the wallet requires a secure context (see the note above).
         allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
     },
     preview: {

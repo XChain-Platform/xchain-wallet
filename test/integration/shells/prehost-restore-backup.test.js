@@ -516,19 +516,47 @@ describe('integration/shells/pre-host fresh-install backup restore', () => {
 
             const vault = await openAs(NEW_DEVICE_PASSWORD);
             const [restored] = await vault.wallets.list();
-            // `list()` migrates on READ, so it would report v3 even for a v2
+            // `list()` migrates on READ, so it would report v4 even for a v2
             // record that had somehow been written. The stored document is the
             // only place the distinction is visible, and the distinction is the
             // whole point: the record has to LAND migrated.
             expect(vault._doc.wallets[0].schemaVersion,
                 'the wallet was stored at its backed-up version, so the migration ran on read '
-                + 'rather than on the way in').toBe(3);
+                + 'rather than on the way in').toBe(4);
             expect(restored.encryptedPassphrase,
                 'a wallet that never stored a passphrase came back with one')
                 .toBeNull();
             // null with passphraseEnabled true is the legacy state, and it is
             // what routes this wallet into the one-time capture at next unlock.
             expect(restored.passphraseEnabled).toBe(true);
+        });
+
+        it('restores a pre-v4 envelope with the wallet mode its own settings held (§20)', async () => {
+            // Before wallet mode moved onto each wallet, the backup carried it
+            // in its app-wide settings. The restored wallet takes THAT value,
+            // never the receiving install's.
+            const sealed = await encryptWalletSeed({
+                password: OLD_DEVICE_PASSWORD,
+                seed: new TextEncoder().encode(MNEMONIC),
+                kdfParams: KDF_PARAMS,
+            });
+            const preV4Vault = sourceVaultWith(sealed, (w) => {
+                const { walletMode: _dropped, ...legacy } = w;
+                return { ...legacy, schemaVersion: 3 };
+            });
+            await preV4Vault.settings.put({ ...(await preV4Vault.settings.get()), walletMode: 'signer' });
+            const fileContent = (await exportBackupFile({
+                vault: preV4Vault,
+                walletId: 'src',
+                password: BACKUP_PASSWORD,
+                kdfParams: KDF_PARAMS,
+            })).fileContent;
+
+            await restore({ fileContent });
+            const vault = await openAs(NEW_DEVICE_PASSWORD);
+            const [restored] = await vault.wallets.list();
+            expect(restored.schemaVersion).toBe(4);
+            expect(restored.walletMode).toBe('signer');
         });
 
         it('a wrong wallet password refuses before any write, passphrase or not', async () => {

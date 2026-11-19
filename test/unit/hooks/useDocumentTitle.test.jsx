@@ -28,20 +28,22 @@ it('maps session and route state to stable page titles', () => {
     expect(documentTitleFor({
         statusState: 'unlocked',
         unlockedView: 'sign-psbt',
-    })).toBe('XChain Wallet - Sign transaction');
+    })).toBe('XChain Wallet - Sign Transaction');
 });
 
-it('titles a route with its heading in sentence case', () => {
+it('titles a route with its heading in Title Case', () => {
     const titleOf = (unlockedView) => documentTitleFor({ statusState: 'unlocked', unlockedView });
-    expect(titleOf('my-bets')).toBe('XChain Wallet - My bets');
-    expect(titleOf('my-tokens')).toBe('XChain Wallet - My tokens');
-    expect(titleOf('mint-settings')).toBe('XChain Wallet - Mint settings');
-    expect(titleOf('pause-token')).toBe('XChain Wallet - Pause token');
-    expect(titleOf('send-picker')).toBe('XChain Wallet - Send');
-    expect(titleOf('actions')).toBe('XChain Wallet - Token actions');
-    expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent accounts');
-    expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance');
-    expect(titleOf('bet-markets')).toBe('XChain Wallet - Betting');
+    expect(titleOf('my-orders')).toBe('XChain Wallet - My Orders');
+    expect(titleOf('my-tokens')).toBe('XChain Wallet - My Tokens');
+    expect(titleOf('mint-settings')).toBe('XChain Wallet - Mint Settings');
+    expect(titleOf('pause-token')).toBe('XChain Wallet - Pause Token');
+    expect(titleOf('send-picker')).toBe('XChain Wallet - Asset');
+    expect(titleOf('actions')).toBe('XChain Wallet - All Actions');
+    expect(titleOf('parallel-compose')).toBe('XChain Wallet - Action Queue');
+    expect(titleOf('multisig-share')).toBe('XChain Wallet - Share Wallet as Cosigner');
+    expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent Accounts');
+    expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance Polls');
+    expect(titleOf('bet-markets')).toBe('XChain Wallet - Prediction markets');
 });
 
 it('titles an onboarding step with the heading the step shows', () => {
@@ -54,6 +56,11 @@ it('titles an onboarding step with the heading the step shows', () => {
     })).toBe('XChain Wallet - Write down your recovery phrase');
     expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'welcome' }))
         .toBe('XChain Wallet - Welcome');
+    expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'pair-partner' }))
+        .toBe('XChain Wallet - Use Another Phone as a Signer');
+    // The pairing moved to Settings, Advanced, so the unlocked view has the same title.
+    expect(documentTitleFor({ statusState: 'unlocked', unlockedView: 'pair-partner' }))
+        .toBe('XChain Wallet - Use Another Phone as a Signer');
 
     const title = renderHook(() => useDocumentTitle({
         statusState: 'no-wallet',
@@ -114,16 +121,16 @@ it('leaves compact extension surfaces unchanged when disabled', () => {
 
 it('titles screens with the heading the screen shows', () => {
     const titleOf = (unlockedView) => documentTitleFor({ statusState: 'unlocked', unlockedView });
-    expect(titleOf('obligations')).toBe('XChain Wallet - Payments due');
+    expect(titleOf('obligations')).toBe('XChain Wallet - Payments Due');
     expect(titleOf('contracts-list')).toBe('XChain Wallet - Contracts');
-    expect(titleOf('lists')).toBe('XChain Wallet - My lists');
+    expect(titleOf('lists')).toBe('XChain Wallet - My Lists');
     expect(titleOf('staking-dashboard')).toBe('XChain Wallet - Staking');
-    expect(titleOf('markets')).toBe('XChain Wallet - Decentralized exchange');
+    expect(titleOf('markets')).toBe('XChain Wallet - Decentralized Exchange');
     expect(titleOf('market-activity')).toBe('XChain Wallet - Marketplace');
-    expect(titleOf('dispensers-list')).toBe('XChain Wallet - My dispensers');
-    expect(titleOf('dispenser')).toBe('XChain Wallet - Create dispenser');
-    expect(titleOf('compose-message')).toBe('XChain Wallet - New message');
-    expect(titleOf('account-picker')).toBe('XChain Wallet - Accounts');
+    expect(titleOf('dispensers-list')).toBe('XChain Wallet - Dispensers');
+    expect(titleOf('dispenser')).toBe('XChain Wallet - Create Dispenser');
+    expect(titleOf('compose-message')).toBe('XChain Wallet - New Message');
+    expect(titleOf('account-picker')).toBe('XChain Wallet - My Accounts');
 });
 
 it('titles a sub-screen of Settings with its own heading', () => {
@@ -162,4 +169,75 @@ it('follows the sub-screen the view reports and falls back when it leaves', () =
     act(() => { section.unmount(); });
     expect(document.title).toBe('XChain Wallet - Settings');
     title.unmount();
+});
+
+// Records every write to document.title while the callback runs.
+function recordTitleWrites(run) {
+    const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'title');
+    const writes = [];
+    Object.defineProperty(document, 'title', {
+        configurable: true,
+        get() { return descriptor.get.call(document); },
+        set(value) {
+            writes.push(value);
+            descriptor.set.call(document, value);
+        },
+    });
+    try {
+        run(writes);
+    } finally {
+        delete document.title;
+    }
+    return writes;
+}
+
+it('writes the Settings title once when a sub-page goes back', () => {
+    document.title = 'Host title';
+    recordTitleWrites((writes) => {
+        const title = renderHook(() => useDocumentTitle({
+            statusState: 'unlocked',
+            onboardingStep: 'welcome',
+            unlockedView: 'settings',
+        }));
+        const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+            initialProps: { label: 'Display' },
+        });
+        expect(document.title).toBe('XChain Wallet - Display');
+
+        writes.length = 0;
+        section.rerender({ label: null });
+        expect(document.title).toBe('XChain Wallet - Settings');
+        expect(writes).toEqual(['XChain Wallet - Settings']);
+
+        title.unmount();
+        section.unmount();
+    });
+    expect(document.title).toBe('Host title');
+});
+
+it('converges on a Settings panel title without a stale title between', () => {
+    document.title = 'Host title';
+    recordTitleWrites((writes) => {
+        const title = renderHook(() => useDocumentTitle({
+            statusState: 'unlocked',
+            onboardingStep: 'welcome',
+            unlockedView: 'settings',
+        }));
+        expect(document.title).toBe('XChain Wallet - Settings');
+
+        writes.length = 0;
+        const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+            initialProps: { label: 'Display' },
+        });
+        expect(writes).toEqual(['XChain Wallet - Display']);
+
+        writes.length = 0;
+        section.rerender({ label: 'Backup' });
+        expect(document.title).toBe('XChain Wallet - Backup');
+        expect(writes).not.toContain('Host title');
+        expect(writes.at(-1)).toBe('XChain Wallet - Backup');
+
+        section.unmount();
+        title.unmount();
+    });
 });

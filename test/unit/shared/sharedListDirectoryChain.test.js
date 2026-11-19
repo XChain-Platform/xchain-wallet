@@ -32,15 +32,10 @@ describe('sharedListDirectoryChainId', () => {
 });
 
 describe('shell wiring', () => {
-    for (const file of [
-        'packages/web/src/App.jsx',
-        'packages/extension/src/popup/App.jsx',
-        'packages/desktop/renderer/App.jsx',
-    ]) {
-        it(`${file} derives the directory chain from the selected network`, () => {
-            const source = readFileSync(join(process.cwd(), file), 'utf8');
-            expect(source).toContain('sharedListDirectoryChainId(listRef, settings?.activeNetwork)');
-            expect(source).not.toContain("listRef?.chainId || 'bitcoin-mainnet'");
-        });
-    }
+    // The Shared lists page is retired; My Lists reads the directory now.
+    it('My Lists derives the directory chain from the wallet network', () => {
+        const source = readFileSync(join(process.cwd(), 'packages/core/src/shared/routes/MyLists.jsx'), 'utf8');
+        expect(source).toContain('sharedListDirectoryChainId(null, chainRegistry.get(firstChain)?.networkKind)');
+        expect(source).not.toContain("listRef?.chainId || 'bitcoin-mainnet'");
+    });
 });

@@ -57,8 +57,9 @@ describe('KeyboardSection', () => {
             expect(screen.queryByText(/Click Rebind/)).toBeNull();
             expect(screen.getByText('Export history')).toBeTruthy();
             expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
-            expect(screen.getByText('Requires “Show pin button on rows” in Display.')).toBeTruthy();
-            expect(screen.getByText('Requires “Show hide button on rows” in Display.')).toBeTruthy();
+            // Display's options live on the Appearance page now.
+            expect(screen.getByText('Requires “Show pin button on rows” in Appearance.')).toBeTruthy();
+            expect(screen.getByText('Requires “Show hide button on rows” in Appearance.')).toBeTruthy();
             const rebinds = screen.getAllByRole('button', { name: 'Rebind' });
             // General (5, incl. palette) + Go to (6) are rebindable; the six
             // context shortcuts are not.
@@ -97,8 +98,8 @@ describe('KeyboardSection', () => {
         const messaging = await setup();
         const lockRow = screen.getByText('Lock wallet').closest('div');
         fireEvent.click(lockRow.querySelector('button'));
-        press({ key: 'k', ctrlKey: true }); // taken by the command palette
-        await waitFor(() => expect(screen.getByText(/already used by "Open command palette"/)).toBeTruthy());
+        press({ key: 'k', ctrlKey: true }); // taken by the wallet menu
+        await waitFor(() => expect(screen.getByText(/already used by "Open the wallet menu"/)).toBeTruthy());
         expect(messaging.updateSettings).not.toHaveBeenCalled();
     });
 
@@ -135,7 +136,7 @@ describe('KeyboardSection', () => {
 
     it('removes an override when capture returns to the built-in binding', async () => {
         const messaging = await setup({ 'command-palette': 'mod+j' });
-        const row = screen.getByText('Open command palette').closest('div');
+        const row = screen.getByText('Open the wallet menu').closest('div');
         fireEvent.click(within(row).getByRole('button', { name: 'Rebind' }));
         press({ key: 'k', ctrlKey: true });
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
@@ -145,7 +146,7 @@ describe('KeyboardSection', () => {
 
     it('resets every override in one persisted update', async () => {
         const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
-        fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset All Shortcuts' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));

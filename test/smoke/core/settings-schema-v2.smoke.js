@@ -30,16 +30,21 @@ import {
 } from '../../../packages/core/src/schemas/settings.js';
 import { migrateSettings } from '../../../packages/core/src/schemas/migrations.js';
 
-// --- 1. Schema constants are at v3 ------------------------------------------
+// --- 1. Schema constants are at v5 ------------------------------------------
 
-assert.equal(CURRENT_VERSION, 3, 'schema bumped to v3');
+// v4 (2026-11-14): automatic donations are one wallet-wide fiat queue.
+// v5 (2026-11-14): the new-recipient test-send threshold is in fiat.
+assert.equal(CURRENT_VERSION, 5, 'schema bumped to v5');
 assert.deepEqual([...REDUCED_MOTION_MODES], ['auto', 'always', 'never']);
 assert.deepEqual([...BACKUP_REMINDER_CADENCES], ['off', 'monthly', 'quarterly']);
 
 // --- 2. createDefaultSettings carries the new fields -------------------------
 
 const fresh = createDefaultSettings();
-assert.equal(fresh.schemaVersion, 3);
+assert.equal(fresh.schemaVersion, 5);
+assert.equal(fresh.grace.testSendThresholdFiat, '0', 'the fiat test-send threshold starts Off');
+assert.equal(fresh.ads.perTransaction, '0.05');
+assert.equal(fresh.ads.sendAt, '5');
 assert.equal(fresh.reducedMotion, 'auto');
 assert.equal(fresh.privacy.blurOnBlur, false);
 assert.equal(fresh.privacy.labelsSurviveRestore, false);
@@ -84,7 +89,11 @@ const v1 = {
 };
 
 const migrated = migrateSettings(v1);
-assert.equal(migrated.schemaVersion, 3, 'migrated all the way to v3');
+assert.equal(migrated.schemaVersion, 5, 'migrated all the way to v5');
+// The v1 switch was off, so donations migrate off, in the display currency.
+assert.equal(migrated.ads.perTransaction, '0', 'an off ADS switch migrates to None');
+assert.equal(migrated.ads.currency, 'EUR', 'the queue takes the display currency');
+assert.equal(migrated.ads.perChain, undefined, 'no per-network donation state survives');
 // Pre-existing v1 fields preserved
 assert.equal(migrated.theme, 'dark');
 assert.equal(migrated.autolockMinutes, 30);
@@ -127,7 +136,7 @@ await vault.open();
 await flows.updateSettings(vault, {
     reducedMotion: 'always',
     privacy: { blurOnBlur: true },
-    grace: { testSendThresholdSats: 100000 },
+    grace: { testSendThresholdFiat: '1000', lookalikeWarnings: false },
     panicMode: { enabled: true },
     backupReminders: 'quarterly',
 });
@@ -135,7 +144,8 @@ const persisted = await flows.getSettings(vault);
 assert.equal(persisted.reducedMotion, 'always');
 assert.equal(persisted.privacy.blurOnBlur, true);
 assert.equal(persisted.privacy.changeAddressRotation, false, 'untouched privacy default preserved');
-assert.equal(persisted.grace.testSendThresholdSats, 100000);
+assert.equal(persisted.grace.testSendThresholdFiat, '1000');
+assert.equal(persisted.grace.lookalikeWarnings, false);
 assert.equal(persisted.grace.undoSendSeconds, 5, 'untouched grace field preserved');
 assert.equal(persisted.panicMode.enabled, true);
 assert.equal(persisted.backupReminders, 'quarterly');

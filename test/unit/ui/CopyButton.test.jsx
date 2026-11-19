@@ -54,6 +54,22 @@ describe('<CopyButton>', () => {
         });
     });
 
+    it('keeps an icon-only copy named while announcing the shared feedback', async () => {
+        render(<CopyButton value="abc123" label="Copy address" iconOnly />);
+        const btn = screen.getByRole('button', { name: 'Copy address' });
+        expect(btn.textContent).toBe('');
+        expect(btn).toHaveAttribute('title', 'Copy address');
+        expect(btn.className).toMatch(/iconOnly/);
+
+        fireEvent.click(btn);
+
+        await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith('abc123'));
+        expect(screen.getByRole('status')).toHaveTextContent('Copied: address');
+        expect(btn).toHaveAccessibleName('Copy address');
+        expect(btn).toHaveAttribute('title', 'Copy address');
+        expect(btn.textContent).toBe('');
+    });
+
     it.each([
         ['address', 'bc1qexactaddress', 'Copy address'],
         ['transaction ID', 'aabbcc001122', 'Copy transaction ID'],

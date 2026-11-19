@@ -12,9 +12,9 @@
 //
 // v2 adds `signerId` per §17.6: addresses are tied to a signer by stable
 // id, so switching signers (e.g. pairing a new Trezor) re-associates
-// addresses by path+pubkey match. v1 records migrate forward with
-// `signerId: null`, signaling "needs reconciliation"; the runtime
-// resolver fills this in on first load.
+// addresses by path+pubkey match. v1 records migrate forward unlinked
+// with `signerId: null`. Software routing does not read that field, and
+// no runtime path reconciles it automatically; see migrations.js.
 //
 // v3 adds `role` per §16: 'receive' | 'change' | 'dispenser'.
 // 'receive'/'change' track the BIP44 external/internal branch (change
@@ -44,6 +44,14 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../util/display_nam
 import { tickerForCoin } from '../registry/coinTicker.js';
 
 export const CURRENT_VERSION = 4;
+
+export const ADDRESS_OWNERSHIP_RULES = Object.freeze({
+    hd: 'required',
+    'imported-wif': 'null',
+    'watch-only': 'paired',
+    trezor: 'required',
+    ledger: 'required',
+});
 
 /**
  * Return the generated name an address receives when it has no custom label.
@@ -89,18 +97,20 @@ export function normalizeAddressLabel(label, record) {
  * @typedef {Object} Address
  * @property {4} schemaVersion
  * @property {string} id
- * @property {string | null} accountId        null for watch-only / imported-WIF
+ * @property {string | null} accountId        required for derived sources, null for imported-WIF,
+ *                                             paired with derivationPath for watch-only
  * @property {string} chain                   coin identifier
  * @property {typeof NETWORKS[number]} network
  * @property {typeof ADDRESS_SOURCES[number]} source
  * @property {string} addressType             script format, e.g. 'p2wpkh'
- * @property {string | null} derivationPath   null for imported/watch-only
+ * @property {string | null} derivationPath   required for derived sources, null for imported-WIF,
+ *                                             paired with accountId for watch-only
  * @property {string} address
  * @property {string} publicKey               hex
  * @property {string} label
  * @property {boolean} pinned
  * @property {boolean} hidden
- * @property {string | null} signerId         owning signer id (§17.6); null = needs reconciliation
+ * @property {string | null} signerId         owning signer id (§17.6); null = unlinked (invalid for hardware sources)
  * @property {typeof ADDRESS_ROLES[number]} role   'receive' | 'change' | 'dispenser' (§16)
  * @property {string} createdAt
  */
@@ -158,7 +168,8 @@ export function validateAddress(record) {
     );
     check(errors, 'chain', isNonEmptyString(r.chain), 'must be a non-empty string');
     check(errors, 'network', isOneOf(r.network, NETWORKS), `must be one of ${NETWORKS.join(', ')}`);
-    check(errors, 'source', isOneOf(r.source, ADDRESS_SOURCES), `must be one of ${ADDRESS_SOURCES.join(', ')}`);
+    const validSource = isOneOf(r.source, ADDRESS_SOURCES);
+    check(errors, 'source', validSource, `must be one of ${ADDRESS_SOURCES.join(', ')}`);
     check(errors, 'addressType', isNonEmptyString(r.addressType), 'must be a non-empty string');
     check(
         errors,
@@ -166,6 +177,7 @@ export function validateAddress(record) {
         r.derivationPath === null || isNonEmptyString(r.derivationPath),
         'must be null or a non-empty string',
     );
+    if (validSource) validateAddressOwnership(errors, r);
     check(errors, 'address', isNonEmptyString(r.address), 'must be a non-empty string');
     check(errors, 'publicKey', isNonEmptyString(r.publicKey), 'must be a non-empty string');
     check(errors, 'label', isString(r.label), 'must be a string');
@@ -180,4 +192,31 @@ export function validateAddress(record) {
     check(errors, 'role', isOneOf(r.role, ADDRESS_ROLES), `must be one of ${ADDRESS_ROLES.join(', ')}`);
     check(errors, 'createdAt', isIsoTimestamp(r.createdAt), 'must be an ISO timestamp');
     return result(errors);
+}
+
+function validateAddressOwnership(errors, record) {
+    const rule = ADDRESS_OWNERSHIP_RULES[record.source];
+    if (!rule) {
+        check(errors, 'source', false, `has no ownership rule for "${record.source}"`);
+        return;
+    }
+    if (rule === 'required') {
+        check(errors, 'accountId', isNonEmptyString(record.accountId),
+            `must be a non-empty string for source "${record.source}"`);
+        check(errors, 'derivationPath', isNonEmptyString(record.derivationPath),
+            `must be a non-empty string for source "${record.source}"`);
+        return;
+    }
+    if (rule === 'null') {
+        check(errors, 'accountId', record.accountId === null,
+            `must be null for source "${record.source}"`);
+        check(errors, 'derivationPath', record.derivationPath === null,
+            `must be null for source "${record.source}"`);
+        return;
+    }
+    const paired = (record.accountId === null) === (record.derivationPath === null);
+    check(errors, 'accountId', paired,
+        `must be null exactly when derivationPath is null for source "${record.source}"`);
+    check(errors, 'derivationPath', paired,
+        `must be null exactly when accountId is null for source "${record.source}"`);
 }

@@ -10,6 +10,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
+import { encryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
+import { base64ToBytes } from '../../../packages/core/src/crypto/kdf.js';
 import {
     DOCUMENT_VERSION,
     decodeDocument,
@@ -41,6 +44,7 @@ describe('storage/codec', () => {
             pendingTxs: [],
             signers: [],
             pendingAirdrops: [],
+            pendingFileUploads: [],
             pendingDeploys: [],
             watchlistEntries: [],
             priceAlerts: [],
@@ -85,6 +89,29 @@ describe('storage/codec', () => {
         await expect(
             decodeDocument(KEY, await backend.load(), new TextEncoder().encode('other-vault')),
         ).rejects.toThrow();
+    });
+
+    it('pins the current shared-key no-AAD format for seed and document blobs', async () => {
+        const { encryptedSeed } = await encryptWalletSeed({
+            seed: new Uint8Array([1, 2, 3, 4]),
+            masterKey: KEY,
+            kdfParams: {
+                algorithm: 'argon2id',
+                salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
+                iterations: 1,
+                memory: 8192,
+                parallelism: 1,
+            },
+        });
+
+        const formatError = await decodeDocument(KEY, base64ToBytes(encryptedSeed))
+            .catch((error) => error);
+        expect(formatError).toBeInstanceOf(Error);
+        expect(formatError).not.toBeInstanceOf(AeadAuthError);
+
+        const document = await encodeDocument(KEY, emptyDocument());
+        await expect(decodeDocument(new Uint8Array(32).fill(18), document))
+            .rejects.toBeInstanceOf(AeadAuthError);
     });
 
     it('rejects non-object payloads and unsupported document versions', async () => {

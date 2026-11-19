@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { selectOption } from '../../helpers/selectOption.js';
 
 let settings;
 let update;
@@ -33,15 +34,17 @@ const { LanguageRegionSection } = await import(
 const { AppearanceSection } = await import(
     '../../../packages/core/src/shared/components/settings/AppearanceSection.jsx'
 );
-const { FeesSection } = await import(
-    '../../../packages/core/src/shared/components/settings/FeesSection.jsx'
-);
+const { FeesHarness: FeesSection } = await import('./networkRowHarness.jsx');
 const { DeveloperModeSection } = await import(
     '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx'
 );
 const { LayoutModeToggle } = await import(
     '../../../packages/core/src/shared/components/LayoutModeToggle.jsx'
 );
+const { TestNetworkPage, buildCustomDescriptor } = await import(
+    '../../../packages/core/src/shared/components/settings/TestNetworksPages.jsx'
+);
+const { defaultRegistry } = await import('../../../packages/core/src/registry/index.js');
 
 function describedText(control) {
     const id = control.getAttribute('aria-describedby');
@@ -107,6 +110,22 @@ describe('shared settings row semantics', () => {
         expect(onChange).toHaveBeenCalledWith(false);
     });
 
+    it('names a toggle with a help tip by its label alone, even with the tip open', () => {
+        render(
+            <ToggleRow
+                label="Show pin button on rows"
+                help="A star pins or unpins the token on Home."
+                checked={false}
+                onChange={() => {}}
+            />,
+        );
+
+        const tip = screen.getByRole('button', { name: 'About Show pin button on rows' });
+        expect(screen.getByRole('switch', { name: 'Show pin button on rows' })).toBeTruthy();
+        fireEvent.click(tip);
+        expect(screen.getByRole('switch', { name: 'Show pin button on rows' })).toBeTruthy();
+    });
+
     it('gives appearance controls visible labels without repeating them in a description', () => {
         render(<AppearanceSection />);
 
@@ -127,7 +146,7 @@ describe('shared settings row semantics', () => {
         render(<AppearanceSection />);
 
         const theme = screen.getByRole('combobox', { name: 'Theme' });
-        fireEvent.change(theme, { target: { value: 'dark' } });
+        selectOption(theme, 'dark');
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not save appearance settings. Try again.',
@@ -148,15 +167,20 @@ describe('shared settings row semantics', () => {
             },
         };
         render(<FeesSection />);
+        fireEvent.click(document.querySelector('[data-network-row="bitcoin-mainnet"] button'));
 
         const strategy = screen.getByRole('combobox', { name: 'Bitcoin fee strategy' });
         const rate = screen.getByRole('textbox', { name: 'Bitcoin custom fee rate' });
         const bump = screen.getByRole('switch', {
             name: 'Bitcoin allow fee bump (Replace-by-Fee)',
         });
-        expect(describedText(strategy)).toMatch(/confirmation speed/i);
-        expect(describedText(rate)).toContain('sat/vB');
-        expect(describedText(bump)).toMatch(/raise the fee later/i);
+        // No description lines under the fields (operator walk 2026-11-15):
+        // the rate's unit and the fee-bump explanation live in the '?' tips.
+        expect(describedText(strategy)).toBeNull();
+        expect(describedText(rate)).toBeNull();
+        expect(describedText(bump)).toBeNull();
+        expect(screen.getByRole('button', { name: /About Custom fee rate/ }).parentElement.textContent).toContain('sat/vB');
+        expect(screen.getByRole('button', { name: /About Allow fee bump/ }).parentElement.textContent).toMatch(/raised later/i);
         expect(bump.checked).toBe(true);
         expect(bump).toHaveAttribute(
             'aria-label',
@@ -166,20 +190,32 @@ describe('shared settings row semantics', () => {
         fireEvent.change(rate, { target: { value: '' } });
         fireEvent.blur(rate);
         expect(rate.getAttribute('aria-invalid')).toBe('true');
-        expect(rate.getAttribute('aria-errormessage')).toBeTruthy();
+        // The standard field's own error line under it, tied to the input.
+        expect(describedText(rate)).toMatch(/fee rate/i);
     });
 });
 
 describe('settings actions and mode choices', () => {
-    it('styles custom-chain removal as a danger action', async () => {
+    // A Remove row is never red (ruling 2026-11-14): a custom network's
+    // Remove network is a plain action row on its own page.
+    it('draws custom network removal as a plain action row, never red', async () => {
         settings = { ...createDefaultSettings(), developerMode: true };
-        messaging.listCustomChains = vi.fn(async () => ({
-            descriptors: [{ id: 'fork-regtest', displayName: 'Fork Regtest', networkKind: 'regtest' }],
-        }));
-        render(<DeveloperModeSection />);
-
-        const remove = await screen.findByRole('button', { name: 'Remove custom network fork-regtest' });
-        expect(remove.className).toMatch(/danger/);
+        const registry = defaultRegistry();
+        const descriptor = buildCustomDescriptor(registry.get('bitcoin-regtest'), {
+            name: 'Fork Regtest',
+            id: 'audit-fork-regtest',
+            explorer: { defaultUrl: 'http://localhost', defaultPort: 18090 },
+            encoder: { defaultUrl: 'http://localhost', defaultPort: 3033 },
+        });
+        registry.addCustom(descriptor);
+        try {
+            render(<TestNetworkPage chainId="audit-fork-regtest" activeWallet={{ id: 'wallet-1' }} />);
+            const remove = await screen.findByRole('button', { name: /^Remove network/ });
+            expect(remove.className).not.toMatch(/danger/);
+            expect(remove.getAttribute('data-tone')).toBe('default');
+        } finally {
+            registry.removeCustom('audit-fork-regtest');
+        }
     });
 
     it('names and describes the extension layout choice and exposes radio state', async () => {

@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OracleRecord } from '../../../packages/core/src/shared/routes/OracleRecord.jsx';
 import { SendPicker } from '../../../packages/core/src/shared/routes/SendPicker.jsx';
 import { StakeNew } from '../../../packages/core/src/shared/routes/StakeNew.jsx';
@@ -41,7 +41,8 @@ describe('SendPicker render', () => {
             onSelect,
         });
 
-        expect(screen.getByRole('heading', { name: 'Send' })).toBeInTheDocument();
+        // Send's Asset field opens this page, so it is titled Asset (G60).
+        expect(screen.getByRole('heading', { name: 'Asset' })).toBeInTheDocument();
         expect(screen.getByRole('status', { name: 'Loading balances' })).toBeInTheDocument();
 
         await act(async () => {
@@ -105,7 +106,7 @@ describe('StakeNew render', () => {
             onPickContract: vi.fn(),
         });
 
-        expect(screen.getByRole('heading', { name: 'New stake' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'New Stake' })).toBeInTheDocument();
         expect(screen.getByText('Loading…')).toBeInTheDocument();
 
         await act(async () => {
@@ -131,7 +132,7 @@ describe('StakeNew render', () => {
         }, props);
 
         expect(await screen.findByText(/Use Receive on a Bitcoin network/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Validator staking/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Validator staking/ })).toHaveAttribute('aria-disabled', 'true');
         unmount();
 
         renderRoute(StakeNew, {
@@ -139,22 +140,31 @@ describe('StakeNew render', () => {
         }, props);
 
         expect(await screen.findByText(/Couldn.t load your staking networks/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
     });
 });
 
-describe('MyBets render', () => {
+// My bets is a tab of Prediction markets (the my-bets route opens the list on it).
+describe('Prediction markets My bets tab render', () => {
     const props = {
         walletId: 'wallet-1',
-        accountId: 'account-1',
+        view: 'bets',
         onBack: vi.fn(),
         onOpenMarket: vi.fn(),
     };
 
+    // My bets is the All list narrowed to the markets bet in (ruling
+    // 2026-11-13): one market the wallet bet in, one it did not.
+    const MARKETS = [
+        { action_index: 7, label: 'Will it rain?', outcomes: 'Yes,No', tick: 'XCHAIN', feed_status: 'open', source: 'bc1qoracle' },
+        { action_index: 8, label: 'Will it snow?', outcomes: 'Yes,No', tick: 'XCHAIN', feed_status: 'open', source: 'bc1qoracle' },
+    ];
+
     it('renders loading and main states', async () => {
         const addresses = deferred();
-        renderRoute(MyBets, {
+        renderRoute(BetFeedsList, {
             getAddressesByChain: vi.fn(() => addresses.promise),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
             bets: vi.fn().mockResolvedValue([{
                 action_index: 9,
                 feed_action_index: 7,
@@ -165,38 +175,42 @@ describe('MyBets render', () => {
             }]),
         }, props);
 
-        expect(screen.getByRole('status', { name: 'Loading bets' })).toBeInTheDocument();
+        expect(screen.getByRole('status', { name: 'Loading prediction market addresses' })).toBeInTheDocument();
 
         await act(async () => {
             addresses.resolve({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] });
             await addresses.promise;
         });
 
-        const row = await screen.findByRole('button', { name: /Market #7/ });
-        fireEvent.click(row);
+        expect(screen.getByRole('tab', { name: 'My predictions' })).toHaveAttribute('aria-selected', 'true');
+        const card = await screen.findByRole('button', { name: 'Will it rain?' });
+        expect(screen.queryByRole('button', { name: 'Will it snow?' })).toBeNull();
+        expect(card).toHaveTextContent('12 XCHAIN');
+        expect(card).not.toHaveTextContent(/bet|Your position/i);
+        fireEvent.click(card);
         expect(props.onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 7);
-        expect(screen.getByRole('heading', { name: 'Pending resolution' })).toBeInTheDocument();
-        expect(screen.getByText('from bc1qbettor')).toBeInTheDocument();
     });
 
     it('renders empty and error states', async () => {
-        const { unmount } = renderRoute(MyBets, {
-            getAddressesByChain: vi.fn().mockResolvedValue({}),
-            bets: vi.fn(),
+        const { unmount } = renderRoute(BetFeedsList, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] }),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
+            bets: vi.fn().mockResolvedValue([]),
         }, props);
 
-        expect(await screen.findByText('No bets yet')).toBeInTheDocument();
+        expect(await screen.findByText('No predictions yet')).toBeInTheDocument();
         unmount();
 
-        renderRoute(MyBets, {
-            getAddressesByChain: vi.fn().mockRejectedValue(new Error('Bet history unavailable.')),
-            bets: vi.fn(),
+        renderRoute(BetFeedsList, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] }),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
+            bets: vi.fn().mockRejectedValue(new Error('Bet history unavailable.')),
         }, props);
 
         // Raw load errors are replaced with plain recovery copy and a retry action.
-        expect(await screen.findByText('Could not load your bets. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load positions for any of your addresses.')).toBeInTheDocument();
         expect(screen.queryByText('Bet history unavailable.')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
     });
 });
 
@@ -232,7 +246,13 @@ describe('OracleRecord render', () => {
             await record.promise;
         });
 
+        // Actions opens first (G102); the market rows are on Markets.
+        expect(await screen.findByRole('list', { name: 'Oracle actions' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: /Markets/ }));
         expect(await screen.findByText('Example market')).toBeInTheDocument();
+        // Only the chosen tab renders: the counts and fees are on Details.
+        expect(screen.queryByText('Markets opened')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
         expect(screen.getByText('Markets opened')).toBeInTheDocument();
         expect(screen.getByText('Fees earned')).toBeInTheDocument();
         expect(screen.getByText('4')).toBeInTheDocument();
@@ -244,8 +264,11 @@ describe('OracleRecord render', () => {
             betFeeds: vi.fn().mockResolvedValue([]),
         }, props);
 
+        // Actions is the first tab and Markets the next; the fees sit under Details.
+        fireEvent.click(await screen.findByRole('tab', { name: /Markets/ }));
+        expect(await screen.findByText('No markets yet')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
         expect(await screen.findByText('No settlement fees yet')).toBeInTheDocument();
-        expect(screen.getByText('No markets yet')).toBeInTheDocument();
         unmount();
 
         renderRoute(OracleRecord, {
@@ -279,8 +302,12 @@ describe('WalletPicker render', () => {
             await wallets.promise;
         });
 
-        expect(await screen.findByRole('button', { name: /Primary wallet BIP39/ })).toHaveAttribute('aria-current', 'true');
-        expect(screen.getByRole('button', { name: 'Manage wallet' })).toBeInTheDocument();
+        // One list card: a row opens that wallet's page; there is no Manage wallet button.
+        const row = await screen.findByRole('button', { name: /Primary wallet/ });
+        expect(row).toHaveAttribute('aria-current', 'true');
+        expect(screen.queryByRole('button', { name: 'Manage Wallet' })).toBeNull();
+        fireEvent.click(row);
+        expect(props.onShowDetails).toHaveBeenCalledWith('wallet-1');
     });
 
     it('renders empty and error states', async () => {

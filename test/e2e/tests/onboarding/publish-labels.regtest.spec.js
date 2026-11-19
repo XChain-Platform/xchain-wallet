@@ -67,15 +67,18 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    approveConfirm,
+    expectConfirmModal,
     fundAddress,
     minerRpc,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Two FILE publishes; FILE carries no protocol fee, so this is miner fees only. */
@@ -179,15 +182,22 @@ async function publishLabels(page) {
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();
 
-    const open = main.getByRole('button', { name: 'Publish now…', exact: true });
-    await expect(open, 'the Backup section offers no "Publish now…" action').toBeVisible({ timeout: 30_000 });
+    // The Publish labels page opens straight on its form (no Publish Now button).
+    const open = main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first();
+    await expect(open, 'Backup and Recovery offers no "Publish labels on-chain" row').toBeVisible({ timeout: 30_000 });
     await open.click();
 
-    const chain = page.getByLabel('Publish network');
-    await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-    await chain.selectOption(REGTEST_CHAIN_ID);
-    await page.getByLabel('Wallet password').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    // The network is the standard Network field and its full-screen list.
+    await selectVenueChain(main, 'Network');
+    // An unlocked session publishes with its pooled signer and asks no
+    // password (2026-11-14); fill it only when the form shows it.
+    const password = fieldByLabel(page, 'Wallet password');
+    if (await password.count()) await password.fill(PASSWORD);
+    await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
+    // The publish signs through the shared confirm screen, which opens in
+    // place of the form.
+    await expectConfirmModal(page, 'the label publish', 120_000);
+    await approveConfirm(page, 'the label publish');
 
     await expect(main.getByText('✓ Labels published'), 'the publish never reported success')
         .toBeVisible({ timeout: 180_000 });
@@ -239,9 +249,9 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // identified by its prefix.
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            owner = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -271,7 +281,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(row, 'the funded address is not in the address list').toBeVisible({ timeout: 30_000 });
             await row.click();
 
-            const labelInput = page.getByLabel('Address label');
+            const labelInput = fieldByLabel(page, 'Address label');
             await expect(labelInput, 'the address detail has no label field').toBeVisible({ timeout: 30_000 });
             await labelInput.fill(LABEL_CANARY);
             const saveLabel = page.getByRole('button', { name: 'Save', exact: true });
@@ -300,7 +310,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // strict-mode violation.
             await page.getByRole('textbox', { name: 'Address' }).fill(owner);
             await page.getByRole('textbox', { name: 'Notes' }).fill(NOTES_CANARY);
-            await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).first().click();
             // Back on the list, with the new contact on it: the publish reads
             // the vault, so the write has to have landed before it runs.
             await expect(page.getByText(CONTACT_CANARY).first(),

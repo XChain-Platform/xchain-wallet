@@ -102,10 +102,11 @@ describe('action param text boundary', () => {
             .toMatch(/text-direction/);
     });
 
-    it('enforces the memo byte ceiling at the common boundary', () => {
-        expect(actionParamsTextError({ action: 'TEST', params: { MEMO: 'é'.repeat(125) } })).toBeNull();
-        expect(actionParamsTextError({ action: 'TEST', params: { MEMO: `${'é'.repeat(125)}a` } }))
-            .toBe('Memo is 251 bytes; the network accepts at most 250 bytes.');
+    it('enforces the memo UTF-16 ceiling at the common boundary', () => {
+        expect(actionParamsTextError({ action: 'TEST', params: { MEMO: '😀'.repeat(125) } })).toBeNull();
+        expect(actionParamsTextError({ action: 'TEST', params: { MEMO: 'é'.repeat(250) } })).toBeNull();
+        expect(actionParamsTextError({ action: 'TEST', params: { MEMO: `${'😀'.repeat(125)}a` } }))
+            .toBe('Memo is 251 characters; the network accepts at most 250 characters.');
     });
 
     it('leaves structured and binary action fields untouched', () => {

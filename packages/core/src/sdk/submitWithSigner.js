@@ -69,6 +69,16 @@ async function broadcastSigned(encoder, txHex) {
  * both and sends the commit and then the reveal: a commit queued alone spends
  * its coin into a script that nothing opens.
  *
+ * `phase` names the leg that failed, and the message reads
+ * `broadcast failed (<phase>): ...`:
+ *   - 'phase1': the first (or only) transaction did not broadcast; nothing from
+ *     this attempt is known to have reached the network.
+ *   - 'envelope_reveal': the commit is on the network and the signed reveal
+ *     this error carries did not broadcast.
+ *   - 'phase2': the commit is on the network and the signed phase-2 spend this
+ *     error carries did not broadcast.
+ * Both 'envelope_reveal' and 'phase2' mean the commit already landed.
+ *
  * Cluster G FOLLOWUP 1.
  */
 export class BroadcastFailedError extends Error {
@@ -80,7 +90,7 @@ export class BroadcastFailedError extends Error {
      *   chainId: string,
      *   signedAt: number,
      *   encoding: string,
-     *   phase: 'phase1' | 'phase2',
+     *   phase: 'phase1' | 'envelope_reveal' | 'phase2',
      *   revealTxHex?: string | null,
      *   revealTxid?: string | null,
      * }} fields
@@ -239,7 +249,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {{ address: string, value: string | number } | null} [deferredFeeOutput]
  * @property {Array<{ address: string, value: string | number }>} [deferredOutputs]
  * @property {{ change?: string | null, rawData?: string | null } | null} [revealOpts]  what the compose built the commit with, so the phase-2 reveal agrees
- * @property {{ included: boolean } | null} [adsDonation]  whether THESE bytes carry the ADS donation
+ * @property {{ included: boolean, fiat?: string | null, currency?: string | null, reservationId?: string | null } | null} [adsDonation]  whether THESE bytes carry the automatic donation, the queued fiat amount it settles, and the review claim the compose took for it
  * @property {{ compressed: boolean, data?: string, rawData?: string } | null} [compression]  the encoder's transparent-compression report for these bytes, carried so the result can state the size actually stored on chain
  * @property {string | null} [revealPsbt]  TAPROOT only: the reveal PSBT composed with `psbtHex`, signed byte-identically before the commit is broadcast
  * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string } | null} [envelope]  TAPROOT only: the recovery record persisted before the commit is broadcast
@@ -260,7 +270,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
- * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null, psbtHex: string }) => void | Promise<void>} [beforeBroadcast] called after the commit and any reveal (the TAPROOT envelope reveal or the P2SH/P2WSH phase-2 spend) are signed and before anything is broadcast
+ * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null, psbtHex: string, finalPsbtHex: string }) => void | Promise<void>} [beforeBroadcast] called after the commit and any reveal (the TAPROOT envelope reveal or the P2SH/P2WSH phase-2 spend) are signed and before anything is broadcast
  * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
  *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
  *                                       Set by callers whose approval came before the build, such as a dApp signAction.
@@ -611,6 +621,7 @@ export async function submitWithSigner({
     // pair missing its reveal or record, so a pair here always has both.
     const envelopePair = Boolean(encoded && encoded.revealPsbt);
     let envelopeRevealSigned = null;
+    let finalPsbtHex = encoded.psbt;
 
     // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
@@ -630,6 +641,7 @@ export async function submitWithSigner({
 
     // Step 3b: the envelope reveal, signed while nothing is on chain yet.
     if (envelopePair) {
+        finalPsbtHex = encoded.revealPsbt;
         envelopeRevealSigned = await signer.signPsbt({
             psbtHex: encoded.revealPsbt,
             chainId,
@@ -686,6 +698,7 @@ export async function submitWithSigner({
             // for each of them and emitted none, so any left out here is burned.
             ...(deferredOutputs.length ? { customOutputs: deferredOutputs } : {}),
         });
+        finalPsbtHex = spendResult.psbt;
         assertRevealSpendsCommitLegs({
             decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
             revealPsbtHex: spendResult.psbt,
@@ -724,7 +737,7 @@ export async function submitWithSigner({
     const revealSigned = envelopeRevealSigned ?? phase2Signed;
     if (typeof beforeBroadcast === 'function') {
         // Pass the commit PSBT too (a hardware signer returns signedPsbtHex '').
-        await beforeBroadcast({ signed, revealSigned, psbtHex: encoded.psbt });
+        await beforeBroadcast({ signed, revealSigned, psbtHex: encoded.psbt, finalPsbtHex });
     }
     // The freeze is checked again at the last moment before the bytes leave:
     // an Undo hold or a hardware signer can keep a signed send waiting here,

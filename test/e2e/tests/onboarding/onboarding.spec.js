@@ -67,12 +67,12 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('password1234');
-        await page.getByLabel('Confirm password').fill('password1234');
+        await page.getByLabel('Confirm password', { exact: true }).fill('password1234');
         await page.getByRole('button', { name: 'Next' }).click();
 
         // Mnemonic display stage
         await revealRecoveryPhrase(page);
-        await page.getByLabel(/saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         // Deliberately wrong words: the wallet must not be created.
@@ -84,7 +84,7 @@ test.describe('onboarding', () => {
 
         // Still on the verification stage; no wallet, no Home.
         await expect(
-            page.getByRole('heading', { name: 'Verify your recovery phrase' }),
+            page.getByRole('heading', { name: 'Verify Your Recovery Phrase' }),
         ).toBeVisible();
         await expect(lockButton(page)).toHaveCount(0);
     });
@@ -106,19 +106,19 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
-        // Import takes a known-good phrase to the Automatic Donation System
+        // Import takes a known-good phrase to the Automatic Donations
         // notice, and Continue from there to an unlocked wallet.
         await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
-        await page.getByLabel('Wallet name').fill('Imported E2E');
+        await page.getByLabel('Wallet name', { exact: true }).fill('Imported E2E');
         await page.getByLabel('Password', { exact: true }).fill('importpassword1');
-        await page.getByLabel('Confirm password').fill('importpassword1');
+        await page.getByLabel('Confirm password', { exact: true }).fill('importpassword1');
         await page.getByRole('button', { name: 'Import' }).click();
 
         // Asserted rather than tolerated: this is the golden path, and a
         // helper that quietly no-opped would let the notice disappear.
         await expect(
-            page.getByRole('heading', { name: 'Automatic Donation System', exact: true }),
-            'an import did not end on the Automatic Donation System notice',
+            page.getByRole('heading', { name: 'Automatic Donations', exact: true }),
+            'an import did not end on the Automatic Donations notice',
         ).toBeVisible({ timeout: 90_000 });
         await acknowledgeImportNotice(page);
 
@@ -133,11 +133,11 @@ test.describe('onboarding', () => {
         // 13 words: not a valid BIP39 count.
         await page.getByLabel('Recovery phrase', { exact: true }).fill('word '.repeat(13).trim());
         await page.getByLabel('Password', { exact: true }).fill('xxxxxxxxxx');
-        await page.getByLabel('Confirm password').fill('xxxxxxxxxx');
+        await page.getByLabel('Confirm password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByRole('button', { name: 'Import' }).click();
 
-        await expect(page.getByRole('alert')).toContainText(
-            'Expected 12, 15, 18, 21, or 24 words, got 13.',
-        );
+        // The field error and the form-errors summary both carry the message.
+        await expect(page.getByRole('alert').filter({ hasText: 'Expected 12, 15, 18, 21, or 24 words, got 13.' }).first())
+            .toBeVisible();
     });
 });

@@ -33,19 +33,22 @@
 # A stale list either blocks a legitimate release or, worse, silently
 # stops demanding a shell that quietly dropped out of the build.
 #
-# THE THIRD COLUMN IS THE BUILD PROFILE (rails §3): which set of
-# features was compiled into that artifact. `default` is the full app
-# (web, desktop, extension); `store` is the mobile store build, which
-# compiles OUT the surfaces the app-store review posture hides (§2.3).
-# Two artifacts of one tag can hold different code, so the profile
-# is written into the signed manifest and every declared glob must name
-# one. A missing or unknown profile fails the gate here, at declaration
-# time, rather than when a release is already staged.
+# THE THIRD COLUMN IS THE BUILD PROFILE (rails §3). `default` is the full
+# app (web, desktop, extension). `store` is the mobile store build: it uses
+# the subtractive CSP without the Trezor connect origin, emits no sourcemaps,
+# uses store packaging and carries the signed profile stamp. The label does
+# not by itself mean any product surface is absent. That is decided by
+# `HIDDEN_SURFACES.store` in packages/web/src/surfaces/registry.js at the
+# signed commit; it has been empty since the 2026-10-09 review decision.
+# The profiles still contain different code because their CSP and sourcemap
+# settings differ, so every declared glob names a profile in the manifest.
+# A missing or unknown profile fails here before a release is staged.
 #
 # The direct APK is `store` and that is not a typo: §6 derives it
 # from the same AAB, so it is the store build's code signed by a
-# different key. Anything compiled out for review is therefore also
-# absent from the direct download.
+# different key. It has the store CSP and no sourcemaps. If
+# `HIDDEN_SURFACES.store` lists a surface, that surface is absent here too;
+# today the list is empty.
 #
 # THAT COUPLING IS NOW A CHOICE RATHER THAN A CONSEQUENCE (operator answer
 # 2026-08-07). A SECOND direct APK is declared below at the
@@ -53,6 +56,8 @@
 # the full feature set. The store-derived APK above stays exactly as it is:
 # it is what Play's review posture permits, it is derived from the uploaded
 # bundle, and it remains the file the download page offers by default.
+# Since the 2026-10-09 review decision both APKs carry the same product
+# surfaces; the `default` APK differs in CSP, sourcemaps and profile stamp.
 #
 # THE FOURTH COLUMN IS THE ARCHITECTURE SET, and it exists because this
 # file's globs are extension-shaped: `*.dmg` is satisfied by ONE dmg. On
@@ -281,20 +286,22 @@ optional  xchain-wallet-v*[0-9].apk         store    -         deferred-android
 #
 # THE SECOND DIRECT APK: same tag, `default` profile, K10 signature, and it
 # exists because the operator answered `build it` rather than `document the
-# coupling`. The `store` profile genuinely compiles the DEX lane out (eight
-# modules) along with the Trezor connect CSP origin, so until this row the
-# users who avoid Play on principle were getting Play's restrictions anyway.
+# coupling`. At that 2026-08-07 decision the `store` profile compiled out the
+# DEX surface listed by `SURFACE_MODULES.dex` as well as the Trezor connect
+# CSP origin. Since 2026-10-09 `HIDDEN_SURFACES.store` is empty, so today the
+# APKs differ in CSP, sourcemaps and profile stamp, not in product surfaces.
 #
 # WHY THE ROW ABOVE IS ANCHORED `*[0-9].apk`, WHICH LOOKS LIKE FUSS AND IS
 # NOT. `xchain-wallet-v*.apk` is GREEDY: measured 2026-08-07 against the real
 # `xr_profile_for`, a default-profile APK named the obvious way did NOT fail
 # the gate. It resolved to `store`, silently, because both names matched one
 # glob declaring one profile, so there was nothing ambiguous to report. That
-# writes a FALSE profile into a signed, append-only manifest - a verifier
-# reads `store` as "the review-hidden surfaces are absent" from the one build
-# that still contains them, which is precisely what
-# `xr_assert_store_profile_buildable` exists to make impossible, arriving
-# through the filename instead of the status file.
+# writes a FALSE profile into a signed, append-only manifest. A verifier reads
+# `store` as the store CSP, no sourcemaps, and whatever
+# `HIDDEN_SURFACES.store` hid at the signed commit, while the bytes actually
+# have the default CSP and sourcemaps. That is precisely what
+# `xr_assert_store_profile_buildable` prevents from arriving through a
+# filename instead of the status file.
 #
 # Anchoring the store row to a trailing DIGIT and suffixing this one makes
 # the two globs disjoint by construction rather than by care: a released

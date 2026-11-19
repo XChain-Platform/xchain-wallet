@@ -23,7 +23,7 @@
 //     `action.send.psbt`.
 //   - All three messaging shims expose `buildSendPsbtRequest` calling
 //     `action.send.psbt`.
-//   - Send.jsx waits for settings and reads walletMode from that snapshot,
+//   - Send.jsx waits for and reads this wallet's own walletMode (§20),
 //     branches the submit handler to `messaging.buildSendPsbtRequest`,
 //     swaps the password / HW block for an explanatory hint at review,
 //     and renders the shared `<ResultScreen>` in the done stage
@@ -137,12 +137,12 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const walletModeReady = settings !== null \|\| !settingsLoading;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
-    'waits for and derives watcher mode from the same settings snapshot',
+    /walletModeKnown: walletModeReady,\s*\} = useWalletMode\(walletId\);/,
+    'waits for and derives watcher mode from this wallet\'s own mode (§20)',
 );
 assert.match(
     sendSrc,
-    /if \(!walletModeReady\) \{\s*return wrap\(<p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p>\);\s*\}/,
+    /if \(!walletModeReady\) \{\s*return wrap\(<ListPage><p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p><\/ListPage>\);\s*\}/,
     'does not render a signing-capable route before wallet mode is known',
 );
 assert.match(
@@ -152,14 +152,18 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /t\('send\.review\.createUnsigned'\)/,
-    'submit button label changes to "Create unsigned transaction" in watcher mode',
+    /<FormAction[\s\S]{0,600}>\s*\{t\('send\.title'\)\}\s*<\/FormAction>/,
+    'the standard form action remains Send in watcher mode',
 );
 assert.match(
     sendSrc,
-    /t\('send\.watcherMode'\)/,
-    'review-stage hint copy explains watcher mode',
+    /<ConfirmStandard[\s\S]{0,1000}\{isWatcherMode \? \([\s\S]{0,220}t\('common\.watcherBuildsUnsigned'\)/,
+    'Confirm Standard explains that watcher approval builds an unsigned transaction',
 );
+assert.match(sendSrc, /<ConfirmStandard\b[\s\S]{0,800}warning=\{reviewWarning\}/,
+    'watcher review keeps its short warning after the details (G127 revised 2026-11-16)');
+assert.match(sendSrc, /<ConfirmDecisionFooter\b[\s\S]{0,400}approveLoading=\{stage === 'submitting'\}/,
+    'watcher review docks the shared button pair, Approve never disabled (G130)');
 // §20 Cluster W FOLLOWUP 3 (closed at v0.239.0): when the source address is
 // HW-paired AND watcher mode is on, an extra StatusMessage explains that the
 // pairing here is decorative and the same HW device must be paired on the

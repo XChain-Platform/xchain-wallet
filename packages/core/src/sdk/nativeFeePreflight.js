@@ -40,7 +40,7 @@ import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
 // Consensus fee destinations copied from the SDK coin registry. The remote quote may
 // confirm this address, but it never chooses it. Selecting by the SDK's local chain identity
 // keeps a reply from choosing both the network and the destination it wants us to pay.
-const FEE_DESTINATION_BY_CHAIN = Object.freeze({
+export const FEE_DESTINATION_BY_CHAIN = Object.freeze({
     'bitcoin-mainnet': '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
     'bitcoin-testnet': 'mfees5QurRs5BHXofdGpTG5pXB6uC6R8RU',
     'bitcoin-regtest': 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',
@@ -168,13 +168,13 @@ export function nativeFeeErrorMessage(
  * protocolFeeRow already imports this module and a message that names the control has to
  * be unable to drift from it. Copying the sentence into either file is how "turn off
  * native-coin fee payment" ended up pointing at a checkbox labelled "Pay protocol fee in
- * BTC instead of XCHAIN".
+ * BTC".
  *
  * @param {string} [coinTicker]   BTC/LTC/DOGE; blank falls back to the generic phrasing
  * @returns {string}
  */
 export function nativeFeeToggleLabel(coinTicker) {
-    return `Pay protocol fee in ${coinTicker || 'the native coin'} instead of XCHAIN`;
+    return `Pay protocol fee in ${coinTicker || 'the native coin'}`;
 }
 
 /**
@@ -185,8 +185,8 @@ export function nativeFeeToggleLabel(coinTicker) {
  * On mainnet that is a market purchase and none of the wallet's business; on testnet and
  * regtest XCHAIN is mint-by-anyone (see MintForm's token picker note and the Developer
  * Mode faucet row), so the wallet can name the screen that does it. The path is the one
- * the shells actually render: Menu -> More actions opens the Token Actions page, whose
- * Mint entry is the MINT form (shared/routes/MenuRoute.jsx, shared/actionEntries.js).
+ * the shells actually render: All actions opens the Token Actions page, whose Mint entry
+ * is the MINT form (shared/actionEntries.js).
  *
  * @param {{ chainId?: string, networkKind?: string }} where
  * @returns {string}   a leading-space sentence, or ''
@@ -194,7 +194,7 @@ export function nativeFeeToggleLabel(coinTicker) {
 function xchainMintHint({ chainId, networkKind } = {}) {
     const kind = String(networkKind || networkKindFromChainId(chainId) || '').toLowerCase();
     if (kind !== 'testnet' && kind !== 'regtest') return '';
-    return ' Anyone can mint XCHAIN on this test network: open Menu > More actions > Mint,'
+    return ' Anyone can mint XCHAIN on this test network: open All actions > Mint,'
         + ' pick XCHAIN and mint yourself some (you pay only the network fee).';
 }
 

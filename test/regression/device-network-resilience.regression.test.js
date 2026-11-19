@@ -73,8 +73,10 @@ describe('regression/device-network-resilience', () => {
         time = 6 * 60 * 1000;
         const duringFailure = await oracle.getNativePrices(request);
 
-        expect(duringFailure.prices).toEqual(first.prices);
-        expect(duringFailure.error).toBe('HTTP 400');
+        expect(duringFailure.prices).toEqual({
+            'dogecoin-mainnet': { ...first.prices['dogecoin-mainnet'], stale: true },
+        });
+        expect(duringFailure.error).toBeUndefined();
         expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 });

@@ -6,10 +6,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { GatedPublishForm } from '../../../packages/core/src/shared/routes/GatedPublishForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { maxPublicFileBytes } from '../../../packages/core/src/flows/fileSizeLimits.js';
+import { formatBytes } from '../../../packages/core/src/shared/utils/formatBytes.js';
 
 const CHAIN = 'bitcoin-regtest';
 const SOURCE = {
@@ -65,6 +69,12 @@ function mount(ui, client = messaging()) {
     return render(<MessagingProvider shell="web" messaging={client}>{ui}</MessagingProvider>);
 }
 
+// The forms sit on the Wallet Form Standard frame: Memo, Access and the
+// Network fee are closed sections, opened before a field inside is used.
+async function openSection(title) {
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
+}
+
 beforeEach(() => {
     readers = [];
     originalFileReader = globalThis.FileReader;
@@ -73,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     globalThis.FileReader = originalFileReader;
 });
 
@@ -87,24 +98,27 @@ describe('publish forms replace file state safely', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Publish File' })).toBeDisabled();
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('exposes gated metadata through the shared field roles and counters', async () => {
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
 
-        const file = await screen.findByLabelText('File to publish');
+        await screen.findByLabelText('File to publish');
         const title = await screen.findByRole('textbox', { name: 'Title' });
+        await openSection('Memo');
         const memo = screen.getByRole('textbox', { name: 'Memo' });
         fireEvent.change(title, { target: { value: 'Member brief' } });
         fireEvent.change(memo, { target: { value: 'October' } });
 
         expect(title).toHaveValue('Member brief');
         expect(memo).toHaveValue('October');
-        expect(file).toHaveAccessibleDescription(/Publish a file that only holders of GATE can read/);
+        fireEvent.click(screen.getByRole('button', { name: /^About File \(up to / }));
+        expect(screen.getByRole('tooltip'))
+            .toHaveTextContent(/Publish a file that only holders of GATE can read/);
         expect(screen.getByText('12 / 120')).toBeInTheDocument();
-        expect(screen.getByText('7 / 120')).toBeInTheDocument();
+        expect(screen.getByText('7 / 250')).toBeInTheDocument();
     });
 
     it('refuses hostile gated metadata before review', async () => {
@@ -118,25 +132,26 @@ describe('publish forms replace file state safely', () => {
             target: { value: 'safe\u202eunsafe' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Title cannot contain text-direction control characters.');
-        expect(screen.queryByRole('form', { name: 'Review gated publish' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('keeps the public network picker free of network-kind text', async () => {
         mount(<PublishFileForm walletId="w" onBack={() => {}} />);
 
-        await screen.findByRole('button', { name: /^Network: Bitcoin/ });
+        // Network sits in the closed From section.
+        await screen.findByRole('button', { name: /^Network: Bitcoin/, hidden: true });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
-        ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
-        ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
-    ])('clears the previous file when a replacement read fails in %s', async (_name, mountRoute, inputLabel) => {
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'File to publish', "Couldn't read that file."],
+        ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish', 'Could not read that file.'],
+        ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach', 'Could not read that file.'],
+    ])('clears the previous file when a replacement read fails in %s', async (_name, mountRoute, inputLabel, unreadableMessage) => {
         mountRoute();
         const input = await screen.findByLabelText(inputLabel);
         fireEvent.change(input, {
@@ -151,7 +166,7 @@ describe('publish forms replace file state safely', () => {
         expect(document.body.textContent).not.toContain('old.txt');
         await act(async () => readers[1].fail());
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not read that file.');
+        expect(await screen.findByRole('alert')).toHaveTextContent(unreadableMessage);
         expect(document.body.textContent).not.toContain('old.txt');
     });
 
@@ -175,7 +190,7 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'File to publish'],
         ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
         ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
     ])('refuses a hostile file name before reading or rendering it in %s', async (_name, mountRoute, inputLabel) => {
@@ -191,7 +206,7 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'File to publish'],
         ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
         ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
     ])('rejects malformed MIME metadata before reading in %s', async (_name, mountRoute, inputLabel) => {
@@ -218,7 +233,7 @@ describe('publish forms replace file state safely', () => {
 
     it('ignores a stale public-file read that finishes after its replacement', async () => {
         mount(<PublishFileForm walletId="w" onBack={() => {}} />);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['old'], 'old.txt', { type: 'text/plain' })] },
         });
@@ -235,17 +250,31 @@ describe('publish forms replace file state safely', () => {
     });
 
     it('uses the encoding-aware attachment cap and rechecks it after metadata edits', async () => {
-        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        // A hardware From cannot sign the Taproot upload reveal, so Standard is
+        // the only Upload method and its legacy ceiling is the one rechecked.
+        // (With the envelope available, a title that outgrows Standard moves the
+        // upload onto the envelope instead of refusing it.)
+        const client = messaging();
+        const device = { ...SOURCE, source: 'ledger' };
+        client.getAddressesByChain.mockResolvedValue({ [CHAIN]: [device] });
+        client.getActiveAddresses.mockResolvedValue({ [CHAIN]: device });
+        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
         const input = await screen.findByLabelText('Choose file to attach');
+        // The field names the Standard ceiling, the one this source can sign.
+        const legacyLabel = `Artwork file (up to ${formatBytes(
+            maxPublicFileBytes({ name: 'file', type: 'application/octet-stream', title: '', memo: '' }),
+            { limit: true },
+        )})`;
+        await waitFor(() => expect(document.body.textContent).toContain(legacyLabel));
         const file = new File([new Uint8Array(8_080)], 'art.txt', { type: 'text/plain' });
         fireEvent.change(input, { target: { files: [file] } });
         await act(async () => readers[0].succeed(8_080));
         await waitFor(() => expect(document.body.textContent).toContain('art.txt'));
 
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'x'.repeat(100) },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Shorten the title or memo');
     });
@@ -268,8 +297,10 @@ describe('publish forms replace file state safely', () => {
         expect(document.body.textContent).not.toContain('No reusable packs');
     });
 
-    it('returns from gated publish review without resubmitting and preserves the form', async () => {
-        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
+    it('sends gated publish straight to the confirm compose and keeps the form when it fails', async () => {
+        const client = messaging();
+        client.composeGatedPublishForConfirm = vi.fn().mockRejectedValue(new Error('Encoder offline'));
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
         const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['draft'], 'members.txt', { type: 'text/plain' })] },
@@ -278,13 +309,34 @@ describe('publish forms replace file state safely', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
             target: { value: 'Member draft' },
         });
-        fireEvent.click(screen.getByRole('checkbox', { name: /published on-chain forever/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
-        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByRole('textbox', { name: 'Title' })).toHaveValue('Member draft');
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Member draft');
         expect(screen.getByText(/members\.txt/)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Sign and Publish|Sign on / })).toBeNull();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    it('builds the unsigned gated publish straight from the watcher form with no confirm step', async () => {
+        const client = messaging();
+        client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
+        // A wallet's mode comes from the wallet-mode store, not settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
+        client.buildGatedPublishPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff' });
+        client.composeGatedPublishForConfirm = vi.fn();
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
+        const input = await screen.findByLabelText('File to publish');
+        fireEvent.change(input, {
+            target: { files: [new File(['abc'], 'members.txt', { type: 'text/plain' })] },
+        });
+        await act(async () => readers[0].succeed(3));
+        fireEvent.click(await screen.findByRole('button', { name: /^Create Transaction for Signing$/i }));
+
+        await waitFor(() => expect(client.buildGatedPublishPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(client.composeGatedPublishForConfirm).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('returns from artwork review without resubmitting and preserves the form', async () => {
@@ -294,13 +346,13 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['art'], 'cover.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'Cover art' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('Cover art');
+        expect(await screen.findByLabelText('Title')).toHaveValue('Cover art');
         expect(screen.getByText('cover.txt')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     });
@@ -308,37 +360,41 @@ describe('publish forms replace file state safely', () => {
     it('shows the exact public metadata that will be built and keeps it after Back', async () => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
+        // A wallet's mode comes from the wallet-mode store, not settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
 
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['abc'], ' report.txt ', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: '  Quarterly report  ' },
         });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        await openSection('Memo');
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: ' keep these spaces ' },
         });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
-        expect(await screen.findByText('report.txt · 3 bytes · text/plain')).toBeInTheDocument();
+        // Sizes read in KB, never bytes; a 3-byte file reads as the 0.1 KB floor.
+        expect(await screen.findByText('report.txt · 0.1 KB · text/plain')).toBeInTheDocument();
         expect(screen.getByText('Quarterly report')).toBeInTheDocument();
         expect(screen.getByText((_, element) => (
             element?.tagName === 'DD' && element.textContent === ' keep these spaces '
         ))).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('  Quarterly report  ');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue(' keep these spaces ');
+        expect(await screen.findByLabelText('Title')).toHaveValue('  Quarterly report  ');
+        expect(screen.getByLabelText('Memo')).toHaveValue(' keep these spaces ');
         expect(document.body.textContent).toContain(' report.txt ');
     });
 
-    it('shows the exact gated metadata and full existing pack hash on review', async () => {
+    it('composes the exact gated metadata and full existing pack hash for the confirm screen', async () => {
         const client = messaging();
         const keyHash = 'ab'.repeat(32);
         client.listGatedKeys.mockResolvedValue([{ keyHash }]);
+        client.composeGatedPublishForConfirm = vi.fn().mockRejectedValue(new Error('Encoder offline'));
         mount(
             <GatedPublishForm
                 walletId="w"
@@ -355,42 +411,45 @@ describe('publish forms replace file state safely', () => {
         });
         await act(async () => readers[0].succeed(3));
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: '  Members  ' } });
+        await openSection('Memo');
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  October  ' } });
-        fireEvent.click(await screen.findByRole('radio', { name: new RegExp(keyHash.slice(0, 12)) }));
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await openSection('Access');
+        // Pack is the themed dropdown (G119): open it, pick the existing pack.
+        fireEvent.click(await screen.findByRole('button', { name: 'Pack: New pack (fresh key)' }));
+        fireEvent.click(screen.getByRole('option', { name: new RegExp(keyHash.slice(0, 12)) }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review gated publish' })).toBeInTheDocument();
-        expect(screen.getByText('gated.txt · 3 bytes · text/plain')).toBeInTheDocument();
-        expect(screen.getByText('Members')).toBeInTheDocument();
-        expect(screen.getByText('October')).toBeInTheDocument();
-        expect(screen.getByText(keyHash)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(await screen.findByLabelText('Title')).toHaveValue('  Members  ');
+        await waitFor(() => expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1));
+        expect(client.composeGatedPublishForConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            gateTicker: 'GATE',
+            type: 'text/plain',
+            title: 'Members',
+            memo: 'October',
+            existingKeyHash: keyHash,
+        }));
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveValue('  Members  ');
         expect(screen.getByLabelText('Memo')).toHaveValue('  October  ');
     });
 
+    // Typed into the one custom fee editor, the Network fee line (G113).
     it.each([
-        ['', 'Enter a custom fee rate.'],
-        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['999999999999999999999', 'Enter a rate no higher than 1,000 sat/vB.'],
+        ['', 'Enter a custom network fee.'],
+        ['50000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses the public custom fee %j before review', async (rate, message) => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
+        // A wallet's mode comes from the wallet-mode store, not settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: rate },
-        });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        await openSection('Speed and Fees');
+        await typeCustomRate(rate);
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -399,25 +458,28 @@ describe('publish forms replace file state safely', () => {
     it('refuses an overlong public memo before review', async () => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
+        // A wallet's mode comes from the wallet-mode store, not settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        await openSection('Memo');
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: 'm'.repeat(251) },
         });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 bytes');
+        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 characters');
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('refuses stale gated ownership before review', async () => {
         const client = messaging();
         client.getTokenInfo.mockResolvedValue({ creator: 'another-owner', divisibility: 8 });
+        client.composeGatedPublishForConfirm = vi.fn();
         mount(
             <GatedPublishForm
                 walletId="w"
@@ -433,11 +495,10 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['abc'], 'gated.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('no longer owns GATE');
-        expect(screen.queryByText('Review gated publish')).not.toBeInTheDocument();
+        expect(client.composeGatedPublishForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses gated memo and fee errors before review', async () => {
@@ -457,21 +518,17 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['abc'], 'gated.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
+        await openSection('Memo');
         fireEvent.change(screen.getByLabelText('Memo'), {
-            target: { value: '😀'.repeat(63) },
+            target: { value: '😀'.repeat(126) },
         });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 bytes');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 characters');
 
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: '0' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await openSection('Speed and Fees');
+        await typeCustomRate('0');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         expect(await screen.findAllByText(/must be greater than zero/)).not.toHaveLength(0);
         expect(client.getTokenInfo).not.toHaveBeenCalled();
     });
@@ -492,6 +549,7 @@ describe('publish forms replace file state safely', () => {
             />,
             client,
         );
+        await openSection('Access');
         const threshold = await screen.findByRole('textbox', { name: 'Unlock threshold' });
         const input = screen.getByLabelText('File to publish');
         fireEvent.change(input, {
@@ -499,8 +557,7 @@ describe('publish forms replace file state safely', () => {
         });
         await act(async () => readers[0].succeed(3));
         fireEvent.change(threshold, { target: { value: '1.234' } });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('at most 2 decimal places');
     });
@@ -523,6 +580,7 @@ describe('publish forms replace file state safely', () => {
             />,
             client,
         );
+        await openSection('Access');
         const threshold = await screen.findByRole('textbox', { name: 'Unlock threshold' });
         const input = screen.getByLabelText('File to publish');
         fireEvent.change(input, {
@@ -530,8 +588,7 @@ describe('publish forms replace file state safely', () => {
         });
         await act(async () => readers[0].succeed(3));
         fireEvent.change(threshold, { target: { value: '1.25' } });
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('not active on this network right now');
         expect(client.getIndexerWatermark).toHaveBeenCalledTimes(2);

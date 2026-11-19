@@ -9,14 +9,18 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
+import { Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
+// The Wallet Form Standard frame (no From and no fee: this form never signs or sends).
+import { FormAction, FormFrame } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/accountPicker.js';
-import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameAccount.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
+// Edit Account carries the same tile look controls as Edit Wallet.
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { TileLookFields, TILE_COLOURS } from '../components/TileLookFields.jsx';
+import { readWalletTile, writeWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -40,6 +44,10 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState(initialName);
+    const savedTile = readWalletTile(accountId);
+    const [tileColour, setTileColour] = useState(savedTile.colour || TILE_COLOURS[0]);
+    const [tileImage, setTileImage] = useState(/** @type {string | null} */ (savedTile.image || null));
+    const [tileShape, setTileShape] = useState(savedTile.shape === 'rounded' ? 'rounded' : 'circle');
     const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
@@ -49,7 +57,6 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const edited = useRef(false);
     const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
     useEffect(() => {
         setTimeout(() => {
@@ -97,6 +104,8 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         }
         setError(null);
         setBusy(true);
+        // The tile's look is saved with the name.
+        writeWalletTile(accountId, { colour: tileColour, image: tileImage, shape: tileShape });
         try {
             const result = await messaging.renameAccount({ accountId, name: trimmed });
             onRenamed(result?.account || result);
@@ -113,38 +122,51 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title={t('accountPicker.renameTitle')}
+            title={t('renameAccount.title')}
         />
     );
 
     const formBody = (
-        <FormPage
-            ref={formRef}
-            label={t('accountPicker.renameTitle')}
+        /* FormFrame around one flat set of fields. */
+        <FormFrame
+            label={t('renameAccount.title')}
             onSubmit={handleSubmit}
-            actions={(
-                <Button type="submit" variant="primary" disabled={saveDisabled}>
-                    {t('history.contact.save')}
-                </Button>
+            action={(
+                <FormAction icon={<Icon.SaveIcon />} disabled={saveDisabled}>
+                    {t('renameAccount.saveChanges')}
+                </FormAction>
             )}
         >
-            <Input
-                ref={nameRef}
-                label={t('renameAccount.name')}
-                value={name}
-                onChange={(e) => {
-                    const nextName = e.target.value;
-                    edited.current = true;
-                    setName(nextName);
-                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
-                        ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
-                        : null);
-                }}
-                autoComplete="off"
-                disabled={busy}
-                error={error || undefined}
-            />
-        </FormPage>
+            {/* One flat form, no section wrappers: the look tile, Account name,
+                then Icon colour, Icon shape and Icon image. */}
+            <div data-flat-look-form="" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-4)', minWidth: 0 }}>
+                {/* The current look tile, centred at the top. */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <span style={{ '--xc-avatar-shape': tileRadius(tileShape), display: 'inline-flex' }}>
+                        <IdentityAvatar name={name || 'Account'} text={walletTileText(name)} seed={accountId} context="hero" variant="asset" tone={tileColour} src={tileImage} />
+                    </span>
+                </div>
+                <Input
+                    ref={nameRef}
+                    label={t('renameAccount.name')}
+                    help={t('renameAccount.nameHelp')}
+                    maxLength={NAME_MAX_LENGTH}
+                    value={name}
+                    onChange={(e) => {
+                        const nextName = e.target.value;
+                        edited.current = true;
+                        setName(nextName);
+                        setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                            ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                            : null);
+                    }}
+                    autoComplete="off"
+                    disabled={busy}
+                    error={error || undefined}
+                />
+                <TileLookFields kind="account" colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
+            </div>
+        </FormFrame>
     );
 
     return (

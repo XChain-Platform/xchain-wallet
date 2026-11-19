@@ -390,16 +390,12 @@ for (const [shell, appPath] of [
     );
 }
 
-// Home surfaces the pending-airdrops resume card.
+// Home carries no pending-airdrops card; the header bell lists it (walletAlerts).
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/onResumeAirdrop/.test(homeSrc), 'Home.jsx accepts onResumeAirdrop prop');
+assert.ok(!/onResumeAirdrop|pendingAirdropCard|listPendingAirdropsForWallet/.test(homeSrc), 'Home.jsx has no pending airdrop card');
 assert.ok(
-    /listPendingAirdropsForWallet/.test(homeSrc),
-    'Home.jsx fetches pending airdrops on mount',
-);
-assert.ok(
-    /pendingAirdropCard/.test(homeSrc),
-    'Home.jsx renders the resume card under the pendingAirdropCard class',
+    /airdrop-pending/.test(readFileSync(join(sharedRoutes, '..', 'walletAlerts.js'), 'utf8')),
+    'the bell alerts list the pending airdrop',
 );
 
 // --- 12. PendingAirdrop schema + vault round-trip ---------------------

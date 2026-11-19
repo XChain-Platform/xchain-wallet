@@ -114,7 +114,6 @@ function createMessaging() {
         getMultisigReceiveAddress: vi.fn().mockResolvedValue(null),
         listMultisigReceiveAddresses: vi.fn().mockResolvedValue([]),
         listQueuedBroadcasts: vi.fn().mockResolvedValue([]),
-        listConfirmSessions: vi.fn().mockResolvedValue([]),
         listPendingAirdropsForWallet: vi.fn().mockResolvedValue([]),
         listContacts: vi.fn().mockResolvedValue([CONTACT]),
         listConnectedSites: vi.fn().mockResolvedValue([]),

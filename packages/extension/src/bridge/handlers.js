@@ -34,7 +34,7 @@
 // assertNotBlocked and no site record. It is the only route that carries its
 // own blocklist check for that reason.
 
-import { flows, schemas } from '@xchain-wallet/core';
+import { flows, registry, schemas } from '@xchain-wallet/core';
 import {
     resolveAutoApproveScope,
     shouldAutoApproveConnect,
@@ -47,7 +47,9 @@ import {
     BRIDGE_SUPPORTED_VERSIONS,
     SIGN_IN_CHALLENGE_SEPARATOR,
     SIGN_IN_CHALLENGE_VERSION,
+    SIGN_IN_DEFAULT_EXPIRY_MS,
     formatSignInChallenge,
+    generateNonce,
     isBridgeVersionSupported,
 } from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
@@ -216,10 +218,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Cluster F FOLLOWUP 3: version negotiation. Reject the
         // connect cleanly when the dApp asks for a bridge version
         // we don't implement, instead of accepting and failing later
-        // when a version-specific method gets called. The spec's own comment
-        // on requiredBridgeVersion says "warns the user"; the hard reject is
-        // the deliberate conservative reading and stays until product says
-        // otherwise.
+        // when a version-specific method gets called.
         if (!isBridgeVersionSupported(requiredBridgeVersion)) {
             throw bridgeError(
                 'BRIDGE_VERSION_MISMATCH',
@@ -227,6 +226,13 @@ export function registerBridgeHandlers(host, opts = {}) {
             );
         }
         const { origin, appName = origin, appIcon } = req;
+        // The site's own icon, rasterized to PNG by the content script inside
+        // the requesting page (contentScript.js captureSiteIcon). It is page
+        // data, so anything but a small PNG data URL is dropped here; the
+        // wallet never fetches an icon itself. `origin` was bound to the
+        // sending tab by ChromeRuntimeAdapter, so a site can only ever
+        // set the icon on its own record.
+        const icon = schemas.sanitizeSiteIcon(req.siteIcon);
 
         const settings = await deps.vault.settings.get().catch(() => null);
         const autoConnect = shouldAutoApproveConnect({ origin, settings });
@@ -306,6 +312,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                     origin,
                     appName,
                     appIcon,
+                    icon,
                     requestedChains,
                     accountOptions,
                     ...approvalRequester(req),
@@ -314,15 +321,23 @@ export function registerBridgeHandlers(host, opts = {}) {
             if (!decision || !decision.approved) {
                 throw new UserRejectedError('connect');
             }
-            // `decision.accounts` is the user's selection from the prompt, but it
-            // crosses a message boundary, so drop any id that is not a real vault
-            // account before it can become a grant: a foreign or made-up id stored
-            // in site.permissions.accounts would be handed back unchanged by every
-            // reader that trusts that list.
+            // Approval decisions cross a message boundary. Keep only chain ids
+            // the background registry knows and account ids the vault holds.
+            // An empty chain list is a wildcard under §43.3, so a decision with
+            // no valid chain must fail instead of becoming a grant for every chain.
+            // Reject the decision as a unit rather than broadening its authority.
+            registry.hydrateCustomChainsFromSettings(deps.chainRegistry, settings);
+            const approvedChains = Array.isArray(decision.chains)
+                ? [...new Set(decision.chains.filter((id) => (
+                    typeof id === 'string' && id.length > 0
+                    && Boolean(deps.chainRegistry.get(id))
+                )))]
+                : [];
+            if (approvedChains.length === 0) throw new UserRejectedError('connect');
             const vaultAccounts = await deps.vault.accounts.list();
             const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
             const permissions = {
-                chains: Array.isArray(decision.chains) ? decision.chains : [],
+                chains: approvedChains,
                 accounts: Array.isArray(decision.accounts)
                     ? decision.accounts.filter((id) => knownAccountIds.has(id))
                     : [],
@@ -354,8 +369,10 @@ export function registerBridgeHandlers(host, opts = {}) {
                     stored.permissions,
                 );
             }
+            // A fresh approval stores the icon captured with this connect, so
+            // a disconnect and reconnect refreshes it.
             const site = schemas.createConnectedSite({
-                origin, appName, appIcon,
+                origin, appName, appIcon, icon,
                 permissions,
                 autoApproved,
             });
@@ -627,6 +644,9 @@ export function registerBridgeHandlers(host, opts = {}) {
                 'signPsbt does not broadcast; pass false or omit broadcast and send the returned txHex',
             );
         }
+        // Signing is held to the active network; the refusals above keep
+        // their codes because none of them can sign.
+        await assertChainOnActiveNetwork(deps, req.chainId);
         const decision = await approvals.signPsbt({
             origin: req.origin,
             kind: 'signPsbt',
@@ -637,6 +657,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
         await assertGrantStillHeld(req, deps, site);
+        await assertChainOnActiveNetwork(deps, req.chainId);
         const resolved = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
@@ -829,6 +850,10 @@ export function registerBridgeHandlers(host, opts = {}) {
                 throw bridgeError('INVALID_PARAMS', `${field} contains the reserved separator`);
             }
         }
+        // The expiry arrives from the page too. A non-positive or non-numeric
+        // window would be signed as an already-expired (or unparseable)
+        // challenge after the user typed a password, so refuse it up front.
+        const expiresInMs = signInExpiryMs(req.expiresInMs);
         // Offer only addresses this site's grant covers; with none, refuse before prompting.
         const candidates = await signInCandidates(deps, site, req);
         if (candidates.length === 0) {
@@ -860,13 +885,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertAddressPermitted(deps, site, chosen.chainId, decision.address);
         // Compose challenge per §43.6 format.
         const now = Date.now();
-        const expiresInMs = Math.min(
-            req.expiresInMs ?? 5 * 60 * 1000,
-            60 * 60 * 1000,
-        );
+        if (now + expiresInMs <= now) {
+            throw bridgeError('CHALLENGE_EXPIRED', 'sign-in window is too short to be valid');
+        }
         const nonce = typeof req.nonce === 'string' && req.nonce.length > 0
             ? req.nonce
-            : randomNonce();
+            : generateNonce();
         // req.origin is stamped by the content script (location.origin),
         // never by the page. requireSite above has already asserted it.
         // Embedding it in the signed bytes binds the sign-in to the site
@@ -911,6 +935,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             chainId,
             path: addr.derivationPath ?? undefined,
             addressId: addr.derivationPath ? undefined : addr.id,
+            addressType: addr.addressType,
             message: challenge,
         });
         // chainId and challengeParts are declared on SignInSuccess and were
@@ -959,6 +984,11 @@ async function executeSignAction(req, deps, ctx) {
     }
     const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
     if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
+    // Signing is held to the wallet's active network even when the site's
+    // chain grant is empty (all chains). Checked after the two refusals above,
+    // which never sign and keep their published results, and before any vault
+    // lookup, indexer read, auto-sign or prompt.
+    await assertChainOnActiveNetwork(deps, req.chainId);
 
     // bridge-spec publishes the spending address as `fromAddress` (SEND and
     // SWEEP alike); the handler read `params.from`, a name no published shape
@@ -988,6 +1018,7 @@ async function executeSignAction(req, deps, ctx) {
     // request carrying a signing-divergence key must never reach the user, because
     // the screen it would render is the wrong description of what would be signed.
     assertNoSigningDivergenceParams(params);
+    assertSupportedSweepParams(actionName, params);
     const toAddress = params.toAddress ?? params.to;
     const sendTick = params.asset ?? params.tick;
     // One of the published gaps is a UNIT gap, not a name gap: `amountRaw` is
@@ -1075,6 +1106,7 @@ async function executeSignAction(req, deps, ctx) {
     if (!decision?.approved) throw new UserRejectedError('signAction');
     if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
     await assertGrantStillHeld(req, deps, site);
+    await assertChainOnActiveNetwork(deps, req.chainId);
 
     const finish = async (submitted) => {
         const success = signActionSuccess(req.chainId, submitted);
@@ -1120,6 +1152,11 @@ async function executeSignAction(req, deps, ctx) {
     // bytes, carrier scripts) against the values approved, and a mismatch is
     // refused unsigned with the same plain message the in-app confirm shows.
     //
+    // adsPayout: false is trusted too. This approval window is shown before the
+    // build and cannot name an automatic donation, so a bridge send only adds
+    // to the donation queue and never carries the queued donation unseen
+    // (§36, ruling 2026-11-14: nothing hidden).
+    //
     // The published param vocabulary is not the flow's. bridge-spec's
     // SendActionParams / SweepActionParams carry fromAddress / toAddress /
     // asset / amountRaw as plain strings, while sendToken and sweepToken take
@@ -1153,14 +1190,14 @@ async function executeSignAction(req, deps, ctx) {
             chainId: req.chainId,
             trackPendingTx: true,
             verifyBuiltTx: true,
+            beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
+            adsPayout: false,
         });
         return finish(submitted);
     }
     if (actionName === 'SWEEP') {
-        // SweepActionParams' optional single-asset `asset` has no consumer:
-        // sweepToken empties by category flags (balances / ownerships / ...),
-        // not per-asset. Mapping from/to restores the action; per-asset sweep
-        // needs a core change and is deliberately left unwired here.
+        // Per-asset requests were refused before approval. sweepToken empties
+        // the source by category flags, so forwarding one would widen intent.
         const submitted = await sweepToken({
             ...pickFlowParams(actionName, params),
             from: fromSource,
@@ -1172,7 +1209,9 @@ async function executeSignAction(req, deps, ctx) {
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
             verifyBuiltTx: true,
+            adsPayout: false,
             chainId: req.chainId,
+            beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
         });
         return finish(submitted);
     }
@@ -1187,12 +1226,9 @@ async function executeSignAction(req, deps, ctx) {
 // from the trusted, pre-approval values right after the spread, and a page key
 // under the same name would be overwritten anyway.
 //
-// Everything else the page sent is dropped. The published shapes
-// (bridge-spec SendActionParams / SweepActionParams) carry only
-// fromAddress / toAddress / asset / amountRaw / memo, so nothing spec-compliant
-// is lost, while `fee` / `feePerKb` / `rbf` (which sendToken and sweepToken DO
-// honour, and which no approval screen renders) can no longer be chosen by the
-// page.
+// Everything else the page sent is dropped after action-specific shape checks.
+// `fee` / `feePerKb` / `rbf` (which sendToken and sweepToken DO honour, and
+// which no approval screen renders) can no longer be chosen by the page.
 // `memo` is on BOTH entries, and that is load-bearing rather than tidy:
 // approvalPayload puts MEMO in `common`, which the SWEEP branch spreads, so the
 // approval screen renders a memo for a sweep and sweepToken then signs it
@@ -1229,6 +1265,15 @@ function assertNoSigningDivergenceParams(params) {
             );
         }
     }
+}
+
+function assertSupportedSweepParams(actionName, params) {
+    if (actionName !== 'SWEEP') return;
+    if (params?.asset === undefined && params?.tick === undefined) return;
+    throw bridgeError(
+        'INVALID_PARAMS',
+        'per-asset SWEEP is not supported; use SEND to move a single asset',
+    );
 }
 
 // The allowlisted subset of a page's params for `actionName`. Absent keys stay
@@ -1844,16 +1889,21 @@ async function invokeSignMessage(deps, req) {
         chainId: req.chainId,
         path: addr.derivationPath ?? undefined,
         addressId: addr.derivationPath ? undefined : addr.id,
+        addressType: addr.addressType,
         message: req.message,
     });
 }
 
-function randomNonce() {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    let hex = '';
-    for (const b of bytes) hex += b.toString(16).padStart(2, '0');
-    return hex;
+const SIGN_IN_MAX_EXPIRY_MS = 60 * 60 * 1000;
+
+// The sign-in window from the page: absent means the published default, a
+// finite positive number is capped at one hour, anything else is refused.
+function signInExpiryMs(raw) {
+    if (raw === undefined || raw === null) return SIGN_IN_DEFAULT_EXPIRY_MS;
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+        throw bridgeError('INVALID_PARAMS', 'expiresInMs must be a positive number');
+    }
+    return Math.min(raw, SIGN_IN_MAX_EXPIRY_MS);
 }
 
 // A refusal raised by a bridge handler.

@@ -68,11 +68,13 @@ describe('TotalBalanceHero privacy', () => {
         });
 
         expect(screen.getByText('•••••')).toBeInTheDocument();
-        expect(screen.getByLabelText('Balance hidden')).toBeInTheDocument();
+        // The amount and the summary row's change pill are both masked, and the
+        // summary row stays so hiding the balance never changes the card's height.
+        expect(screen.getAllByLabelText('Balance hidden')).toHaveLength(2);
         expect(screen.queryByText('$1,234.56')).toBeNull();
         expect(screen.queryByText(/not priced/)).toBeNull();
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.queryByLabelText('Balance summary')).toBeNull();
+        expect(screen.getByLabelText('Balance summary').textContent).not.toMatch(/\d/);
     });
 });
 
@@ -93,8 +95,17 @@ describe('TotalBalanceHero fiat formatting', () => {
         });
 
         expect(screen.getByText('$1,256.56')).toBeInTheDocument();
-        expect(screen.getByText('1 token not priced')).toBeInTheDocument();
+        expect(screen.queryByText(/not priced/)).toBeNull();
         expect(screen.getByLabelText('1,256.56 US dollars')).toBeInTheDocument();
+    });
+
+    it('shows a numeric zero when every holding lacks a price', () => {
+        mount({
+            rows: [row({ quantity: '50000000', divisibility: 8, fiatRate: null })],
+        });
+
+        expect(screen.getByText('$0.00')).toBeInTheDocument();
+        expect(screen.getByLabelText('0.00 US dollars')).toBeInTheDocument();
     });
 
     it('uses locale currency placement and keeps the ISO code as the suffix', async () => {
@@ -149,13 +160,10 @@ describe('TotalBalanceHero fiat formatting', () => {
 });
 
 describe('TotalBalanceHero message formatting', () => {
-    it.each([
-        ['Price unavailable', [row({ fiatRate: null })]],
-        ['Test coins have no value', [row({ chainId: 'bitcoin-testnet', fiatRate: null })]],
-    ])('renders "%s" in secondary body text', (copy, rows) => {
-        mount({ rows });
+    it('renders the test-coin message in secondary body text', () => {
+        mount({ rows: [row({ chainId: 'bitcoin-testnet', fiatRate: null })] });
 
-        const amount = screen.getByText(copy).closest('[aria-label]');
+        const amount = screen.getByText('Test coins have no value').closest('[aria-label]');
         expect(amount.className).toMatch(/amountMessage/);
         expect(cssRule('amountMessage')).toMatch(/font-family:\s*var\(--xc-font-sans\)/);
         expect(cssRule('amountMessage')).toMatch(/font-size:\s*var\(--xc-text-lg\)/);
@@ -171,23 +179,37 @@ describe('TotalBalanceHero message formatting', () => {
 });
 
 describe('TotalBalanceHero refresh status', () => {
-    it('renders the current update label once', () => {
+    it('does not render an updated line while online', () => {
         mount({ lastSyncedAt: Date.now() });
 
-        expect(screen.getAllByText('Updated just now')).toHaveLength(1);
+        expect(screen.queryByText(/^Updated/)).toBeNull();
     });
 
-    it('shows one shared status using the oldest balance or price update', () => {
+    it('does not render an updated line while offline either; Settings, About shows it', () => {
+        // The last-updated time moved off the card to Settings, About, so
+        // saved balances shown offline carry no age line on the card.
+        const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+        try {
+            mount({ lastSyncedAt: Date.now() - 2 * 24 * 60 * 60_000 });
+            expect(screen.queryByText(/Updated/)).toBeNull();
+            expect(screen.queryByText(/ago/)).toBeNull();
+        } finally {
+            onLine.mockRestore();
+        }
+    });
+
+    it('leaves refresh out of the balance card and prints no online freshness line', () => {
+        // The card has two buttons, the eye and the wallet balance toggle; Refresh is not
+        // among them, and a menu appears only where it holds other rows.
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
         const pricesFetchedAt = Date.now() - 10 * 60_000;
         const { rerender } = mount({ lastSyncedAt, pricesFetchedAt, onRefresh });
 
-        const status = screen.getByText('Updated 10 minutes ago');
-        expect(status.className).toMatch(/stale/);
-        expect(screen.getAllByRole('status')).toHaveLength(1);
-        screen.getByRole('button', { name: 'Refresh portfolio' }).click();
-        expect(onRefresh).toHaveBeenCalledOnce();
+        expect(screen.queryByText(/^Updated/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Balance actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Refresh portfolio/ })).toBeNull();
+        expect(onRefresh).not.toHaveBeenCalled();
 
         rerender(
             <MessagingProvider shell="web" messaging={{ getSettings: vi.fn(async () => ({})) }}>
@@ -201,7 +223,8 @@ describe('TotalBalanceHero refresh status', () => {
                 />
             </MessagingProvider>,
         );
-        expect(screen.getByRole('button', { name: 'Refreshing portfolio' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Balance actions' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: /Refreshing portfolio/ })).toBeNull();
     });
 });
 
@@ -229,33 +252,57 @@ describe('TotalBalanceHero responsive layout', () => {
         expect(cssRule('amountValue')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('collapses narrow-screen icon actions into one overflow menu', () => {
-        vi.stubGlobal('matchMedia', vi.fn((query) => ({
-            matches: query === '(max-width: 479px)',
-            media: query,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-        })));
+    it('puts the eye and unit swap in the card and the shell rows in one overflow menu', () => {
         const onOpenSettings = vi.fn();
         const onCommandPalette = vi.fn();
-        const onToggleFilter = vi.fn();
         const onLockWallet = vi.fn();
-        mount({ onOpenSettings, onCommandPalette, onToggleFilter, onLockWallet });
+        mount({ onOpenSettings, onCommandPalette, onLockWallet });
 
+        const swap = screen.getByRole('button', { name: 'Show wallet balance in BTC' });
+        const eye = screen.getByRole('button', { name: 'Hide balance' });
         const trigger = screen.getByRole('button', { name: 'Balance actions' });
-        expect(screen.getAllByRole('button')).toEqual([trigger]);
+        expect(screen.getAllByRole('button')).toEqual([eye, swap, trigger]);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
         fireEvent.click(trigger);
         const menu = screen.getByRole('menu', { name: 'Balance actions' });
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
-        expect([
-            ...within(menu).getAllByRole('menuitem'),
-            ...within(menu).getAllByRole('menuitemcheckbox'),
-        ]).toHaveLength(6);
+        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+            'Open settings',
+            'Open the wallet menu',
+            'Lock wallet',
+        ]);
+        expect(within(menu).queryAllByRole('menuitemcheckbox')).toHaveLength(0);
         fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu', { name: 'Balance actions' })).toBeNull();
         expect(STYLES).toMatch(/@media not all and \(min-width: 480px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-sm\)/);
+    });
+});
+
+describe('TotalBalanceHero card surface', () => {
+    it('gives the solid hero surface one pronounced border, soft shadow, and chart height', () => {
+        const homeStyles = readFileSync(join(
+            process.cwd(),
+            'packages/core/src/shared/components/HomeTabs.module.css',
+        ), 'utf8');
+        const heroStack = homeStyles.match(/\.heroStack\s*\{([^}]*)\}/)?.[1] || '';
+        const chartStack = homeStyles.match(/\.heroStackWithChart\s*\{([^}]*)\}/)?.[1] || '';
+
+        expect(cssRule('hero')).toMatch(/background:\s*var\(--xc-hero-bg\);/);
+        expect(cssRule('hero')).toMatch(/border:\s*1px solid var\(--xc-hero-border\);/);
+        expect(cssRule('hero')).toMatch(/box-shadow:\s*var\(--xc-hero-shadow\);/);
+        expect(heroStack).toMatch(/background:\s*var\(--xc-hero-bg\);/);
+        expect(heroStack).toMatch(/border:\s*1px solid var\(--xc-hero-border\);/);
+        expect(heroStack).toMatch(/box-shadow:\s*var\(--xc-hero-shadow\);/);
+        expect(heroStack).toMatch(/overflow:\s*hidden/);
+        expect(chartStack).toMatch(/min-height:\s*160px/);
+        expect(STYLES).not.toMatch(/-gradient\(/);
+        expect(heroStack).not.toMatch(/-gradient\(/);
+    });
+
+    it('tints the range pill to match its direction', () => {
+        expect(STYLES).toMatch(/\.changePositive\.changePositive\s*\{[^}]*background:\s*var\(--xc-hero-pill-up-bg\)[^}]*color:\s*var\(--xc-hero-pill-up-text\)/s);
+        expect(STYLES).toMatch(/\.changeNegative\.changeNegative\s*\{[^}]*background:\s*var\(--xc-hero-pill-down-bg\)[^}]*color:\s*var\(--xc-hero-pill-down-text\)/s);
     });
 });

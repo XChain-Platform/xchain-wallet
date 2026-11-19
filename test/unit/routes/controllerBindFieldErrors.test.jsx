@@ -73,7 +73,7 @@ describe('ControllerBindForm field errors', () => {
         mount();
         const guard = await screen.findByLabelText('Guard contract');
         fireEvent.change(guard, { target: { value: '12' } });
-        const cooldown = screen.getByLabelText(/Cooldown blocks/);
+        const cooldown = screen.getByLabelText(/Cooldown blocks/, { selector: 'input' });
         fireEvent.change(cooldown, { target: { value: 'x1' } });
         const submit = document.querySelector('form button[type="submit"]');
         await waitFor(() => expect(submit.disabled).toBe(false));

@@ -31,6 +31,7 @@
 // close the gap early and leave funds hidden behind a "done".
 
 import { createAddress } from '../schemas/address.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import {
     BATCH_FEATURE_BALANCES,
@@ -41,6 +42,7 @@ import {
 } from './balances.js';
 import { branchOf } from './changeAddress.js';
 import { indexSpaceSharedAcrossTypes } from './_addressIndexSpace.js';
+import { hardwareWalletRecord, isHardwareWallet } from './hardwareWallet.js';
 import {
     scanBranch,
     scanSharedBranch,
@@ -58,8 +60,6 @@ export const DISCOVERY_READ_TIMEOUT_MS = 30000;
 
 const RECEIVE_BRANCH = 0;
 const CHANGE_BRANCH = 1;
-const HD_SOURCES = new Set(['hd', 'trezor', 'ledger']);
-
 /** An explorer answer the flow cannot read as used or unused. */
 export class UnrecognizedExplorerReplyError extends Error {
     constructor(address, reason) {
@@ -225,6 +225,9 @@ export async function discoverWalletAddresses({
         throw new Error('discoverWalletAddresses: walletId is required');
     }
     if (!signer || typeof signer.getAddresses !== 'function') {
+        // A hardware wallet never has a pooled signer; it is skipped below
+        // anyway, so answer "nothing found" instead of asking for one.
+        if (await hardwareWalletRecord(vault, walletId)) return { found: 0, chains: [] };
         throw new Error('discoverWalletAddresses: an unlocked signer is required');
     }
     if (!chainRegistry) throw new Error('discoverWalletAddresses: chainRegistry is required');
@@ -288,7 +291,7 @@ export async function discoverWalletAddresses({
                                 accountId: account.id,
                                 chain: descriptor.coin,
                                 network: descriptor.networkKind,
-                                source: signer.kind === 'software' ? 'hd' : signer.kind,
+                                source: addressSourceForSignerKind(signer.kind),
                                 addressType,
                                 derivationPath: derived.path,
                                 address: derived.address,
@@ -320,7 +323,11 @@ export async function discoverWalletAddresses({
 // Build the scan scopes, or return null for wallets that must not be scanned.
 async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) {
     const wallet = await vault.wallets.get(walletId);
-    if (!wallet || wallet.origin === 'demo' || wallet.format === 'wif-only') return null;
+    // A hardware wallet is skipped: its accounts were chosen on the device at
+    // connect time, and a gap-limit scan would wake the device for every
+    // derivation.
+    if (!wallet || wallet.origin === 'demo' || wallet.format === 'wif-only'
+        || isHardwareWallet(wallet)) return null;
     const sharedIndexSpace = indexSpaceSharedAcrossTypes(wallet.format);
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -331,7 +338,9 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
     const heldIndices = new Map();
     for (const a of await vault.addresses.list()) {
         const account = a.accountId ? accountById.get(a.accountId) : null;
-        if (!account || !HD_SOURCES.has(a.source)) continue;
+        // Discovery runs with the wallet seed signer, which cannot derive a
+        // hardware account's independent key material.
+        if (!account || a.source !== 'hd') continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
         const descriptor = chainRegistry.descriptorFor(chainId);

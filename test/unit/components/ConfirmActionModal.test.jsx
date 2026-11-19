@@ -39,7 +39,9 @@ const DECODED = {
     ],
     warnings: [],
 };
-const REPORT_PASS = { verdict: 'pass', restricted: false, findings: [{ code: 'DRYRUN_VALID', severity: 'info', message: 'ok' }], unverified: [], stateHeight: 100 };
+// The SDK's valid dry-run finding: source 'dryrun' and a data object are what
+// make it the indexer's verdict (utils/preflightCheckState.js).
+const REPORT_PASS = { verdict: 'pass', restricted: false, findings: [{ code: 'DRYRUN_VALID', severity: 'info', source: 'dryrun', message: 'ok', data: {} }], unverified: [], stateHeight: 100 };
 const REPORT_HARD_FAIL = { verdict: 'fail', restricted: false, findings: [{ code: 'DEST_ADDRESS_INVALID', severity: 'error', overridable: false, message: 'bad address' }], unverified: [] };
 const REPORT_OVERRIDABLE = { verdict: 'fail', restricted: false, findings: [{ code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' }], unverified: [] };
 
@@ -68,18 +70,68 @@ describe('ConfirmActionModal', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    it('renders the intent, chain badge, and preflight panel when ready', () => {
+    it('renders the Confirm Standard body: sentence, address fact, Reject and Approve, no pass banner', () => {
         render(<ConfirmActionModal {...base()} />);
-        expect(screen.getByTestId('action-intent')).toBeTruthy();
-        expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
-        expect(screen.getByTestId('preflight-panel')).toBeTruthy();
-        expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe('Send 5 JDOG');
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe('Send 5 JDOG to');
+        const address = screen.getByTestId('confirm-address');
+        expect(address).toHaveAttribute('title', 'bc1qxyz');
+        expect(address.closest('[data-testid="confirm-facts"]')).not.toBeNull();
+        expect(address.previousElementSibling).toHaveTextContent('To');
+        expect(screen.queryByTestId('preflight-panel')).toBeNull();
+        expect(screen.queryByTestId('confirm-warning')).toBeNull();
+        expect(screen.getByTestId('confirm-modal').textContent).not.toMatch(/Looks good|Checked against/);
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
-        expect(screen.queryByTestId('contract-call-warning')).toBeNull();
     });
 
-    it('shows a payment summary once and truncates its destination with AddressText', () => {
+    it.each([411, 1280])('docks only Reject and Approve, 8px between and around them, at %ipx', (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false })} />);
+
+        const buttons = screen.getByTestId('confirm-buttons');
+        const decision = screen.getByTestId('confirm-decision');
+        // The status notice scrolls with the page; the docked footer holds
+        // only the two buttons (G127 revised 2026-11-16).
+        expect(screen.getByTestId('confirm-status').closest('main')).toBeTruthy();
+        expect([...decision.children]).toEqual([buttons]);
+        expect(decision.closest('footer')).toBeTruthy();
+        expect(decision.closest('main')).toBeNull();
+
+        const css = readFileSync(
+            'packages/core/src/shared/components/ConfirmStandard.module.css',
+            'utf8',
+        );
+        expect(css).toMatch(/\.buttons\s*\{[^}]*gap:\s*var\(--xc-space-2\)/s);
+        // 8px all round the buttons: the footer that holds them pads
+        // space-2 on every side, keeping the home-indicator inset.
+        expect(css).toMatch(/footer:has\(\.buttons\)\s*\{[^}]*padding:\s*var\(--xc-space-2\);[^}]*padding-bottom:\s*calc\(var\(--xc-space-2\) \+ var\(--xc-screen-safe-bottom/s);
+        expect(css).not.toMatch(/warningDock/);
+    });
+
+    it.each([411, 1280])('puts the status notice exactly 8px below the toolbar at %ipx', (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false })} />);
+
+        const standardCss = readFileSync('packages/core/src/shared/components/ConfirmStandard.module.css', 'utf8');
+        const screenCss = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        expect(screen.getByTestId('confirm-modal').firstElementChild)
+            .toBe(screen.getByTestId('confirm-status-slot'));
+        expect(standardCss).toMatch(/\.stack\s*\{[^}]*gap:\s*var\(--xc-space-2\)/s);
+        expect(standardCss).not.toMatch(/\.stack\s*\{[^}]*padding-(?:block-)?top/s);
+        expect(screenCss).toMatch(/\.body\s*\{[^}]*padding:\s*var\(--xc-page-top\) var\(--xc-page-gutter\)/s);
+        expect(tokensCss).toMatch(/--xc-page-top:\s*var\(--xc-space-2\);\s*\/\* 8px everywhere \*\//);
+    });
+
+    it('does not expose the removed technicalDetails adapter prop', () => {
+        const source = readFileSync(
+            'packages/core/src/shared/components/ActionConfirmScreen.jsx',
+            'utf8',
+        );
+        expect(source).not.toMatch(/\btechnicalDetails\b/);
+    });
+
+    it('shows a payment once: the sentence without the chain, the destination as the first fact', () => {
         const destination = 'bcrt1qz0l4ngaddre55thatneed5truncat10n9x7w2';
         const summary = `Send 0.01 BTC on Bitcoin to ${destination}`;
         render(<ConfirmActionModal {...base({
@@ -95,10 +147,14 @@ describe('ConfirmActionModal', () => {
         })} />);
 
         const modal = screen.getByTestId('confirm-modal');
-        const intentSummary = screen.getByTestId('action-intent').querySelector('p');
-        expect(modal.textContent.match(/Send 0\.01 BTC on Bitcoin to/g)).toHaveLength(1);
-        expect(intentSummary).toHaveTextContent('Send 0.01 BTC on Bitcoin to bcrt1q…n9x7w2');
-        expect(intentSummary.querySelector('[title]')).toHaveAttribute('title', destination);
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe('Send 0.01 BTC to');
+        expect(modal.textContent.split(destination).length - 1).toBeLessThanOrEqual(1);
+        const facts = screen.getByTestId('confirm-facts');
+        const address = screen.getByTestId('confirm-address');
+        expect(address.querySelector('[title]')).toHaveAttribute('title', destination);
+        expect(address.closest('[data-testid="confirm-facts"]')).toBe(facts);
+        expect(facts.querySelector('dt')).toHaveTextContent('To');
+        expect(facts.querySelector('dd')).toBe(address);
     });
 
     it('shows an order expiration as the moment it names, not as Unix seconds', () => {
@@ -115,9 +171,9 @@ describe('ConfirmActionModal', () => {
             },
         })} />);
 
-        const row = screen.getByText('Expiration').closest('div');
-        expect(row.textContent).not.toContain(seconds);
-        expect(row.textContent).toMatch(/2100/);
+        const value = screen.getByText('Expiration').nextElementSibling;
+        expect(value.textContent).not.toContain(seconds);
+        expect(value.textContent).toMatch(/2100/);
     });
 
     it('shows the hardware output caveat only for a hardware signer', () => {
@@ -131,7 +187,7 @@ describe('ConfirmActionModal', () => {
     it('uses the bare approve fallback when no decoded action is available', () => {
         render(<ConfirmActionModal {...base({ decoded: null })} />);
 
-        expect(screen.getByTestId('confirm-chain-badge')).toHaveTextContent('Bitcoin');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Review this action');
         expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
         expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
     });
@@ -141,12 +197,13 @@ describe('ConfirmActionModal', () => {
             decoded: { summary: 'Call contract #21', details: [], warnings: [] },
         })} />);
 
-        expect(screen.getByTestId('contract-call-warning')).toHaveTextContent(
+        // The warning slot's one danger notice carries it (G127).
+        expect(screen.getByTestId('confirm-warning')).toHaveTextContent(
             'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.',
         );
     });
 
-    it('names amount-free actions and updates when the reviewed amount changes', () => {
+    it('says every action in one plain sentence and keeps the footer Approve as the reviewed amount changes', () => {
         const { rerender } = render(<ConfirmActionModal {...base({
             decoded: {
                 summary: 'Send 0.5 BTC to bc1qxyz',
@@ -157,7 +214,7 @@ describe('ConfirmActionModal', () => {
                 warnings: [],
             },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Send 0\.5 BTC$/);
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/^Send 0\.5 BTC to$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: {
@@ -169,46 +226,52 @@ describe('ConfirmActionModal', () => {
                 warnings: [],
             },
         })} />);
-        expect(screen.getByTestId('confirm-approve'))
-            .toHaveTextContent(/^Send 12,345,678,901,234,567,890\.12345678 BTC$/);
+        expect(screen.getByTestId('confirm-sentence'))
+            .toHaveTextContent(/^Send 12,345,678,901,234,567,890\.12345678 BTC to$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Create dispenser on Bitcoin: lock 10 TOKEN', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Create dispenser$/);
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/^Create dispenser: lock 10 TOKEN$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Cancel order on Bitcoin (#17)', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Cancel order$/);
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/^Cancel order \(#17\)$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Publish 123.45 to feed 700', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Publish 123\.45$/);
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/^Publish 123\.45 to feed 700$/);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
     });
 
-    it('orders and labels the review as recipient, amount, fee, then total', () => {
+    it('orders the page as status, icon, sentence, facts with the address first and fees, then the short warning', () => {
         const { container } = render(<ConfirmActionModal {...base({
-            feeText: 'Network fee: 0.1 BTC',
-            totalText: 'Total: 5.1 BTC',
+            composed: { psbt: 'x', action: 'SEND', actionWarnings: ['DESTROY'] },
+            nativeTicker: 'BTC',
+            networkFee: { amount: '0.1', ticker: 'BTC' },
+            report: null,
         })} />);
-        const labels = Array.from(screen.getByTestId('action-intent').querySelectorAll('dt'))
-            .map((node) => node.textContent);
-        expect(labels).toEqual(['To', 'Amount']);
-
-        const intent = screen.getByTestId('action-intent');
-        const fee = screen.getByTestId('confirm-fee');
-        const total = screen.getByTestId('confirm-total');
-        const preflight = screen.getByTestId('preflight-panel');
-        expect(intent.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(fee.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(total.compareDocumentPosition(preflight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(container.querySelector('[data-testid^="confirm-total"]')).toBeNull();
+        const order = ['confirm-status', 'confirm-icon', 'confirm-sentence', 'confirm-facts', 'confirm-warning']
+            .map((id) => screen.getByTestId(id));
+        for (let i = 1; i < order.length; i += 1) {
+            expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        }
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.querySelector('dt')).toHaveTextContent('To');
+        expect(facts.querySelector('dd')).toBe(screen.getByTestId('confirm-address'));
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.1 BTC');
+        // The address and amount are said by the sentence and first fact, so
+        // the decoded Destination and Amount rows do not repeat them.
         expect(container.textContent).not.toContain('Destination');
+        expect(screen.getByTestId('confirm-facts').textContent).not.toContain('Amount');
     });
 
-    it('normalizes protocol exchange and destination rows and keeps one emphasized action', () => {
+    it('says an order as a trade sentence and keeps Reject red and Approve green', () => {
         render(<ConfirmActionModal {...base({
+            composed: { psbt: 'x', action: 'ORDER' },
             decoded: {
                 summary: 'Create order: give 5 JDOG for 0.01 BTC',
                 details: [
@@ -220,16 +283,19 @@ describe('ConfirmActionModal', () => {
             },
         })} />);
 
-        const labels = Array.from(screen.getByTestId('action-intent').querySelectorAll('dt'))
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Buy 0.01 BTC for 5 JDOG');
+        // The Give and Get rows are the sentence; the receive address stays a fact.
+        const labels = Array.from(screen.getByTestId('confirm-facts').querySelectorAll('dt'))
             .map((node) => node.textContent);
-        expect(labels).toEqual(['To', 'You send', 'You get']);
-        expect(screen.getByTestId('confirm-reject').className).toContain('secondary');
+        expect(labels).toContain('Receive address');
+        expect(labels).not.toContain('You send');
+        expect(screen.getByTestId('confirm-reject').className).toContain('danger');
         expect(screen.getByTestId('confirm-approve').className).toContain('success');
         expect(screen.getAllByRole('button').filter((button) => button.className.includes('success')))
             .toHaveLength(1);
     });
 
-    it('shows the native unit when only the shared fee fallback is available', () => {
+    it('keeps a fee whose amount is unknown as its own row, never as Unavailable', () => {
         const confirmAction = {
             phase: 'ready',
             composed: { psbt: 'x', decoded: DECODED },
@@ -254,8 +320,39 @@ describe('ConfirmActionModal', () => {
             />,
         );
 
-        expect(screen.getByTestId('confirm-fee'))
-            .toHaveTextContent('Network fee estimate unavailable (BTC).');
+        expect(screen.getByTestId('confirm-modal').textContent).not.toMatch(/unavailable/i);
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('Not known yet');
+        expect(screen.getByTestId('confirm-facts').querySelector('[data-testid="confirm-fee-network"]')).not.toBeNull();
+    });
+
+    it('passes the form estimate through once as the network fee row', () => {
+        const confirmAction = {
+            phase: 'ready',
+            composed: { psbt: 'x', action: 'SEND', chainId: 'bitcoin-mainnet', protocolFeeKnownFree: true, decoded: DECODED },
+            report: REPORT_PASS,
+            acknowledged: new Set(),
+            acknowledge: vi.fn(),
+            canApprove: true,
+            approve: vi.fn(),
+            reject: vi.fn(),
+            error: null,
+            source: null,
+        };
+        render(
+            <ActionConfirmScreen
+                confirmAction={confirmAction}
+                chainId="bitcoin-mainnet"
+                chainLabel="Bitcoin"
+                feeEstimate={{ coinAmount: '0.0002' }}
+                signerReady
+                password=""
+                onPasswordChange={vi.fn()}
+            />,
+        );
+        const fee = screen.getByTestId('confirm-fee-network');
+        expect(fee).toHaveTextContent('0.0002 BTC');
+        expect(fee.closest('[data-testid="confirm-facts"]')).not.toBeNull();
+        expect(screen.getAllByTestId('confirm-fee-network')).toHaveLength(1);
     });
 
     it.each([
@@ -272,12 +369,11 @@ describe('ConfirmActionModal', () => {
                 )),
             },
         })} />);
-        const amount = screen.getByText('Amount').closest('div').querySelector('dd');
-        expect(amount.textContent).toBe(expected);
-        expect(screen.getByTestId('action-intent').querySelector('p').textContent)
-            .toBe(`Send ${expected} JDOG to bc1qxyz`);
-        expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe(`Send ${expected} JDOG`);
+        // The amount is said once, in the sentence, by the shared display policy.
+        expect(screen.getByTestId('confirm-sentence').textContent)
+            .toBe(`Send ${expected} JDOG to`);
+        expect(screen.queryByText('Amount')).toBeNull();
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
     });
 
     it.each([
@@ -299,15 +395,11 @@ describe('ConfirmActionModal', () => {
             },
         })} />);
 
-        const intent = screen.getByTestId('action-intent');
-        expect(intent.querySelector('p').textContent).toContain(`Send ${expected} JDOG`);
-        expect(screen.getByText('Amount').closest('div').querySelector('dd').textContent)
-            .toBe(expected);
-        expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe(`Send ${expected} JDOG`);
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe(`Send ${expected} JDOG to`);
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
     });
 
-    it('shows an exact total for a native payment without adding unlike units', () => {
+    it('shows an exact native payment fee once as its row, with no Total', () => {
         const confirmAction = {
             phase: 'ready',
             composed: {
@@ -342,7 +434,13 @@ describe('ConfirmActionModal', () => {
                 onPasswordChange={vi.fn()}
             />,
         );
-        expect(screen.getByTestId('confirm-total').textContent).toBe('Total: 1.000025 BTC');
+        expect(screen.queryByTestId('confirm-total-main')).toBeNull();
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe('Send 1 BTC to');
+        expect(screen.getByTestId('confirm-fee-network').textContent).toBe('0.000025 BTC');
+        expect(screen.getByTestId('confirm-modal').textContent.match(/0\.000025 BTC/g)).toHaveLength(1);
+        // A bare coin payment has nothing for the indexer to check, so the
+        // page makes no status claim either way.
+        expect(screen.queryByTestId('confirm-status')).toBeNull();
 
         rerender(
             <ActionConfirmScreen
@@ -365,7 +463,9 @@ describe('ConfirmActionModal', () => {
                 onPasswordChange={vi.fn()}
             />,
         );
-        expect(screen.queryByTestId('confirm-total')).toBeNull();
+        // A token payment and a coin fee stay in their own units.
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe('Send 1 JDOG to');
+        expect(screen.getByTestId('confirm-fee-network').textContent).toBe('0.000025 BTC');
     });
 
     it.each([360, 412])('keeps long Send review values readable and its actions pinned at %ipx', (width) => {
@@ -424,55 +524,51 @@ describe('ConfirmActionModal', () => {
             />,
         );
 
-        const intent = screen.getByTestId('action-intent');
         expect(address).toHaveLength(62);
-        expect(intent).toHaveTextContent(address);
-        expect(intent).toHaveTextContent(longToken);
-        expect(intent).toHaveTextContent(amount);
-        expect(intent).toHaveTextContent(fiatValue);
-        expect(intent).toHaveTextContent(`${amount} → 87654321.87654321`);
+        // The sentence wraps whole; the address is the first fact row; a
+        // long fact is cut to one line with its full value as the title (G121).
+        expect(screen.getByTestId('confirm-sentence'))
+            .toHaveTextContent(`Send 12,345,678.12345678 ${longToken} to`);
+        expect(screen.getByTestId('confirm-address').querySelector('[title]')).toHaveAttribute('title', address);
+        expect(screen.getByTestId('confirm-facts').querySelector('dd')).toBe(screen.getByTestId('confirm-address'));
+        expect(screen.getByTestId('confirm-sentence').textContent).not.toContain(address);
+        expect(screen.getByTitle(fiatValue)).toBeTruthy();
         expect(screen.getByTestId('confirm-send-memo').textContent).toBe(memo);
-        expect(screen.getByTestId('confirm-fee'))
-            .toHaveTextContent(`Network fee: 0.000025 BTC (${fiatValue})`);
+        expect(screen.getByTestId('confirm-fee-network'))
+            .toHaveTextContent('0.000025 BTC');
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeVisible();
-        expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
+        expect(approve).toHaveTextContent(/^Approve$/);
         const reviewMain = screen.getByTestId('confirm-modal').closest('main');
         const actionFooter = approve.closest('footer');
         expect(actionFooter).toBe(reviewMain.nextElementSibling);
         expect(actionFooter).toContainElement(screen.getByTestId('confirm-reject'));
         expect(reviewMain).not.toContainElement(approve);
 
-        const intentCss = readFileSync(
-            'packages/core/src/shared/components/ActionIntentSummary.module.css',
+        const standardCss = readFileSync(
+            'packages/core/src/shared/components/ConfirmStandard.module.css',
             'utf8',
         );
         const modalCss = readFileSync(
             'packages/core/src/shared/components/ConfirmActionModal.module.css',
             'utf8',
         );
-        expect(intentCss).toMatch(/@media \(max-width: 480px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
-        expect(intentCss).not.toMatch(/@container|container-type/);
-        expect(intentCss).toMatch(/\.summary\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-        expect(intentCss).toMatch(/\.row dd\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/s);
-        expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-        expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
-        expect(modalCss).not.toMatch(/@container|container-type/);
+        expect(standardCss).not.toMatch(/@container|container-type/);
+        expect(standardCss).toMatch(/\.sentence\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(standardCss).toMatch(/\.oneLine\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // Reject and Approve stay a row of two halves at every width.
+        expect(standardCss).toMatch(/\.buttons\s*\{[^}]*flex-direction:\s*row/s);
+        expect(standardCss).toMatch(/\.button\s*\{[^}]*flex:\s*1 1 0/s);
+        expect(standardCss).not.toMatch(/@media[^{]*\{[^}]*\.buttons/s);
         expect(modalCss).toMatch(/\.credentials dd\s*\{[^}]*white-space:\s*pre-wrap/s);
-        expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
-        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.credentials dl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
-        expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
-        // A stacked footer sizes each button by its content, so a wrapped label never spills over its neighbour.
-        expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer > \*\s*\{[^}]*flex:\s*0 0 auto/s);
     });
 
-    it('uses a plain headline when an action has no decoded summary', () => {
+    it('uses a plain sentence when an action has no decoded summary', () => {
         render(<ConfirmActionModal {...base({ decoded: null })} />);
-        expect(screen.getByText('Review action')).toBeTruthy();
+        expect(screen.getByText('Review this action')).toBeTruthy();
         expect(screen.getByTestId('confirm-modal').getAttribute('aria-label'))
-            .toBe('Confirm Review action');
+            .toBe('Confirm Review this action');
     });
 
     it('shows the browser-verified requesting site in a labelled block', () => {
@@ -513,12 +609,14 @@ describe('ConfirmActionModal', () => {
 
         it('names the spender on the action variant', () => {
             render(<ConfirmActionModal {...base({ sourceAddress: ADDR })} />);
+            // A send shows its recipient as the first fact, so the spender is
+            // the later From row.
             const row = screen.getByTestId('confirm-source');
-            expect(row.textContent).toMatch(/^From/);
+            expect(row.previousElementSibling.textContent).toMatch(/^From/);
             // The final review keeps the complete address visible and also
             // exposes it through the title attribute.
             expect(row.querySelector('[title]')?.getAttribute('title')).toBe(ADDR);
-            expect(row.textContent).toContain(ADDR);
+            expect(row.getAttribute('title')).toBe(ADDR);
         });
 
         it('renders no row when no source was supplied', () => {
@@ -580,7 +678,9 @@ describe('ConfirmActionModal', () => {
     // Reject, in place of the old overlay modal.
     it('renders as a page titled Confirm (no overlay dialog)', () => {
         render(<ConfirmActionModal {...base()} />);
-        expect(screen.getByText('Confirm')).toBeTruthy();
+        // The page is titled Confirm; its footer button reads Approve (ruling G24).
+        expect(screen.getByRole('heading', { level: 1, name: 'Confirm' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
         expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 
@@ -653,9 +753,14 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-reject')).toBeDisabled();
     });
 
-    it('a non-overridable error keeps Approve disabled with no ack checkbox', () => {
-        render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false })} />);
-        expect(screen.getByTestId('confirm-approve').disabled).toBe(true);
+    it('a non-overridable error sends nothing on Approve, says why at the top, and offers no ack checkbox', () => {
+        const onApprove = vi.fn();
+        render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false, onApprove })} />);
+        // G130: Approve keeps its colour and answers the tap instead.
+        expect(screen.getByTestId('confirm-approve').disabled).toBe(false);
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        expect(onApprove).not.toHaveBeenCalled();
+        expect(screen.getByTestId('confirm-blocked')).toHaveTextContent("This will fail, so Approve won't send it.");
         expect(screen.queryByTestId('ack-DEST_ADDRESS_INVALID')).toBeNull();
     });
 
@@ -664,7 +769,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
     });
 
-    it('keeps Approve disabled until the preview finishes loading', () => {
+    it('sends nothing until the preview finishes loading, and says so on a tap', () => {
         const onApprove = vi.fn();
         const props = base({
             phase: 'preflighting', report: null, reportLoading: true, onApprove,
@@ -672,12 +777,15 @@ describe('ConfirmActionModal', () => {
         const { rerender } = render(<ConfirmActionModal {...props} />);
 
         const button = screen.getByTestId('confirm-approve');
-        expect(button).toBeDisabled();
+        expect(button).toBeEnabled();
         fireEvent.click(button);
         expect(onApprove).not.toHaveBeenCalled();
+        expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Wait for the network check to finish, then approve.');
 
         rerender(<ConfirmActionModal {...props} phase="ready" reportLoading={false} />);
         expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+        // The reason it answered no longer holds, so the notice goes.
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
     });
 
     it('Approve disables synchronously on click and calls onApprove once', () => {
@@ -734,16 +842,15 @@ describe('ConfirmActionModal', () => {
     it('renders a new request with its own signing wallet on the first commit', () => {
         const commits = [];
         const recordCommit = () => {
+            const from = document.querySelector('[data-testid="confirm-source"]');
             commits.push({
                 request: document.querySelector('[data-testid="confirm-modal"]')?.getAttribute('aria-label'),
-                wallet: document.querySelector('[data-testid="wallet-identity"]')?.textContent,
+                wallet: from?.previousElementSibling?.textContent,
             });
         };
-        const firstWallet = { id: 'first-wallet', name: 'First wallet' };
-        const secondWallet = { id: 'second-wallet', name: 'Second wallet' };
         const { rerender } = render(
             <Profiler id="confirm" onRender={recordCommit}>
-                <ConfirmActionModal {...base({ signingWallet: firstWallet })} />
+                <ConfirmActionModal {...base({ sourceAddress: 'bc1qfirstsource', sourceName: 'Main · First wallet' })} />
             </Profiler>,
         );
 
@@ -751,8 +858,9 @@ describe('ConfirmActionModal', () => {
             <Profiler id="confirm" onRender={recordCommit}>
                 <ConfirmActionModal {...base({
                     composed: { psbt: 'second' },
-                    decoded: { summary: 'Send 7 JDOG', details: [], warnings: [] },
-                    signingWallet: secondWallet,
+                    decoded: { summary: 'Send 7 JDOG', details: [{ label: 'Destination', value: 'bc1qxyz' }], warnings: [] },
+                    sourceAddress: 'bc1qsecondsource',
+                    sourceName: 'Main · Second wallet',
                 })} />
             </Profiler>,
         );
@@ -783,8 +891,45 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-queued').textContent).not.toMatch(/retry/i);
     });
 
-    it('preflight verdict fail sets aria-live=assertive', () => {
+    it('a tap with no password marks the password field and the top of the page, and signs nothing (G130)', () => {
+        const approve = vi.fn();
+        const onPasswordChange = vi.fn();
+        render(
+            <ActionConfirmScreen
+                confirmAction={{
+                    phase: 'ready',
+                    composed: { psbt: 'x', action: 'SEND', chainId: 'bitcoin-mainnet', decoded: DECODED },
+                    report: REPORT_PASS,
+                    acknowledged: new Set(),
+                    acknowledge: vi.fn(),
+                    canApprove: true,
+                    approve,
+                    reject: vi.fn(),
+                    error: null,
+                    source: null,
+                }}
+                chainLabel="Bitcoin"
+                signerReady={false}
+                password=""
+                onPasswordChange={onPasswordChange}
+            />,
+        );
+        const button = screen.getByTestId('confirm-approve');
+        expect(button).toBeEnabled();
+        fireEvent.click(button);
+        expect(approve).not.toHaveBeenCalled();
+        expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Enter your password to approve.');
+        expect(screen.getByText('Enter your password.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'x' } });
+        expect(onPasswordChange).toHaveBeenCalledWith('x');
+        expect(screen.queryByText('Enter your password.')).toBeNull();
+    });
+
+    it('preflight verdict fail sets aria-live=assertive on the status notice', () => {
         render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false })} />);
-        expect(screen.getByTestId('preflight-panel').getAttribute('aria-live')).toBe('assertive');
+        const notice = screen.getByTestId('confirm-status');
+        expect(notice.getAttribute('role')).toBe('alert');
+        expect(notice.getAttribute('aria-live')).toBe('assertive');
+        expect(notice).toHaveTextContent('bad address');
     });
 });

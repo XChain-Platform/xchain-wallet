@@ -62,6 +62,7 @@ import {
     PRE_HOST_MESSAGE_TYPES,
 } from '@xchain-wallet/extension/src/background/sessionMeta.js';
 import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
+import { createLockedAutopay } from '@xchain-wallet/core/notifications/index.js';
 // The pure idle decision, shared with the extension backstop so the two
 // shells cannot drift on what "idle" means.
 import {
@@ -101,8 +102,12 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  * @property {import('@xchain-wallet/extension/src/background/broadcastQueueStorage.js').BroadcastQueueStorage | null} [broadcastQueueStorage]
  *        Desktop supplies a file adapter under userData. Other callers retain
  *        the shell default when this dependency is absent.
+ * @property {{ list: () => Promise<string[] | null>, add: (id: string) => Promise<void>, remove: (ids: string[]) => Promise<void>, clear?: () => Promise<void> } | null} [broadcastQueuePrunedLedger]
+ *        Desktop supplies a file ledger so removals survive queue IO failures.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {() => object|null} [loadAmountRules]
+ *        The SDK amount validators the host settles pre-flight reports with.
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
  *        §50 / Cluster L FOLLOWUP 4: supplied by main/index.js so the
  *        diagnostic dump records electron version + OS + walletVersion.
@@ -162,8 +167,10 @@ export function createRuntime(deps) {
         // wires it into core's freeze before the first window opens.
         panicModeStore: deps.panicModeStore || null,
         broadcastQueueStorage,
+        broadcastQueuePrunedLedger: deps.broadcastQueuePrunedLedger,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
+        loadAmountRules: deps.loadAmountRules || null,
         getDiagnosticContext: deps.getDiagnosticContext,
         // Egress-policy applier, kept optional: unit tests and headless
         // callers build runtimes without it and must still get a host.
@@ -177,6 +184,13 @@ export function createRuntime(deps) {
         deadlineWatcher: null,
         dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
+        // PC-16 Phase B: auto pay keeps paying armed orders after a lock (OS
+        // screen lock and suspend included) for as long as main runs. The
+        // session lives in main's memory only, never the keychain or disk;
+        // the renderer sees plain status and a Stop call.
+        lockedAutopay: deps.notify
+            ? createLockedAutopay({ shellKind: 'desktop', notify: deps.notify, logger: console })
+            : null,
         // PC-16: pre-unlocked software signers, populated by the shared
         // wallet.unlock handler while the password is in scope. A keychain
         // restore can also populate wallets sealed under the vault key; any
@@ -193,7 +207,10 @@ export function createRuntime(deps) {
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
         // and only a wipe seals and renews it.
-        broadcastQueueStore: newBroadcastQueueStore(broadcastQueueStorage),
+        broadcastQueueStore: newBroadcastQueueStore(
+            broadcastQueueStorage,
+            deps.broadcastQueuePrunedLedger,
+        ),
     };
 }
 
@@ -210,9 +227,9 @@ export async function installPanicModePersistence(runtime) {
     await flowsLib.configurePanicModePersistence(runtime.panicModeStore);
 }
 
-/** Build a queue store over the runtime's process-wide storage adapter. */
-function newBroadcastQueueStore(storage) {
-    return createBroadcastQueueStore({ storage });
+/** Build a queue store with the durable prune ledger supplied by the shell. */
+function newBroadcastQueueStore(storage, prunedLedger) {
+    return createBroadcastQueueStore({ storage, prunedLedger });
 }
 
 /**
@@ -372,6 +389,9 @@ async function runSystemAutoLock(runtime) {
 }
 
 async function lockRuntimeForAutoLock(runtime, store, reason) {
+    // Armed auto pay moves to its locked session first, so an idle lock, an
+    // OS screen lock or a suspend locks the wallet without stopping it.
+    await captureLockedAutopay(runtime);
     // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
     runtime.autoLockCleanupPending = true;
@@ -449,6 +469,7 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            loadAmountRules: runtime.loadAmountRules,
             // A password change re-seals the vault; the keychain-cached
             // session key must follow it or the next launch opens nothing.
             vaultKeyring: createVaultKeyring({
@@ -508,8 +529,26 @@ export async function ensureHost(runtime) {
         // §46 price-alert poll watcher: same lifecycle + adapter as above.
         if (runtime.notify && !runtime.priceAlertWatcher && typeof globalThis.fetch === 'function') {
             const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+            // Token alerts price through the chain registry; the setting is read
+            // once per poll so a privacy toggle applies without a restart.
+            let tokenPriceDeps = {};
+            if (typeof notificationsLib.createTokenPriceLookup === 'function') {
+                let priceDataAllowed = true;
+                const lookup = notificationsLib.createTokenPriceLookup({
+                    chainRegistry: runtime.chainRegistry,
+                    allowCoingeckoFallback: () => priceDataAllowed,
+                });
+                tokenPriceDeps = {
+                    getTokenPrices: async (req) => {
+                        const settings = await flowsLib.getSettings(vault);
+                        priceDataAllowed = settings?.privacy?.priceDataEnabled !== false;
+                        return lookup(req);
+                    },
+                };
+            }
             runtime.priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
                 getNativePrices: ({ chainIds, fiatCurrency }) => priceOracle.getNativePrices({ chainIds, fiatCurrency }),
+                ...tokenPriceDeps,
                 listArmedAlerts: () => vault.priceAlerts.list(),
                 getSettings: () => flowsLib.getSettings(vault),
                 notify: runtime.notify,
@@ -581,9 +620,9 @@ export async function ensureHost(runtime) {
 
         // PC-16 CoinPay auto-pay engine. Desktop main is the spec's best
         // fire-and-forget home (tray-capable, no worker eviction). Pays
-        // only when the signer pool holds the wallet's signer, i.e. after
-        // a password unlock; a keychain-only session is notify-only with
-        // the ObligationsView banner explaining how to arm.
+        // when the signer pool holds the wallet's signer: after a password
+        // unlock, or after a keychain restore for the primary wallet (the
+        // pool populate above). Once locked, runtime.lockedAutopay pays.
         if (runtime.notify && !runtime.coinpayAutopayWatcher) {
             runtime.coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
                 vault,
@@ -594,8 +633,12 @@ export async function ensureHost(runtime) {
                 reservationLedger: runtime.host.host.reservationLedger,
                 notify: runtime.notify,
                 shellKind: 'desktop',
+                // Shared with the locked session so a lock or unlock hands
+                // the payer lease over instead of waiting it out.
+                ...(runtime.lockedAutopay && { instanceId: runtime.lockedAutopay.instanceId }),
                 logger: console,
             });
+            runtime.coinpayAutopayWatcher.seedAttempted?.(runtime.lockedAutopay?.takeHandoff() ?? []);
             runtime.coinpayAutopayWatcher.start();
             runtime.coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
         }
@@ -653,10 +696,38 @@ export function tearDownHost(runtime) {
         runtime.signerPool = new signersLib.SignerPool();
     }
     if (runtime.vault) {
-        try { runtime.vault.close(); } catch (_err) { /* already closed */ }
+        // A vault locked auto pay took is the session's to close.
+        if (!runtime.lockedAutopay?.holdsVault(runtime.vault)) {
+            try { runtime.vault.close(); } catch (_err) { /* already closed */ }
+        }
         runtime.vault = null;
     }
     runtime.host = null;
+}
+
+/**
+ * PC-16 Phase B: hand armed auto pay to its locked session just before a lock
+ * zeroes the signer pool. Nothing armed, or no open vault (a repeat lock),
+ * does nothing, and the lock runs exactly as before. Never throws.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<boolean>} whether the session took the vault
+ */
+export async function captureLockedAutopay(runtime) {
+    if (!runtime?.lockedAutopay || !runtime.vault || !runtime.host) return false;
+    try {
+        return await runtime.lockedAutopay.lock({
+            vault: runtime.vault,
+            signerPool: runtime.signerPool,
+            chainRegistry: runtime.chainRegistry,
+            sdkRegistry: runtime.sdkRegistry,
+            reservationLedger: runtime.host?.host?.reservationLedger,
+            watcher: runtime.coinpayAutopayWatcher,
+        });
+    } catch (err) {
+        console.error('[xchain] locked auto pay could not start:', err);
+        return false;
+    }
 }
 
 /**
@@ -693,6 +764,8 @@ export function tearDownHost(runtime) {
  *                                           somebody else's idle clock
  *   - broadcastQueue `broadcast-queue.json` signed transactions waiting
  *                                           for an explicit retry
+ *   - broadcastQueuePruned                    wallet removals that must
+ *                                           survive a queue IO failure
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -711,6 +784,8 @@ export function tearDownHost(runtime) {
  */
 export async function wipeRuntimeStores(runtime) {
     if (!runtime) throw new Error('wipeRuntimeStores: runtime is required');
+    // The vault being erased is the one locked auto pay holds.
+    try { await runtime.lockedAutopay?.end('wallet-wipe'); } catch { /* the wipe goes on */ }
     tearDownHost(runtime);
     // Seal the shared queue store so a broadcast the torn-down host still has
     // on the network writes nothing back; the next unlock gets a fresh one.
@@ -719,7 +794,10 @@ export async function wipeRuntimeStores(runtime) {
     } catch (err) {
         console.error('[xchain] broadcast-queue seal failed:', err);
     }
-    runtime.broadcastQueueStore = newBroadcastQueueStore(runtime.broadcastQueueStorage);
+    runtime.broadcastQueueStore = newBroadcastQueueStore(
+        runtime.broadcastQueueStorage,
+        runtime.broadcastQueuePrunedLedger,
+    );
 
     /** @type {string[]} */
     const cleared = [];
@@ -734,6 +812,7 @@ export async function wipeRuntimeStores(runtime) {
         ['storage', runtime.storageBackend],
         ['session', runtime.sessionBackend],
         ['broadcastQueue', runtime.broadcastQueueStorage],
+        ['broadcastQueuePruned', runtime.broadcastQueuePrunedLedger],
         ['unlockThrottle', runtime.unlockThrottleStore],
         // The auto-lock stamp describes a session that no longer exists
         // after a wipe; carrying it into the next wallet would hand that
@@ -865,14 +944,26 @@ export async function handleIpcMessage(runtime, message) {
                     walletId: opts.walletId,
                     run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
                 }),
-                onLocked: (result) => {
+                onLocked: async (result) => {
                     runtime.autoLockCleanupPending = result?.secretsCleared === false;
+                    // Armed auto pay moves to its locked session before the
+                    // teardown zeroes the pool (PC-16 Phase B).
+                    await captureLockedAutopay(runtime);
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.
                     if (!runtime.autoLockCleanupPending) {
                         runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
                     }
                 },
+                // The Locked screen's auto pay line and Stop, and the end of
+                // locked auto pay before any unlock, create or import.
+                ...(runtime.lockedAutopay && {
+                    lockedAutopay: runtime.lockedAutopay,
+                    beforeSessionStart: (type) => runtime.lockedAutopay.end(type === 'wallet.unlock' ? 'unlock' : 'wallet-switch'),
+                }),
+                // wallet.hardware.balances keeps the open vault's price-data
+                // switch; with no open vault the defaults apply.
+                readSettings: () => (runtime.vault ? runtime.vault.settings.get() : null),
             });
             // A locked wallet whose KDF metadata cannot be read can never unlock:
             // reading it here sends the renderer to the damaged-vault screen

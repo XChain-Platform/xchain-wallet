@@ -17,17 +17,14 @@ const VIEWPORT = { width: 412, height: 869 };
 // hardware keyboard), and Network & endpoints shows only in Developer Mode;
 // this walk runs at a phone width on an ordinary wallet.
 const SUBPAGES = [
-    'This wallet',
-    'Display',
-    'Privacy',
-    'Safety',
-    'Wallet mode',
-    'Backup',
-    'Fees',
-    'Connected sites',
-    'Automatic donation system',
-    'Developer mode',
-    'About',
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy and Sites',
+    'Appearance',
+    'Notifications',
+    'Network and Fees',
+    'Advanced',
 ];
 
 function escapeRegExp(value) {
@@ -36,7 +33,7 @@ function escapeRegExp(value) {
 
 function settingsRow(page, title) {
     return page.getByRole('main').getByRole('button', {
-        name: new RegExp(`^${escapeRegExp(title)}\\b`, 'i'),
+        name: new RegExp(`^${escapeRegExp(title)}\\b(?! the )`, 'i'),
     }).first();
 }
 
@@ -102,23 +99,27 @@ test.describe('Settings: every section', () => {
             await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
         }
 
-        await settingsRow(page, 'Display').click();
-        const displaySwitch = page.getByRole('switch', { name: 'Show pin button on rows', exact: true });
+        // The pin switch sits under Tokens and lists on the Appearance page.
+        await settingsRow(page, 'Appearance').click();
+        const displaySwitch = page.getByRole('switch', { name: 'Pin button on rows', exact: true });
         await expect(displaySwitch).toBeVisible();
         const expectedDisplay = await flipSwitch(displaySwitch);
-        await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+        const backToSettings = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+        await backToSettings.click();
 
+        await settingsRow(page, 'Notifications').click();
         const notificationSwitch = page.getByRole('switch', {
             name: 'Transaction confirmations',
             exact: true,
         });
         await expect(notificationSwitch).toBeVisible();
         const expectedNotification = await flipSwitch(notificationSwitch);
+        await backToSettings.click();
 
-        // Wide layouts lock from the side navigation ('Lock'); the phone header carries 'Lock wallet'.
-        await page.getByRole('button', { name: 'Lock', exact: true })
-            .or(page.getByRole('button', { name: 'Lock wallet', exact: true }))
-            .first().click();
+        // The phone locks from the Wallet menu's 'Lock wallet' button.
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        await page.getByRole('dialog', { name: 'Wallet menu' })
+            .getByRole('button', { name: 'Lock wallet', exact: true }).click();
         const unlock = page.getByRole('button', { name: 'Unlock Wallet', exact: true });
         await expect(unlock, 'the wallet did not lock').toBeVisible();
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -126,14 +127,16 @@ test.describe('Settings: every section', () => {
         await expect(unlockedShell(page), 'the wallet did not unlock').toBeVisible();
 
         await openSettings(page);
+        await settingsRow(page, 'Notifications').click();
         await expect(page.getByRole('switch', {
             name: 'Transaction confirmations',
             exact: true,
         })).toBeChecked({ checked: expectedNotification });
+        await backToSettings.click();
 
-        await settingsRow(page, 'Display').click();
+        await settingsRow(page, 'Appearance').click();
         await expect(page.getByRole('switch', {
-            name: 'Show pin button on rows',
+            name: 'Pin button on rows',
             exact: true,
         })).toBeChecked({ checked: expectedDisplay });
     });

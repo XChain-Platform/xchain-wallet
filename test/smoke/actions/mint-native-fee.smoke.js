@@ -8,10 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for PC-51: MINT joins the native-coin fee-payment surfaces. Asserts
-// MintForm mounts the shared NativeFeeToggle and plumbs payFeeInNativeCoin
-// into BOTH submit paths (the compose preview + the legacy submit),
-// and that the mintToken flow forwards it into encoderOpts.
+// MINT carries no protocol fee, so neither its form nor its flow can request
+// a native protocol-fee output on any chain.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -24,18 +22,13 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
 // ---- MintForm surface ----
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'MintForm.jsx');
-assert.match(form, /import \{ NativeFeeToggle \}/, 'MintForm imports NativeFeeToggle');
-assert.match(form, /<NativeFeeToggle/, 'MintForm renders the toggle');
-assert.match(form, /setPayFeeInNativeCoin/, 'MintForm holds the toggle state');
-// The opt-in must reach the compose step so the fee output sits in the
-// previewed PSBT, AND the submit payload.
-const composeHasFlag = /encoderOpts:\s*\{\s*payFeeInNativeCoin/.test(form);
-assert.ok(composeHasFlag, 'MintForm passes payFeeInNativeCoin into compose/encoderOpts');
-const occurrences = (form.match(/payFeeInNativeCoin: payFeeInNativeCoin \|\| undefined/g) || []).length;
-assert.ok(occurrences >= 3, `MintForm plumbs the flag across compose + both submit paths (found ${occurrences})`);
+assert.doesNotMatch(form, /NativeFeeToggle/, 'MintForm mounts no native protocol-fee toggle');
+assert.doesNotMatch(form, /useNativeFee/, 'MintForm does not mount the useNativeFee hook');
+assert.doesNotMatch(form, /nativeFeeForFeelessAction/, 'MintForm does not derive a native fee flag');
+assert.doesNotMatch(form, /payFeeInNativeCoin/, 'MintForm never requests a native fee output');
 
-// ---- mintToken flow threads the encoder opt ----
+// ---- mintToken flow rejects the encoder opt by omission ----
 const flow = read('packages', 'core', 'src', 'flows', 'mintToken.js');
-assert.match(flow, /opts\.payFeeInNativeCoin !== undefined && \{ payFeeInNativeCoin: opts\.payFeeInNativeCoin \}/, 'mintToken forwards payFeeInNativeCoin into encoderOpts');
+assert.doesNotMatch(flow, /payFeeInNativeCoin/, 'mintToken cannot forward a native fee flag');
 
 console.log('mint-native-fee smoke: all assertions passed');

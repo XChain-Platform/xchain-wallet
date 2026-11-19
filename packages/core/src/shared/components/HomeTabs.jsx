@@ -8,37 +8,46 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useState } from 'react';
+import { Button, EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
     buildBalanceRows,
     buildPlatformTokenRow,
     detectSpamCandidates,
-    sortByChainThenAsset,
     coinFromChainId,
     fiatValue,
     isAssetImageSourceAllowed,
-    tickerColor,
 } from './BalanceList.jsx';
-import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
+import { AllocationCard } from './AllocationCard.jsx';
+import { HOME_WIDE_MIN_PX, HomeWideLayout, useHomeWide } from './HomeWideLayout.jsx';
+import { listDetailStyles } from './PanelSplit.jsx';
 import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx';
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
+import { prepareValuation } from '../utils/portfolioValuation.js';
+import { HoldingValueContext } from './holdingValueContext.js';
+import { useWalletHistory } from '../hooks/useWalletHistory.js';
+import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
-import { HomeFilterBar } from './HomeFilterBar.jsx';
-import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
-import { activityRowAmount } from '../utils/activityAmount.js';
-import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
-import {
-    isDemoWallet,
-    synthesizeDemoHistory,
-    synthesizeDemoDefiPositions,
-} from '@xchain-wallet/core/flows';
+import { HomeListFilterMenu } from './HomeListFilterMenu.jsx';
+import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
+import { ActivityRow as SharedActivityRow, actionIconForAction } from './ActivityRow.jsx';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
+import { recentActivityEntries } from '../utils/historyRow.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import {
+    activityEntryLabel,
+    activityEntryMatchesQuery,
+    balanceRowMatchesQuery,
+    defiPositionMatchesQuery,
+    filterBalanceRowsByQuery,
+    normalizeHomeQuery,
+    sortDefiPositions,
+} from '../utils/homeListFilter.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
@@ -51,21 +60,21 @@ import {
     priceTokenRows,
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { resolveSmallBalanceFiat } from '../../schemas/settings.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
-import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/receive.js';
-import '../../i18n/locales/en/walletDetails.js';
 
 const TotalBalanceHero = memo(TotalBalanceHeroBase);
 const PortfolioChart = memo(PortfolioChartBase);
 
 const BALANCE_SORT_STORAGE_KEY = 'xc:balances:sort';
-const BALANCE_SORT_OPTIONS = new Set(['value', 'name', 'change']);
+const BALANCE_SORT_OPTIONS = new Set(['value', 'name']);
 
 function balanceSortStorageKey(walletId) {
     return `${BALANCE_SORT_STORAGE_KEY}:${walletId || 'none'}`;
@@ -74,9 +83,9 @@ function balanceSortStorageKey(walletId) {
 function readBalanceSort(walletId) {
     try {
         const value = globalThis.localStorage?.getItem(balanceSortStorageKey(walletId));
-        return BALANCE_SORT_OPTIONS.has(value) ? value : 'value';
+        return BALANCE_SORT_OPTIONS.has(value) ? value : 'name';
     } catch {
-        return 'value';
+        return 'name';
     }
 }
 
@@ -85,6 +94,59 @@ function persistBalanceSort(walletId, value) {
         globalThis.localStorage?.setItem(balanceSortStorageKey(walletId), value);
     } catch {
         // Storage can be unavailable in privacy-restricted shells.
+    }
+}
+
+// The Balances list's Type filter (operator 2026-11-15): one list of coins
+// and tokens, narrowed to coins or tokens from the filter popover,
+// remembered per wallet beside the sort.
+const BALANCE_TYPE_STORAGE_KEY = 'xc:balances:type';
+export const HOME_BALANCE_TYPES = Object.freeze(['all', 'coins', 'tokens']);
+
+function balanceTypeStorageKey(walletId) {
+    return `${BALANCE_TYPE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readBalanceType(walletId) {
+    try {
+        const value = globalThis.localStorage?.getItem(balanceTypeStorageKey(walletId));
+        return HOME_BALANCE_TYPES.includes(value) ? value : 'all';
+    } catch {
+        return 'all';
+    }
+}
+
+function persistBalanceType(walletId, value) {
+    try {
+        globalThis.localStorage?.setItem(balanceTypeStorageKey(walletId), value);
+    } catch {
+        // Storage can be unavailable in privacy-restricted shells.
+    }
+}
+
+/** Home's three tabs (operator 2026-11-15; G toggles hold at most four). */
+export const HOME_TABS = Object.freeze(['balances', 'nfts', 'defi']);
+
+/**
+ * Maps a Home tab value, current or retired, to the tab it opens and the
+ * Type filter it sets. The retired All, Coins and Tokens tabs open Balances
+ * with the matching Type; the retired Activity tab (History holds that
+ * list) opens Balances as it is. A value it does not know opens Balances.
+ *
+ * @param {string | null | undefined} value
+ * @returns {{ tab: 'balances' | 'nfts' | 'defi', type?: 'all' | 'coins' | 'tokens' }}
+ */
+export function resolveHomeTab(value) {
+    switch (value) {
+        case 'nfts':
+        case 'defi':
+            return { tab: value };
+        case 'all':
+        case 'coins':
+        case 'tokens':
+            return { tab: 'balances', type: value };
+        default:
+            return { tab: 'balances' };
     }
 }
 
@@ -111,53 +173,35 @@ function compareBalanceNames(a, b) {
 
 /**
  * Sort balance rows without converting exact fiat values to floating point.
- * Missing values and changes stay at the end, with name order as the stable
- * fallback so an unavailable price never makes a row jump unpredictably.
+ * Missing values stay at the end, with name order as the stable fallback so
+ * an unavailable price never makes a row jump unpredictably.
  */
-export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
+export function sortBalanceRows(rows, sortBy) {
     const list = Array.isArray(rows) ? rows.slice() : [];
-    if (sortBy === 'name') return list.sort(compareBalanceNames);
+    if (sortBy !== 'value') return list.sort(compareBalanceNames);
     return list.sort((a, b) => {
-        const aMetric = sortBy === 'change'
-            ? (Number.isFinite(a.change24hPct)
-                ? a.change24hPct
-                : nativePriceMap[a.chainId]?.change24hPct)
-            : fiatValue(a.quantity, a.divisibility, a.fiatRate);
-        const bMetric = sortBy === 'change'
-            ? (Number.isFinite(b.change24hPct)
-                ? b.change24hPct
-                : nativePriceMap[b.chainId]?.change24hPct)
-            : fiatValue(b.quantity, b.divisibility, b.fiatRate);
-        const aMissing = sortBy === 'change'
-            ? !Number.isFinite(Number(aMetric))
-            : aMetric === null;
-        const bMissing = sortBy === 'change'
-            ? !Number.isFinite(Number(bMetric))
-            : bMetric === null;
+        const aMetric = fiatValue(a.quantity, a.divisibility, a.fiatRate);
+        const bMetric = fiatValue(b.quantity, b.divisibility, b.fiatRate);
+        const aMissing = aMetric === null;
+        const bMissing = bMetric === null;
         if (aMissing !== bMissing) return aMissing ? 1 : -1;
         if (aMissing) return compareBalanceNames(a, b);
-        const compared = sortBy === 'change'
-            ? Math.sign(Number(bMetric) - Number(aMetric))
-            : compareDecimalStrings(String(bMetric), String(aMetric));
+        const compared = compareDecimalStrings(String(bMetric), String(aMetric));
         return compared || compareBalanceNames(a, b);
     });
 }
 
 /**
- * Top-level tabbed view for Home.
+ * Top-level tabbed view for Home (operator 2026-11-15, every width).
  *
- *   Coins    - native rows (BTC / LTC / DOGE / …) only
- *   Tokens   - every non-native tick, divisible or not
- *   NFTs     - the subset of Tokens matching the protocol collectible
- *              rule (DECIMALS = 0 AND LOCK_MAX_SUPPLY = 1)
- *   History  - chronological transaction stream (placeholder)
- *   DeFi     - staking, dispensers, contracts (placeholder)
+ *   Balances - one list of coins, then every non-native tick, narrowed by
+ *              the filter popover's Type (All types, Coins, Tokens)
+ *   NFTs     - a grid of large images of the tokens matching the protocol
+ *              collectible rule (DECIMALS = 0 AND LOCK_MAX_SUPPLY = 1)
+ *   DeFi     - open orders, dispensers, stakes and other open positions
  *
- * The Tokens and NFTs descriptions above were stale until 2026-09-22 and
- * are the reason the tab read as arbitrary: they described a divisible /
- * indivisible split the code stopped implementing. NFTs is a subset of
- * Tokens, not its complement, and the rule is now stated on screen too
- * rather than left for the user to infer.
+ * NFTs is a subset of the tokens, not their complement (not a divisible /
+ * indivisible split), so an NFT also lists under Balances.
  *
  * Network filter applies across every tab so flipping `BTC` filters
  * all tabs to BTC at once. Filter state owned here so it persists
@@ -166,53 +210,97 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {object} props
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {Record<string, Array<{ balances: any | null }>>} props.balances
- * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch. Drives the staleness label below the tab strip (Cluster G FOLLOWUP 5 / G155).
+ * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch. Refreshes prices and dates saved data while offline.
  * @param {string} props.networkFilter   'all' or a coin family
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
- * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  * @param {() => void} [props.onBuy]       opens the coin exchange from the first-funding state
  * @param {boolean} [props.hasAddresses]   whether the active account has any receiving address
  * @param {() => void} [props.onAddAddress] opens address generation for an account with no addresses
- * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
+ * @param {() => void} [props.onHistory]   opens the complete chronological feed from the Activity tab's View all control
+ * @param {any[] | null} [props.recentActivity] the wallet's newest history entries for the Activity tab; null while they load
+ * @param {boolean} [props.recentActivityFailed] the recent-activity read failed and no saved rows exist
+ * @param {() => void} [props.onActivityOpen] asks the host to load recent activity when the Activity tab opens
+ * @param {any[] | null} [props.defiPositions] the wallet's open DeFi positions; null while they load
+ * @param {boolean} [props.defiPositionsFailed] the DeFi reads failed without returning any rows
+ * @param {() => void} [props.onDefiOpen] asks the host to load DeFi positions when the DeFi tab opens
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
- * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
- * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
  * @param {boolean} [props.balanceNoticeShown] Home shows its own balance notice, so an empty tab shows no empty state
+ * @param {(item: HomeDetailItem) => import('react').ReactNode} [props.renderDetail]
+ *   wide Home (G115): the host draws the selected item's detail beside the list.
+ *   Without it Home stays one column at every width.
+ * @param {HomeDetailItem | null} [props.detailSelection] the item the host holds as selected; null opens the first asset
+ * @param {(item: HomeDetailItem) => void} [props.onDetailSelect] a row picked on wide Home
+ * @param {import('react').ReactNode} [props.footer] the page's closing card (the backup
+ *   reminder): under the list in one column, at the end of the list column on wide Home
+ * @param {(wide: boolean) => void} [props.onWideChange] told whether the wide layout
+ *   shows (false again on unmount), so the host lays its Screen body out for the split
+ *   (G128: the body stops scrolling and each panel scrolls on its own)
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
+export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, accountId = null, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, recentActivity = null, recentActivityFailed = false, onActivityOpen, defiPositions = null, defiPositionsFailed = false, onDefiOpen, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balanceNoticeShown = false, renderDetail, detailSelection = null, onDetailSelect, footer = null }) {
     const tabsId = useId();
-    const [active, setActive] = useState('coins');
+    // Wide Home (G115) shows only on a desktop-wide Home whose host can draw
+    // the detail panel; everything below keeps the one-column Home otherwise.
+    const [wrapRef, wide] = useHomeWide(HOME_WIDE_MIN_PX, typeof renderDetail === 'function');
+    // Before paint, so the host's body never paints one frame scrolling as
+    // one column around the split.
+    useLayoutEffect(() => {
+        if (typeof onWideChange !== 'function') return undefined;
+        onWideChange(wide);
+        return () => onWideChange(false);
+    }, [wide, onWideChange]);
+    // Home opens on Balances at every width; the Type filter narrows it.
+    const [active, setActiveTab] = useState(/** @type {'balances' | 'nfts' | 'defi'} */ ('balances'));
+    const [balanceType, setBalanceType] = useState(() => readBalanceType(walletId));
+    const changeBalanceType = useCallback((value) => {
+        if (!HOME_BALANCE_TYPES.includes(value)) return;
+        setBalanceType(value);
+        persistBalanceType(walletId, value);
+    }, [walletId]);
+    // Every tab change goes through the mapper, so a retired tab value
+    // (All, Coins, Tokens) still lands on Balances with its Type.
+    const setActive = useCallback((value) => {
+        const next = resolveHomeTab(value);
+        setActiveTab(next.tab);
+        if (next.type) changeBalanceType(next.type);
+    }, [changeBalanceType]);
+    // Proof checks read once per (address, token): the explorer serves no
+    // bulk balance proof, so they run only while the list shows tokens alone,
+    // as the old Tokens tab did. Token prices are one batch and run always.
+    const tokensOnly = active === 'balances' && balanceType === 'tokens';
+    // A host that does not hold the selection still gets one, for this visit.
+    const [localSelection, setLocalSelection] = useState(/** @type {HomeDetailItem | null} */ (null));
+    const selection = typeof onDetailSelect === 'function' ? detailSelection : localSelection;
+    const selectDetail = typeof onDetailSelect === 'function' ? onDetailSelect : setLocalSelection;
+    // The chart's change over the selected range, shown in the balance card.
+    const [rangeChange, setRangeChange] = useState(null);
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
     const isDemo = isDemoWallet(walletId);
-    // Inline filter row (search + network dropdown) is collapsed by
-    // default and revealed by the filter button in the hero. State lives
-    // here so it persists across tab switches.
-    // It opens on its own while a token query is live: the query outlives
-    // this component (the shell owns it), so a remount would otherwise hide
-    // the only control showing why the Tokens list is empty.
-    const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
-    const toggleFilter = useCallback(() => setFilterOpen((value) => !value), []);
+    const changeSort = useCallback((value) => {
+        if (!BALANCE_SORT_OPTIONS.has(value)) return;
+        setSortBy(value);
+        persistBalanceSort(walletId, value);
+    }, [walletId]);
     const { messaging } = useMessaging();
     const verifyMap = useProofVerification({
         messaging,
         balances,
-        enabled: verifyProofsEnabled && active === 'tokens',
+        enabled: verifyProofsEnabled && tokensOnly,
     });
 
     useEffect(() => {
         setSortBy(readBalanceSort(walletId));
+        setBalanceType(readBalanceType(walletId));
     }, [walletId]);
 
     const builtRows = useMemo(
         () => buildBalanceRows(balances, chainRegistry, activeByChain),
         [balances, chainRegistry, activeByChain],
     );
-    const balanceChainIds = useMemo(() => Object.keys(balances || {}), [balances]);
     // Real balance reads carry no price, so native rows get the coin's live
     // §45 rate here; without it the hero and the chart count every coin as
     // unpriced. A demo wallet asks for nothing (its fixtures price
@@ -248,10 +336,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         () => new Set(detectSpamCandidates(builtRows)),
         [builtRows],
     );
-    // Every tab names the tokens it wants priced so the hero keeps any rate
-    // already in the shared store; only the Tokens tab may fetch fresh ones.
-    // Gating the list itself dropped known token values from the total each
-    // time the user left the Tokens tab.
+    // Every held token is priced for every tab and Type, so the default All
+    // types list and the hero total carry live token prices. The refresh is
+    // one batch whose reads follow the chains, never the tokens (one oracle
+    // snapshot and one markets read per coin family), and spam-looking dust
+    // is never asked for.
     const tokenRequests = useMemo(() => {
         if (isDemoWallet(walletId)) return [];
         return displayRows
@@ -272,7 +361,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         tokens: tokenRequests,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: Boolean(settings) && !settingsLoading && active === 'tokens',
+        refreshEnabled: Boolean(settings) && !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
@@ -330,26 +419,49 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
     }, [allRows, networkFilter]);
+    // One query for every tab: each list keeps only rows whose visible text
+    // contains it, while the hero and chart keep the whole network's total.
+    const tokenQueryTrim = normalizeHomeQuery(tokenQuery);
+    const clearQuery = canFilter && tokenQueryTrim ? () => onTokenQueryChange('') : undefined;
     const coins = useMemo(
-        () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy, nativePriceMap),
-        [filteredRows, sortBy, nativePriceMap],
+        () => sortBalanceRows(filterBalanceRowsByQuery(filteredRows.filter((r) => r.kind === 'native'), tokenQueryTrim), sortBy),
+        [filteredRows, tokenQueryTrim, sortBy],
     );
-    // Tokens = every non-native tick, regardless of divisibility or
-    // imagery. The single canonical "what do I hold?" surface.
-    const tokens = useMemo(
-        () => active === 'tokens'
-            ? sortBalanceRows(filteredRows.filter(
-                (r) => r.kind !== 'native',
-            ), sortBy, nativePriceMap)
-            : [],
-        [active, filteredRows, sortBy, nativePriceMap],
-    );
-    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
-    // Off for a demo wallet: its rows carry the wallet's real addresses, and
-    // a demo wallet's addresses never go to an explorer (issue #82).
+    // A chain whose token read failed has no way to say so through its token
+    // rows when none were read, so its coin row carries the flag.
+    const tokensUnreadable = filteredRows.some((r) => r.kind === 'native' && r.tokensUnavailable === true);
+    // Tokens = every non-native tick, regardless of divisibility or imagery,
+    // in the chosen order. An unavailable token price reads as zero in this
+    // display-only list, matching the coins' three-column layout without
+    // changing the total; a picked row gets its real rate back as it opens
+    // (openBalanceRow).
+    const tokenRows = useMemo(() => {
+        if (active !== 'balances' || balanceType === 'coins') return [];
+        return sortBalanceRows(filterBalanceRowsByQuery(
+            filteredRows.filter((r) => r.kind !== 'native'),
+            tokenQueryTrim,
+        ), sortBy).map((row) => (
+            fiatValue(row.quantity, row.divisibility, row.fiatRate) === null
+                ? { ...row, fiatRate: 0 }
+                : row
+        ));
+    }, [active, balanceType, filteredRows, tokenQueryTrim, sortBy]);
+    // The Balances list: the coins, then the tokens, each group in the
+    // chosen order, from the rows already read (it adds no read), or one of
+    // the two groups when the Type filter narrows it.
+    const balanceRows = useMemo(() => {
+        if (active !== 'balances') return [];
+        if (balanceType === 'coins') return coins;
+        if (balanceType === 'tokens') return tokenRows;
+        return [...coins, ...tokenRows];
+    }, [active, balanceType, coins, tokenRows]);
+    // Read only to keep the wallet's own tokens out of the unknown-token
+    // filter. Off for a demo wallet: its rows carry the wallet's real
+    // addresses, and a demo wallet's addresses never go to an explorer
+    // (issue #82).
     const ownedTokens = useOwnedTokens(
         balances,
-        !isDemo && (active === 'tokens' || settings?.hideUnknownTokens === true),
+        !isDemo && settings?.hideUnknownTokens === true,
     );
     const automaticHiddenKeys = useMemo(
         () => settings?.hideUnknownTokens === true
@@ -368,6 +480,57 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         }),
         [filteredRows, hiddenKeys, automaticHiddenKeys],
     );
+    // The value chart's history: batch reads of every address the wallet
+    // holds on each chain the chart values (token history with its balance
+    // effects, native coin history, and the held tokens' price series), one
+    // call per 20 addresses per page, refreshed with the balances for only
+    // what is newer. The demo wallet's line is synthesized and reads none.
+    const walletAddressesByChain = useMemo(() => {
+        const out = {};
+        for (const [chainId, entries] of Object.entries(balances || {})) {
+            if (!Array.isArray(entries)) continue;
+            out[chainId] = entries.map((entry) => entry?.address).filter((a) => typeof a === 'string' && a);
+        }
+        return out;
+    }, [balances]);
+    // History is read for the chains the chart values; price series for every
+    // held mainnet token, priced now or not, so the set (and the one price
+    // read per chain) does not move as each token's current rate lands.
+    // Spam-looking dust is never asked for, as in the current-rate batch.
+    const valuedReads = useMemo(() => {
+        const chainIds = new Set();
+        const tokenTicksByChain = {};
+        for (const row of portfolioRows) {
+            if (!row?.chainId) continue;
+            if (row.kind !== 'native' && isMainnetChainId(row.chainId) && !spamKeys.has(`${row.chainId}:${row.tick}`)) {
+                (tokenTicksByChain[row.chainId] ||= []).push(row.tick);
+            }
+            if (fiatValue(row.quantity, row.divisibility, row.fiatRate) !== null) chainIds.add(row.chainId);
+        }
+        return { chainIds: [...chainIds], tokenTicksByChain };
+    }, [portfolioRows, spamKeys]);
+    const walletHistory = useWalletHistory({
+        walletId,
+        accountId,
+        activeNetwork: settingsLoading ? null : (settings?.activeNetwork || 'mainnet'),
+        messaging,
+        addressesByChain: walletAddressesByChain,
+        chainIds: valuedReads.chainIds,
+        tokenTicksByChain: valuedReads.tokenTicksByChain,
+        refreshKey: balancesFetchedAt,
+        enabled: !isDemo,
+    });
+    // The unit the balance card shows its total in; the chart follows it.
+    const [heroUnit, setHeroUnit] = useState(/** @type {{ tick: string, chainId: string, price: number } | null} */ (null));
+    // One valuation input for the chart and wide Home's detail panel, so the
+    // panel's holding line is the chart's share of that asset.
+    const holdingValueSource = useMemo(() => ({
+        prepared: prepareValuation({ rows: portfolioRows, history: isDemo ? null : walletHistory, activeByChain }),
+        priceMap: nativePriceMap,
+        seedId: isDemo ? DEMO_CHART_SEED : walletId,
+        synthesize: isDemo,
+        requestRange: isDemo ? null : walletHistory.requestRange,
+    }), [portfolioRows, walletHistory, activeByChain, nativePriceMap, isDemo, walletId]);
     // Test coins have no market price, so the fiat chart is hidden only when
     // every held row is on a test network; an empty wallet keeps its chart,
     // and the demo wallet prices its synthetic test-network holdings.
@@ -375,66 +538,42 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const testCoinsOnly = !isDemoWallet(walletId)
         && chainRows.length > 0
         && chainRows.every((row) => !isMainnetChainId(row.chainId));
-    const issuedUnheld = useMemo(() => {
-        if (active !== 'tokens') return [];
-        const held = new Set(allRows.map((r) => `${r.chainId}:${r.tick}`));
-        const out = [];
-        for (const o of ownedTokens) {
-            if (held.has(`${o.chainId}:${o.tick}`)) continue;
-            const coin = chainRegistry.get(o.chainId)?.coin || coinFromChainId(o.chainId);
-            if (networkFilter !== 'all' && coin !== networkFilter) continue;
-            if (tokenQueryTrim && !o.tick.toLowerCase().includes(tokenQueryTrim)) continue;
-            const row = buildPlatformTokenRow(o.chainId, o.tick, null, chainRegistry);
-            if (!row) continue;
-            out.push(Number.isFinite(o.divisibility) ? { ...row, divisibility: o.divisibility } : row);
+    // On wide Home a row opens its detail beside the list instead of a page.
+    const selectAssetInPanel = useCallback((token) => {
+        selectDetail({ type: 'asset', key: `${token.chainId}:${token.tick}` });
+    }, [selectDetail]);
+    const openToken = wide ? selectAssetInPanel : onSelectToken;
+    const openEntry = wide && typeof onSelectEntry === 'function'
+        ? (entry) => selectDetail({ type: 'entry', key: `entry:${entry?.key ?? ''}`, entry })
+        : onSelectEntry;
+    // A Balances row opens with its real rate: the list shows an unpriced
+    // token at zero, and the page it opens must not price it at zero.
+    const openBalanceRow = useMemo(() => (typeof openToken === 'function'
+        ? (token) => {
+            const source = filteredRows.find((row) => (
+                row.chainId === token.chainId && row.tick === token.tick
+            ));
+            openToken(source
+                ? { ...token, fiatRate: source.fiatRate ?? null, fiatRateSource: source.fiatRateSource }
+                : token);
         }
-        return sortByChainThenAsset(out);
-    }, [active, ownedTokens, allRows, networkFilter, tokenQueryTrim, chainRegistry]);
-    const filteredTokens = useMemo(() => {
-        if (!tokenQueryTrim) return tokens;
-        return tokens.filter((r) => {
-            const tick = String(r.tick || '').toLowerCase();
-            const name = String(r.displayName || '').toLowerCase();
-            return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
-        });
-    }, [tokens, tokenQueryTrim]);
-    const pricedTokens = useMemo(
-        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) !== null),
-        [filteredTokens],
-    );
-    const unpricedTokens = useMemo(
-        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) === null),
-        [filteredTokens],
-    );
-    const pricesFetchedAt = useMemo(() => {
-        let oldest = null;
-        for (const row of filteredRows) {
-            if (!hasNonZeroQuantity(row) || fiatValue(row.quantity, row.divisibility, row.fiatRate) === null) continue;
-            const fetchedAt = Date.parse(row.fiatRateFetchedAt);
-            if (!Number.isFinite(fetchedAt)) continue;
-            oldest = oldest === null ? fetchedAt : Math.min(oldest, fetchedAt);
-        }
-        return oldest;
-    }, [filteredRows]);
+        : undefined), [filteredRows, openToken]);
     // A row whose balance read failed may hold funds, so it never reads as
     // an empty wallet that needs its first funding.
     const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row) || Boolean(row?.unavailable));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
-    // An empty tab while balances could not be checked proves nothing, so it
-    // says that once (and the shell's stale-balances notice steps aside).
     // While Home's own balance notice is up, that notice is the one message
     // and an empty tab stays quiet.
-    const quietEmpty = Boolean(balanceNoticeShown) && !isDemo;
-    const showUnchecked = !quietEmpty && balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
-    const uncheckedState = showUnchecked ? (
-        <BalancesUncheckedState
-            plain={false}
-            onRetry={onRecheckBalances}
-            onReceive={hasAddresses ? onReceive : undefined}
-        />
-    ) : null;
-    const showBalanceSort = (active === 'coins' && !showFirstFunding && coins.length > 0)
-        || (active === 'tokens' && filteredTokens.length > 0);
+    const quietEmpty = Boolean(balanceNoticeShown);
+    // Any row on the network keeps the menu (and its Type field) reachable,
+    // so a Type that matches nothing can always be changed back.
+    const showBalanceSort = !showFirstFunding && active === 'balances' && filteredRows.length > 0;
+    // The first-funding state and the quiet empty tab speak only for an
+    // unfiltered list; a query that matches nothing reads as no matches.
+    // Narrowed to Tokens there is no first funding (the old Tokens tab's rule).
+    const balancesFirstFunding = showFirstFunding && balanceType !== 'tokens';
+    const balancesQuiet = quietEmpty && !tokenQueryTrim
+        && (balancesFirstFunding || balanceRows.length === 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
     // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a
@@ -444,45 +583,106 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const collectibleKeys = useCollectibleKeys(active === 'nfts' ? filteredRows : [], isDemo);
     const nfts = useMemo(
         () => active === 'nfts'
-            ? sortByChainThenAsset(filteredRows.filter(
+            ? sortBalanceRows(filteredRows.filter(
                 (r) => r.kind !== 'native'
-                    && collectibleKeys.has(`${r.chainId}:${r.tick}`),
-            ))
+                    && collectibleKeys.has(`${r.chainId}:${r.tick}`)
+                    && balanceRowMatchesQuery(r, tokenQueryTrim),
+            ), sortBy)
             : [],
-        [active, filteredRows, collectibleKeys],
+        [active, filteredRows, collectibleKeys, tokenQueryTrim, sortBy],
     );
+    // The item whose detail shows beside the list: the one picked, or the
+    // first asset (the first coin, else the first token). It is looked up in
+    // the live rows, so a balance poll updates it in place.
+    const detailItem = useMemo(() => {
+        if (!wide) return null;
+        if (selection?.type === 'entry' && selection.entry) {
+            return { type: 'entry', key: selection.key, entry: selection.entry };
+        }
+        const byKey = (key) => filteredRows.find((r) => `${r.chainId}:${r.tick}` === key) || null;
+        const picked = selection?.type === 'asset' ? byKey(selection.key) : null;
+        const row = picked
+            || coins[0]
+            || sortBalanceRows(filteredRows.filter((r) => r.kind !== 'native'), sortBy)[0]
+            || null;
+        if (!row) return null;
+        return {
+            type: 'asset',
+            key: `${row.chainId}:${row.tick}`,
+            token: {
+                chainId: row.chainId,
+                tick: row.tick,
+                kind: row.kind,
+                displayName: row.displayName,
+                divisibility: row.divisibility,
+                fiatRate: row.fiatRate ?? null,
+                fiatRateSource: row.fiatRateSource,
+                fiatRateStale: row.fiatRateStale === true,
+                fiatRateFetchedAt: row.fiatRateFetchedAt || null,
+                quantity: row.quantity,
+                imageUrl: isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages) ? row.imageUrl : null,
+            },
+        };
+    }, [wide, selection, filteredRows, coins, sortBy, allowRemoteImages]);
+    const selectedAssetKey = detailItem?.type === 'asset' ? detailItem.key : null;
 
+    // Each tab label carries an icon. There is no Activity tab because History
+    // holds the same list.
+    const tabLabel = (IconGlyph, text) => (
+        <span className={styles.tabWithIcon}><span className={styles.tabIcon} aria-hidden="true"><IconGlyph /></span>{text}</span>
+    );
     const tabs = [
-        { id: 'coins',    label: t('home.tabs.coins')    },
-        { id: 'tokens',   label: t('home.tabs.tokens')   },
-        { id: 'nfts',     label: t('home.tabs.nfts')     },
-        { id: 'defi',     label: t('home.tabs.defi')     },
-        { id: 'activity', label: t('home.tabs.activity') },
+        { id: 'balances', label: tabLabel(Icon.CoinsIcon, t('balances.balances')) },
+        { id: 'nfts',     label: tabLabel(Icon.ImageIcon, t('home.tabs.nfts')) },
+        { id: 'defi',     label: tabLabel(Icon.StakeIcon, t('home.tabs.defi')) },
     ];
+    // The Balances list's empty copy follows the Type it is narrowed to.
+    const balancesEmpty = tokenQueryTrim
+        ? {
+            title: balanceType === 'tokens' ? t('home.tabs.noMatchingTokens') : t('home.tabs.noMatches'),
+            body: balanceType === 'tokens' ? t('home.tabs.matchingTokensAppearHereAfter') : t('home.tabs.matchesAppearHereAfter'),
+        }
+        : {
+            all: {
+                title: t('home.tabs.noAssetsYet'),
+                body: t('home.tabs.assetsAppearHereAfterYou'),
+            },
+            coins: networkFilter === 'all'
+                ? { title: t('home.tabs.noCoinsYet'), body: t('home.tabs.coinsAppearHereAfterYou') }
+                : { title: t('home.tabs.noCoinsOnThisNetwork'), body: t('home.tabs.coinsOnThisNetworkAppear') },
+            tokens: tokensUnreadable
+                ? { title: t('home.tabs.tokensCouldntBeLoaded'), body: t('home.tabs.tokensCouldntBeLoadedBody') }
+                : networkFilter === 'all'
+                    ? { title: t('home.tabs.noTokensYet'), body: t('home.tabs.tokensAppearHereAfterYou') }
+                    : { title: t('home.tabs.noTokensOnThisNetwork'), body: t('home.tabs.tokensOnThisNetworkAppear') },
+        }[balanceType];
 
-    return (
-        <div className={styles.wrap}>
-            {/* Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
-                their own dollar amounts via separate flows once they
-                wire up; for now they're not in the sum. */}
+    // The page is built from three blocks (the balance card, the tab row and
+    // the chosen tab's list), stacked in one column, or on wide Home laid out
+    // by HomeWideLayout beside the allocation card and the detail panel.
+    // Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
+    // their own dollar amounts via separate flows once they wire up; for now
+    // they're not in the sum. The balance card and its chart share one cell,
+    // the chart drawn behind the balance on the card's app blue.
+    const heroNode = (
+            <div className={testCoinsOnly ? styles.heroStack : `${styles.heroStack} ${styles.heroStackWithChart}`}>
             <RouteErrorBoundary
                 variant="compact"
                 resetKey={`${walletId || ''}:${networkFilter}:price`}
             >
                 <TotalBalanceHero
+                    walletName={walletName}
+                    rangeChange={rangeChange}
                     rows={portfolioRows}
                     walletId={walletId}
                     networkFilter={networkFilter}
-                    lastSyncedAt={balancesFetchedAt}
-                    pricesFetchedAt={pricesFetchedAt}
                     onRefresh={onRefresh}
                     refreshing={refreshing}
-                    filterOpen={filterOpen}
-                    onToggleFilter={canFilter ? toggleFilter : undefined}
                     onCommandPalette={onCommandPalette}
                     onOpenSettings={onOpenSettings}
                     onLockWallet={onLockWallet}
                     nativePriceMap={nativePriceMap}
+                    onUnitChange={setHeroUnit}
                 />
             </RouteErrorBoundary>
 
@@ -497,24 +697,19 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         nativePriceMap={nativePriceMap}
                         nativePricesLoading={nativePricesLoading}
                         nativePricesError={nativePricesError}
+                        behind
+                        onRangeChange={setRangeChange}
+                        history={isDemo ? null : walletHistory}
+                        activeByChain={activeByChain}
+                        unit={heroUnit}
                     />
                 ) : null}
             </RouteErrorBoundary>
+            </div>
+    );
 
-            {actions}
-
-            {canFilter && filterOpen ? (
-                <HomeFilterBar
-                    chainRegistry={chainRegistry}
-                    coinFamilies={coinFamilies || []}
-                    networkFilter={networkFilter}
-                    onNetworkFilterChange={onNetworkFilterChange}
-                    tokenQuery={tokenQuery}
-                    onTokenQueryChange={onTokenQueryChange}
-                />
-            ) : null}
-
-            <div className={styles.tabsRow}>
+    const tabsRowNode = (
+            <div className={canFilter || showBalanceSort ? `${styles.tabsRow} ${styles.tabsRowWithFilter}` : styles.tabsRow}>
                 <Tabs
                     id={tabsId}
                     items={tabs}
@@ -524,44 +719,33 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     aria-label={t('home.tabs.walletView')}
                 />
 
-                {showBalanceSort ? (
-                    <label className={styles.sortControl}>
-                        <span className={styles.sortLabel}>{t('home.tabs.sortBalances')}</span>
-                        <span className={styles.sortCompactValue} aria-hidden="true">
-                            {sortBy === 'change' ? t('home.tabs.24hChange') : sortBy[0].toUpperCase() + sortBy.slice(1)}
-                        </span>
-                        <span className={styles.sortCompactIcon} aria-hidden="true">
-                            <Icon.ChevronDownIcon />
-                        </span>
-                        <select
-                            className={styles.sortSelect}
-                            aria-label={t('home.tabs.sortBalances')}
-                            value={sortBy}
-                            onChange={(event) => {
-                                const value = event.target.value;
-                                if (!BALANCE_SORT_OPTIONS.has(value)) return;
-                                setSortBy(value);
-                                persistBalanceSort(walletId, value);
-                            }}
-                        >
-                            <option value="value">{t('home.tabs.value')}</option>
-                            <option value="name">{t('walletDetails.name')}</option>
-                            <option value="change">{t('home.tabs.24hChange')}</option>
-                        </select>
-                    </label>
+                {canFilter || showBalanceSort ? (
+                    <HomeListFilterMenu
+                        sortBy={sortBy}
+                        onSortChange={changeSort}
+                        chainRegistry={chainRegistry}
+                        coinFamilies={coinFamilies || []}
+                        networkFilter={networkFilter}
+                        onNetworkFilterChange={onNetworkFilterChange}
+                        tokenQuery={tokenQuery}
+                        onTokenQueryChange={onTokenQueryChange}
+                        tab={active === 'balances' && balanceType !== 'all' ? balanceType : active}
+                        balanceType={active === 'balances' ? balanceType : undefined}
+                        onBalanceTypeChange={active === 'balances' ? changeBalanceType : undefined}
+                    />
                 ) : null}
             </div>
+    );
 
+    const panelNode = (
             <div
                 id={`${tabsId}-panel`}
                 className={styles.panel}
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
-                {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
-                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0))
-                    && !(quietEmpty && (showFirstFunding || coins.length === 0)) ? (
-                    showFirstFunding ? (
+                {active === 'balances' && !balancesQuiet ? (
+                    balancesFirstFunding ? (
                         <EmptyState
                             title={t('home.tabs.fundYourWallet')}
                             body={hasAddresses
@@ -576,121 +760,34 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         />
                     ) : (
                         <BalanceList
-                            rows={coins}
+                            rows={balanceRows}
                             fiatCurrency={settings?.fiatCurrency || 'USD'}
                             multisig={multisig}
                             multisigChainId={multisigChainId}
-                            emptyTitle={networkFilter === 'all' ? t('home.tabs.noCoinsYet') : t('home.tabs.noCoinsOnThisNetwork')}
-                            emptyBody={networkFilter === 'all'
-                                ? t('home.tabs.coinsAppearHereAfterYou')
-                                : t('home.tabs.coinsOnThisNetworkAppear')}
-                            onReceive={networkFilter === 'all' ? onReceive : undefined}
-                            onSelectToken={onSelectToken}
+                            emptyTitle={balancesEmpty.title}
+                            emptyBody={balancesEmpty.body}
+                            emptyActionLabel={clearQuery ? t('home.tabs.clearFilter') : undefined}
+                            onEmptyAction={clearQuery}
+                            onReceive={networkFilter === 'all' && !tokenQueryTrim && balanceType !== 'tokens' ? onReceive : undefined}
+                            onSelectToken={openBalanceRow}
                             pinnedKeys={pinnedKeys}
                             onTogglePin={onTogglePin}
                             hiddenKeys={hiddenKeys}
                             automaticHiddenKeys={automaticHiddenKeys}
                             onToggleHide={onToggleHide}
+                            verifyMap={tokensOnly ? verifyMap : undefined}
                             hideSmallBalances={hideSmallBalances}
-                            smallBalanceThreshold={settings?.smallBalanceThreshold}
+                            smallBalanceFiat={resolveSmallBalanceFiat(settings)}
                             numberFormat={settings?.numberFormat}
                             allowRemoteImages={allowRemoteImages}
                             showChain={networkFilter === 'all'}
+                            selectedKey={selectedAssetKey}
                         />
                     )
                 ) : null}
 
-                {active === 'tokens' ? (
-                    <>
-                    {filteredTokens.length === 0 && showUnchecked && !tokenQueryTrim ? uncheckedState : null}
-                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) && !(quietEmpty && !tokenQueryTrim) ? (
-                        <BalanceList
-                            rows={[]}
-                            emptyTitle={tokenQueryTrim
-                                ? t('home.tabs.noMatchingTokens')
-                                : (networkFilter === 'all' ? t('home.tabs.noTokensYet') : t('home.tabs.noTokensOnThisNetwork'))}
-                            emptyBody={tokenQueryTrim
-                                ? t('home.tabs.matchingTokensAppearHereAfter')
-                                : (networkFilter === 'all'
-                                    ? t('home.tabs.tokensAppearHereAfterYou')
-                                    : t('home.tabs.tokensOnThisNetworkAppear'))}
-                            emptyActionLabel={tokenQueryTrim && canFilter ? t('home.tabs.clearFilter') : undefined}
-                            onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
-                        />
-                    ) : null}
-                    {pricedTokens.length > 0 ? (
-                        <BalanceList
-                            rows={pricedTokens}
-                            fiatCurrency={settings?.fiatCurrency || 'USD'}
-                            onSelectToken={onSelectToken}
-                            pinnedKeys={pinnedKeys}
-                            onTogglePin={onTogglePin}
-                            hiddenKeys={hiddenKeys}
-                            automaticHiddenKeys={automaticHiddenKeys}
-                            onToggleHide={onToggleHide}
-                            verifyMap={verifyMap}
-                            hideSmallBalances={hideSmallBalances}
-                            smallBalanceThreshold={settings?.smallBalanceThreshold}
-                            numberFormat={settings?.numberFormat}
-                            allowRemoteImages={allowRemoteImages}
-                            showChain={networkFilter === 'all'}
-                        />
-                    ) : null}
-                    {unpricedTokens.length > 0 ? (
-                        <section aria-label={t('home.tabs.unpricedTokens')}>
-                            <p className={styles.tabNote}>{t('home.tabs.unpricedTokens')}</p>
-                            <BalanceList
-                                rows={unpricedTokens}
-                                fiatCurrency={settings?.fiatCurrency || 'USD'}
-                                onSelectToken={onSelectToken}
-                                pinnedKeys={pinnedKeys}
-                                onTogglePin={onTogglePin}
-                                hiddenKeys={hiddenKeys}
-                                automaticHiddenKeys={automaticHiddenKeys}
-                                onToggleHide={onToggleHide}
-                                verifyMap={verifyMap}
-                                hideSmallBalances={hideSmallBalances}
-                                smallBalanceThreshold={settings?.smallBalanceThreshold}
-                                numberFormat={settings?.numberFormat}
-                                allowRemoteImages={allowRemoteImages}
-                                showChain={networkFilter === 'all'}
-                            />
-                        </section>
-                    ) : null}
-                    {issuedUnheld.length > 0 ? (
-                        <section aria-label={t('home.tabs.issuedByYou')} data-testid="issued-unheld">
-                            <p className={styles.tabNote}>{t('home.tabs.issuedByYou')}</p>
-                            <BalanceList
-                                rows={issuedUnheld}
-                                fiatCurrency={settings?.fiatCurrency || 'USD'}
-                                onSelectToken={onSelectToken}
-                                pinnedKeys={pinnedKeys}
-                                onTogglePin={onTogglePin}
-                                hiddenKeys={hiddenKeys}
-                                automaticHiddenKeys={automaticHiddenKeys}
-                                onToggleHide={onToggleHide}
-                                verifyMap={verifyMap}
-                                numberFormat={settings?.numberFormat}
-                                allowRemoteImages={allowRemoteImages}
-                                showChain={networkFilter === 'all'}
-                            />
-                        </section>
-                    ) : null}
-                    </>
-                ) : null}
-
                 {active === 'nfts' ? (
                     <>
-                        {/* The rule, on screen. A user holding six ticks under
-                            Tokens and two here cannot otherwise tell why, and
-                            guessing "the ones with pictures" is wrong: artwork
-                            plays no part in it. Wording tracks
-                            protocol/NFT_Standard.md. */}
-                        {nfts.length > 0 ? (
-                        <p className={styles.tabNote}>
-                            {t('home.tabs.aTickAppearsHereWhen')}
-                        </p>
-                        ) : null}
                         <RouteErrorBoundary
                             variant="compact"
                             resetKey={`${walletId || ''}:${networkFilter}:collectibles`}
@@ -698,63 +795,113 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             <CollectiblesView
                                 rows={nfts}
                                 demo={isDemo}
-                                emptyTitle={networkFilter === 'all' ? t('home.tabs.noCollectiblesYet') : t('home.tabs.noCollectiblesOnThisNetwork')}
-                                emptyBody={networkFilter === 'all'
-                                    ? t('home.tabs.collectiblesAppearHereAfterYou')
-                                    : t('home.tabs.collectiblesOnThisNetworkAppear')}
-                                onReceive={networkFilter === 'all' ? onReceive : undefined}
-                                onSelectToken={onSelectToken}
+                                size="large"
+                                emptyTitle={tokenQueryTrim
+                                    ? t('home.tabs.noMatches')
+                                    : (networkFilter === 'all' ? t('home.tabs.noCollectiblesYet') : t('home.tabs.noCollectiblesOnThisNetwork'))}
+                                emptyBody={tokenQueryTrim
+                                    ? t('home.tabs.matchesAppearHereAfter')
+                                    : (networkFilter === 'all'
+                                        ? t('home.tabs.collectiblesAppearHereAfterYou')
+                                        : t('home.tabs.collectiblesOnThisNetworkAppear'))}
+                                emptyActionLabel={clearQuery ? t('home.tabs.clearFilter') : undefined}
+                                onEmptyAction={clearQuery}
+                                onReceive={networkFilter === 'all' && !tokenQueryTrim ? onReceive : undefined}
+                                onSelectToken={openToken}
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}
                                 hiddenKeys={hiddenKeys}
                                 automaticHiddenKeys={automaticHiddenKeys}
                                 onToggleHide={onToggleHide}
                                 allowRemoteImages={allowRemoteImages}
+                                selectedKey={selectedAssetKey}
                             />
                         </RouteErrorBoundary>
                     </>
                 ) : null}
 
                 {active === 'activity' ? (
-                    isDemo ? (
-                        <DemoActivityList
-                            chainIds={balanceChainIds}
-                            balances={balances}
-                            networkFilter={networkFilter}
-                            walletId={walletId}
-                            onSelectEntry={onSelectEntry}
-                            allowRemoteImages={allowRemoteImages}
-                        />
-                    ) : (
-                        <EmptyState
-                            title={t('home.tabs.yourActivityIsInHistory')}
-                            body={t('home.tabs.everySendReceiveAndOther')}
-                            actionLabel={t('home.tabs.openHistory')}
-                            onAction={onHistory}
-                        />
-                    )
+                    <RecentActivityList
+                        entries={recentActivity}
+                        failed={recentActivityFailed}
+                        balances={balances}
+                        networkFilter={networkFilter}
+                        query={tokenQueryTrim}
+                        onClearQuery={clearQuery}
+                        onOpen={onActivityOpen}
+                        onHistory={onHistory}
+                        onSelectEntry={onSelectEntry}
+                        allowRemoteImages={allowRemoteImages}
+                    />
                 ) : null}
 
                 {active === 'defi' ? (
-                    isDemo ? (
-                        <DemoDefiList
-                            networkFilter={networkFilter}
-                            balances={balances}
-                            chainRegistry={chainRegistry}
-                            onSelectEntry={onSelectEntry}
-                            allowRemoteImages={allowRemoteImages}
-                        />
-                    ) : (
-                        <EmptyState
-                            title={t('home.tabs.noDefiPositionsYet')}
-                            body={t('home.tabs.stakingDispensersContractBalancesAnd')}
-                        />
-                    )
+                    <DefiList
+                        positions={defiPositions}
+                        failed={defiPositionsFailed}
+                        networkFilter={networkFilter}
+                        query={tokenQueryTrim}
+                        sortBy={sortBy}
+                        onClearQuery={clearQuery}
+                        balances={balances}
+                        onOpen={onDefiOpen}
+                        onSelectEntry={openEntry}
+                        allowRemoteImages={allowRemoteImages}
+                    />
                 ) : null}
             </div>
+    );
+
+    if (!wide) {
+        return (
+            <div ref={wrapRef} className={styles.wrap}>
+                {heroNode}
+                {tabsRowNode}
+                {panelNode}
+                {footer}
+            </div>
+        );
+    }
+    const detailLabel = detailItem?.type === 'asset'
+        ? (detailItem.token.displayName || detailItem.token.tick)
+        : undefined;
+    return (
+        // A box between Home's Screen body and the split: it passes the
+        // body's height down (G128).
+        <div ref={wrapRef} className={[styles.wrap, listDetailStyles.splitFill].filter(Boolean).join(' ')}>
+            <HomeWideLayout
+                hero={heroNode}
+                allocation={<AllocationCard rows={portfolioRows} chainRegistry={chainRegistry} fiatCurrency={fiatCurrency} />}
+                listHeader={tabsRowNode}
+                // The footer (the backup reminder) closes the list column, so
+                // nothing follows the split and its line runs to the bottom
+                // edge (operator 2026-11-15).
+                list={(
+                    <>
+                        {panelNode}
+                        {footer}
+                    </>
+                )}
+                detail={detailItem ? (
+                    <HoldingValueContext.Provider value={holdingValueSource}>
+                        {renderDetail(detailItem)}
+                    </HoldingValueContext.Provider>
+                ) : (
+                    <EmptyState title={t('home.wide.noSelectionTitle')} body={t('home.wide.noSelectionBody')} titleAs="p" />
+                )}
+                detailLabel={detailLabel}
+            />
         </div>
     );
 });
+
+/**
+ * What wide Home's detail panel shows (G115): a coin, token or NFT by its
+ * `chainId:tick` key, with the live row as `token` when it is drawn, or one
+ * History entry (a DeFi position row).
+ *
+ * @typedef {{ type: 'asset', key: string, token?: any } | { type: 'entry', key: string, entry: any }} HomeDetailItem
+ */
 
 /**
  * Builds zero-balance rows for watched tokens that are absent from the latest
@@ -906,32 +1053,11 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-const ACTION_ICON = {
-    send:       (k) => <Icon.SendIcon key={k} />,
-    receive:    (k) => <Icon.ReceiveIcon key={k} />,
-    issue:      (k) => <Icon.PlusIcon key={k} />,
-    mint:       (k) => <Icon.TokenIcon key={k} />,
-    destroy:    (k) => <Icon.TrashIcon key={k} />,
-    sweep:      (k) => <Icon.DownloadIcon key={k} />,
-    dispenser:  (k) => <Icon.MarketIcon key={k} />,
-    dispense:   (k) => <Icon.DownloadIcon key={k} />,
-    order:      (k) => <Icon.MarketIcon key={k} />,
-    swap:       (k) => <Icon.SwapIcon key={k} />,
-    dividend:   (k) => <Icon.DollarIcon key={k} />,
-    broadcast:  (k) => <Icon.BroadcastIcon key={k} />,
-    message:    (k) => <Icon.MessageIcon key={k} />,
-    link:       (k) => <Icon.LinkIcon key={k} />,
-    crosschain: (k) => <Icon.LinkIcon key={k} />,
-    stake:      (k) => <Icon.StakeIcon key={k} />,
-    contract:   (k) => <Icon.ContractIcon key={k} />,
-    other:      (k) => <Icon.HistoryIcon key={k} />,
-};
-
-const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages }) {
+export const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages, chevron = false }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
-    const tick = entry.raw?.tick || entry.raw?.TICK || '';
+    const tick = activityRowTick(entry);
     const tokenInfo = tick ? (assetLookup.get(`${entry.chainId}|${tick}`) || null) : null;
     const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
         ? tokenInfo.imageUrl
@@ -941,7 +1067,8 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
+    // A row in the 'other' bucket reads its own action, as History's rows do.
+    const label = activityEntryLabel(entry, walletAddresses);
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
     // One formatter with History: a SEND carries whole units, every other
     // action base units.
@@ -949,8 +1076,9 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         divisibility: tokenInfo?.divisibility ?? 8,
         direction,
     });
+    const amountQualifier = activityRowAmountQualifier(entry);
     const primary = amount
-        ? `${amount}${tick ? ` ${tick}` : ''}`
+        ? `${amount}${tick ? ` ${tick}` : ''}${amountQualifier ? ` ${amountQualifier}` : ''}`
         : (tick || nativeTicker);
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     return (
@@ -961,9 +1089,13 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
                 imageUrl={tokenImageUrl}
                 isNative={isNative}
                 label={label}
+                actionIcon={actionIconForAction(kind === 'send' || kind === 'receive' ? kind : entry.action)}
                 amount={displayPrimary}
                 status={status}
                 timestamp={entry.timestamp}
+                block={entry.blockIndex
+                    ? t('history.row.block', { block: String(entry.blockIndex) })
+                    : null}
                 onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry({
                     ...entry,
                     detailContext: {
@@ -972,248 +1104,228 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
                         walletAddresses: [...walletAddresses],
                     },
                 }) : undefined}
+                // A row that opens its detail page reads as tappable with the
+                // Back-sized forward chevron; a row that opens nothing has none.
+                trailing={chevron && typeof onSelectEntry === 'function'
+                    ? <span className={styles.rowChevron} data-row-chevron><Icon.ForwardIcon /></span>
+                    : null}
                 data-activity-row
             />
         </li>
     );
 });
 
-// Demo activity feed: synthesizes per-chain rows, wraps each in the
-// History entry shape so onSelectEntry can hand them to ActionDetail.
-function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry, allowRemoteImages }) {
-    void walletId;
-    const walletAddresses = useMemo(() => new Set(['demo-address']), []);
-    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
-    const entries = useMemo(() => {
-        /** @type {Array<any>} */
-        const all = [];
-        for (const cid of chainIds) {
-            if (networkFilter !== 'all' && coinFromChainId(cid) !== networkFilter) continue;
-            const history = synthesizeDemoHistory(cid, 'demo-address');
-            for (const h of history) {
-                const aIdx = String(h.action_index ?? h.actionIndex ?? '');
-                if (!aIdx) continue;
-                all.push({
-                    key: `${cid}|${aIdx}:demo-address`,
-                    chainId: cid,
-                    address: 'demo-address',
-                    actionIndex: aIdx,
-                    action: String(h.action || 'ACTION'),
-                    blockIndex: Number(h.block_index ?? h.blockIndex ?? 0),
-                    timestamp: Number(h.timestamp ?? 0),
-                    txHash: String(h.tx_hash ?? h.txHash ?? ''),
-                    source: String(h.source ?? ''),
-                    raw: h,
-                    link: null,
-                });
-            }
-        }
-        return all.sort((a, b) => b.timestamp - a.timestamp);
-    }, [chainIds, networkFilter]);
-
-    // Synthetic chain tip per chainId: max blockIndex across visible entries
-    // plus a small buffer, so the detail view reads a plausible confirmation
-    // count instead of "1" for the freshest confirmed entry.
-    const chainTips = useMemo(() => {
-        /** @type {Record<string, number>} */
-        const tips = {};
-        for (const e of entries) {
-            if (!e.chainId || !e.blockIndex) continue;
-            if (!tips[e.chainId] || e.blockIndex > tips[e.chainId]) {
-                tips[e.chainId] = e.blockIndex;
-            }
-        }
-        for (const cid of Object.keys(tips)) tips[cid] += 8;
-        return tips;
-    }, [entries]);
-
-    if (entries.length === 0) {
-        return <EmptyState title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
-    }
+// The Activity tab ends with one full-width success button that opens the
+// complete History feed; it renders only when the host can open History.
+function SeeAllActivityButton({ onHistory }) {
+    if (typeof onHistory !== 'function') return null;
     return (
-        <ul className={`${styles.demoList} ${styles.activityList}`}>
-            {entries.map((e) => (
-                <ActivityEntryRow
-                    key={e.key}
-                    entry={e}
-                    walletAddresses={walletAddresses}
-                    assetLookup={assetLookup}
-                    chainTip={chainTips[e.chainId] || null}
-                    allowRemoteImages={allowRemoteImages}
-                    onSelectEntry={onSelectEntry}
-                />
-            ))}
-        </ul>
+        <Button
+            variant="success"
+            block
+            className={styles.seeAllActivity}
+            icon={<Icon.HistoryIcon />}
+            onClick={onHistory}
+        >
+            {t('home.tabs.openHistory')}
+        </Button>
     );
 }
 
-// DeFi action list: three-line history-row style. Left side is always
-// the XCHAIN product mark (the only thing stakeable on the protocol)
-// with the chain icon overlaid in the bottom-right; right side surfaces
-// the action label + status on line one, the primary subject (amount /
-// token / lock) on line two, and block / confirms / relative time on
-// line three.
-// Convert a synthetic DeFi position into a History-shaped entry so the
-// shared ActionDetail page can render it. action_index / tx_hash are
-// fabricated (the position doesn't have a real on-chain index) but are
-// stable per position, so navigating back and forth keeps the same key.
+// The Activity tab's newest history rows in History's row layout, ending with
+// See all activity, which opens the complete feed. The host loads the rows
+// when the tab opens, so Home's first paint reads no history.
+function RecentActivityList({ entries, failed, balances, networkFilter, query = '', onClearQuery, onOpen, onHistory, onSelectEntry, allowRemoteImages }) {
+    useEffect(() => {
+        if (typeof onOpen === 'function') onOpen();
+    }, [onOpen]);
+    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
+    const walletAddresses = useMemo(
+        () => new Set((entries || []).map((e) => e?.address).filter(Boolean)),
+        [entries],
+    );
+    const rows = useMemo(() => {
+        const recent = recentActivityEntries(entries);
+        const onNetwork = networkFilter === 'all'
+            ? recent
+            : recent.filter((e) => coinFromChainId(e.chainId) === networkFilter);
+        return query ? onNetwork.filter((e) => activityEntryMatchesQuery(e, query, walletAddresses)) : onNetwork;
+    }, [entries, networkFilter, query, walletAddresses]);
+    if (entries === null && !failed) {
+        return (
+            <>
+                <p className={styles.tabNote} role="status">{t('home.tabs.loadingRecentActivity')}</p>
+                <SeeAllActivityButton onHistory={onHistory} />
+            </>
+        );
+    }
+    if (rows.length === 0) {
+        if (query && !failed) {
+            return (
+                <>
+                    <EmptyState
+                        title={t('home.tabs.noMatches')}
+                        body={t('home.tabs.matchesAppearHereAfter')}
+                        actionLabel={onClearQuery ? t('home.tabs.clearFilter') : undefined}
+                        onAction={onClearQuery}
+                    />
+                    <SeeAllActivityButton onHistory={onHistory} />
+                </>
+            );
+        }
+        if (failed) {
+            return (
+                <>
+                    <EmptyState
+                        title={t('home.tabs.recentActivityUnavailable')}
+                        body={t('home.tabs.recentActivityUnavailableBody')}
+                    />
+                    <SeeAllActivityButton onHistory={onHistory} />
+                </>
+            );
+        }
+        return (
+            <>
+                <EmptyState
+                    title={networkFilter === 'all' ? t('history.empty.noActivityTitle') : t('home.tabs.noActivityOnThisNetwork')}
+                    body={t('home.tabs.sendsReceivesAndOtherActionsAppear')}
+                />
+                <SeeAllActivityButton onHistory={onHistory} />
+            </>
+        );
+    }
+    return (
+        <>
+            <ul className={`${styles.demoList} ${styles.activityList}`} aria-label={t('home.tabs.recentActivity')}>
+                {rows.map((e) => (
+                    <ActivityEntryRow
+                        key={e.key}
+                        entry={e}
+                        walletAddresses={walletAddresses}
+                        assetLookup={assetLookup}
+                        chainTip={null}
+                        allowRemoteImages={allowRemoteImages}
+                        onSelectEntry={onSelectEntry}
+                    />
+                ))}
+            </ul>
+            <SeeAllActivityButton onHistory={onHistory} />
+        </>
+    );
+}
+
+// Convert a DeFi position into a History-shaped entry so ActionDetail can
+// render the same source row when the user opens it.
 function defiPositionToEntry(position, idx) {
-    const aIdx = String(300000 + idx);
+    const address = String(position.address || position.raw?.source || '');
+    const aIdx = String(position.actionIndex || position.raw?.action_index || position.id || idx);
     return {
-        key: `${position.chainId}|${aIdx}:demo-address`,
+        key: `${position.chainId}:${aIdx}:${address}`,
         chainId: position.chainId,
-        address: 'demo-address',
+        address,
         actionIndex: aIdx,
         action: position.action,
         blockIndex: Number(position.blockIndex || 0),
         timestamp: Number(position.timestamp || 0),
-        txHash: `demo-defi-${position.id}`,
-        source: 'demo-address',
-        raw: { ...position },
+        txHash: String(position.txHash || position.raw?.tx_hash || ''),
+        source: String(position.raw?.source || address),
+        raw: { ...position.raw, ...position },
         link: null,
     };
 }
 
-function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, allowRemoteImages }) {
+function DefiList({ positions, failed, networkFilter, query = '', sortBy = 'name', onClearQuery, balances, onOpen, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
-    const positions = useMemo(() => {
-        const all = synthesizeDemoDefiPositions();
-        const filtered = networkFilter === 'all'
+    useEffect(() => {
+        if (typeof onOpen === 'function') onOpen();
+    }, [onOpen]);
+    const rows = useMemo(() => {
+        const all = Array.isArray(positions) ? positions : [];
+        const onNetwork = networkFilter === 'all'
             ? all
             : all.filter((p) => coinFromChainId(p.chainId) === networkFilter);
-        return [...filtered].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    }, [networkFilter]);
+        const matching = query ? onNetwork.filter((p) => defiPositionMatchesQuery(p, query)) : onNetwork;
+        return sortDefiPositions(matching, sortBy);
+    }, [positions, networkFilter, query, sortBy]);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
 
-    if (positions.length === 0) {
-        return <EmptyState title={t('home.tabs.noDefiPositions')} body={t('home.tabs.noDemoPositionsOnThe')} />;
+    if (positions === null && !failed && typeof onOpen === 'function') {
+        return <p className={styles.tabNote} role="status">{t('home.tabs.loadingDefiPositions')}</p>;
+    }
+    if (rows.length === 0) {
+        if (query && !failed) {
+            return (
+                <EmptyState
+                    title={t('home.tabs.noMatches')}
+                    body={t('home.tabs.matchesAppearHereAfter')}
+                    actionLabel={onClearQuery ? t('home.tabs.clearFilter') : undefined}
+                    onAction={onClearQuery}
+                />
+            );
+        }
+        if (failed) {
+            return (
+                <EmptyState
+                    title={t('home.tabs.defiPositionsUnavailable')}
+                    body={t('home.tabs.defiPositionsUnavailableBody')}
+                />
+            );
+        }
+        return (
+            <EmptyState
+                title={t('home.tabs.noDefiPositionsYet')}
+                body={t('home.tabs.stakingDispensersContractBalancesAnd')}
+            />
+        );
     }
     return (
-        <ul className={styles.demoList}>
-            {positions.map((p, idx) => {
-                const chainIconUrl = branding.chainIconSmallUrl(p.chainId);
-                const statusLabel = p.status === 'confirmed' ? 'Confirmed'
-                    : p.status === 'failed' ? 'Failed'
-                    : 'Pending';
-                const statusClass = p.status === 'confirmed' ? styles.statusValid
-                    : p.status === 'failed' ? styles.statusInvalid
-                    : styles.statusPending;
-                // Icon resolution:
-                //   STAKE   → XCHAIN product mark (square) + chain overlay,
-                //             because the only stakeable token on the
-                //             protocol is XCHAIN and stake is BTC-only.
-                //   native  → circular chain icon (no overlay), when the
-                //             row's tick matches the chain's native ticker
-                //             (e.g. a contract holding BTC on Bitcoin).
-                //   token   → square token image / tinted-letter, with a
-                //             chain icon overlay so the user can tell
-                //             which chain it lives on.
+        <ul className={`${styles.demoList} ${styles.activityList}`}>
+            {rows.map((p, idx) => {
+                // A stake is always XCHAIN, the protocol's only stakeable
+                // token, drawn with its product mark; a row whose tick is the
+                // chain's native ticker draws the chain mark; any other
+                // token draws its artwork with the chain overlay.
                 const isStake = p.action === 'STAKE';
                 const nativeTicker = (p.chainId.split('-')[0] || '').toUpperCase()
                     .replace('BITCOIN', 'BTC')
                     .replace('LITECOIN', 'LTC')
                     .replace('DOGECOIN', 'DOGE');
-                const tick = p.tick || '';
-                const isNativeAsset = !isStake && tick && tick === nativeTicker;
+                const tick = isStake ? 'XCHAIN' : (p.tick || '');
+                const isNativeAsset = !isStake && Boolean(tick) && tick === nativeTicker;
                 const tokenInfo = (!isStake && tick && !isNativeAsset)
                     ? assetLookup.get(`${p.chainId}|${tick}`)
                     : null;
-                const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
-                    ? tokenInfo.imageUrl
-                    : null;
+                const imageUrl = isStake
+                    ? branding.faviconUrl()
+                    : isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
+                        ? tokenInfo.imageUrl
+                        : null;
                 return (
                     <li key={p.id}>
-                        <button
-                            type="button"
-                            className={styles.demoRowButton}
-                            onClick={() => {
-                                if (typeof onSelectEntry === 'function') {
-                                    onSelectEntry(defiPositionToEntry(p, idx));
-                                }
-                            }}
-                        >
-                            <div className={balanceStyles.iconWrap}>
-                                {!isStake ? (
-                                    <span
-                                        className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action) }}
-                                        aria-hidden="true"
-                                    >
-                                        {(tick || p.action).slice(0, 1).toUpperCase()}
-                                    </span>
-                                ) : null}
-                                {isStake ? (
-                                    <img
-                                        src={branding.faviconUrl()}
-                                        alt=""
-                                    aria-hidden="true"
-                                    className={styles.tokenIconSquare}
-                                    loading="lazy"
-                                    decoding="async"
-                                    />
-                                ) : isNativeAsset ? (
-                                    chainIconUrl ? (
-                                        <img
-                                            src={chainIconUrl}
-                                            alt=""
-                                            aria-hidden="true"
-                                            className={balanceStyles.iconImg}
-                                            loading="lazy"
-                                            decoding="async"
-                                            style={{ position: 'absolute', inset: 0 }}
-                                        />
-                                    ) : null
-                                ) : tokenImageUrl ? (
-                                    <img
-                                        src={tokenImageUrl}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={styles.tokenIconSquare}
-                                        loading="lazy"
-                                        decoding="async"
-                                        style={{ position: 'absolute', inset: 0 }}
-                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                ) : null}
-                                {!isNativeAsset && chainIconUrl ? (
-                                    <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
-                                ) : null}
-                            </div>
-                            <div className={styles.demoRowBody}>
-                                <div className={styles.demoRowMain}>
-                                    {(() => {
-                                        const iconFn = ACTION_ICON[String(p.action || '').toLowerCase()] || ACTION_ICON.other;
-                                        return (
-                                            <span className={styles.activityActionIcon} aria-hidden="true">
-                                                {iconFn('icon')}
-                                            </span>
-                                        );
-                                    })()}
-                                    <span className={styles.demoActionTag}>{actionDisplayLabel(p.action)}</span>
-                                    <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
-                                </div>
-                                <div className={styles.demoRowPrimary}>
-                                    {balancesHidden ? '•••••' : p.primary}
-                                </div>
-                                <div className={styles.demoRowMeta}>
-                                    {p.blockIndex ? (
-                                        <>
-                                            <span>{t('home.tabs.blockNumber', { block: Number(p.blockIndex) })}</span>
-                                            <span className={styles.confirmationsPill}>
-                                                {p.confirms} {t('home.tabs.confirms')}
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <span className={styles.confirmationsPill}>{t('home.tabs.unconfirmed')}</span>
-                                    )}
-                                    {p.timestamp ? (
-                                        <span className={styles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timestamp)}
-                                        </span>
-                                    ) : null}
-                                </div>
-                            </div>
-                        </button>
+                        <SharedActivityRow
+                            chainId={p.chainId}
+                            tick={tick || p.action}
+                            imageUrl={imageUrl}
+                            isNative={isNativeAsset}
+                            label={actionDisplayLabel(p.action)}
+                            actionIcon={actionIconForAction(p.action)}
+                            amount={balancesHidden ? '•••••' : p.primary}
+                            /* Two lines, the height of a Coins or Tokens row: the status
+                               badge beside the action, the date beside the amount, and no
+                               block number. */
+                            className={styles.defiRow}
+                            status={p.status}
+                            timestamp={p.timestamp}
+                            block={null}
+                            onClick={typeof onSelectEntry === 'function'
+                                ? () => onSelectEntry(defiPositionToEntry(p, idx))
+                                : undefined}
+                            /* The Back-sized chevron the Coins and Tokens rows carry. */
+                            trailing={typeof onSelectEntry === 'function'
+                                ? <span className={styles.rowChevron}><Icon.ForwardIcon /></span>
+                                : null}
+                            data-activity-row
+                        />
                     </li>
                 );
             })}

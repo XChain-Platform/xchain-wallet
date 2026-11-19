@@ -281,7 +281,7 @@ const balances = [
 // 1n. BROADCAST v0/v1/v2/v3: each gets its own labeled side-effect.
 {
     for (const [version, expect] of [
-        ['0', /Broadcast/],
+        ['0', /Announcement/],
         ['1', /Oracle/],
         ['2', /Feed/],
         ['3', /Feed result/],

@@ -8,10 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The About panel (Settings → About) shows LICENSE_SUMMARY by default and
-// reveals the full LICENSE_TEXT behind a "Show full text" toggle. Both are
-// bundled at build time. LICENSE_TEXT keeps the canonical LICENSE.md wording
-// while storing each paragraph on one line so the UI can wrap it responsively.
+// LICENSE_SUMMARY is the plain language form and LICENSE_TEXT keeps the
+// canonical LICENSE.md wording while storing each paragraph on one line.
 // The license-full-text smoke ignores whitespace while pinning the wording, so
 // any edit to LICENSE.md must be mirrored here (re-run scripts to regenerate).
 

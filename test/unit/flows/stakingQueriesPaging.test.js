@@ -3,6 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+    readAllPages,
     validatorsForChain,
     rewardClaimsForAddress,
     rewardsForAddress,
@@ -104,5 +105,36 @@ describe('address-scoped staking reads', () => {
 
         await expect(rewardsForAddress({ sdkRegistry: registryFor(sdk), chainId: 'c', address: 'a' }))
             .rejects.toThrow(/201 of 250 rows/);
+    });
+});
+
+describe('readAllPages first page', () => {
+    it('rejects an empty first page that names rows it does not carry', async () => {
+        const read = vi.fn(async () => ({ total: 5, data: [] }));
+
+        await expect(readAllPages(read)).rejects.toThrow(/0 of 5 rows/);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps an empty first page whose total is 0', async () => {
+        const empty = { total: 0, data: [] };
+
+        await expect(readAllPages(vi.fn(async () => empty))).resolves.toBe(empty);
+    });
+
+    it('keeps an empty first page whose total is not a number', async () => {
+        const empty = { data: [] };
+
+        await expect(readAllPages(vi.fn(async () => empty))).resolves.toBe(empty);
+    });
+
+    it('passes a caller-supplied page or limit through unchanged', async () => {
+        const answer = { total: 5, data: [] };
+        const read = vi.fn(async () => answer);
+
+        await expect(readAllPages(read, { page: 2 })).resolves.toBe(answer);
+        await expect(readAllPages(read, { limit: 10 })).resolves.toBe(answer);
+        expect(read).toHaveBeenNthCalledWith(1, { page: 2 });
+        expect(read).toHaveBeenNthCalledWith(2, { limit: 10 });
     });
 });

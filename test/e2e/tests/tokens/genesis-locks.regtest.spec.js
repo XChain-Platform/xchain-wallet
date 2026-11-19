@@ -44,9 +44,12 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
+    pickIssuePreset,
     submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
@@ -64,8 +67,11 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    expectSubmitRefused,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 3;
@@ -194,9 +200,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -254,9 +258,7 @@ async function openManageToken(page, tick = TICK) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
 }
 
 async function openTokenAdmin(page, item, tick = TICK) {
@@ -264,6 +266,42 @@ async function openTokenAdmin(page, item, tick = TICK) {
 
     // Scope the action to main because the shell has its own wallet Lock button.
     await clickManageTokenAction(page.getByRole('main'), item);
+}
+
+/**
+ * Picks the venue chain on the open Issue Token form and returns the address it
+ * signs with. The network and the signer sit in the From section, closed until
+ * opened, and the signer resolves in an effect after the network changes, so it
+ * is polled rather than read once.
+ */
+async function readIssueSource(probe) {
+    await openIssueSection(probe, 'From');
+    await selectVenueChain(probe);
+    await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
+        { timeout: 30_000, message: 'the Issue Token form names no signing address' })
+        .toMatch(REGTEST_ADDRESS_RE);
+    return fieldByLabel(probe, 'From address').inputValue();
+}
+
+/**
+ * Fills the Limited edition preset on the open Issue Token form: the name, the
+ * edition size, the per-transaction cap and the artwork URL, and leaves the
+ * form ready to submit. The preset caps each address at one copy and the form
+ * refuses a per-address cap below the per-transaction one, so the per-address
+ * cap is raised to the whole edition.
+ */
+async function fillEdition(main, tick) {
+    await pickIssuePreset(main, /^Limited edition/);
+    await openIssueSection(main, 'From');
+    await selectVenueChain(main);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(String(EDITION_SIZE));
+    await openIssueSection(main, 'Public minting');
+    await fieldByLabel(main, 'Max per transaction').fill(String(EDITION_PER_TX));
+    await fieldByLabel(main, 'Max per address').fill(String(EDITION_SIZE));
+    await openIssueSection(main, 'Description');
+    await fieldByLabel(main, 'Image URL').fill(EDITION_IMAGE_URL);
 }
 
 /**
@@ -276,9 +314,8 @@ async function onboardAndCreateLocked(page) {
 
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
-    await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(probe);
-    const source = await probe.getByLabel('From').inputValue();
+    await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(probe);
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -290,24 +327,24 @@ async function onboardAndCreateLocked(page) {
 
     await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Custom/ }).click();
+    // No template: the Custom token is the form with nothing picked.
+    await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-    await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Token name (ticker)').fill(TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByLabel('Description (optional)').fill(DESCRIPTION);
-    await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(TICK);
+    await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
+    await openIssueSection(main, 'Description');
+    await fieldByLabel(main, 'Token description').fill(DESCRIPTION);
+    await openIssueSection(main, 'Public minting');
+    await fieldByLabel(main, 'Max per transaction').fill(String(MAX_MINT));
 
-    // The PC-06 disclosure. Deliberately NOT the "Lock this token" shortcut on
-    // the same form: that sets LOCK_MAX_SUPPLY and LOCK_MINT together, and this
-    // test needs exactly one flag set so the other fields stay editable and can
-    // act as the control.
-    await main.getByRole('button', { name: /Advanced/ }).click();
-    const descriptionLock = main.getByRole('checkbox', { name: 'Description' });
+    // The Locks section. Each lock is its own switch, so exactly one flag is set
+    // here and the other fields stay editable and can act as the control.
+    await openIssueSection(main, 'Locks');
+    const descriptionLock = main.getByRole('switch', { name: 'Description', exact: true });
     await expect(descriptionLock,
-        'the advanced disclosure has no Description lock, so the lock matrix is not on this form')
+        'the Locks section has no Description lock, so the lock matrix is not on this form')
         .toBeVisible({ timeout: 15_000 });
     await descriptionLock.check();
 
@@ -351,7 +388,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('CONTROL: an UNLOCKED field still edits, so ISSUE edits work at all', async () => {
             await openTokenAdmin(page, 'Mint settings');
             const form = page.getByRole('main');
-            const field = form.getByLabel('Max mint per transaction (optional)');
+            const field = fieldByLabel(form, 'Max mint per transaction');
             await expect(field).toBeVisible({ timeout: 30_000 });
             await field.fill(String(MAX_MINT_EDITED));
             await form.getByRole('button', { name: /^(Save|Update|Sign)/ }).first().click();
@@ -377,15 +414,18 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // lock flags and withdraws the Description action, naming the
             // lock as the reason. The Mint settings edit above went through
             // the same page, so this is the lock and not a dead menu.
+            // The Description row sits in the Token page group, locked with
+            // its reason in place of its description.
             await openManageToken(page);
-            await page.getByRole('button', { name: /More/ }).last().click();
-            const describeAction = page.getByRole('menuitem', { name: 'Description', exact: true });
+            const describeAction = page.getByRole('main')
+                .getByRole('region', { name: 'Token page' })
+                .getByRole('button', { name: /^Description\b/ });
             await expect(describeAction,
                 'Manage Token offers a description edit on a token whose LOCK_DESCRIPTION is set')
                 .toBeDisabled({ timeout: 30_000 });
             await expect(describeAction,
                 'the withdrawn Description action does not say the description is locked')
-                .toHaveAttribute('title', /permanently locked/i);
+                .toContainText(/permanently locked/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an edit the network has already refused reached the confirm screen')
                 .toBe(0);
@@ -408,9 +448,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -421,14 +460,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Limited edition/ }).click();
-            await selectVenueChain(main);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(MINTABLE_TICK);
-            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
-            await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await fillEdition(main, MINTABLE_TICK);
             await submitTokenWizard(page);
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -461,34 +493,33 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // token does not need it anyway: the edition template writes
             // LOCK_MAX_SUPPLY at genesis, so the prior is real rather than
             // absent.
-            await openTokenAdmin(page, 'Lock', MINTABLE_TICK);
+            // The action is "Lock settings" under Supply; each flag is a switch.
+            await openTokenAdmin(page, 'Lock settings', MINTABLE_TICK);
             const form = page.getByRole('main');
-            const submit = form.getByRole('button', { name: 'Update token' });
+            const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
-            const descriptionLock = form.getByRole('checkbox', { name: /^Description/ });
+            const descriptionLock = form.getByRole('switch', { name: /^Description/ });
             await expect(descriptionLock,
                 'the Lock form does not offer the Description flag on this token')
                 .toBeEnabled();
             // Already locked at genesis by the edition template, and the form
             // says so rather than offering it again.
-            await expect(form.getByRole('checkbox', { name: /^Max supply/ })).toBeDisabled();
+            await expect(form.getByRole('switch', { name: /^Max supply/ })).toBeDisabled();
 
-            // D-165, asserted in both directions. The typed confirmation used to
-            // render only in the legacy review stage, which the wallet shows to
-            // WATCHER wallets alone, so an ordinary user locked a token
-            // permanently with a checkbox and one click.
+            // The typed LOCK gate, in both directions. Submit is never disabled
+            // (G130): a tap is refused on the form, and nothing is sent, until
+            // the word is exact.
             await descriptionLock.check();
-            await expect(submit,
-                'a permanent lock is submittable without the typed confirmation')
-                .toBeDisabled();
-            const typed = form.getByLabel('Type LOCK to confirm');
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a permanent lock with no typed confirmation');
+            const typed = fieldByLabel(form, 'Type LOCK to confirm');
             await expect(typed, 'the Lock form has no typed confirmation at all on this path')
                 .toBeVisible({ timeout: 15_000 });
             await typed.fill('LOOK');
-            await expect(submit, 'a near-miss word satisfied the confirmation').toBeDisabled();
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a permanent lock confirmed with a near-miss word', { field: typed });
             await typed.fill('LOCK');
-            await expect(submit).toBeEnabled();
             await submit.click();
 
             await expectConfirmScreen(page);
@@ -525,20 +556,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = list.getByRole('button').filter({ hasText: MINTABLE_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            // Issuer actions stay hidden until the page has confirmed this
-            // address created the token, so the heading alone is too early.
-            const mintAction = page.getByRole('button', { name: 'Mint', exact: true })
-                .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            await expect.poll(() => mintAction.count(), {
-                message: 'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
+            // Issuer actions stay locked until the page has confirmed this
+            // address created the token, so the view alone is too early. The
+            // Mint row is always listed under Supply; a mint lock shows it
+            // aria-disabled with its reason, so "offered" means enabled.
+            const mintAction = page.getByRole('main').locator('[data-action-id="mint"]');
+            await expect(mintAction, 'Manage Token lists no Mint action').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
+                'Manage Token locks Mint on a token the chain will happily mint, because its coarse '
                     + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
-                    + 'freezing the metadata should not retire the mint button',
-                timeout: 60_000,
-            }).toBeGreaterThan(0);
+                    + 'freezing the metadata should not retire the mint button')
+                .not.toHaveAttribute('aria-disabled', 'true', { timeout: 60_000 });
         });
     });
 
@@ -551,9 +581,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(probe);
-            source = await probe.getByLabel('From').inputValue();
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -564,14 +593,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Limited edition/ }).click();
-            await selectVenueChain(main);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(LOCKMINT_TICK);
-            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
-            await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await fillEdition(main, LOCKMINT_TICK);
             await submitTokenWizard(page);
             await expectConfirmScreen(page);
             expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))
@@ -581,18 +603,18 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('lock MINTING, which is the one flag that forbids it', async () => {
-            await openTokenAdmin(page, 'Lock', LOCKMINT_TICK);
+            await openTokenAdmin(page, 'Lock settings', LOCKMINT_TICK);
             const form = page.getByRole('main');
-            const submit = form.getByRole('button', { name: 'Update token' });
+            const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
             // D-165's gate again, on a different flag: the typed word is
             // required whichever lock is being set, not just the one it was
             // first driven with.
-            await form.getByRole('checkbox', { name: /^Minting/ }).check();
-            await expect(submit).toBeDisabled();
-            await form.getByLabel('Type LOCK to confirm').fill('LOCK');
-            await expect(submit).toBeEnabled();
+            await form.getByRole('switch', { name: /^Minting/ }).check();
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a MINTING lock with no typed confirmation');
+            await fieldByLabel(form, 'Type LOCK to confirm').fill('LOCK');
             await submit.click();
 
             await expectConfirmScreen(page);
@@ -625,16 +647,20 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = list.getByRole('button').filter({ hasText: LOCKMINT_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            const mintAction = page.getByRole('main').getByRole('button', { name: 'Mint', exact: true })
-                .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            expect(await mintAction.count(),
+            // A mint-locked token still lists the Mint row, locked with its
+            // reason in place of the description: that is "offers nothing".
+            const mintAction = page.getByRole('main').locator('[data-action-id="mint"]');
+            await expect(mintAction, 'Manage Token lists no Mint action').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
                 'Manage Token still offers Mint on a token the chain has permanently locked against '
                 + 'it, so D-166 traded a false absence for a false presence')
-                .toBe(0);
+                .toHaveAttribute('aria-disabled', 'true', { timeout: 30_000 });
+            // A row is also locked while the owner read is pending, so the
+            // reason pins it to the mint lock itself.
+            await expect(mintAction, 'the locked Mint row does not name the mint lock as its reason')
+                .toContainText(/permanently locked/i, { timeout: 60_000 });
         });
 
         await test.step('and the Mint form itself refuses rather than advertising supply', async () => {

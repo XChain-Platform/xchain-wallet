@@ -139,7 +139,9 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 background: 'var(--xc-card-bg)',
                 borderRadius: 'var(--xc-card-radius)',
                 padding: 'var(--xc-card-pad)',
-                marginTop: '0.75rem',
+                /* No top margin; the Market page's Open | Filled
+                   switch sits the page gap above it, as above Open orders. */
+                marginTop: 0,
             }}
         >
             <div style={{
@@ -206,7 +208,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                 const key = `${summary.ownerAddress || 'unknown'}-${summary.key || 'row'}-${idx}`;
                                 return (
                                     <tr key={key}>
-                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={t('components.tradeHistoryPanel.time')} style={{ color: 'var(--xc-fg-muted)' }}>
                                             {onOpenTx && summary.txHash ? (
                                                 <button
                                                     type="button"
@@ -220,18 +222,18 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                         </td>
                                         <td
                                             className={`${tableStyles.cell} ${tableStyles.numeric}`}
-                                            data-label="Price"
+                                            data-label={t('components.placeOrderPanel.price')}
                                             style={{ color: sideColor }}
                                         >
                                             {summary.price}
                                         </td>
-                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={t('components.placeOrderPanel.size', { tick1 })}>
                                             {summary.size}
                                         </td>
-                                        <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
+                                        <td className={tableStyles.cell} data-label={t('components.placeOrderPanel.side')} style={{ color: sideColor, fontWeight: 600 }}>
                                             {summary.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                         </td>
-                                        <td className={tableStyles.cell} data-label="Address">
+                                        <td className={tableStyles.cell} data-label={t('verifySignature.address')}>
                                             {summary.ownerAddress ? (
                                                 <AddressText address={summary.ownerAddress} />
                                             ) : '--'}

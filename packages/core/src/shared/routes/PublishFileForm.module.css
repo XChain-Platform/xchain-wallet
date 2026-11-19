@@ -1,0 +1,16 @@
+.reviewPreview,
+.composePreview {
+    display: block;
+    max-width: 160px;
+    max-height: 160px;
+    object-fit: contain;
+    border-radius: var(--xc-radius-md);
+}
+
+.reviewPreview {
+    margin: 0 auto var(--xc-space-3);
+}
+
+.composePreview {
+    margin: 0 auto var(--xc-space-3);
+}

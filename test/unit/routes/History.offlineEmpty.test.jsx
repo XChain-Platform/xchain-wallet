@@ -80,14 +80,15 @@ describe('History offline with nothing saved', () => {
         // While the verdict is offline no read can finish, so none starts; the
         // recheck flips the verdict and the page then loads by itself.
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(reach.refresh).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the unchecked message when services are only degraded', async () => {
+    it('shows the plain empty state, with no per-page network error, when services are only degraded', async () => {
         reach.overall = 'degraded';
         mount(makeMessaging());
-        expect(await screen.findByText("Balances couldn't be checked")).toBeInTheDocument();
+        expect(await screen.findByText('No activity yet')).toBeInTheDocument();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
         expect(screen.queryByText("You're offline")).toBeNull();
     });
 });

@@ -99,6 +99,7 @@ function runBootCheck(engine = {}, opts = {}) {
     }
 
     const window = { document };
+    if (engine.isSecureContext !== undefined) window.isSecureContext = engine.isSecureContext;
     if (engine.crypto) window.crypto = engine.crypto;
     if (engine.indexedDB) window.indexedDB = engine.indexedDB;
     if (engine.TextEncoder) window.TextEncoder = engine.TextEncoder;
@@ -136,6 +137,7 @@ function capableEngine() {
     return {
         modules: true,
         es2022: true,
+        isSecureContext: true,
         crypto: { subtle: { importKey() {}, encrypt() {} }, getRandomValues() {} },
         indexedDB: { open() {} },
         TextEncoder: function TextEncoder() {},
@@ -193,8 +195,7 @@ describe('boot-check.js: the tier that runs before the bundle', () => {
     });
 
     it.each([
-        ['crypto.subtle', (e) => { e.crypto = { getRandomValues() {} }; }],
-        ['crypto.getRandomValues', (e) => { e.crypto = { subtle: { importKey() {}, encrypt() {} } }; }],
+        ['crypto.getRandomValues', (e) => { e.crypto = {}; }],
         ['indexedDB', (e) => { delete e.indexedDB; }],
         ['TextEncoder/TextDecoder', (e) => { delete e.TextDecoder; }],
     ])('refuses an engine missing %s', (name, break_) => {
@@ -204,11 +205,19 @@ describe('boot-check.js: the tier that runs before the bundle', () => {
         expect(window.__xchainBootFloor.missing).toContain(name);
     });
 
-    it('rejects a subtle object whose methods are absent, not merely a missing one', () => {
+    it('allows an otherwise capable engine without SubtleCrypto', () => {
         const engine = capableEngine();
-        engine.crypto = { subtle: {}, getRandomValues() {} };
+        engine.crypto = { getRandomValues() {} };
+        const { root, window } = runBootCheck(engine);
+        expect(window.__xchainBootFloor).toBeUndefined();
+        expect(root.children).toHaveLength(0);
+    });
+
+    it('refuses an insecure origin even when every crypto primitive is present', () => {
+        const engine = capableEngine();
+        engine.isSecureContext = false;
         const { window } = runBootCheck(engine);
-        expect(window.__xchainBootFloor.missing).toContain('crypto.subtle');
+        expect(window.__xchainBootFloor.missing).toContain('secure context');
     });
 
     it('waits for DOMContentLoaded when it runs from <head>', () => {
@@ -244,7 +253,7 @@ describe('boot-check.js: the tier that runs before the bundle', () => {
         const theirs = floorFailureMessage({ missing: ['BigInt'], usable: false });
 
         for (const phrase of [
-            'The browser engine here is missing: BigInt.',
+            'Required security capabilities are unavailable: BigInt.',
             'Updating Android System WebView',
             'Your recovery phrase is unaffected',
         ]) {

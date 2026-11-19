@@ -28,7 +28,8 @@
 //   Node (tests), it returns a file:// URL that still resolves on disk.
 
 export const PRODUCT_NAME = 'XChain Wallet';
-export const TAGLINE = 'The open-source, non-custodial wallet for the XChain Platform.';
+// Short enough for one line on every width (operator pick 2026-11-15).
+export const TAGLINE = 'Multi-chain wallet for the XChain Platform';
 
 export const CANONICAL_DOMAIN = 'wallet.xchain.io';
 export const HOMEPAGE_URL = `https://${CANONICAL_DOMAIN}`;
@@ -51,6 +52,8 @@ export const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
 export const IPFS_GATEWAY_BASE = 'https://ipfs.io/ipfs';
 export const ARWEAVE_GATEWAY_BASE = 'https://arweave.net';
 export const ANDROID_UPDATE_FEED_URL = 'https://downloads.xchain.io/wallet/android/latest.json';
+export const WALLET_RELEASE_FEED_URL = 'https://downloads.xchain.io/wallet/releases.json';
+export const WEB_WALLET_URL = 'https://wallet.xchain.io';
 export const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
 export const TREZOR_CONNECT_SCRIPT_URL = `${TREZOR_CONNECT_ORIGIN}/9/trezor-connect.js`;
 export const TREZOR_MANIFEST = Object.freeze({
@@ -87,7 +90,39 @@ export const EXTERNAL_EXPLORERS = Object.freeze({
 // bundler-friendly URL. Keep these as strings so chain descriptors can
 // carry them without importing Vite-specific syntax.
 export const LOGO_FILE = 'xchain-color-750.png';
+// Keep Trezor's own, unmodified bytes from https://trezor.visualbook.pro/media/pages/trezor/logos/symbol/4d3d8267d7-1786016192/trezor-symbol-black-rgb.svg.
+export const TREZOR_LOGO_FILE = 'trezor-symbol-black-rgb.svg';
+// Keep Ledger's own, unmodified bytes from the press kit at https://www.ledger.com/press
+// (Ledger_Press_kit_october_2025.zip, Logos/Ledger/LEDGER-WORDMARK-SINGLE-CHARACTER-BLACK-CMYK-01.svg, renamed only).
+export const LEDGER_LOGO_FILE = 'ledger-symbol-black.svg';
 export const FAVICON_FILE = 'favicon.png';
+// The platform's gas and staking token (the same tick as GAS_TICK in
+// cosigner/allowedTicks.js, kept local so branding stays import-free).
+export const PLATFORM_TOKEN_TICK = 'XCHAIN';
+// The XChain mark inside an outlined circle, the shape of the coin icons.
+export const PLATFORM_TOKEN_ICON_FILE = 'xchain-token-500.png';
+export const FREEWALLET_WALLY_FILE = 'freewallet-wally-180.png';
+
+/**
+ * Block-explorer logos, keyed by the `id` of the transaction-explorer entry
+ * (registry/coinTicker.js). Each file is the project's own icon, bundled
+ * unmodified so no explorer row loads a remote image. Sources:
+ *   xchain         favicon.png (this wallet's own XChain logo)
+ *   mempool        https://mempool.space/resources/favicons/apple-touch-icon.png
+ *   blockstream    https://blockstream.info/img/favicon.png
+ *   litecoinspace  https://litecoinspace.org/resources/favicons/apple-touch-icon.png
+ *   blockchair     https://blockchair.com/apple-touch-icon.png
+ *   blockcypher    https://github.com/blockcypher.png (the BlockCypher GitHub organisation avatar,
+ *                  because live.blockcypher.com refuses non-browser downloads of its favicon)
+ */
+export const EXPLORER_LOGO_FILES = Object.freeze({
+    xchain: FAVICON_FILE,
+    mempool: 'explorer-mempool.png',
+    blockstream: 'explorer-blockstream.png',
+    litecoinspace: 'explorer-litecoinspace.png',
+    blockchair: 'explorer-blockchair.png',
+    blockcypher: 'explorer-blockcypher.png',
+});
 
 /**
  * Small chain icon filenames keyed by ChainDescriptor.id. The "20" is the
@@ -136,9 +171,42 @@ export function logoUrl() {
     return brandingUrl(LOGO_FILE);
 }
 
+/** @returns {string | null} Official hardware signer vendor logo URL. */
+export function signerVendorLogoUrl(vendor) {
+    if (vendor === 'trezor') return brandingUrl(TREZOR_LOGO_FILE);
+    if (vendor === 'ledger') return brandingUrl(LEDGER_LOGO_FILE);
+    return null;
+}
+
 /** @returns {string} Favicon URL. */
 export function faviconUrl() {
     return brandingUrl(FAVICON_FILE);
+}
+
+/**
+ * Bundled icon for the platform's own token (XCHAIN), or null for any other
+ * ticker. The token has no on-chain image, so without this its rows drew a
+ * bare letter; every token icon surface reads this one source.
+ * @param {string} tick
+ * @returns {string | null}
+ */
+export function platformTokenIconUrl(tick) {
+    return String(tick || '').toUpperCase() === PLATFORM_TOKEN_TICK ? brandingUrl(PLATFORM_TOKEN_ICON_FILE) : null;
+}
+
+/**
+ * Bundled logo URL for a block explorer, or null when the wallet ships none.
+ * @param {string} explorerId  entry id from the transaction-explorer list
+ * @returns {string | null}
+ */
+export function explorerLogoUrl(explorerId) {
+    const file = Object.hasOwn(EXPLORER_LOGO_FILES, explorerId) ? EXPLORER_LOGO_FILES[explorerId] : null;
+    return file ? brandingUrl(file) : null;
+}
+
+/** @returns {string} FreeWallet Wally logo URL. */
+export function freeWalletWallyUrl() {
+    return brandingUrl(FREEWALLET_WALLY_FILE);
 }
 
 /**

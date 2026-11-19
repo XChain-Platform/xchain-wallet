@@ -158,11 +158,20 @@ function viteBin(tree) {
     throw new Error(`no vite under ${tree}; install the tree first`);
 }
 
+export function viteServerEnvironment(out, side, inherited = process.env) {
+    return {
+        ...inherited,
+        VITE_XCHAIN_REAL_SDK: '0',
+        BROWSER: 'none',
+        XCHAIN_VITE_CACHE_DIR: join(out, 'vite-cache', side),
+    };
+}
+
 async function startServer(side, tree, port) {
     const log = openSync(join(OUT, `server-${side}.log`), 'w');
     const child = spawn(process.execPath, [viteBin(tree), '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
         cwd: join(tree, 'packages/web'),
-        env: { ...process.env, VITE_XCHAIN_REAL_SDK: '0', BROWSER: 'none' },
+        env: viteServerEnvironment(OUT, side),
         detached: true,
         stdio: ['ignore', log, log],
     });
@@ -256,6 +265,10 @@ function makeShooter(page, side, size, entries) {
     const dir = join(OUT, 'shots', side, size.name);
     mkdirSync(dir, { recursive: true });
     return async function shoot(key, expectedHeading = null) {
+        // Park the pointer in the corner before each shot. Navigation clicks
+        // leave it over whatever sits under the clicked control, so a layout
+        // shift in one tree can turn a hover state on in only one side's shots.
+        await page.mouse.move(0, 0).catch(() => {});
         await settle(page);
         if (expectedHeading) await assertScreenHeading(page, expectedHeading);
         for (const phase of ['top', 'bottom']) {
@@ -429,8 +442,10 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         if (wantScreen('onboarding')) await shoot('onboarding-start');
         await dismissCarousel(page);
         if (wantScreen('onboarding')) await shoot('onboarding-welcome');
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
-        await page.getByRole('region', { name: 'Active address balance' }).first().waitFor({ state: 'visible', timeout: 180_000 });
+        await page.getByRole('button', { name: 'Try Demo' }).click();
+        await page.getByRole('region').filter({
+            has: page.getByText(/^(?:Wallet value|Wallet balance)$/),
+        }).first().waitFor({ state: 'visible', timeout: 180_000 });
     } catch (err) {
         skip('demo-entry', err);
         await ctx.close();

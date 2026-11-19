@@ -69,6 +69,7 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
     openPaletteCommand,
@@ -78,6 +79,8 @@ import {
     expectConfirmModal as sharedConfirmModal,
     explorerJson,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -90,7 +93,10 @@ import {
     unlockAfterReload,
     warmPreflight,
     selectVenueSendAsset,
+    openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE, LIST and the ISSUE v5 edit each pay a real coin fee on this chain. */
@@ -197,9 +203,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -238,6 +242,9 @@ async function reloadToHome(page) {
  * filter applied, so the scoping is the wallet's own.
  */
 async function readChainAddresses(page, keep) {
+    // The picker trigger sits on the From address, inside the From section,
+    // which a Form Standard form keeps closed until opened.
+    await openFromAddress(page.getByRole('main'));
     await page.getByRole('button', { name: 'Choose source address' }).click();
     const rows = page.getByRole('button', { name: /^View address / });
     await expect(rows.first(), 'the From picker listed no addresses at all')
@@ -279,10 +286,8 @@ async function onboardAndIssue(page, tick, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -299,14 +304,11 @@ async function onboardAndIssue(page, tick, walletName) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From', { exact: true }).inputValue(),
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(tick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: tick, supply: SUPPLY });
 
     await expectConfirmModal(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -324,7 +326,7 @@ async function generateExtraAddresses(page, count) {
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
-    await page.getByLabel('Number of addresses').fill(String(count));
+    await fieldByLabel(page, 'Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
     // The modal derives the addresses one at a time and closes only after the
     // last one is stored; navigating or reloading before that drops the rest.
@@ -349,7 +351,7 @@ async function publishAddressList(page, source, chooseMembers) {
     await seedPrices();
     await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
     // Reading the wallet's addresses through this form's own From picker does
@@ -361,7 +363,7 @@ async function publishAddressList(page, source, chooseMembers) {
         + `${others.length}: ${others.join(', ')}`)
         .toBeGreaterThanOrEqual(2);
 
-    expect(await main.getByLabel('From', { exact: true }).inputValue(),
+    expect(await (await openFromAddress(main)).inputValue(),
         'the list would be published from an address that is not the token issuer, so it would be '
         + 'paid for by an address holding no coin')
         .toBe(source);
@@ -370,8 +372,10 @@ async function publishAddressList(page, source, chooseMembers) {
 
     // TYPE=2. An access list must be an address list: issue.js refuses anything
     // else with `invalid: ALLOW_LIST (bad list)` / `BLOCK_LIST (bad list)`.
-    await main.getByLabel('List type').selectOption('2');
-    await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
+    // List type is the themed dropdown: open it, then pick Addresses.
+    await main.getByRole('button', { name: /^List type:/ }).click();
+    await main.getByRole('option', { name: 'Addresses', exact: true }).click();
+    await fieldByLabel(main, 'Addresses').fill(members.join('\n'));
 
     // The parser's own count, before anything is composed. A list silently short
     // of a member would make the gate below pass or fail for the wrong reason.
@@ -379,7 +383,7 @@ async function publishAddressList(page, source, chooseMembers) {
     await expect(main, `the list form did not accept all ${members.length} addresses as valid for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+    await main.getByRole('button', { name: 'Publish List', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');
@@ -415,21 +419,20 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
     await clickManageTokenAction(main, 'Access lists');
 
     const form = page.getByRole('main');
     // The state Session 20 stopped at, asserted rather than assumed: the "after"
-    // only means something against a token that started ungated. The BUTTON
-    // LABEL is the assertion, because it reads "Change …" once something is
-    // bound and "Choose …" while nothing is - a per-field answer that the
-    // shared "None" text cannot give.
-    const pickButton = form.getByRole('button', { name: `Choose ${kind}-list` });
+    // only means something against a token that started ungated. The FIELD'S
+    // NAME is the assertion: an Allow list or Block list field reads its
+    // placeholder ("None set", G114) while nothing is bound and the bound
+    // list once something is, a per-field answer.
+    const fieldName = (k) => `${k === 'allow' ? 'Allow' : 'Block'} list: None set`;
+    const pickButton = form.getByRole('button', { name: fieldName(kind), exact: true });
     await expect(pickButton, `this token already had a ${kind}-list before the bind`)
         .toBeVisible({ timeout: 30_000 });
-    await expect(form.getByRole('button', { name: `Choose ${other}-list` }),
+    await expect(form.getByRole('button', { name: fieldName(other), exact: true }),
         `this token already had a ${other}-list, so a stray binding could explain the verdicts below`)
         .toBeVisible();
 
@@ -446,7 +449,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     await expect(form).toContainText(`List #${listIndex}`);
     await expect(form).toContainText(`${memberCount} member${memberCount === 1 ? '' : 's'}`);
 
-    await form.getByRole('button', { name: /^(Update token|Preview)$/ }).click();
+    await form.getByRole('button', { name: 'Update Access Lists', exact: true }).click();
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(bound.action)).toBe('ISSUE');
@@ -525,7 +528,7 @@ async function composeTokenSend(page, tick, destination) {
     await expect(main, `the Send form is not sourcing from the address that holds ${tick}`)
         .toContainText(new RegExp(`[\\d,]+\\s*${tick} available`), { timeout: 60_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(SEND_AMOUNT));
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expectConfirmModal(page);
@@ -539,8 +542,9 @@ async function expectPermittedSend(page, { source, tick, destination, senderStar
 
     // The dry-run ran the real handler against the bound list and let this
     // destination through. Anything else here means the gate is refusing traffic
-    // it should pass, which is worse than not gating at all.
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+    // it should pass, which is worse than not gating at all. The transfer rules a
+    // SEND always declares make an approval the settle-time note (operator 2026-11-18).
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'settleChecks');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
 
     const permitted = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -561,16 +565,18 @@ async function expectRefusedSend(page, { source, tick, destination, senderNow })
 
     // Half one: the wallet says so BEFORE the fee is spent, and its refusal
     // sentence carries the network's own reason ("not authorized") inside it.
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-    await expect(page.getByTestId('preflight-panel')).toHaveAttribute('data-verdict', 'fail');
-    await expect(page.getByTestId('preflight-panel'))
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'fail');
+    await expect(page.getByTestId('confirm-status'))
         .toContainText(/would be refused because .*not authorized/i);
 
     // ...and it blocks by default. The override is the anti-censorship half of
     // §4.2 and is what lets this spec ask the chain directly.
+    // Approve keeps its colour (G130); a tap says why and sends nothing.
     const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeDisabled();
+    await approve.click();
+    await expect(page.getByTestId('confirm-blocked')).toBeVisible();
     await page.getByTestId('ack-DRYRUN_INVALID').check();
+    await expect(page.getByTestId('confirm-blocked')).toHaveCount(0);
     await expect(approve).toBeEnabled();
 
     // Half two: the chain, asked over the wallet's objection.

@@ -24,17 +24,21 @@
 // surfacing dead entries.
 
 import { t } from '../../i18n/index.js';
+import { markWalletDataStale } from '../utils/walletDataFreshness.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/firstPaint.js';
+import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/governance.js';
 import '../../i18n/locales/en/issue.js';
 import '../../i18n/locales/en/keyboard.js';
 import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/routes.js';
-import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
+import '../../i18n/locales/en/walletMenu.js';
 import { Icon } from '../../ui/index.js';
+import { visibleWalletMenu, walletLockAction } from '../walletMenu.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
@@ -60,6 +64,9 @@ export const COMMAND_CATEGORIES = /** @type {const} */ ([
 // they stay English in data and are only localized for display.
 const CATEGORY_LABEL_KEYS = {
     Suggested: 'palette.category.suggested',
+    Menu: 'palette.category.menu',
+    'In Settings': 'palette.category.inSettings',
+    'In All actions': 'palette.category.inAllActions',
     Recent: 'ui.addressCombobox.recent',
     Navigate: 'palette.category.navigate',
     Tokens: 'home.tabs.tokens',
@@ -118,6 +125,117 @@ const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
     'sign-message',
     'sign-psbt',
 ]);
+
+const ALL_ACTION_CATEGORIES = new Set(['Navigate', 'Create', 'Trade', 'Sign']);
+
+const markAllActionCommands = (commands) => commands.map((command) => (
+    ALL_ACTION_CATEGORIES.has(command.category) && !command.searchGroup
+        ? { ...command, searchGroup: 'In All actions', searchOnlyTitle: true }
+        : command
+));
+
+const CATALOGUE_COMMAND_META = {
+    home: { subtitleKey: 'palette.navHome.subtitle', keywords: ['balances', 'portfolio', 'tokens', 'overview'] },
+    send: { subtitleKey: 'palette.navSend.subtitle', keywords: ['pay', 'transfer', 'spend'] },
+    receive: { subtitleKey: 'palette.navReceive.subtitle', keywords: ['address', 'deposit', 'qr'] },
+    history: { subtitleKey: 'palette.navHistory.subtitle', keywords: ['transactions', 'activity', 'timeline'] },
+    scan: { subtitleKey: 'palette.walletScan.subtitle', keywords: ['qr', 'camera', 'scan'] },
+    'my-tokens': { subtitleKey: 'palette.navMyTokens.subtitle', keywords: ['issued', 'owned', 'assets', 'manage'] },
+    addresses: { subtitleKey: 'palette.navAddresses.subtitle', keywords: ['accounts', 'keys'] },
+    markets: { subtitleKey: 'palette.navMarkets.subtitle', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'] },
+    'market-activity': { subtitleKey: 'palette.navMarketplace.subtitle', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'] },
+    'dispensers-list': { subtitleKey: 'palette.navDispensers.subtitle', keywords: ['vending', 'sell'] },
+    obligations: { subtitleKey: 'palette.navObligations.subtitle', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'] },
+    'contracts-list': { subtitleKey: 'palette.navContracts.subtitle', keywords: ['vm', 'deploy', 'execute'] },
+    'staking-dashboard': { subtitleKey: 'palette.navStaking.subtitle', keywords: ['stake', 'validator', 'rewards'] },
+    'multisig-create': { subtitleKey: 'palette.navMultisigCreate.subtitle', keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'] },
+    lists: { subtitleKey: 'palette.navLists.subtitle', keywords: ['list', 'roster', 'allowlist', 'blocklist'] },
+    actions: { subtitleKey: 'palette.navActions.subtitle', keywords: ['more', 'menu', 'catalogue'] },
+    messaging: { subtitleKey: 'palette.navMessaging.subtitle', keywords: ['inbox', 'messages', 'chat'] },
+    contacts: { subtitleKey: 'palette.navContacts.subtitle', keywords: ['address book', 'people'] },
+    alerts: { keywords: ['notifications', 'notify'] },
+    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'] },
+    wizard: { subtitleKey: 'palette.createToken.subtitle', keywords: ['issue', 'new token', 'mint', 'launch'] },
+    'publish-file': { subtitleKey: 'palette.createPublishFile.subtitle', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'] },
+    'sign-message': { subtitleKey: 'palette.signMessage.subtitle', keywords: ['sign', 'message', 'attest'] },
+    // Rows the grouped full menu added (2026-11-13) keep the subtitle and
+    // keywords of the palette command they replace.
+    'dispenser-explorer': { subtitleKey: 'palette.navBrowseDispensers.subtitle', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'] },
+    broadcast: { subtitleKey: 'palette.createBroadcast.subtitle', keywords: ['broadcast', 'announce'] },
+    'link-form': { keywords: ['link', 'cross chain', 'history'] },
+    'my-orders': { subtitleKey: 'palette.navMyOrders.subtitle', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'] },
+    'my-swaps': { subtitleKey: 'palette.navMySwaps.subtitle', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'] },
+    dispenser: { subtitleKey: 'palette.createDispenser.subtitle', keywords: ['dispenser', 'vending', 'sell'] },
+    'contract-deploy': { keywords: ['contract', 'deploy', 'publish', 'vm'] },
+    'governance-polls': { subtitleKey: 'palette.navGovernance.subtitle', keywords: ['vote', 'poll', 'proposal'] },
+    'governance-delegations': { keywords: ['vote', 'delegate', 'delegation', 'governance'] },
+    'multisig-sign': { subtitleKey: 'palette.navMultisigSign.subtitle', keywords: ['multisig', 'cosigner', 'approve', 'psbt'] },
+    'cosigner-accounts': { subtitleKey: 'palette.navCoSignerAccounts.subtitle', keywords: ['agent', 'agent accounts', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'] },
+    'pair-signer': { keywords: ['hardware', 'ledger', 'trezor', 'pair', 'signer'] },
+    'verify-signature': { subtitleKey: 'palette.signVerify.subtitle', keywords: ['verify', 'signature', 'check'] },
+    'sign-psbt': { subtitleKey: 'palette.signPsbt.subtitle', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'] },
+    'wallet-picker': { subtitleKey: 'palette.walletSwitch.subtitle', keywords: ['wallet', 'switch', 'change'] },
+    'account-picker': { keywords: ['account', 'switch', 'change'] },
+    'add-wallet': { keywords: ['wallet', 'new', 'import', 'create'] },
+    'connected-sites': { subtitleKey: 'palette.navConnectedSites.subtitle', keywords: ['dapps', 'permissions', 'connections'] },
+    'parallel-compose': { subtitleKey: 'commandPalette.actionQueue.subtitle', keywords: ['action', 'queue', 'parallel', 'cross chain'] },
+    advanced: { subtitleKey: 'palette.createAdvanced.subtitle', keywords: ['advanced', 'raw', 'expert'] },
+    swap: { subtitleKey: 'palette.tradeSwap.subtitle', keywords: ['swap', 'order', 'exchange'] },
+    'create-order': { subtitleKey: 'palette.tradeOrder.subtitle', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'] },
+    'cross-chain-swap': { subtitleKey: 'palette.tradeXchainSwap.subtitle', keywords: ['cross chain', 'bridge', 'atomic'] },
+    'cross-chain-order': { subtitleKey: 'palette.tradeXchainOrder.subtitle', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'] },
+    'batch-compose': { keywords: ['batch', 'bundle', 'many'] },
+    coinpay: { subtitleKey: 'palette.tradeCoinpay.subtitle', keywords: ['coinpay', 'pay', 'settle'] },
+    oracle: { subtitleKey: 'palette.createOraclePrice.subtitle', keywords: ['oracle', 'price', 'fiat', 'quote', 'feed'] },
+    'bridge-move': { subtitleKey: 'palette.createBridgeMove.subtitle', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'] },
+    'add-account': { keywords: ['account', 'new', 'add'] },
+    settings: { subtitleKey: 'components.totalBalanceHero.openSettings', keywords: ['preferences', 'options', 'config'] },
+    airdrop: { subtitleKey: 'palette.createAirdrop.subtitle', keywords: ['airdrop', 'distribute', 'bulk'] },
+    'governance-create-poll': { keywords: ['poll', 'vote', 'proposal', 'new', 'governance'] },
+    'compose-message': { keywords: ['message', 'write', 'send', 'compose', 'chat'] },
+};
+
+// A menu row takes the id of the palette command it replaces, so search lists
+// that destination once (the dedupe in buildCommands drops the later copy).
+const CATALOGUE_COMMAND_IDS = {
+    'market-activity': 'nav-marketplace',
+    'dispensers-list': 'nav-dispensers',
+    'contracts-list': 'nav-contracts',
+    'staking-dashboard': 'nav-staking',
+    actions: 'nav-actions',
+    'bet-markets': 'nav-betting',
+    wizard: 'create-token',
+    'publish-file': 'create-publish-file',
+    'sign-message': 'sign-message',
+    'dispenser-explorer': 'nav-browse-dispensers',
+    broadcast: 'create-broadcast',
+    'my-orders': 'nav-my-orders',
+    'my-swaps': 'nav-my-swaps',
+    dispenser: 'create-dispenser',
+    'governance-polls': 'nav-governance',
+    'multisig-sign': 'nav-multisig-sign',
+    'cosigner-accounts': 'nav-cosigner-accounts',
+    'verify-signature': 'sign-verify',
+    'sign-psbt': 'sign-psbt',
+    'connected-sites': 'nav-connected-sites',
+    'parallel-compose': 'create-action-queue',
+    advanced: 'create-advanced',
+    swap: 'trade-swap',
+    'create-order': 'trade-order',
+    'cross-chain-swap': 'trade-xchain-swap',
+    'cross-chain-order': 'trade-xchain-order',
+    coinpay: 'trade-coinpay',
+    oracle: 'create-oracle-price',
+    'bridge-move': 'create-bridge-move',
+    airdrop: 'create-airdrop',
+};
+
+const SIDEBAR_SEARCH_TITLE_KEYS = {
+    markets: 'components.leftNav.exchangeDex',
+    'my-tokens': 'components.leftNav.myTokens',
+    'governance-polls': 'components.leftNav.governance',
+    'bet-markets': 'components.leftNav.bettingMarkets',
+};
 
 /**
  * Parse a free-form palette query into synthetic action commands (§33.3).
@@ -179,9 +297,9 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {(view: string) => void} navigate  shell view setter (setUnlockedView)
  * @property {() => void} [lock]                 lock the wallet
  * @property {() => void} [refresh]              refresh balances / session
- * @property {() => void} [scan]                 open the QR scanner overlay
  * @property {() => void} [switchWallet]         open the wallet picker
- * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
+ * @property {(tab: 'all' | 'bets' | 'markets') => void} [openBetTab]  open Bet Markets on one of its tabs
+ * @property {boolean} [hasBtcAddress]          gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
  * @property {boolean} [hasVmAddress]            gates Contracts: an address on any chain whose descriptor advertises DEPLOY (BTC / LTC / DOGE today)
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface] false only when the build compiled the DEX surface out; its commands then point at views that do not exist
@@ -208,57 +326,38 @@ export function buildCommands(ctx) {
     const hasDex = ctx.hasDexSurface !== false;
     const list = [];
 
-    // ---- Navigate: primary surfaces (mirror LeftNav) --------------------
+    // ---- Navigate: wallet menu catalogue and additional surfaces --------
+    for (const group of visibleWalletMenu(ctx)) {
+        for (const row of group.rows) {
+            const meta = CATALOGUE_COMMAND_META[row.id] || {};
+            list.push({
+                id: CATALOGUE_COMMAND_IDS[row.id] || `nav-${row.id}`,
+                category: 'Navigate',
+                searchGroup: 'Menu',
+                searchOnlyTitle: true,
+                title: row.label,
+                ...(SIDEBAR_SEARCH_TITLE_KEYS[row.id]
+                    ? { searchTitle: t(SIDEBAR_SEARCH_TITLE_KEYS[row.id]) }
+                    : {}),
+                ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
+                keywords: meta.keywords || [],
+                Icon: Icon[row.icon],
+                // Scan opens the shell's scanner overlay where the shell has one.
+                run: row.id === 'scan' && typeof ctx.scan === 'function' ? () => ctx.scan() : go(row.id),
+            });
+        }
+    }
+
+
     list.push(
-        { id: 'nav-home', category: 'Navigate', title: t('home.title'), subtitle: t('palette.navHome.subtitle'), keywords: ['balances', 'portfolio', 'tokens', 'overview'], Icon: Icon.HomeIcon, run: go('home') },
-        { id: 'nav-history', category: 'Navigate', title: t('history.title'), subtitle: t('palette.navHistory.subtitle'), keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
-        // The palette reaches every route by name, so gating the nav
-        // rails alone would leave Send one Cmd-K away from a wallet whose
-        // Wallet Mode screen says the screen is hidden. Signer mode drops both.
-        ...(ctx.isSignerMode ? [] : [
-            { id: 'nav-send', category: 'Navigate', title: t('send.title'), subtitle: t('palette.navSend.subtitle'), keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
-            { id: 'nav-receive', category: 'Navigate', title: t('home.receive'), subtitle: t('palette.navReceive.subtitle'), keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
-        ]),
-        // The DEX rows are gated on the surface EXISTING in this build,
-        // not on anything about the wallet: a build that hides the DEX compiles
-        // those routes out, so the command would land the user on Home with no
-        // explanation.
-        // Spread in place rather than pushed later, so the display order every
-        // other build has stays exactly as it was.
         ...(hasDex ? [
-            { id: 'nav-markets', category: 'Navigate', title: t('palette.navMarkets.title'), subtitle: t('palette.navMarkets.subtitle'), keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
-            { id: 'nav-marketplace', category: 'Navigate', title: t('nav.marketplace'), subtitle: t('palette.navMarketplace.subtitle'), keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.LineChartIcon, run: go('market-activity') },
             { id: 'nav-my-orders', category: 'Navigate', title: t('palette.navMyOrders.title'), subtitle: t('palette.navMyOrders.subtitle'), keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
             { id: 'nav-my-swaps', category: 'Navigate', title: t('palette.navMySwaps.title'), subtitle: t('palette.navMySwaps.subtitle'), keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
-        { id: 'nav-dispensers', category: 'Navigate', title: t('routes.addressList.dispensers'), subtitle: t('palette.navDispensers.subtitle'), keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
-        // The buyer's side. 'Dispensers' above lists the ones this wallet
-        // opened; a buyer with no link in hand needs the search, which was
-        // reachable only through the Token Actions catalogue.
         { id: 'nav-browse-dispensers', category: 'Navigate', title: t('palette.navBrowseDispensers.title'), subtitle: t('palette.navBrowseDispensers.subtitle'), keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
-        { id: 'nav-my-tokens', category: 'Navigate', title: t('palette.navMyTokens.title'), subtitle: t('palette.navMyTokens.subtitle'), keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
-        { id: 'nav-messaging', category: 'Navigate', title: t('home.messaging'), subtitle: t('palette.navMessaging.subtitle'), keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
-        { id: 'nav-addresses', category: 'Navigate', title: t('home.addresses'), subtitle: t('palette.navAddresses.subtitle'), keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
-        { id: 'nav-lists', category: 'Navigate', title: t('palette.navLists.title'), subtitle: t('palette.navLists.subtitle'), keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
-        // Plain-language subtitle, opcode in `keywords` only: 'coinpay' still
-        // matches in search, and no palette row renders a raw protocol verb.
-        { id: 'nav-obligations', category: 'Navigate', title: t('nav.paymentsDue'), subtitle: t('palette.navObligations.subtitle'), keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
-        { id: 'nav-actions', category: 'Navigate', title: t('palette.navActions.title'), subtitle: t('palette.navActions.subtitle'), keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
     );
-    // Contracts follow the VM gate (every chain whose descriptor advertises
-    // DEPLOY: BTC, LTC and DOGE today), the same gate Home's Contracts entry
-    // uses, so an LTC/DOGE-only wallet reaches Contracts from the palette too.
-    // A shell that has not wired hasVmAddress yet falls back to the older
-    // BTC gate rather than hiding the surface. Staking stays BTC-only.
-    if (ctx.hasVmAddress ?? ctx.hasBtcAddress) {
-        list.push({ id: 'nav-contracts', category: 'Navigate', title: t('home.contracts'), subtitle: t('palette.navContracts.subtitle'), keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
-    }
     if (ctx.hasBtcAddress) {
-        list.push({ id: 'nav-staking', category: 'Navigate', title: t('home.staking'), subtitle: t('palette.navStaking.subtitle'), keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
-        // Multisig is Bitcoin-only (§10.3), so it shares the staking gate. The
-        // actions menu already listed both; the palette found neither.
         list.push(
-            { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
             { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
             { id: 'nav-cosigner-accounts', category: 'Navigate', title: t('palette.navCoSignerAccounts.title'), subtitle: t('palette.navCoSignerAccounts.subtitle'), keywords: ['agent', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'], Icon: Icon.UsersIcon, run: go('cosigner-accounts') },
         );
@@ -266,21 +365,25 @@ export function buildCommands(ctx) {
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: t('governance.title'), subtitle: t('palette.navGovernance.subtitle'), keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
     }
-    // Betting, on the DEX pattern: the browse hub plus the two views a user comes
+    // Prediction markets, on the DEX pattern: the browse hub plus the two views a user comes
     // back to rather than browses to. Ungated like the actions-menu entry it
     // mirrors, because the hub itself reports when no chain in this wallet
     // supports BET; gating here would make the destination silently unfindable
-    // instead of explaining itself.
+    // instead of explaining itself. My bets and My markets are Prediction markets tabs,
+    // so a shell without a tab opener lands on the hub.
+    const betTab = (tab) => (typeof ctx.openBetTab === 'function'
+        ? () => ctx.openBetTab(tab)
+        : go('bet-markets'));
     list.push(
-        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
-        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: go('my-bets') },
-        { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: go('bet-oracle-console') },
+        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
+        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'betting', 'prediction', 'position', 'stake', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: betTab('bets') },
+        { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: betTab('markets') },
     );
 
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
     list.push(
         { id: 'create-token', category: 'Create', title: t('palette.createToken.title'), subtitle: t('palette.createToken.subtitle'), keywords: ['issue', 'new token', 'mint', 'launch'], Icon: Icon.PlusIcon, run: go('wizard') },
-        { id: 'create-issue', category: 'Create', title: t('issue.title'), subtitle: t('palette.createIssue.subtitle'), keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
+        { id: 'create-issue', category: 'Create', title: t('issue.title'), subtitle: t('palette.createIssue.subtitle'), keywords: ['issue'], Icon: Icon.TokenIcon, run: go('wizard') },
         { id: 'create-mint', category: 'Create', title: t('palette.createMint.title'), subtitle: t('palette.createMint.subtitle'), keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
         { id: 'create-destroy', category: 'Create', title: t('palette.createDestroy.title'), subtitle: t('palette.createDestroy.subtitle'), keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
         { id: 'create-sweep', category: 'Create', title: t('palette.createSweep.title'), subtitle: t('palette.createSweep.subtitle'), keywords: ['sweep', 'migrate', 'move', 'consolidate'], Icon: Icon.SendIcon, run: go('sweep') },
@@ -298,7 +401,9 @@ export function buildCommands(ctx) {
         // wallet that had never issued a token could not reach it from any
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
-        { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
+        { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LinkIcon, run: go('controller-bind') },
+        // Unbinding is its own form, so it has its own command beside Bind.
+        { id: 'create-controller-unbind', category: 'Create', title: t('palette.createControllerUnbind.title'), subtitle: t('palette.createControllerUnbind.subtitle'), keywords: ['controller', 'guard', 'unbind', 'remove', 'policy', 'release'], Icon: Icon.UnlinkIcon, run: go('controller-unbind') },
         // The two bridge surfaces. Authoring forms that open free-entry, like
         // their neighbours here: the move form picks its own leg from the
         // chain it is on, and the settings form carries the same token picker
@@ -309,14 +414,15 @@ export function buildCommands(ctx) {
         // is not a trade; nobody is on the other side of it.
         { id: 'create-bridge-move', category: 'Create', title: t('palette.createBridgeMove.title'), subtitle: t('palette.createBridgeMove.subtitle'), keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
         { id: 'create-bridge-settings', category: 'Create', title: t('palette.createBridgeSettings.title'), subtitle: t('palette.createBridgeSettings.subtitle'), keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
+        { id: 'create-mint-settings', category: 'Create', title: t('routes.manageToken.mintSettings'), subtitle: t('palette.createMintSettings.subtitle'), keywords: ['mint', 'supply', 'issuer', 'limit'], Icon: Icon.GearIcon, run: go('mint-settings') },
         { id: 'create-advanced', category: 'Create', title: t('palette.createAdvanced.title'), subtitle: t('palette.createAdvanced.subtitle'), keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
+        { id: 'create-action-queue', category: 'Create', title: t('commandPalette.actionQueue.title'), subtitle: t('commandPalette.actionQueue.subtitle'), keywords: ['action', 'queue', 'parallel', 'cross chain'], Icon: Icon.MenuIcon, run: go('parallel-compose') },
     );
 
     // ---- Trade: DEX / cross-chain flows ---------------------------------
     // Ungated here: 'trade-coinpay' SETTLES an order that already matched, which
     // is a payment the user owes - one seed spans shells, so a match made on web
-    // can come due on a phone whose build has no DEX. Templates only prefill the
-    // parallel composer, which every build has.
+    // can come due on a phone whose build has no DEX.
     list.push(
         ...(hasDex ? [
             { id: 'trade-swap', category: 'Trade', title: t('palette.tradeSwap.title'), subtitle: t('palette.tradeSwap.subtitle'), keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
@@ -326,8 +432,7 @@ export function buildCommands(ctx) {
         ...(hasDex ? [
             { id: 'trade-xchain-swap', category: 'Trade', title: t('palette.tradeXchainSwap.title'), subtitle: t('palette.tradeXchainSwap.subtitle'), keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
             { id: 'trade-xchain-order', category: 'Trade', title: t('palette.tradeXchainOrder.title'), subtitle: t('palette.tradeXchainOrder.subtitle'), keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
-        ] : []),
-        { id: 'trade-xchain-templates', category: 'Trade', title: t('palette.tradeXchainTemplates.title'), subtitle: t('palette.tradeXchainTemplates.subtitle'), keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
+        ] : [])
     );
 
     // ---- Sign: message / signature / PSBT -------------------------------
@@ -337,44 +442,49 @@ export function buildCommands(ctx) {
         { id: 'sign-psbt', category: 'Sign', title: t('home.signer.signTransaction'), subtitle: t('palette.signPsbt.subtitle'), keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
     );
 
-    // ---- Contacts -------------------------------------------------------
-    list.push(
-        { id: 'nav-contacts', category: 'Contacts', title: t('components.contactsPickerScreen.contacts'), subtitle: t('palette.navContacts.subtitle'), keywords: ['address book', 'people'], Icon: Icon.UsersIcon, run: go('contacts') },
-    );
-
     // ---- Wallet verbs (only when the shell wires the handler) -----------
-    if (typeof ctx.scan === 'function') {
-        list.push({ id: 'wallet-scan', category: 'Wallet', title: t('scan.scannerAlt'), subtitle: t('palette.walletScan.subtitle'), keywords: ['qr', 'camera', 'scan'], Icon: Icon.ScanIcon, run: () => ctx.scan() });
-    }
     if (typeof ctx.refresh === 'function') {
-        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => ctx.refresh() });
+        // An explicit refresh reads past every saved wallet read, whatever its
+        // age. The shell refresh remounts the screens, so the mark wakes no one.
+        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => { markWalletDataStale({ notify: false }); ctx.refresh(); } });
     }
     if (typeof ctx.switchWallet === 'function') {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
     }
     if (typeof ctx.lock === 'function') {
-        list.push({ id: 'wallet-lock', category: 'Wallet', title: t('home.lockWallet'), subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon.LockIcon, run: () => ctx.lock() });
+        const lockRow = walletLockAction();
+        list.push({ id: 'wallet-lock', category: 'Wallet', searchGroup: 'Menu', searchOnlyTitle: true, title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {
         list.push({ id: 'help-shortcuts', category: 'Wallet', title: t('keyboard.shortcutHelp.keyboardShortcuts'), subtitle: t('palette.helpShortcuts.subtitle'), keywords: ['keys', 'hotkeys', 'help', 'cheatsheet', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
     }
 
     // ---- Settings -------------------------------------------------------
-    list.push(
-        { id: 'nav-settings', category: 'Settings', title: t('home.settings'), subtitle: t('components.totalBalanceHero.openSettings'), keywords: ['preferences', 'options', 'config'], Icon: Icon.GearIcon, run: go('settings') },
-        { id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
-    );
+    list.push({ id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') });
+
+    // A palette entry whose destination is now a menu row steps aside, so
+    // search lists that destination once, under Menu.
+    const menuIds = new Set();
+    const deduped = list.filter((command) => {
+        if (command.searchGroup === 'Menu') {
+            menuIds.add(command.id);
+            return true;
+        }
+        return !menuIds.has(command.id);
+    });
+    list.length = 0;
+    list.push(...deduped);
 
     if (ctx.isSignerMode) {
-        return list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category));
+        return markAllActionCommands(list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category)));
     }
     if (ctx.isDemoWallet) {
-        return list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id));
+        return markAllActionCommands(list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id)));
     }
     if (ctx.isWatcherMode) {
-        return list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id));
+        return markAllActionCommands(list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id)));
     }
-    return list;
+    return markAllActionCommands(list);
 }
 
 /**
@@ -473,8 +583,8 @@ export function sitesToCommands(sites, ctx) {
 
 // §33.2 "Settings pages". Static mirror of the Settings.jsx section list
 // (ids must match SectionDef.id there; the shell-wiring smoke pins this).
-// Sections whose visibility is conditional in Settings (accounts-addresses)
-// or that duplicate a dedicated palette entry (connected-sites) are omitted.
+// The desktop-only Updates section and sections that duplicate dedicated
+// palette entries (contacts and connected-sites) are omitted.
 const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'this-wallet', get title() { return t('settings.page.thisWallet'); }, keywords: ['wallet', 'rename', 'remove'] },
     { id: 'appearance', get title() { return t('settings.page.appearance'); }, keywords: ['theme', 'dark', 'light'] },
@@ -483,14 +593,13 @@ const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'language-region', get title() { return t('settings.page.languageRegion'); }, keywords: ['language', 'currency', 'fiat'] },
     { id: 'privacy', get title() { return t('settings.page.privacy'); }, keywords: ['tor', 'rotation', 'blur'] },
     { id: 'safety', get title() { return t('settings.page.safety'); }, keywords: ['autolock', 'panic', 'undo'] },
-    { id: 'wallet-mode', get title() { return t('settings.page.walletMode'); }, keywords: ['watcher', 'signer', 'air-gapped'] },
     { id: 'backup', get title() { return t('settings.page.backup'); }, keywords: ['seed', 'phrase', 'restore', 'export'] },
     { id: 'fees', get title() { return t('settings.page.fees'); }, keywords: ['fee', 'rbf', 'strategy'] },
     { id: 'network', get title() { return t('settings.network.label'); }, keywords: ['mainnet', 'testnet', 'regtest'] },
     { id: 'network-endpoints', get title() { return t('settings.page.networkEndpoints'); }, keywords: ['explorer', 'encoder', 'hub', 'url'] },
     { id: 'notifications', get title() { return t('alerts.notificationsTitle'); }, keywords: ['alerts', 'notify'] },
     { id: 'ads', get title() { return t('palette.settings.ads'); }, keywords: ['donation', 'ads', 'support'] },
-    { id: 'developer', get title() { return t('palette.settings.developer'); }, keywords: ['dev', 'debug', 'regtest'] },
+    { id: 'developer', get title() { return t('palette.settings.developer'); }, keywords: ['dev', 'debug', 'regtest', 'advanced', 'raw', 'action', 'queue', 'parallel'] },
     { id: 'about', get title() { return t('routes.addressList.about'); }, keywords: ['version', 'license'] },
 ]);
 
@@ -528,8 +637,11 @@ export function settingsSectionsToCommands(ctx) {
     return SETTINGS_SECTIONS.filter((s) => !hidden.has(s.id)).map((s) => ({
         id: `settings-${s.id}`,
         category: 'Settings',
+        searchGroup: 'In Settings',
         title: t('palette.settingsSectionTitle', { section: s.title }),
-        keywords: ['settings', ...s.keywords],
+        searchTitle: s.title,
+        searchContext: t('walletMenu.row.settings'),
+        keywords: s.keywords,
         Icon: Icon.GearIcon,
         run: () => ctx.openSettings(s.id),
     }));

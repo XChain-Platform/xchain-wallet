@@ -78,6 +78,9 @@
 // grouping half directly and is `test.fixme` for the reason stated on it.
 //
 // SCREEN FACTS worth more than the time they cost to find:
+//   - The search box, the date window and the Grouping mode control sit in
+//     the title bar's "History filters" menu, outside `main` and closed until
+//     its button is pressed (`openHistoryFilters` in fixtures/regtest.js).
 //   - The search box is `<input type="search">`, so its ARIA role is SEARCHBOX,
 //     not textbox. `getByRole('textbox', { name: 'Search history' })` matches
 //     nothing and, with no actionTimeout set, hangs for the whole test budget.
@@ -118,11 +121,15 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_ID,
@@ -134,8 +141,15 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
+    approveConfirm,
+    closeHistoryFilters,
+    openHistoryFilters,
+    searchHistory,
+    setHistoryDateWindow,
 } from '../../fixtures/regtest.js';
 import { pickAssetByChainAndTick, waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for both broadcasts. */
@@ -213,15 +227,10 @@ async function reloadToHome(page) {
 
 /** Approves the open confirm modal and returns the txid the wallet reports. */
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    // Generous, because Approve stays disabled until the pre-flight report
-    // resolves and a COLD dry-run on this shared venue has been measured at
-    // several seconds. A real blocking verdict fails here too, which is why
-    // the message names both possibilities rather than guessing.
-    await expect(approve, 'Approve never became enabled: either the pre-flight report never '
-        + 'arrived, or the venue really does refuse this action')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // Approve is never disabled (G130), but a tap during the pre-flight check
+    // or just after the review opens is dropped, so the fixture taps until the
+    // confirm screen takes it, and names a refusal if one comes back.
+    await approveConfirm(page);
 
     // SUCCESS DOES NOT HAVE ONE HEADING, AND IT DOES NOT HAVE TWO EITHER.
     // This helper waited for "Broadcast pending" and reported a SUCCESSFUL
@@ -285,10 +294,7 @@ async function openHistoryWidened(page) {
 async function widenDateWindow(page) {
     const iso = (offsetDays) =>
         new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
-    await expect(page.getByLabel('Search history'), 'History did not render its filter bar')
-        .toBeVisible({ timeout: 30_000 });
-    await page.getByLabel('From date').fill(iso(-30));
-    await page.getByLabel('To date').fill(iso(2));
+    await setHistoryDateWindow(page, iso(-30), iso(2));
 }
 
 /** One row of ActionDetail's Details tab, found by the label that heads it. */
@@ -362,9 +368,9 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         await test.step(`send ${SEND_AMOUNT} ${TICK} to a real destination`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true }))
+            await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(DESTINATION);
+            await fieldByLabel(page, 'To').fill(DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
@@ -410,9 +416,11 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
                 .toContainText('Send');
             await expect(button, 'the row does not read Confirmed for a mined, valid action')
                 .toContainText('Confirmed');
+            // History rows print the block as a bare integer (HistoryEntryRow's
+            // `String(entry.blockIndex)`), never grouped with commas.
             await expect(button, 'the row shows a different block than the explorer recorded')
                 .toHaveAttribute('aria-description',
-                    new RegExp(`^Block ${Number(chainRow.block_index).toLocaleString('en-US')}(,|$)`));
+                    new RegExp(`^Block ${String(Number(chainRow.block_index))}(,|$)`));
 
             baselineRows = await historyRows(page).count();
             // The MINT and the SEND. More than one matters: claim 2's
@@ -432,7 +440,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole('banner').filter({ hasText: 'Send #' }).first(),
                 'the detail page is not titled for the action index the chain recorded')
-                .toContainText(`Send #${Number(chainRow.action_index).toLocaleString('en-US')}`);
+                .toContainText(`Send #${String(Number(chainRow.action_index))}`);
 
             await page.getByRole('tab', { name: 'Details' }).click();
 
@@ -460,7 +468,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await expect(detailRow(page, 'Status'), 'the detail disagrees with the chain about status')
                 .toContainText(String(chainRow.status), { ignoreCase: true });
             await expect(detailRow(page, 'Block'), 'the detail disagrees with the chain about the block')
-                .toContainText(Number(chainRow.block_index).toLocaleString('en-US'));
+                .toContainText(String(Number(chainRow.block_index)));
             // The txid draws shortened; its full value is the element's title.
             await expect(detailRow(page, 'Transaction ID').getByTitle(sendTxid, { exact: true }),
                 'the detail shows a different transaction than the one the wallet said it broadcast')
@@ -473,9 +481,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await page.getByRole('button', { name: 'Back to history' }).click();
             await widenDateWindow(page);
 
-            const search = page.getByLabel('Search history');
-
-            await search.fill('zzz-no-such-history-row-zzz');
+            await searchHistory(page, 'zzz-no-such-history-row-zzz');
             await expect(historyRows(page), 'a search that matches nothing still left rows on screen, '
                 + 'so the box is re-rendering rather than filtering')
                 .toHaveCount(0, { timeout: 15_000 });
@@ -483,20 +489,24 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // By TXID, which is one of the few fields History.jsx flattens onto
             // the entry itself (`txHash`). Searching by destination or tick
             // matches nothing on this build; see the header.
-            await search.fill(sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'searching the send\'s own txid did not narrow the list to it')
                 .toHaveCount(1, { timeout: 15_000 });
             await expect(historyRowFor(page, REGTEST_CHAIN_ID, chainRow.action_index, own),
                 'the one surviving row is not the action that txid belongs to')
                 .toBeVisible();
 
-            await search.fill('');
+            await searchHistory(page, '');
             await expect(historyRows(page), 'clearing the search did not restore the full list')
                 .toHaveCount(baselineRows, { timeout: 15_000 });
         });
 
         await test.step('CLAIM 3: Grouped and Flat both render, and neither loses the row', async () => {
-            const modes = page.getByRole('radiogroup', { name: 'Grouping mode' });
+            // The Grouping mode control sits in the History filters panel; a
+            // click inside the panel leaves it open, and it is closed after
+            // each pick so the list below is what the row checks read.
+            const modes = page.getByRole('dialog', { name: 'History filters', exact: true })
+                .getByRole('radiogroup', { name: 'Grouping mode' });
             const grouped = modes.getByRole('radio', { name: 'Grouped' });
             const flat = modes.getByRole('radio', { name: 'Flat' });
             const row = historyRowFor(page, REGTEST_CHAIN_ID, chainRow.action_index, own);
@@ -504,13 +514,17 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // Grouped is the persisted default for a wallet that has never
             // chosen (`readPersistedGroupingMode`), and this browser context is
             // fresh, so the screen should open there.
+            await openHistoryFilters(page);
             await expect(grouped, 'History did not open in its default Grouped mode')
                 .toHaveAttribute('aria-checked', 'true');
+            await closeHistoryFilters(page);
             await expect(row, 'Grouped mode does not show the send').toBeVisible();
 
+            await openHistoryFilters(page);
             await flat.click();
             await expect(flat, 'the Flat segment did not take').toHaveAttribute('aria-checked', 'true');
             await expect(grouped).toHaveAttribute('aria-checked', 'false');
+            await closeHistoryFilters(page);
             await expect(row, 'Flat mode dropped the send').toBeVisible();
             // A MINT with no ISSUE beside it and a SEND have nothing to collapse
             // under ANY grouping rule, so equal counts here is the correct
@@ -519,9 +533,11 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await expect(historyRows(page), 'Flat mode changed how many rows exist')
                 .toHaveCount(baselineRows);
 
+            await openHistoryFilters(page);
             await grouped.click();
             await expect(grouped, 'the Grouped segment did not take back')
                 .toHaveAttribute('aria-checked', 'true');
+            await closeHistoryFilters(page);
             await expect(row, 'coming back to Grouped mode lost the send').toBeVisible();
             await expect(historyRows(page), 'returning to Grouped changed how many rows exist')
                 .toHaveCount(baselineRows);
@@ -613,7 +629,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         const mintTick = async (amount) => {
             await openPaletteCommand(page, 'Advanced action');
             await selectVenueChain(page);
-            await page.getByLabel('Action', { exact: true }).selectOption('MINT');
+            await pickOption(fieldByLabel(page, 'Action'), 'MINT');
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
             await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
             await page.getByRole('button', { name: 'Sign action' }).click();
@@ -635,12 +651,13 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         await test.step('issue a token, leaving headroom to mint', async () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(tick);
-            await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
-            await main.getByLabel(/Initial mint/).fill(INITIAL_MINT);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await readIssueSource(main);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
+            await openIssueSection(main, 'Initial mint');
+            await fieldByLabel(main, 'Initial mint').fill(INITIAL_MINT);
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await expectConfirmModal(page, 'this action', 30_000);
             await waitForValidAction(await approveAndGetTxid(page));
             await reloadToHome(page);

@@ -124,14 +124,13 @@ export class NotImplementedError extends Error {
  * "p2tr"` or `input has only a witnessUtxo` instead of the capability message.
  *
  * Guards `envelopeReveal` ONLY, deliberately, and `reveal` is NOT added here.
- * The two flags sit on opposite sides of the first broadcast. `envelopeReveal`
- * is dispatched while nothing is on chain (submitWithSigner step 3b, before the
- * commit), so refusing it costs an error. `reveal` is the P2SH/P2WSH phase-2
- * spend, dispatched AFTER phase 1 has been broadcast, so a refusal there
- * completes the commit and never the reveal, which is the stranded-funds event
- * §6 forbids. The guard on that path is the pre-dispatch capability check in
- * submitWithSigner (`flows/signerCapability.js#signerSupportsChunkReveal`,
- * consulted before phase 1 is signed), never a refusal at the signer.
+ * Both reveals are signed while nothing is on chain (submitWithSigner steps 3b
+ * and 3c), so a refusal of either costs an error. `reveal` is the P2SH/P2WSH
+ * phase-2 spend: its lane is gated before anything is signed by the
+ * pre-dispatch capability check in submitWithSigner
+ * (`flows/signerCapability.js#signerSupportsChunkReveal`), which admits only the
+ * software signer. No signer-level guard exists for `reveal`; a request that
+ * got past that check would fail inside the vendor format converter.
  *
  * @param {string} signerId
  * @param {{ envelopeReveal?: boolean } | null | undefined} params
@@ -239,8 +238,8 @@ export function assertFullInputCoverage(signerId, inputCount, signingPaths) {
  *                                script-path spend), dispatched by submitWithSigner step 3b
  *                                while nothing is on chain yet. A signer that cannot produce
  *                                a script-path spend REFUSES it here, via
- *                                `assertCannotSignEnvelopeReveal`; unlike `reveal`, refusing
- *                                costs an error rather than a stranded commit.
+ *                                `assertCannotSignEnvelopeReveal`; refusing costs an error
+ *                                because nothing is on chain yet.
  */
 
 /**
@@ -259,6 +258,7 @@ export function assertFullInputCoverage(signerId, inputCount, signingPaths) {
  * @property {string} chainId
  * @property {string} [path]
  * @property {string} [addressId]
+ * @property {string} [addressType] authoritative script type of the signing address
  */
 
 /**

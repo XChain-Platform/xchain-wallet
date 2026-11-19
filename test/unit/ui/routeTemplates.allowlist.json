@@ -1,9 +1,9 @@
 {
     "files": {
-        "packages/core/src/shared/components/settings/AdsSection.jsx": {
+        "packages/core/src/shared/components/settings/ConnectedSitesSection.jsx": {
             "heading": {
-                "count": 1,
-                "reason": "The chain name titling one per-chain amount card in the Ads settings sub-page; a card title inside a settings card, not a page group title."
+                "count": 2,
+                "reason": "The site's name in the site detail's identity card and the blocked entry in its entry detail's identity card (G16), each the page's one hero name; a title of the card's subject, not a group title."
             }
         },
         "packages/core/src/shared/routes/AddressPreferencesForm.jsx": {
@@ -32,13 +32,25 @@
         },
         "packages/core/src/shared/routes/BatchComposerForm.jsx": {
             "heading": {
+                "count": 3,
+                "reason": "The result-screen successTitle heading, plus the per-transaction labels inside the result and the review summary: items of the action's own result and confirm screens, not group titles. One result pattern shared by every action; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/BetFeedDetail.jsx": {
+            "heading": {
                 "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "reason": "Your position names the approved position summary card inside the market detail, not a page group or a second page title."
+            }
+        },
+        "packages/core/src/shared/routes/CoSignerAccountDetail.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The agent account's name inside its identity card, the page's one hero name like the approved token hero; a title of the card's subject, not a group title."
             }
         },
         "packages/core/src/shared/routes/BroadcastForm.jsx": {
             "heading": {
-                "count": 2,
+                "count": 1,
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
@@ -62,8 +74,8 @@
         },
         "packages/core/src/shared/routes/DispenserDetail.jsx": {
             "heading": {
-                "count": 4,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "count": 5,
+                "reason": "The amount heading identifies the detail hero, three headings label the embedded Buy, Details and Recent dispenses panels, and the Dispenser Details heading titles its fact card. None is a page group title."
             }
         },
         "packages/core/src/shared/routes/DispenserForm.jsx": {
@@ -86,26 +98,20 @@
         },
         "packages/core/src/shared/routes/ListCreateForm.jsx": {
             "heading": {
-                "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "count": 4,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage), plus the Fork result's 'Now referenced by' label. One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
-        "packages/core/src/shared/routes/ListForkForm.jsx": {
+        "packages/core/src/shared/routes/ListDetail.jsx": {
             "heading": {
-                "count": 3,
-                "reason": "Result-screen title and the result screen's 'Now referenced by' label inside the fork result FormPage, plus the watcher-mode refusal title. One result pattern shared by every action form, not a group title; restyling it is a design call."
+                "count": 1,
+                "reason": "The list's name inside its identity card, the page's one hero name like the approved token hero (G16); a title of the card's subject, not a group title."
             }
         },
-        "packages/core/src/shared/routes/Loading.jsx": {
+        "packages/core/src/shared/routes/ListLookForm.jsx": {
             "screen": {
                 "count": 1,
-                "reason": "The boot and unlock spinner screen: a centred progress line and a retry button, with no form or list to lay out through a template."
-            }
-        },
-        "packages/core/src/shared/routes/ManageToken.jsx": {
-            "heading": {
-                "count": 1,
-                "reason": "The token ticker headline in the issuer hero, beside the token icon and the lock badges; the page identity, not a group title."
+                "reason": "Edit look keeps its own Screen with the PageHeader like Edit wallet, until the form-standard port (wave B) moves every *Form route onto FormPage at once; the body is a FormFrame."
             }
         },
         "packages/core/src/shared/routes/MessagingInbox.jsx": {
@@ -120,33 +126,21 @@
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
-        "packages/core/src/shared/routes/MyOrdersView.jsx": {
-            "heading": {
-                "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
-            }
-        },
-        "packages/core/src/shared/routes/MySwapsView.jsx": {
-            "heading": {
-                "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
-            }
-        },
         "packages/core/src/shared/routes/OracleForm.jsx": {
             "heading": {
                 "count": 1,
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
-        "packages/core/src/shared/routes/PairSignerForm.jsx": {
+        "packages/core/src/shared/routes/PollDetail.jsx": {
             "heading": {
                 "count": 1,
-                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+                "reason": "Your vote names the wallet-specific vote summary inside the poll result panel, not a page group or a second page title."
             }
         },
         "packages/core/src/shared/routes/ProjectRosterForm.jsx": {
             "heading": {
-                "count": 3,
+                "count": 4,
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
@@ -188,12 +182,46 @@
             "form": {
                 "count": 1,
                 "reason": "The inline password prompt that unlocks a gated file inside the token detail files panel; a field under the file list, not a page form."
-            }
-        },
-        "packages/core/src/shared/routes/ViewPrivateKey.jsx": {
+            },
             "heading": {
                 "count": 1,
-                "reason": "The danger-tone 'Before you continue' headline over the private key warning list. SectionHeader has no danger tone, so moving it drops the warning colour; that is a design call."
+                "reason": "A screen-reader-only heading names the coin when the page is embedded as wide Home's detail panel (G115), where no page header names it; nothing visible is drawn."
+            }
+        },
+        "packages/core/src/shared/routes/AddAccountForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/RenameAccountForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/RenameWalletForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A wallet-management form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/core/src/shared/routes/VerifySignatureForm.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "A signing tool form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
+            }
+        },
+        "packages/extension/src/approval/kinds/ConnectApproval.jsx": {
+            "empty": {
+                "count": 1,
+                "reason": "The connection request's unavailable-account state sits inside the approval form rather than replacing the whole page."
+            }
+        },
+        "packages/extension/src/approval/kinds/SignApproval.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "The password credential form is the approval screen footer beneath ConfirmStandard, not a standalone page form."
             }
         }
     }

@@ -89,7 +89,15 @@ describe('form field error references', () => {
             </>,
         );
 
-        const fee = screen.getByLabelText('Custom fee rate (sat/vB)');
+        // G113: with a fee estimate, the one custom editor is the Network fee
+        // line's exact-fee amount, opened from its Edit control.
+        if (!screen.queryByRole('textbox', { name: /^Network fee amount/ })) {
+            fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
+        }
+        const fee = screen.getByRole('textbox', { name: /^Network fee amount/ });
+        // Type, then clear: the editor may open already empty, and clearing an
+        // empty box fires no change.
+        fireEvent.change(fee, { target: { value: '1' } });
         fireEvent.change(fee, { target: { value: '' } });
         fireEvent.blur(fee);
 
@@ -99,9 +107,9 @@ describe('form field error references', () => {
         expectLinkedError(screen.getByLabelText('Address field'), 'Address error');
         expectLinkedError(screen.getByLabelText('Amount field'), 'Amount error');
         expectLinkedError(screen.getByRole('button', { name: /Token field/ }), 'Token error');
-        expectLinkedError(screen.getByLabelText('Tokens (one per line)'), 'Not a token name: bad token');
+        expectLinkedError(screen.getByLabelText('Tokens'), 'Not a token name: bad token');
         expectLinkedError(screen.getByLabelText('Target price'), 'Enter a price greater than zero.');
-        expectLinkedError(fee, 'Enter a custom fee rate.');
+        expectLinkedError(fee, 'Enter a custom network fee.');
 
         const fieldErrors = [
             'Input error',

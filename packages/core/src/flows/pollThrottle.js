@@ -55,8 +55,9 @@
  */
 
 /**
- * @param {number} intervalMs  the poll interval the window is keyed to (BALANCE_POLL_INTERVAL_MS
- *                             for Home and History, the badge hook's own pollMs for coinpay)
+ * @param {number} intervalMs  the window the throttle is keyed to (BALANCE_MAX_AGE_MS for
+ *                             Home, PENDING_POLL_INTERVAL_MS for History, the badge hook's
+ *                             own pollMs for coinpay)
  * @param {{ now?: () => number }} [opts]  clock, injectable for tests and the profiler
  * @returns {PollThrottle}
  */

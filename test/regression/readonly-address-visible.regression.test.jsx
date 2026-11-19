@@ -11,8 +11,8 @@
 // Regression suite: read-only address visibility.
 //
 //   [P1] 2026-10-13: The opaque input can cover its read-only address and
-//        action icon unless both overlays occupy a higher stacking layer.
-//        The visible address also remains available to assistive technology.
+//        preview unless the overlay occupies a higher stacking layer. The
+//        visible address also remains available to assistive technology.
 
 import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -55,7 +55,7 @@ function zIndexOf(body) {
 }
 
 describe('regression/read-only-address-visible', () => {
-    it('[REGRESSION P1] keeps the address overlay and icon visible above the input', () => {
+    it('[REGRESSION P1] keeps the address overlay visible above the input', () => {
         const { container } = render(
             <AddressField
                 label="From"
@@ -69,19 +69,21 @@ describe('regression/read-only-address-visible', () => {
         const input = screen.getByLabelText('From');
         const overlay = container.querySelector(`.${addressFieldStyles.readOnlyValue}`);
         const icon = screen.getByRole('button', { name: 'Choose address' });
+        const label = document.querySelector(`label[for="${input.id}"]`);
         expect(input).toHaveClass(inputStyles.input);
         expect(overlay).toHaveClass(addressFieldStyles.readOnlyValue);
-        // The icon is the kit Button inside the positioned iconButton slot.
-        expect(icon.closest(`.${addressFieldStyles.iconButton}`)).not.toBeNull();
+        expect(label).not.toContainElement(icon);
+        expect(input.parentElement).toContainElement(icon);
 
         const inputRule = ruleBody(inputCss, '.controlHitArea > .input');
         expect(inputRule).toMatch(/position:\s*relative/);
         const inputZIndex = zIndexOf(inputRule);
-        for (const selector of ['.readOnlyValue', '.iconButton']) {
-            const overlayRule = ruleBody(addressFieldCss, selector);
-            expect(overlayRule).toMatch(/position:\s*absolute/);
-            expect(zIndexOf(overlayRule)).toBeGreaterThan(inputZIndex);
-        }
+        const overlayRule = ruleBody(addressFieldCss, '.readOnlyValue');
+        expect(overlayRule).toMatch(/position:\s*absolute/);
+        expect(zIndexOf(overlayRule)).toBeGreaterThan(inputZIndex);
+        const actionRule = ruleBody(inputCss, '.controlActions');
+        expect(actionRule).toMatch(/position:\s*absolute/);
+        expect(zIndexOf(actionRule)).toBeGreaterThan(zIndexOf(overlayRule));
 
         expect(overlay).toHaveTextContent('bc1qso…acking');
         // The overlay is visual only: the input already exposes the full

@@ -14,12 +14,10 @@
 //   - <RawPsbtViewer> exists with the expected public API
 //   - Returns null when developerMode=false (the only way the gate
 //     short-circuits; caller never gets a stray reveal block)
-//   - SignApproval wires it for both signPsbt (with hex) and
-//     signAction (with action fields), gated behind a freshly-fetched
-//     developerMode setting
-//   - Send.jsx wires it into the review stage with the action fields
-//     it has at review time (no PSBT yet; encode happens on submit),
-//     gated behind the existing useDeveloperMode hook
+//   - G127 removes raw transaction inventories from review screens and routes
+//     caller PSBTs through decoded Confirm Standard facts
+//   - both extension approval and the in-wallet Sign Transaction flow remain
+//     fail-closed, with Developer Mode as the explicit escape hatch
 //   - approval-side messaging exposes getSettings
 
 import { strict as assert } from 'node:assert';
@@ -33,6 +31,9 @@ const compPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components',
 const cssPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'RawPsbtViewer.module.css');
 const signPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx');
 const sendPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
+const psbtFormPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'PsbtSignForm.jsx');
+const psbtConfirmPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'PsbtConfirmScreen.jsx');
+const intentPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'PsbtIntentPanel.jsx');
 const approvalMsgPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'messaging.js');
 
 assert.ok(existsSync(compPath), 'RawPsbtViewer.jsx exists');
@@ -42,6 +43,9 @@ const compSrc = readFileSync(compPath, 'utf8');
 const cssSrc = readFileSync(cssPath, 'utf8');
 const signSrc = readFileSync(signPath, 'utf8');
 const sendSrc = readFileSync(sendPath, 'utf8');
+const psbtFormSrc = readFileSync(psbtFormPath, 'utf8');
+const psbtConfirmSrc = readFileSync(psbtConfirmPath, 'utf8');
+const intentSrc = readFileSync(intentPath, 'utf8');
 const msgSrc = readFileSync(approvalMsgPath, 'utf8');
 
 // --- 1. Public API + gate semantics -------------------------------------
@@ -75,12 +79,12 @@ assert.match(compSrc, /copyText\(value\)/, 'copy uses the shared clipboard path'
 assert.match(compSrc, /Copy failed: clipboard unavailable/, 'copy failure is visible in plain words');
 assert.match(
     compSrc,
-    /copyLabel\('psbt', 'unsigned transaction code'\)/,
+    /copyLabel\('psbt', 'Unsigned Transaction Code'\)/,
     'PSBT copy button labels what it copies',
 );
 assert.match(
     compSrc,
-    /copyLabel\('fields', 'action fields'\)/,
+    /copyLabel\('fields', 'Action Fields'\)/,
     'action-fields copy button labels what it copies',
 );
 
@@ -89,9 +93,14 @@ for (const cls of ['root', 'toggle', 'body', 'section', 'label', 'hex', 'json', 
     assert.match(cssSrc, new RegExp(`\\.${cls}\\b`), `CSS defines .${cls}`);
 }
 
-// --- 3. SignApproval wiring --------------------------------------------
+// --- 3. SignApproval replacement ---------------------------------------
 
-assert.match(signSrc, /import \{ RawPsbtViewer \}/, 'imports the viewer');
+assert.doesNotMatch(signSrc, /RawPsbtViewer/, 'G127 approval has no collapsed technical-details viewer');
+assert.match(
+    signSrc,
+    /import \{ amountLabel, barePsbtSendPresentation \} from '@xchain-wallet\/core\/shared\/components\/PsbtIntentPanel\.jsx'/,
+    'imports decoded bare-payment presentation helpers',
+);
 assert.match(signSrc, /getSettings/, 'imports getSettings from approval messaging');
 
 // Settings fetch on mount.
@@ -110,46 +119,47 @@ assert.match(
     'fetch failure leaves developerMode false (gate stays closed)',
 );
 
-// Renders for both signPsbt (psbtHex) and signAction (actionFields).
+// A caller PSBT enters Confirm Standard as decoded action facts or a bare
+// payment, never as a raw input/output inventory. An unreadable action that
+// spends this wallet's inputs stays fail-closed outside Developer Mode.
+assert.doesNotMatch(
+    signSrc,
+    /<PsbtIntentPanel/,
+    'signPsbt approval has no raw PSBT inventory panel',
+);
+assert.match(signSrc, /const confirmationDecoded = kind === 'signPsbt'/, 'signPsbt enters the shared decoded confirmation model');
+assert.match(signSrc, /<ConfirmStandard/, 'approval renders Confirm Standard');
 assert.match(
     signSrc,
-    /<RawPsbtViewer\s+developerMode=\{developerMode\}\s+psbtHex=\{kind === 'signPsbt' \? payload\?\.payload\?\.psbtHex : undefined\}/,
-    'psbtHex flows through only for signPsbt',
+    /psbtRefusalReason\(\{[\s\S]*?developerMode[\s\S]*?\}\)/,
+    'developer mode gates the fail-closed unreadable-action escape hatch',
 );
-assert.match(
-    signSrc,
-    /actionFields=\{\s*kind === 'signAction'\s*\?\s*\{ action: payload\?\.action, \.\.\.\(payload\?\.payload \|\| \{\}\) \}\s*:\s*kind === 'signPsbt'/,
-    'actionFields uses {action, ...payload.payload} for signAction',
-);
+assert.match(intentSrc, /!own\.has\(output\.address\)/, 'bare payments exclude wallet-owned change');
+assert.doesNotMatch(intentSrc, /data-testid="psbt-input"/, 'raw input rows stay removed');
+assert.doesNotMatch(intentSrc, /data-testid="psbt-output"/, 'raw output rows stay removed');
 
 // --- 4. approval/messaging.js ------------------------------------------
 
 assert.match(msgSrc, /export function getSettings\(/);
 assert.match(msgSrc, /sendMessage\('settings\.get'\)/);
 
-// --- 5. Send.jsx wiring --------------------------------------------------
+// --- 5. In-wallet PSBT signing and G127 exclusion -----------------------
 
-assert.match(sendSrc, /import \{ RawPsbtViewer \}/);
-assert.match(sendSrc, /import \{ useDeveloperMode \}/);
-assert.match(sendSrc, /const \{ developerMode \} = useDeveloperMode\(\);/);
-// PC-52 split this into two shapes: a multi-recipient send shows its LEGS,
-// a single one keeps the flat TICK/AMOUNT/DESTINATION fields. Both must still
-// declare the action, so developer mode never shows a send whose recipients
-// disagree with what gets composed.
+assert.doesNotMatch(sendSrc, /RawPsbtViewer/, 'Send review has no G127-forbidden technical disclosure');
 assert.match(
-    sendSrc,
-    /<RawPsbtViewer\s+developerMode=\{developerMode\}\s+actionFields=\{isMultiSend \? \{\s*action: 'SEND'/s,
-    'Send.jsx review renders RawPsbtViewer with the action fields it has at review time',
+    psbtFormSrc,
+    /<PsbtConfirmScreen[\s\S]*?decomposed=\{decomposed\}[\s\S]*?developerMode=\{developerMode\}/,
+    'Sign Transaction routes the decoded PSBT and Developer Mode gate to PsbtConfirmScreen',
 );
 assert.match(
-    sendSrc,
-    /LEGS: sendLegs\.map\(/,
-    'the multi-recipient branch shows every leg, not a one-recipient stand-in',
+    psbtConfirmSrc,
+    /variant="psbt"[\s\S]*?psbtPanel=\{\([\s\S]*?<PsbtIntentPanel/,
+    'PsbtConfirmScreen keeps the fail-closed decoded intent panel on the shared confirm page',
 );
 assert.match(
-    sendSrc,
-    /\} : \{\s*action: 'SEND',\s*TICK: tick\.trim\(\),/s,
-    'the single-recipient branch is unchanged',
+    psbtConfirmSrc,
+    /refusal=\{refusal\}/,
+    'PsbtConfirmScreen passes an unreadable-action refusal into the confirm gate',
 );
 
 console.log('raw-psbt-viewer smoke OK');

@@ -24,6 +24,8 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -35,7 +37,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -51,13 +55,11 @@ async function reloadToHome(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     const main = page.getByRole('main');
     await expect(main, 'no transaction id appeared after Approve')
@@ -97,7 +99,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
     const generated = (await listed()).filter((address) => !before.has(address));
     expect(generated.length, 'generating added exactly one address').toBe(1);
@@ -141,12 +144,9 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            expect(await main.getByLabel('From').inputValue()).toBe(owner);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            expect(await readIssueSource(main)).toBe(owner);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
             await expectConfirmModal(page, 'the ISSUE');
             const action = await waitForValidAction(await approveAndGetTxid(page));
@@ -163,13 +163,13 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openTokenAdmin(page, 'Transfer', TICK);
             const main = page.getByRole('main');
-            const destination = main.getByLabel('New owner address');
+            const destination = fieldByLabel(main, 'New owner address');
             await expect(destination).toBeVisible({ timeout: 30_000 });
             await destination.fill(newOwner);
-            await main.getByRole('button', { name: 'Update token', exact: true }).click();
+            await main.getByRole('button', { name: 'Transfer Ownership', exact: true }).click();
 
             await expectConfirmModal(page, 'the ownership transfer');
-            await expect(page.getByTestId('action-intent'))
+            await expect(page.getByTestId('confirm-sentence'))
                 .toContainText(`Transfer ownership of ${TICK}`);
             const txid = await approveAndGetTxid(page);
             const action = await waitForValidAction(txid);

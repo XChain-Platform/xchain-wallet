@@ -89,15 +89,25 @@ export function sampleMatchesFor(tick1, tick2) {
     const rng = makeRng(hashTicks(tick1, tick2) ^ 0xdeadbeef);
     const now = Math.floor(Date.now() / 1000);
     const matches = [];
-    let price = mid;
+    let price = mid * 0.82;
+    const phaseA = rng() * 2 * Math.PI;
+    const phaseB = rng() * 2 * Math.PI;
     const total = 80;
     const windowSec = 7 * 86400;
     for (let i = 0; i < total; i++) {
         const baseOffset = Math.floor((total - i) * (windowSec / total));
         const jitter = Math.floor(rng() * 1800);
         const timestamp = now - baseOffset - jitter;
-        const drift = (rng() - 0.5) * mid * 0.04;
-        price = clamp(price + drift, mid * 0.4, mid * 2.2);
+        // A demo market never advertises a loss: the walk climbs from 0.82x to
+        // about 1.18x the midpoint over the window, with small wobble.
+        // Two swells (a pullback and a rally, placed per pair) ride on the climb
+        // and fade over the last day, so the day's move is a gain.
+        const x = (i + 1) / total;
+        const fade = Math.min(1, (1 - x) * 7);
+        const swell = (0.07 * Math.sin(3 * Math.PI * x + phaseA) + 0.04 * Math.sin(7 * Math.PI * x + phaseB)) * fade;
+        const target = mid * (0.82 + 0.36 * x + swell);
+        const wobble = (rng() - 0.5) * mid * 0.03;
+        price = clamp(price + (target - price) * 0.5 + wobble, mid * 0.4, mid * 2.2);
         const size = Math.floor(10 + rng() * 500);
         const buyerTakes = rng() > 0.5;
         if (buyerTakes) {
@@ -120,10 +130,47 @@ export function sampleMatchesFor(tick1, tick2) {
             });
         }
     }
+    liftFinalAboveLastDay(matches, tick2, now);
     // Sort newest first so RecentTradesPanel shows recent activity at the top
     // (the chart's bucketizer doesn't care about input order).
     matches.sort((a, b) => b.timestamp - a.timestamp);
     return matches;
+}
+
+// The price a sample row traded at, in tick2 per tick1 whichever side gave.
+function rowPrice(row, tick2) {
+    return row.give_tick === tick2
+        ? Number(row.give_amount) / Number(row.get_amount)
+        : Number(row.get_amount) / Number(row.give_amount);
+}
+
+/**
+ * The swells fade over the last day but can still crest at its start, so a
+ * pair's day chart could close below where it opened. Only then, lift the
+ * newest trade just above every price of the last day (plus an hour of slack
+ * and the trade before it, which the day chart may open on). Pairs whose day
+ * already closes highest keep their rows byte for byte.
+ *
+ * @param {Array<any>} matches  oldest first, as the walk built them
+ * @param {string} tick2
+ * @param {number} now  seconds
+ */
+function liftFinalAboveLastDay(matches, tick2, now) {
+    if (matches.length < 2) return;
+    const last = matches[matches.length - 1];
+    const dayStart = now - 86400 - 3600;
+    let dayHigh = -Infinity;
+    for (let i = matches.length - 2; i >= 0; i -= 1) {
+        dayHigh = Math.max(dayHigh, rowPrice(matches[i], tick2));
+        if (matches[i].timestamp < dayStart) break;
+    }
+    if (!(rowPrice(last, tick2) <= dayHigh)) return;
+    const lifted = dayHigh * 1.004;
+    if (last.give_tick === tick2) {
+        last.give_amount = formatPrice(lifted * Number(last.get_amount));
+    } else {
+        last.get_amount = formatPrice(lifted * Number(last.give_amount));
+    }
 }
 
 function clamp(n, lo, hi) {

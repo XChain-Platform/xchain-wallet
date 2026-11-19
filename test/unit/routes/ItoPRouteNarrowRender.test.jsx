@@ -104,7 +104,7 @@ describe('I through P route rendering at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: /^(Review|Link)$/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Link Actions' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, issueTokenCss);
     });
 
@@ -145,37 +145,36 @@ describe('I through P route rendering at 320px', () => {
             />,
             {
                 getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
-                getOwnedTokens: vi.fn().mockResolvedValue([]),
+                getOwnedTokens: vi.fn().mockResolvedValue([
+                    { tick: 'NARROW', locked: false },
+                ]),
             },
         );
 
-        expect(await screen.findByRole('button', { name: 'Issue new token' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create Token' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, myTokensCss);
     });
 
-    it('keeps PairSignerForm contained with its primary action and long labels present', async () => {
-        const label = 'S'.repeat(40);
+    it('keeps PairSignerForm contained with its device rows present and long device names wrapping', () => {
         const { container } = mount(
             <PairSignerForm
-                walletId="wallet-1"
+                mode="add"
                 pairTrezor={vi.fn()}
                 pairLedger={vi.fn()}
                 onBack={() => {}}
             />,
-            {
-                listSigners: vi.fn().mockResolvedValue([{
-                    id: 'signer-1',
-                    vendor: 'trezor',
-                    model: 'safe-3',
-                    label,
-                }]),
-            },
         );
 
         expect(screen.getByRole('button', { name: /Trezor/ })).toBeInTheDocument();
-        await screen.findByText(label);
-        const identityRule = pairSignerCss.match(/\.pairedIdentity\s*\{[^}]*\}/s)?.[0] || '';
-        expect(identityRule).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(screen.getByRole('button', { name: /Ledger/ })).toBeInTheDocument();
+        // A long device name in the shared device card wraps instead of widening the page.
+        const deviceCardCss = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/components/hardware/HardwareDeviceCard.module.css'),
+            'utf8',
+        );
+        const nameRule = deviceCardCss.match(/\.name\s*\{[^}]*\}/s)?.[0] || '';
+        expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
         expectNoFixedWidthBeyondViewport(container, pairSignerCss);
+        expectNoFixedWidthBeyondViewport(container, deviceCardCss);
     });
 });

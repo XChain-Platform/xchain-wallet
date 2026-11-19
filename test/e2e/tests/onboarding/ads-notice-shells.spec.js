@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Rendered gate for the Automatic Donation System notice. The notice informs
+// Rendered gate for the Automatic Donations notice. The notice informs
 // and does not ask: one Continue button, no decline or skip control, no
 // field or switch, no per-chain amount, and Continue leaves the ads setting
 // untouched so the default (on) still holds on Home.
@@ -14,12 +14,13 @@
 
 import {
     DEFAULT_PASSWORD,
+    backToSettingsList,
     completeRecoveryPhraseChallenge,
     readRecoveryPhrase,
     dismissIntroCarousel,
     expect,
     nav,
-    openSettings,
+    openAutomaticDonations,
     test,
     unlockedAnyScreen,
 } from '../../fixtures/wallet.js';
@@ -40,14 +41,16 @@ const SHELLS = [
 ];
 
 const DECLINE_COPY = /decline|skip|not now|no thanks|maybe later|turn off|disable|opt out|cancel/i;
-const AMOUNT_COPY = /\b(sats?|satoshis?|LTC|DOGE|BTC|XCP|USD)\b|[$€£]\s?\d|\d[\d,.]*\s?%?\s?(sats?|LTC|DOGE|BTC)\b|\d,\d{3}/i;
+// The approved notice states the wallet-wide fiat defaults (Held 2 ruling,
+// 2026-11-17); a per-chain coin amount would still be wrong.
+const CHAIN_AMOUNT_COPY = /\b(sats?|satoshis?|LTC|DOGE|BTC|XCP)\b|\d,\d{3}/i;
 
 const noticeHeading = (page) =>
-    page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    page.getByRole('heading', { name: 'Automatic Donations', exact: true });
 
 async function assertNotice(page) {
     await expect(noticeHeading(page)).toBeVisible({ timeout: kdfStepTimeout() });
-    const form = page.getByRole('form', { name: 'Automatic Donation System' });
+    const form = page.getByRole('form', { name: 'Automatic Donations' });
     await expect(form, 'the notice is a form-page surface').toBeVisible();
 
     // The header Back is disabled on the notice after create and after import.
@@ -75,12 +78,18 @@ async function assertNotice(page) {
     );
     expect(await controls.count(), 'form controls on the notice').toBe(0);
 
-    // No per-chain amount or currency figure.
+    // The fiat defaults from the schema, and no per-chain amount.
     const text = await form.innerText();
-    expect(text, 'notice text carries an amount').not.toMatch(AMOUNT_COPY);
+    expect(text, 'notice states the per-transaction default').toContain('$0.05');
+    expect(text, 'notice states the send-at default').toContain('$5.00');
+    expect(text, 'notice text carries a per-chain amount').not.toMatch(CHAIN_AMOUNT_COPY);
 
-    // A notice: the title, a subtitle, a bullet list of statements, one action.
-    expect(await form.locator('ul > li').count(), 'statement bullets').toBe(3);
+    // A notice: one info notice whose title is the subtitle and whose body is
+    // three statement paragraphs, then one action.
+    const notice = form.locator('[data-tone="info"]');
+    expect(await notice.count(), 'one info notice').toBe(1);
+    expect(await notice.locator('p').count(), 'statement paragraphs').toBe(3);
+    expect(await form.locator('ul, ol').count(), 'no list on the notice').toBe(0);
     expect(await form.getByRole('button').count(), 'actions inside the notice').toBe(1);
 }
 
@@ -88,12 +97,13 @@ async function assertNotice(page) {
 async function createToNotice(page) {
     await page.getByRole('button', { name: 'Create new wallet' }).click();
     await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
-    await page.getByLabel(/^Confirm( password)?$/).fill(DEFAULT_PASSWORD);
+    // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+    await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(DEFAULT_PASSWORD);
     const next = page.getByRole('button', { name: 'Next' });
     await expect(next).toBeEnabled({ timeout: 30_000 });
     await next.click();
     const words = await readRecoveryPhrase(page);
-    await page.getByLabel(/written down|saved my recovery phrase/i).check();
+    await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -103,12 +113,12 @@ async function continueToHome(page) {
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: kdfStepTimeout() });
     // The ads setting is not written: the default (on) still holds in Settings.
-    await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
-    await expect(toggle).toBeVisible();
-    await expect(toggle, 'Continue leaves the default on').toBeChecked();
-    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await openAutomaticDonations(page);
+    const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
+    await expect(perTransaction).toBeVisible();
+    await expect(perTransaction, 'Continue leaves the default on').toHaveText(/\$0\.05/);
+    await expect(page.getByTestId('ads-hero')).toContainText('$0.05 per transaction');
+    await backToSettingsList(page);
     if (await nav(page).count() === 0) {
         await page.getByRole('button', { name: 'Back', exact: true }).click();
     }
@@ -133,9 +143,9 @@ for (const { shell, width, height } of SHELLS) {
             await dismissIntroCarousel(page);
             await page.getByRole('button', { name: 'Import wallet' }).click();
             await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
-            await page.getByLabel('Wallet name').fill('Notice Import');
+            await page.getByLabel('Wallet name', { exact: true }).fill('Notice Import');
             await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
-            await page.getByLabel(/^Confirm( password)?$/).fill(DEFAULT_PASSWORD);
+            await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(DEFAULT_PASSWORD);
             await page.getByRole('button', { name: 'Import' }).click();
             await assertNotice(page);
             await continueToHome(page);

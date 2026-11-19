@@ -45,8 +45,8 @@ assert.match(form, /submitMethods: \{ hw: 'callbackActionHw', software: 'callbac
     'three-way signer dispatch via useActionForm');
 assert.match(
     form,
-    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'CALLBACK'\)/,
-    'typed-CALLBACK confirm uses the shared exact-match gate',
+    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'RECALL'\)/,
+    'typed-RECALL confirm uses the shared exact-match gate',
 );
 assert.match(form, /tokenHolderSummary/, 'holder / payout preview wired');
 assert.match(form, /Total payout/, 'total payout shown');
@@ -55,7 +55,12 @@ assert.match(form, /blockReached/, 'after-CALLBACK_BLOCK gate present');
 assert.match(form, /configComplete/, 'blocks when no callback is configured');
 assert.match(form, /split their balance across new addresses/,
     'dust-split griefing caveat present');
-assert.match(form, /variant=\{isWatcherMode \? 'primary' : 'danger'\}/, 'danger-styled submit');
+assert.match(form, /const CALLBACK_PAYOUT_WARNING = [^;]+split balances across new addresses/,
+    'callback payout uncertainty has one explicit warning');
+assert.match(form, /warnings: \[\.\.\.\(decoded\.warnings \|\| \[\]\), CALLBACK_PAYOUT_WARNING\]/,
+    'callback payout warning is carried into the Confirm Standard warning slot');
+assert.match(form, /<ConfirmActionModal\b/, 'watcher review uses the shared Confirm Standard adapter');
+assert.match(form, /<ActionConfirmScreen\b/, 'signed review uses the shared Confirm Standard screen');
 assert.match(form, /prebuiltPsbt/, 'single-encode confirm path forwards the composed PSBT');
 assert.match(form, /ResultScreen/, 'watcher encode-only result surface');
 
@@ -86,12 +91,13 @@ for (const shell of [
     }
 }
 
-// ---- ManageToken + shell wiring ----
-const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');
-assert.match(manage, /onCallbackSettings/, 'ManageToken offers Callback settings');
-assert.match(manage, /onExecuteCallback/, 'ManageToken offers Execute callback');
+// ---- Issuer actions (the asset page's issuer groups) + shell wiring ----
+const manage = read('packages', 'core', 'src', 'shared', 'components', 'TokenOwnerActions.jsx');
+assert.match(manage, /onCallbackSettings/, 'the issuer groups offer Callback settings');
+assert.match(manage, /onExecuteCallback/, 'the issuer groups offer Execute callback');
 assert.match(manage, /!assetInfo\?\.callbackTick/, 'Execute callback only when a callback is configured');
-assert.match(manage, /id: 'execute-callback'.*danger: true/s, 'Execute callback is danger-styled');
+assert.match(manage, /id: 'execute-callback'[\s\S]{0,500}?danger: true/, 'Execute callback is danger-styled');
+assert.match(manage, /id: 'destroy'[^\n]*danger: true/, 'Destroy is danger-styled');
 
 for (const shell of [
     ['packages', 'web', 'src', 'App.jsx'],
@@ -102,8 +108,8 @@ for (const shell of [
     assert.ok(src.includes('CallbackForm'), `${shell.join('/')} imports CallbackForm`);
     assert.ok(src.includes("unlockedView === 'execute-callback'"), `${shell.join('/')} routes the callback view`);
     assert.ok(src.includes("unlockedView === 'callback-settings'"), `${shell.join('/')} routes callback-settings into TokenAdminForm`);
-    assert.ok(src.includes("onCallbackSettings={() => openForm('callback-settings')}"), `${shell.join('/')} wires onCallbackSettings`);
-    assert.ok(src.includes("onExecuteCallback={() => openForm('execute-callback')}"), `${shell.join('/')} wires onExecuteCallback`);
+    assert.ok(src.includes("onCallbackSettings: (ctx) => openOwnerForm('callback-settings', ctx)"), `${shell.join('/')} wires onCallbackSettings`);
+    assert.ok(src.includes("onExecuteCallback: (ctx) => openOwnerForm('execute-callback', ctx)"), `${shell.join('/')} wires onExecuteCallback`);
 }
 
 console.log('callback-config-execute smoke: all assertions passed');

@@ -40,7 +40,7 @@ describe('DemoExitConfirm', () => {
         const dialog = screen.getByRole('dialog', { name: 'Exit demo and delete its data?' });
         expect(dialog).toHaveAccessibleDescription(DEMO_EXIT_MESSAGE);
         expect(dialog).toHaveTextContent('sample accounts, addresses, balances, and history');
-        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).className)
+        expect(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }).className)
             .toMatch(/danger/);
     });
 
@@ -48,7 +48,7 @@ describe('DemoExitConfirm', () => {
         const { onConfirm, onCancel } = setup();
         const dialog = screen.getByRole('dialog');
 
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
         expect(onConfirm).toHaveBeenCalledTimes(1);
         expect(onCancel).not.toHaveBeenCalled();
 
@@ -60,7 +60,7 @@ describe('DemoExitConfirm', () => {
     it('locks every exit while busy and displays the failure reason', () => {
         const { onConfirm, onCancel } = setup({ busy: true, error: 'Could not clear local data' });
         const dialog = screen.getByRole('dialog');
-        const confirm = within(dialog).getByRole('button', { name: 'Exit demo & wipe' });
+        const confirm = within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' });
         const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
 
         expect(dialog).toHaveAttribute('aria-busy', 'true');

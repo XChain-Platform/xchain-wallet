@@ -11,7 +11,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 const reachability = vi.hoisted(() => ({ overall: 'offline' }));
 
@@ -159,6 +159,8 @@ describe('ActionDetail', () => {
 describe.each([
     ['SwapForm', () => <SwapForm walletId={WALLET_ID} onBack={() => {}} />, 'Swapping needs a network connection.'],
     ['CrossChainSwapForm', () => <CrossChainSwapForm walletId={WALLET_ID} onBack={() => {}} />, 'Swapping needs a network connection.'],
+    // The Create a token route: the one Issue Token form states its own
+    // offline note and keeps Issue Token off.
     ['TokenWizard', () => <TokenWizard walletId={WALLET_ID} onBack={() => {}} />, 'Creating a token needs a network connection.'],
 ])('%s', (_name, route, message) => {
     it('shows one offline message and hides the shell notice when only the probe is offline', async () => {
@@ -174,6 +176,20 @@ describe.each([
         renderScreen(messagingWith({}), route());
         await screen.findByRole('heading', {}, { timeout: 3000 }).catch(() => {});
         expect(screen.queryByText(message)).toBeNull();
+    });
+});
+
+describe('TokenWizard offline submit', () => {
+    it('keeps Issue Token enabled but composes nothing while offline (G130)', async () => {
+        const composeForConfirm = vi.fn();
+        renderScreen(messagingWith({ composeForConfirm }), <TokenWizard walletId={WALLET_ID} onBack={() => {}} />);
+        await screen.findByText('Creating a token needs a network connection.');
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'OFFLINE' } });
+        const issue = screen.getByRole('button', { name: 'Issue Token' });
+        expect(issue).toBeEnabled();
+        fireEvent.submit(screen.getByRole('form', { name: 'Issue Token' }));
+        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
+        expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });
 
@@ -212,18 +228,21 @@ describe('TokenDetail', () => {
         getSupplyHistory: vi.fn().mockResolvedValue([]),
     });
 
-    it('disables Send and Trade with reasons when only the probe is offline', async () => {
+    it('disables Send and Exchange with reasons when only the probe is offline', async () => {
         renderScreen(detailMessaging(), detail());
-        const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
-        expect(actions.getByRole('button', { name: 'Trade' })).toBeDisabled();
-        expect(actions.getByText('Trade needs a network connection.')).toBeInTheDocument();
+        // The Actions tab (open by default) holds the action list; a locked row
+        // says why in place of its description.
+        const actions = within(await screen.findByRole('list', { name: 'Actions for CACHE' }));
+        const exchange = actions.getByRole('button', { name: /^Exchange\b/ });
+        expect(exchange).toHaveAttribute('aria-disabled', 'true');
+        expect(within(exchange).getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
-    it('keeps Trade enabled when the probe is healthy', async () => {
+    it('keeps Exchange enabled when the probe is healthy', async () => {
         reachability.overall = 'normal';
         renderScreen(detailMessaging(), detail());
-        const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
-        expect(actions.getByRole('button', { name: 'Trade' })).toBeEnabled();
-        expect(actions.queryByText('Trade needs a network connection.')).toBeNull();
+        const actions = within(await screen.findByRole('list', { name: 'Actions for CACHE' }));
+        expect(actions.getByRole('button', { name: /^Exchange\b/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.queryByText('Exchange needs a network connection.')).toBeNull();
     });
 });

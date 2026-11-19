@@ -74,15 +74,63 @@ export function compiledPayloadByteLen(actionString, rawData, compression = null
 }
 
 /**
+ * Whether this chain declares support for carrying a Taproot envelope.
+ *
+ * @param {{ taprootEnvelope?: boolean }|null|undefined} descriptor chain descriptor
+ * @returns {boolean}
+ */
+export function chainCarriesEnvelope(descriptor) {
+    return descriptor?.taprootEnvelope === true;
+}
+
+/**
+ * Whether this chain can carry a Taproot envelope, either by an explicit
+ * capability declaration or by listing Taproot among its address types.
+ *
+ * @param {{ taprootEnvelope?: boolean, addressTypes?: string[] }|null|undefined} descriptor chain descriptor
+ * @returns {boolean}
+ */
+export function envelopeChainFor(descriptor) {
+    return chainCarriesEnvelope(descriptor)
+        || (Array.isArray(descriptor?.addressTypes) && descriptor.addressTypes.includes('p2tr'));
+}
+
+/**
+ * Why the Upload method field cannot offer a Taproot envelope.
+ *
+ * @param {object} args
+ * @param {{ coin?: string, taprootEnvelope?: boolean, addressTypes?: string[] }|null|undefined} args.descriptor
+ * @param {{ source?: string }|null|undefined} args.fromAddress
+ * @param {boolean} [args.isWatcherMode=false]
+ * @returns {'noTaproot'|'chain'|'watcher'|'hardware'|'watchOnly'|'signer'|null}
+ */
+export function envelopeUnavailableReason({ descriptor, fromAddress, isWatcherMode = false }) {
+    if (!envelopeChainFor(descriptor)) {
+        return descriptor?.coin === 'dogecoin' ? 'noTaproot' : 'chain';
+    }
+    if (isWatcherMode) return 'watcher';
+    if (!fromAddress || typeof fromAddress !== 'object') return 'signer';
+    let source;
+    try {
+        source = fromAddress.source;
+    } catch {
+        return 'signer';
+    }
+    if (source === 'trezor' || source === 'ledger') return 'hardware';
+    if (source === 'watch-only') return 'watchOnly';
+    if (!signerSupportsTapscript(fromAddress)) return 'signer';
+    return null;
+}
+
+/**
  * Whether this chain and signer can carry a Taproot envelope at all.
  *
- * @param {{ addressTypes?: string[] }|null|undefined} descriptor  chain descriptor
+ * @param {{ taprootEnvelope?: boolean, addressTypes?: string[] }|null|undefined} descriptor chain descriptor
  * @param {{ source?: string, kind?: string }|null|undefined} signer the spending Address record or live Signer
  * @returns {boolean}
  */
 export function envelopeAvailableFor(descriptor, signer) {
-    // The chain half: `p2tr` is the descriptor's own statement that it does Taproot.
-    if (!Array.isArray(descriptor?.addressTypes) || !descriptor.addressTypes.includes('p2tr')) return false;
+    if (!envelopeChainFor(descriptor)) return false;
     // The signer half: a reveal nobody can sign would strand the commit.
     return signerSupportsTapscript(signer) || liveSignerSupportsTapscript(signer);
 }

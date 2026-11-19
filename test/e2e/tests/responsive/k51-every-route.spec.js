@@ -73,17 +73,14 @@ const TOP_LEVEL_ROUTES = [
 // Phone layouts leave Keyboard out of Settings (shortcut bindings need a
 // hardware keyboard), and Network & endpoints shows only in Developer Mode.
 const SETTINGS_SUBPAGES = [
-    'This wallet',
-    'Display',
-    'Privacy',
-    'Safety',
-    'Wallet mode',
-    'Backup',
-    'Fees',
-    'Connected sites',
-    'Automatic donation system',
-    'Developer mode',
-    'About',
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy and Sites',
+    'Appearance',
+    'Notifications',
+    'Network and Fees',
+    'Advanced',
 ];
 
 test.use(K51);
@@ -101,16 +98,16 @@ async function settle(page) {
 
 async function openPaletteDestination(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
-    await palette.getByRole('option', { name: new RegExp(`^${escapeRegExp(title)}\\b`) })
+    await palette.getByRole('option', { name: new RegExp(`^${escapeRegExp(title)}\\b(?! the )`) })
         .first().click();
 }
 
 async function openTopLevelRoute(page, route) {
     // Marketplace is a rail destination at larger tiers and a palette
-    // destination on compact screens, where the More sheet has no row for it.
+    // destination on compact screens through the searchable wallet menu.
     if (route === 'Marketplace') {
         await openPaletteDestination(page, route);
     } else {
@@ -377,7 +374,7 @@ test.describe('LG K51 responsive route sweep', () => {
         for (const subpage of SETTINGS_SUBPAGES) {
             await test.step(`Settings / ${subpage}`, async () => {
                 const row = page.getByRole('main').getByRole('button', {
-                    name: new RegExp(`^${escapeRegExp(subpage)}\\b`, 'i'),
+                    name: new RegExp(`^${escapeRegExp(subpage)}\\b(?! the )`, 'i'),
                 });
                 await expect(row, `Settings has no ${JSON.stringify(subpage)} row`).toBeVisible();
                 await row.click();
@@ -386,7 +383,7 @@ test.describe('LG K51 responsive route sweep', () => {
                 await expectK51Layout(page, `Settings / ${subpage}`);
 
                 await page.getByRole('button', { name: 'Back to settings' }).click();
-                await expect(page.getByRole('searchbox', { name: 'Search settings' })).toBeVisible();
+                await expect(page.getByRole('button', { name: 'Filter settings' })).toBeVisible();
             });
         }
     });

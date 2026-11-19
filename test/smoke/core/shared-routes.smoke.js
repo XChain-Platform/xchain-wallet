@@ -72,7 +72,8 @@ for (const rel of [
     'src/shared/routes/Receive.jsx',
     'src/shared/routes/Receive.module.css',
     'src/shared/routes/TokenWizard.jsx',
-    'src/shared/routes/TokenWizard.module.css',
+    'src/shared/routes/IssueTokenForm.jsx',
+    'src/shared/routes/IssueTokenForm.module.css',
 ]) {
     assert.ok(existsSync(join(core, rel)), `shared file exists: ${rel}`);
 }
@@ -115,11 +116,11 @@ const routeMessagingCalls = {
     // a later change removed messaging.lockWallet from Home: both lock paths
     // (idle timer and the manual Lock entry) are shell-owned now, since a
     // route unmounts on navigation and took the idle timer with it.
-    // Home reads balances through loadDisplayBalances, which calls
-    // messaging.getWalletBalances for every wallet but the demo one.
+    // Home reads balances through the wallet source's messaging (U64): a demo
+    // wallet's source answers getWalletBalances from sample data.
     Home: [
         'messaging.listWallets',
-        'loadDisplayBalances(messaging',
+        'messaging.getWalletBalances(walletId, accountId)',
     ],
     Send: [
         'messaging.sendToken',
@@ -132,7 +133,8 @@ const routeMessagingCalls = {
         'messaging.getAddressesByChain',
         'messaging.getNewestAddress',
     ],
-    TokenWizard: [
+    // The Issue a Token route hosts IssueTokenForm, which owns the messaging calls.
+    IssueTokenForm: [
         'messaging.getAddressesByChain',
         'messaging.issueToken',
     ],

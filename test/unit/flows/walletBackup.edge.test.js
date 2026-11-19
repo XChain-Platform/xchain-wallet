@@ -16,6 +16,8 @@ const crypto = vi.hoisted(() => ({
     makeFreshKdfParams: vi.fn(),
     encrypt: vi.fn(),
     decrypt: vi.fn(),
+    encryptWalletSeed: vi.fn(),
+    decryptWalletSeed: vi.fn(),
 }));
 
 vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => ({
@@ -28,6 +30,8 @@ vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => 
     makeFreshKdfParams: crypto.makeFreshKdfParams,
     encrypt: crypto.encrypt,
     decrypt: crypto.decrypt,
+    encryptWalletSeed: crypto.encryptWalletSeed,
+    decryptWalletSeed: crypto.decryptWalletSeed,
     bytesToBase64: (bytes) => `base64:${Array.from(bytes).join(',')}`,
     base64ToBytes: () => new Uint8Array([8, 9]),
 }));
@@ -43,7 +47,11 @@ import {
 } from '../../../packages/core/src/flows/backupFile.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
 import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
-import { KDF_MIN_ITERATIONS, KDF_MIN_MEMORY_KIB } from '../../../packages/core/src/crypto/kdf.js';
+import {
+    copyMasterKey,
+    KDF_MIN_ITERATIONS,
+    KDF_MIN_MEMORY_KIB,
+} from '../../../packages/core/src/crypto/kdf.js';
 
 const KDF = {
     algorithm: 'argon2id', salt: 'salt', iterations: 2, memory: 8192, parallelism: 1,
@@ -96,10 +104,27 @@ beforeEach(() => {
     });
     crypto.parseBackupEnvelope.mockReset().mockImplementation((value) => value);
     crypto.stringifyBackupEnvelope.mockReset().mockReturnValue('{"envelope":true}');
-    crypto.deriveMasterKeyAsync.mockReset().mockResolvedValue(new Uint8Array([1, 2, 3]));
+    crypto.deriveMasterKeyAsync.mockReset().mockResolvedValue(new Uint8Array(32).fill(1));
     crypto.makeFreshKdfParams.mockReset().mockReturnValue(NEXT_KDF);
     crypto.encrypt.mockReset().mockResolvedValue(new Uint8Array([6, 7]));
     crypto.decrypt.mockReset().mockResolvedValue(new Uint8Array([4, 5]));
+    crypto.encryptWalletSeed.mockReset().mockImplementation(async ({ seed, kdfParams, masterKey }) => {
+        const workingKey = copyMasterKey(masterKey);
+        try {
+            const blob = await crypto.encrypt(workingKey, seed);
+            return { encryptedSeed: `base64:${Array.from(blob).join(',')}`, kdfParams };
+        } finally {
+            workingKey.fill(0);
+        }
+    });
+    crypto.decryptWalletSeed.mockReset().mockImplementation(async ({ masterKey }) => {
+        const workingKey = copyMasterKey(masterKey);
+        try {
+            return await crypto.decrypt(workingKey, new Uint8Array([8, 9]));
+        } finally {
+            workingKey.fill(0);
+        }
+    });
 });
 
 describe('backup export and payload validation edges', () => {
@@ -188,7 +213,7 @@ describe('wallet re-key failure and cleanup edges', () => {
     });
 
     it('classifies an imported-key tag mismatch as the wrong password and zeros the old key', async () => {
-        const oldKey = new Uint8Array([1, 2, 3]);
+        const oldKey = new Uint8Array(32).fill(1);
         const wallet = {
             encryptedSeed: '',
             encryptedPassphrase: null,
@@ -204,7 +229,7 @@ describe('wallet re-key failure and cleanup edges', () => {
 
         expect(error).toBeInstanceOf(BackupSeedPasswordError);
         expect(error.what).toBe('imported key');
-        expect([...oldKey]).toEqual([0, 0, 0]);
+        expect(oldKey.every((byte) => byte === 0)).toBe(true);
     });
 
     // A short or undecodable seal is damage, not a password: only a tag mismatch is.
@@ -212,7 +237,7 @@ describe('wallet re-key failure and cleanup edges', () => {
         ['a ciphertext shorter than IV and tag', new Error('aead: ciphertext too short')],
         ['a seal that is not base64', new DOMException('Invalid character', 'InvalidCharacterError')],
     ])('reports %s as a damaged seal, never as the wrong password', async (_label, fault) => {
-        const oldKey = new Uint8Array([1, 2, 3]);
+        const oldKey = new Uint8Array(32).fill(1);
         const wallet = {
             encryptedSeed: 'seed', encryptedPassphrase: null, importedKeys: [], kdfParams: KDF,
         };
@@ -227,7 +252,7 @@ describe('wallet re-key failure and cleanup edges', () => {
         expect(error).not.toBeInstanceOf(BackupSeedPasswordError);
         expect(error.what).toBe('seed');
         expect(error.cause).toBe(fault);
-        expect([...oldKey]).toEqual([0, 0, 0]);
+        expect(oldKey.every((byte) => byte === 0)).toBe(true);
     });
 
     // The new seal guards THIS device's password, so it never inherits a cost below the floor.
@@ -270,8 +295,8 @@ describe('wallet re-key failure and cleanup edges', () => {
     });
 
     it('zeros both keys and decrypted plaintext when resealing fails', async () => {
-        const oldKey = new Uint8Array([1, 2]);
-        const newKey = new Uint8Array([3, 4]);
+        const oldKey = new Uint8Array(32).fill(1);
+        const newKey = new Uint8Array(32).fill(3);
         const seed = new Uint8Array([5, 6]);
         const wallet = {
             encryptedSeed: 'seed', encryptedPassphrase: null, importedKeys: [], kdfParams: KDF,
@@ -285,13 +310,13 @@ describe('wallet re-key failure and cleanup edges', () => {
         await expect(rekeyWalletRecord(wallet, {
             walletPassword: 'wallet password', devicePassword: 'device password',
         })).rejects.toThrow('encrypt unavailable');
-        expect([...oldKey]).toEqual([0, 0]);
-        expect([...newKey]).toEqual([0, 0]);
+        expect(oldKey.every((byte) => byte === 0)).toBe(true);
+        expect(newKey.every((byte) => byte === 0)).toBe(true);
         expect([...seed]).toEqual([0, 0]);
     });
 
     it('zeros the old key and decrypted plaintext when passphrase decryption fails', async () => {
-        const oldKey = new Uint8Array([1, 2]);
+        const oldKey = new Uint8Array(32).fill(1);
         const seed = new Uint8Array([5, 6]);
         const wif = new Uint8Array([7, 8]);
         const wallet = {
@@ -309,7 +334,7 @@ describe('wallet re-key failure and cleanup edges', () => {
         await rekeyWalletRecord(wallet, {
             walletPassword: 'wallet password', devicePassword: 'device password',
         }).catch(() => {});
-        expect([...oldKey]).toEqual([0, 0]);
+        expect(oldKey.every((byte) => byte === 0)).toBe(true);
         expect([...seed]).toEqual([0, 0]);
         expect([...wif]).toEqual([0, 0]);
     });

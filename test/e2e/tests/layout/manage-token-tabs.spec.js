@@ -3,23 +3,24 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// At 360px every Manage token panel tab fits the strip, so none sits cut
-// off past the edge of a phone screen.
+// On phone widths every tab of My Tokens' token page fits the strip, so none
+// sits cut off past the edge of the screen. The page is the one asset page
+// (operator ruling 2026-11-15): Actions, Details and History, headed by the
+// token's name.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
-const TABS = ['Dispensers', 'Orders', 'Swaps', 'Holders', 'Activity'];
+const TABS = ['Actions', 'Details', 'History'];
 
 async function openManagedToken(page) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('My tokens');
     await palette.getByRole('option', { name: /^My tokens\b/ }).first().click();
     await expect(palette).toBeHidden();
-    await page.getByLabel('Search your tokens by ticker or description').fill('XCP');
     await page.getByRole('button', { name: 'Open XCP token details' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Manage token' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'XCP', exact: true })).toBeVisible();
 }
 
 for (const width of [320, 360, 412]) {
@@ -28,7 +29,7 @@ for (const width of [320, 360, 412]) {
         await createWallet(page);
         await openManagedToken(page);
 
-        const strip = page.getByRole('tablist', { name: 'Token management panels' });
+        const strip = page.getByRole('tablist', { name: 'Coin or token view' });
         await strip.scrollIntoViewIfNeeded();
         const fit = await strip.evaluate((el) => ({
             client: el.clientWidth,
@@ -44,8 +45,8 @@ for (const width of [320, 360, 412]) {
             expect(box.x + box.width, `${name} tab runs past the strip`).toBeLessThanOrEqual(fit.right + 0.5);
         }
 
-        await strip.getByRole('tab', { name: 'Activity', exact: true }).click();
-        await expect(strip.getByRole('tab', { name: 'Activity', exact: true }))
+        await strip.getByRole('tab', { name: 'Details', exact: true }).click();
+        await expect(strip.getByRole('tab', { name: 'Details', exact: true }))
             .toHaveAttribute('aria-selected', 'true');
     });
 }

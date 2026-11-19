@@ -30,17 +30,18 @@
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
 //     attributes whose names are user-visible: aria-label,
 //     aria-description, aria-roledescription, aria-valuetext, alt,
-//     title, placeholder, label, hint, caption, tooltip, heading,
-//     emptyText, actionLabel, backLabel, text, body, ariaLabel,
+//     title, placeholder, label, hint, help, caption, tooltip, data-label,
+//     heading, emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
 //     error, recovery, feeText, totalText, emptyActionLabel, warningNoun,
 //     message, description, lead, legend, closeLabel, searchLabel, subtitle,
 //     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
-//     unavailableMessage, intro (the USER_FACING_ATTRS set below is the authority;
-//     keep this list in step with it). The last forty-four are component
-//     props rather than DOM attributes: shipping components
+//     unavailableMessage, intro, secondaryActionLabel, secondaryLabel,
+//     doneLabel (the USER_FACING_ATTRS set below is the authority; keep this
+//     list in step with it). The names from `heading` on are component props
+//     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -80,6 +81,9 @@
 //     (`T.file` judges only `file`), a computed key reaches every entry,
 //     and only string-shaped values count, so an id or a nested object
 //     beside the copy stays silent. A table no sink reads is never judged.
+//   - Nullish fallbacks in translation variables:
+//     t('key', { value: label ?? 'Unavailable' }) → flagged. Passing a
+//     second t() call or a runtime value as the fallback stays silent.
 //
 // What the rule cannot see, so a clean run is not proof a screen has no
 // untranslated copy:
@@ -101,6 +105,8 @@
 //     renders <DetailRow label="x" value="Default window" /> as text.
 //     `value` stays unchecked because CopyButton and form controls carry
 //     data under it; give a copy-rendering prop a name in the set instead.
+//   - Other `data-*` attributes that a stylesheet exposes as text through
+//     CSS `attr()`. Add any such copy-bearing name to USER_FACING_ATTRS.
 //
 // What the rule allows:
 //
@@ -114,7 +120,8 @@
 //     flagged; the smoke test pins those three.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
-//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`,
+//     `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`
+//     except `data-label`,
 //     `on*`, and every `aria-*` outside USER_FACING_ATTRS (so
 //     `aria-label`, `aria-description`, `aria-roledescription` and
 //     `aria-valuetext` stay checked while `aria-labelledby`,
@@ -154,8 +161,14 @@ const USER_FACING_ATTRS = new Set([
     'placeholder',
     'label',
     'hint',
+    // Field help copy shown from the label-row InfoTip, the successor of
+    // the static hint line under a field.
+    'help',
     'caption',
     'tooltip',
+    // DataTable.module.css exposes this value on screen through
+    // `content: attr(data-label)` at narrow viewports.
+    'data-label',
     // Component props, not DOM attributes. Shipping components render copy
     // through these (SideEditor heading, ChainGroup emptyText, the settings
     // and empty-state rows' actionLabel, PageHeader backLabel), and a
@@ -328,6 +341,12 @@ const USER_FACING_ATTRS = new Set([
     // above their content. Every JSX `intro=` is copy, a JSX element or a
     // runtime value, and no gate reports the last two.
     'intro',
+    // EmptyState renders `secondaryActionLabel` as its outline button text.
+    // ResultScreen renders `secondaryLabel` and `doneLabel` as button text.
+    // Across packages/*/src these names have no technical payload use.
+    'secondaryActionLabel',
+    'secondaryLabel',
+    'doneLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -444,6 +463,27 @@ function branchCopy(node, allow = [], minLength = 2) {
         if (nested !== null) return nested;
     }
     return null;
+}
+
+/** Return untranslated nullish fallback copy passed as a t() variable. */
+function translationVarViolations(node, allow = [], minLength = 2) {
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'Identifier' || node.callee.name !== 't') {
+        return [];
+    }
+    const vars = node.arguments?.[1];
+    if (vars?.type !== 'ObjectExpression') return [];
+    const out = [];
+    for (const prop of vars.properties ?? []) {
+        if ((prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') || prop.computed) continue;
+        if (prop.value?.type !== 'LogicalExpression' || prop.value.operator !== '??') continue;
+        const copy = branchCopy(prop.value, allow, minLength);
+        if (copy === null) continue;
+        out.push({
+            node: prop.value,
+            message: `Translation variable fallback "${truncate(copy)}" should use t('key').`,
+        });
+    }
+    return out;
 }
 
 /**
@@ -696,6 +736,9 @@ export function findViolations(node, options = {}) {
 
     function visit(n) {
         if (!n || typeof n !== 'object') return;
+        if (n.type === 'CallExpression') {
+            out.push(...translationVarViolations(n, allow, minLength));
+        }
         if (n.type === 'ObjectPattern') {
             // Copy shipped as a destructured prop default never reaches a
             // JSX node, so judge the pattern here and let the generic
@@ -941,6 +984,9 @@ function create(context) {
             for (const v of propDefaultViolations(node, allow, minLength)) {
                 context.report({ node: v.node, message: v.message });
             }
+        },
+        CallExpression(node) {
+            for (const v of translationVarViolations(node, allow, minLength)) context.report(v);
         },
     };
 }

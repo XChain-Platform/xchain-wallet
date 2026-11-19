@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
@@ -37,6 +37,8 @@ async function mount(overrides) {
         listPendingDeploys: () => Promise.resolve([]),
         planDeploy: () => Promise.resolve({ single: true, totalChunks: 0, codeHash: 'ab' }),
         getContractExportedMeta: () => Promise.resolve(null),
+        // Gas is only suggested for code that validated.
+        validateContractCode: () => Promise.resolve({ valid: true }),
         ...overrides,
     };
     const messaging = new Proxy(target, {
@@ -52,13 +54,19 @@ async function mount(overrides) {
     await drain();
 }
 
-afterEach(() => cleanup());
+// The checks run by themselves once typing pauses for 500 ms.
+async function pauseTyping() {
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    await drain();
+}
+
+beforeEach(() => { vi.useFakeTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('publish tool failures', () => {
     it('keeps an internal error out of the gas suggestion message', async () => {
         await mount({ suggestContractGasLimit: () => Promise.reject(INTERNAL) });
-        fireEvent.click(screen.getByRole('button', { name: 'Suggest gas' }));
-        await drain();
+        await pauseTyping();
 
         expect(screen.getByText('Gas suggestion failed.')).toBeInTheDocument();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
@@ -66,8 +74,7 @@ describe('publish tool failures', () => {
 
     it('keeps an internal error out of the size check message', async () => {
         await mount({ checkContractCodeSize: () => Promise.reject(INTERNAL) });
-        fireEvent.click(screen.getByRole('button', { name: 'Estimate size' }));
-        await drain();
+        await pauseTyping();
 
         expect(screen.getByText('Size check failed.')).toBeInTheDocument();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();

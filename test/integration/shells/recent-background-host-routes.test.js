@@ -12,6 +12,15 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
         return { txid: 'feed-list-edit' };
     }),
 }));
+// These tests cover the host route wiring. The fixture sessions carry no
+// real script, so the transaction binding check is stubbed here; its own
+// cases live in test/unit/flows/multisigClassicalSession.test.js.
+vi.mock('../../../packages/core/src/flows/multisigTransactionBinding.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    // A bound PSBT whose partial signatures the SDK finalizes, the path these
+    // route tests exercise.
+    assertMultisigTransactionBinding: vi.fn(async () => ({ config: null, script: '', spend: { partialSignatureCount: 2 } })),
+}));
 
 import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
 import { makeFreshKdfParams, deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';

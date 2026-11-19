@@ -32,13 +32,13 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     ORDER: 'Order',
     SWAP: 'Swap',
     DIVIDEND: 'Dividend',
-    BROADCAST: 'Broadcast',
+    BROADCAST: 'Announcement',
     // A pasted, already-signed transaction pushed as it is; not the BROADCAST action.
     BROADCAST_SIGNED_TX: 'Raw transaction',
     MESSAGE: 'Message',
     AIRDROP: 'Airdrop',
     BATCH: 'Batch',
-    CALLBACK: 'Callback',
+    CALLBACK: 'Token recall',
     COINPAY: 'Coin payment',
     FILE: 'File',
     LINK: 'Link',
@@ -56,10 +56,10 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     STAKE: 'Stake',
     UNSTAKE: 'Unstake',
     WITHDRAW: 'Withdraw',
-    // ADDRESS publishes a messaging encryption key (plumbing emitted by the
-    // messaging flows); VOTE is an authorable governance action. Both are
-    // reachable in user History, so map them rather than lean on the fallback.
-    ADDRESS: 'Messaging setup',
+    // ADDRESS v0 sets fee and dispenser preferences; v1 binds or unbinds a
+    // controller. A History row cannot distinguish the versions by name, so
+    // use wording that is true of both. VOTE is an authorable governance action.
+    ADDRESS: 'Address settings',
     VOTE: 'Vote',
     // Validator and mirror-injected verbs the user never authors but the
     // indexer still returns for an address. The vendored action manifest
@@ -96,9 +96,9 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // the wallet itself composed (ORDER -> ORDER_CANCEL in xchain-indexer
     // actions/order.js, and the dispenser/swap equivalents), so an owner who
     // cancels their own order reads the result in their own History.
-    BET: 'Bet',
-    BET_EXPIRE: 'Bet expired',
-    BET_EDIT: 'Bet updated',
+    BET: 'Buy prediction',
+    BET_EXPIRE: 'Prediction refunded',
+    BET_EDIT: 'Prediction updated',
     COINPAY_EXPIRE: 'Coin payment expired',
     DISPENSER_CANCEL: 'Dispenser cancelled',
     DISPENSER_CLOSE: 'Dispenser closed',

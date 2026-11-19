@@ -40,8 +40,9 @@ const ADDRESSES = {
  * @param {Record<string, 'missing' | Error>} verdictByTick   per-tick override;
  *        anything left out resolves as a real, found token, so an
  *        incidental lookup never breaks a case that isn't testing it.
+ * @param {Record<string, unknown>} [formProps]   extra DividendForm props (a prefilled tick)
  */
-function mountDividend(verdictByTick = {}) {
+function mountDividend(verdictByTick = {}, formProps = {}) {
     const getTokenInfo = vi.fn(({ tick }) => {
         const v = verdictByTick[tick];
         if (v instanceof Error) return Promise.reject(v);
@@ -88,7 +89,7 @@ function mountDividend(verdictByTick = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(DividendForm, { walletId: 'w', initialChainId: CHAIN, onBack() {} }),
+            React.createElement(DividendForm, { walletId: 'w', initialChainId: CHAIN, onBack() {}, ...formProps }),
         ),
     );
     return messaging;
@@ -96,7 +97,8 @@ function mountDividend(verdictByTick = {}) {
 
 async function openPicker(fieldLabel) {
     await flushTimers();
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(fieldLabel, 'i') }));
+    // Anchored: the field's own help tip is named "About <label>".
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${fieldLabel}`, 'i') }));
     await flushTimers();
 }
 
@@ -108,7 +110,7 @@ async function pickRow(tick) {
 }
 
 const amountField = () => screen.getByLabelText(/^Per-unit amount/);
-const submitButton = () => screen.getByRole('button', { name: /^(Pay dividend|Preview)$/ });
+const submitButton = () => screen.getByRole('button', { name: 'Pay Dividend' });
 
 async function flushTimers() {
     for (let pass = 0; pass < 3; pass += 1) {
@@ -134,19 +136,32 @@ afterEach(() => {
 });
 
 describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
-    it('names the network\'s own coin at the holder-of field and disables submit', async () => {
-        const messaging = mountDividend();
+    it('offers no coin in either token picker', async () => {
+        mountDividend();
         await openPicker('Holder-of token');
-        await pickRow('BTC');
+        await expect(pickRow('BTC')).rejects.toThrow('no BTC row');
+        await pickRow('GOODTOK');
+        await openPicker('Dividend token');
+        await expect(pickRow('BTC')).rejects.toThrow('no BTC row');
+        // The list was loaded when BTC was looked for: its tokens are there.
+        await pickRow('GOODPAY');
+    });
+
+    it('answers a tap on the network coin with the field error and sends nothing', async () => {
+        // The picker no longer offers the coin, so it arrives as a prefilled tick.
+        const messaging = mountDividend({}, { initialTick: 'BTC' });
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/BTC is the active network itself, not an XChain token/);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/BTC is the active network itself/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('names an unknown holder-of ticker and disables submit', async () => {
+    it('answers an unknown holder-of ticker tap instead of disabling submit', async () => {
         mountDividend({ GHOSTTOK: 'missing' });
         await openPicker('Holder-of token');
         await pickRow('GHOSTTOK');
@@ -154,10 +169,13 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTTOK exists on the active network\./);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/No token named GHOSTTOK/);
     });
 
-    it('names an unknown dividend ticker and disables submit', async () => {
+    it('answers an unknown dividend ticker tap instead of disabling submit', async () => {
         mountDividend({ GHOSTPAY: 'missing' });
         await openPicker('Holder-of token');
         await pickRow('GOODTOK');
@@ -165,7 +183,10 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GHOSTPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTPAY exists on the active network\./);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/No token named GHOSTPAY/);
     });
 
     it('enables submit once both tickers resolve to real tokens', async () => {

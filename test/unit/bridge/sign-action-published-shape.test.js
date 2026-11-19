@@ -53,7 +53,7 @@ function fakeVault() {
         },
     };
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }) },
+        settings: { get: async () => ({ activeNetwork: 'regtest', blockedOrigins: [] }) },
         connectedSites: {
             findBy: async (field, value) => [site].filter((s) => s[field] === value),
             put: async () => site,

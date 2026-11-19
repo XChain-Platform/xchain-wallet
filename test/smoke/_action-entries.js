@@ -35,7 +35,7 @@ export const actionEntriesSrc = readFileSync(ACTION_ENTRIES_PATH, 'utf8');
 
 /**
  * Entry defs parsed out of the shared module, by id.
- * @type {Map<string, { id: string, handler: string, label: string, description: string }>}
+ * @type {Map<string, { id: string, handler: string, label: string, labelKey: string, description: string }>}
  */
 export const actionEntries = new Map();
 
@@ -43,13 +43,14 @@ export const actionEntries = new Map();
 // scan is enough and keeps the helper free of a parser dependency. Reading
 // it as source (rather than importing it) is deliberate: these are smokes,
 // and they run under plain node with no bundler alias for @xchain-wallet/*.
-const DEF_RE = /\{\s*id:\s*'([^']+)',\s*handler:\s*'([^']+)',\s*label:\s*'((?:[^'\\]|\\.)*)',\s*description:\s*'((?:[^'\\]|\\.)*)',\s*\}/g;
+const DEF_RE = /\{\s*id:\s*'([^']+)',\s*handler:\s*'([^']+)',\s*(label|labelKey):\s*'((?:[^'\\]|\\.)*)',\s*description:\s*'((?:[^'\\]|\\.)*)',\s*\}/g;
 for (const m of actionEntriesSrc.matchAll(DEF_RE)) {
     actionEntries.set(m[1], {
         id: m[1],
         handler: m[2],
-        label: m[3].replace(/\\'/g, "'"),
-        description: m[4].replace(/\\'/g, "'"),
+        label: m[3] === 'label' ? m[4].replace(/\\'/g, "'") : '',
+        labelKey: m[3] === 'labelKey' ? m[4] : '',
+        description: m[5].replace(/\\'/g, "'"),
     });
 }
 

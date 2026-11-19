@@ -8,14 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for the shared label → icon resolver. Drives the auto-icon
-// behaviour on Button + the icon column on HeaderActionMenu's extra-
-// actions list.
+// Unit tests for the shared label → icon resolver used by Button and menu rows.
 
 import { describe, it, expect } from 'vitest';
 import {
     iconForLabel,
-    SendIcon, ReceiveIcon, SignIcon, BroadcastIcon, LockIcon, UnlockIcon,
+    SendIcon, ReceiveIcon, IncomingIcon, SignIcon, BroadcastIcon, LockIcon, UnlockIcon,
     CheckIcon, XIcon, TrashIcon, PencilIcon, PlusIcon, RefreshIcon,
     BackIcon, ForwardIcon, CopyIcon, ScanIcon, SearchIcon, FilterIcon,
     EyeIcon, UploadIcon, DownloadIcon, MigrateIcon, TokenIcon,
@@ -25,13 +23,21 @@ import {
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('ui/icons/iconForLabel', () => {
+    it('uses different glyphs for Receive and Scan', () => {
+        expect(ReceiveIcon().type).not.toBe(ScanIcon().type);
+    });
+
     const cases = [
         ['Send', SendIcon],
         ['Send message', SendIcon],
         ['Receive', ReceiveIcon],
+        ['Received', IncomingIcon],
+        ['Incoming payment', IncomingIcon],
         ['Sign', SignIcon],
         ['Sign action', SignIcon],
         ['Broadcast', BroadcastIcon],
+        ['Announce', BroadcastIcon],
+        ['Announcement', BroadcastIcon],
         ['Lock', LockIcon],
         ['Unlock', UnlockIcon],
         ['Save', SaveIcon],
@@ -73,6 +79,7 @@ describe('ui/icons/iconForLabel', () => {
         ['Transfer ownership', HandshakeIcon],   // "transfer" → Handshake
         ['Verify signature', VerifyIcon],        // "verify" → shield-check
         ['Multisig signing', MultisigIcon],
+        ['Multisig sessions', MultisigIcon],
         ['Addresses', AddressIcon],
         ['Contracts', ContractIcon],
         ['Call method', ContractIcon],

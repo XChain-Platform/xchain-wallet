@@ -33,6 +33,26 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
+describe('AddAccountForm flat layout', () => {
+    it('has no FormSection wrappers and lists the fields in order', () => {
+        const { container } = render(
+            <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
+        );
+        expect(container.querySelector('[data-form-section-title]')).toBeNull();
+        expect(container.querySelector('[data-form-section-chevron]')).toBeNull();
+        const flat = container.querySelector('[data-flat-look-form]');
+        expect(flat).toBeTruthy();
+        const text = container.textContent;
+        // The header also reads "Add Account", so the action is the last match.
+        const order = ['Account name', 'Icon colour', 'Icon shape', 'Icon image'].map((s) => text.indexOf(s));
+        order.push(text.lastIndexOf('Add Account'));
+        expect(order.every((i) => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const tile = flat.firstElementChild;
+        expect(tile.compareDocumentPosition(screen.getByLabelText('Account name', { selector: 'input' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
 describe('AddAccountForm navigation', () => {
     it('renders a working Back control', () => {
         const onBack = vi.fn();
@@ -45,14 +65,18 @@ describe('AddAccountForm navigation', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('puts account guidance with the name field instead of above the form', () => {
+    it('puts account guidance in the name field help tip', () => {
         render(
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
         expect(screen.queryByText('A new set of derived addresses under the same recovery phrase.')).toBeNull();
-        expect(screen.getByText(/Names a separate set of addresses in this wallet/))
-            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'About Account name' }));
+        expect(screen.getByRole('tooltip'))
+            .toHaveTextContent('Names a separate set of addresses in this wallet.');
+        // The tip opens on demand; the only description is the live length counter.
+        expect(screen.getByLabelText('Account name', { selector: 'input' }).getAttribute('aria-describedby'))
+            .toMatch(/-counter$/);
     });
 
     it('uses the highest derivation index for the default name', async () => {
@@ -79,10 +103,18 @@ describe('AddAccountForm navigation', () => {
         fireEvent.change(screen.getByLabelText('Account name'), {
             target: { value: '  SAVINGS  ' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
-        expect(screen.getByText('An account named "SAVINGS" already exists.')).toBeTruthy();
+        const notice = screen.getByRole('alert', { name: 'Form errors' });
+        expect(notice).toHaveTextContent('An account named "SAVINGS" already exists.');
+        const field = screen.getByLabelText('Account name');
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(notice.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(messaging.createAccount).not.toHaveBeenCalled();
+
+        fireEvent.change(field, { target: { value: 'Savings 2' } });
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(field).not.toHaveAttribute('aria-invalid', 'true');
     });
 
     it('passes the created account to its completion callback', async () => {
@@ -96,7 +128,7 @@ describe('AddAccountForm navigation', () => {
             target: { value: '  Spending  ' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith(account));
         expect(messaging.createAccount).toHaveBeenCalledWith({
@@ -113,11 +145,11 @@ describe('AddAccountForm navigation', () => {
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
         expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Add account' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Add Account' }).disabled).toBe(true);
         resolveCreate({ account: { id: 'account-2' } });
     });
 
@@ -127,7 +159,7 @@ describe('AddAccountForm navigation', () => {
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
         expect(await screen.findByText('Signer unavailable')).toBeTruthy();
         expect(screen.getByLabelText('Account name').disabled).toBe(false);

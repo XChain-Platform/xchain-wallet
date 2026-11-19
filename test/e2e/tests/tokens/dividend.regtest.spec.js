@@ -24,6 +24,8 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -36,7 +38,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -63,13 +67,11 @@ async function newDevice(browser) {
 
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
@@ -93,11 +95,9 @@ async function fundWithFees(page, address) {
 async function issueHolderToken(page, source) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(HOLDER_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(HOLDER_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: HOLDER_TICK, supply: HOLDER_SUPPLY });
 
     const txid = await approveAndReadTxid(page, `the ISSUE of ${HOLDER_TICK}`);
     const action = await waitForValidAction(txid);
@@ -108,7 +108,7 @@ async function issueHolderToken(page, source) {
 async function sendHolderUnits(page, destination) {
     await gotoSection(page, 'Send');
     await selectVenueSendAsset(page, HOLDER_TICK);
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(HOLDER_UNITS));
     await mainButton(page, 'Send').click();
 
@@ -197,10 +197,10 @@ test.describe('DIVIDEND on regtest', () => {
             await expect(main.getByText(/1 eligible holder/)).toBeVisible({ timeout: 60_000 });
             await expect(main.getByText(new RegExp(`total distribution ~${HOLDER_UNITS * RATE} XCHAIN`)))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: 'Pay dividend', exact: true }).click();
+            await main.getByRole('button', { name: 'Pay Dividend', exact: true }).click();
 
             await expectConfirmModal(issuer, 'the DIVIDEND');
-            await expect(issuer.getByTestId('action-intent'))
+            await expect(issuer.getByTestId('confirm-sentence'))
                 .toContainText(`Pay ${RATE} XCHAIN per unit of ${HOLDER_TICK}`);
             dividendTxid = await approveAndReadTxid(issuer, 'the DIVIDEND');
             await expect(main).toContainText('Dividend sent');

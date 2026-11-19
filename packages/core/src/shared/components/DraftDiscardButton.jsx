@@ -27,7 +27,6 @@ export function DraftDiscardButton({ onClick, label, children }) {
             type="button"
             variant="link"
             size="sm"
-            icon={null}
             onClick={onClick}
             aria-label={label}
         >

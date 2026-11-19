@@ -19,14 +19,19 @@ describe.each(SHELLS)('%s wallet management routing', (_name, path) => {
 
     it('returns the picker to Settings when Settings opened it', () => {
         expect(source).toContain("onOpenWalletPicker={() => openWalletPicker('settings')}");
-        expect(source).toContain('onBack={() => setUnlockedView(walletPickerReturnView)}');
-        expect(source).toContain("setSettingsInitialSection('this-wallet')");
+        // Back pops the history; Settings reopens on the Wallets page it showed.
+        expect(source).toMatch(/<WalletPicker[\s\S]*?onBack=\{goBack\}/);
+        expect(source).toContain("setSettingsInitialSection('g-wallets')");
+        expect(source).not.toContain('walletPickerReturnView');
     });
 
     it('prefills rename and returns to the wallet details screen', () => {
         expect(source).toMatch(/onRename=\{\(wallet\) => \{[\s\S]*?name: wallet\.name/);
         expect(source).toMatch(/<RenameWalletForm[\s\S]*?initialName=\{walletRenameTarget\.name\}/);
-        expect(source.match(/setUnlockedView\('wallet-details'\)/g)?.length).toBeGreaterThanOrEqual(3);
+        const rename = source.slice(source.indexOf('<RenameWalletForm'), source.indexOf("unlockedView === 'account-picker'"));
+        expect(rename).toMatch(/onBack=\{\(\) => \{\s*setWalletRenameTarget\(null\);\s*goBack\(\);/);
+        // A saved name unwinds to Wallet Details, so Back never reopens the form.
+        expect(rename).toContain("nav.land('wallet-details')");
     });
 
     it('refreshes shell state after a demo wallet exits from details', () => {

@@ -37,6 +37,7 @@
        (extension popup / dev variant) regardless of root font metrics */
     min-width: 200px;
     width: max-content;
+    max-width: calc(100vw - 2 * var(--xc-page-gutter, 8px));
     background: var(--xc-surface-raised, #1B2231);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
@@ -64,8 +65,10 @@
     font-size: var(--xc-text-sm);
 }
 
-.addMenuItem:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .addMenuItem:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .addMenuItem > span {
@@ -80,64 +83,6 @@
     display: inline-flex;
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-}
-
-/* Full-width segmented toggle (All | Normal | Imported | Other) between the
-   filter row and the results. Equal-width segments; active one filled. When
-   the labels are wider than the control (a Slide Over window at the largest
-   text size), the segments wrap onto a second row instead of being cut. */
-.segmented {
-    display: flex;
-    flex-wrap: wrap;
-    width: 100%;
-    min-height: var(--xc-control-h-md);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-    background: var(--xc-surface);
-    overflow: hidden;
-}
-
-.segment {
-    position: relative;
-    flex: 1 1 0;
-    min-height: calc(var(--xc-control-h-md) - 2px);
-    appearance: none;
-    /* The group paints the surface and draws the edge, as in SegmentedControl. */
-    background: transparent;
-    border: none;
-    border-inline-start: 1px solid var(--xc-border);
-    padding: var(--xc-space-2) var(--xc-space-1);
-    font: inherit;
-    font-size: var(--xc-control-font-md, var(--xc-control-font));
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-/* A hairline above a wrapped row, drawn as a border so forced colors keep it.
-   On the first row it sits in the control's own border, where the control's
-   overflow clips it. */
-.segment::before {
-    content: '';
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: -1px;
-    border-block-start: 1px solid var(--xc-border);
-    pointer-events: none;
-}
-
-.segment:first-child {
-    border-inline-start: none;
-}
-
-.segment:hover:not(.segmentActive) {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.segmentActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
 }
 
 /* Empty state shown when the filter matches no addresses: a calm card so it
@@ -203,6 +148,11 @@
     text-transform: uppercase;
 }
 
+/* Wallet scope: the shared SectionHeader above each account's addresses; only its spacing is local. */
+.accountHeading {
+    margin: var(--xc-space-3) 0 var(--xc-space-1);
+}
+
 .hiddenToggle {
     appearance: none;
     width: 100%;
@@ -261,182 +211,17 @@
     color: var(--xc-text-muted);
 }
 
-/* Green "Active" pill marking the chain's active (operating) address.
-   Used both as the small bubble on a list row and the detail-view badge. */
+/* The "Active" bubble marking the chain's active (operating) address on its
+   list row: the same bubble My Wallets and My Accounts use (WalletPicker
+   .activeBadge). View Address carries no pills (AddressDetail). */
 .addrActive {
     flex: 0 0 auto;
-    padding: 2px var(--xc-space-2);
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-inverted);
-    text-transform: uppercase;
-    box-shadow: var(--xc-shadow-sm);
-    background: linear-gradient(180deg, #22c55e, #16a34a);
-}
-
-/* Top of the address detail view (address + label), no card wrapper. */
-.detailTop {
-    margin-bottom: var(--xc-space-3);
-}
-
-/* Address detail view. */
-.detailCard {
-    composes: card from '../../ui/Card.module.css';
-}
-
-.detailCardSpaced {
-    margin-top: var(--xc-space-3);
-}
-
-.detailName {
-    font-size: var(--xc-text-lg);
-    font-weight: 600;
-    color: var(--xc-text);
-    word-break: break-word;
-    margin-bottom: var(--xc-space-1);
-}
-
-.detailNameEmpty {
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-/* The address and its Copy button share a wrapping row with a gap, so on a
-   wide screen the button sits beside the address instead of touching its
-   last character, and on a phone it drops below the wrapped address. */
-.detailAddr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    word-break: break-all;
-}
-
-.detailAddr > :first-child {
-    min-width: 0;
-}
-
-/* Detail cards under the quick actions on the address detail view. */
-.tabPanel {
-    padding: var(--xc-space-3) 0;
-}
-
-.detailField {
-    margin-top: var(--xc-space-3);
-}
-
-.detailLabel {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 700;
-    margin-bottom: 2px;
-}
-
-/* "Address" caption (left) + optional "Active" pill (right) on the detail view. */
-.detailLabelRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-}
-
-.detailValue {
-    font-size: var(--xc-text-md);
-    word-break: break-all;
-}
-
-/* Inline label editor: input grows, Save button hugs the right. */
-.labelRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.labelRow > :first-child {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin-bottom: 0;
-}
-
-/* Size the Save button to at least a quarter of the row (one tile of the
-   four-up quick actions below, same gap), so it matches the Delete button
-   where that is wide enough. On a phone a column is narrower than the icon and
-   label, so the button grows to fit them instead of breaking "Save" onto one
-   letter per line. */
-.labelRow > :last-child {
-    flex: 0 0 auto;
-    min-width: calc((100% - 3 * var(--xc-space-2)) / 4);
-}
-
-/* The kit label span sets its own white-space, so the no-wrap goes on it. */
-.labelRow > :last-child > span {
-    white-space: nowrap;
-}
-
-/* Action row under the detail card, mirroring the contacts detail: up to
-   five tiles stay on one row at a 360 px phone. */
-.quickActions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
-}
-
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
     font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: 72px;
-    text-align: center;
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.quickAction > span {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-.quickActionIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    font-weight: 700;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
@@ -449,4 +234,11 @@
         background: SelectedItem;
         color: SelectedItemText;
     }
+}
+
+/* The add or import menu opens from the plus at the end of the title line,
+   so it anchors to that edge. */
+.addMenuWrap > .addMenu {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
 }

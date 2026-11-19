@@ -27,6 +27,7 @@ import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 const traverse = _traverse.default || _traverse;
 const TEST_LOCALE = 'unit-partial';
 const TRANSLATION_KEY = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
+const URL_HOST = /^(?:[a-z0-9-]+\.)+(?:com|io|org)$/i;
 const sharedSources = import.meta.glob(
     '../../packages/core/src/shared/**/*.{js,jsx}',
     { query: '?raw', import: 'default', eager: true },
@@ -65,12 +66,12 @@ function translationUsage(source, acceptsInjectedTranslator = false) {
             ));
         },
         StringLiteral(path) {
-            if (TRANSLATION_KEY.test(path.node.value)) keys.add(path.node.value);
+            if (TRANSLATION_KEY.test(path.node.value) && !URL_HOST.test(path.node.value)) keys.add(path.node.value);
         },
         TemplateLiteral(path) {
             if (path.node.expressions.length !== 0) return;
             const value = path.node.quasis[0]?.value.cooked;
-            if (value && TRANSLATION_KEY.test(value)) keys.add(value);
+            if (value && TRANSLATION_KEY.test(value) && !URL_HOST.test(value)) keys.add(value);
         },
     });
 
@@ -269,7 +270,14 @@ describe('translations', () => {
             ))
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
-        expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
+        // Reviewed exception, not a way round the rule above: a `...Desc` key is
+        // the one-line description under an action row's title (Batch's Add
+        // and Remove rows, the co-signer detail menu), which matches the
+        // literal action-row descriptions in shared routes ("Change its name
+        // and tile") and so ends with no full stop. It must hold only that:
+        // a Desc that grows into sentences belongs under Hint or Body.
+        const rowDescriptions = Object.entries(en).filter(([key]) => /Desc$/.test(key));
+        expect(rowDescriptions.filter(([, value]) => /[.!?…]$/.test(value) || /[.!?]\s/.test(value))).toEqual([]);
         expect(en['send.destination.placeholder']).toBe('Enter an address or name…');
     });
 
@@ -281,31 +289,25 @@ describe('translations', () => {
             multisigAvailability: en['multisig.share.availability'],
             signerRegion: en['home.signer.region'],
             signerBody: en['home.signer.body'],
-            argumentCount: en['execute.review.args'],
+            confirmFacts: en['confirmStandard.facts'],
             arguments: en['execute.params'],
-            optionalArguments: en['execute.paramsOptional'],
-            argumentHint: en['execute.paramsHint'],
             savedPackKey: en['gatedPublish.watcherSavedKey'],
             watcherPackKey: en['gatedPublish.watcherHint'],
             importOptions: en['importWallet.lane'],
             historySearch: en['history.filters.searchPlaceholder'],
-            peerError: en['history.detail.peerError'],
         }).toEqual({
-            networkSettings: 'Open network settings',
+            networkSettings: 'Open Network Settings',
             unavailable: 'Not available',
-            watcher: 'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
-            multisigAvailability: 'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
-            signerRegion: 'Signer mode home',
-            signerBody: "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
-            argumentCount: '{count, plural, one { with # argument} other { with # arguments}}',
+            watcher: 'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            multisigAvailability: "Only addresses from a software wallet can be shared here. An address with no key in this wallet can't be shared, and a hardware wallet must export this information from the device or its companion app.",
+            signerRegion: 'Signer for another phone home',
+            signerBody: "This wallet signs transactions built on your other phone. Sending, receiving, and balances aren't available here. Its wallet mode is shown on Wallet Details.",
+            confirmFacts: 'Action details',
             arguments: 'Arguments',
-            optionalArguments: 'Arguments (optional)',
-            argumentHint: 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
-            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
-            watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
+            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction on the phone that signs for this wallet, then broadcast it from a wallet that can send it to the network.',
+            watcherPackKey: 'Another phone signs for this wallet: this prepares the transaction for it. The pack key stays in this wallet either way.',
             importOptions: 'Wallet import options',
             historySearch: 'Search by action, address, token, transaction ID, or memo…',
-            peerError: "Couldn't load the linked transaction. Try again.",
         });
     });
 
@@ -419,28 +421,24 @@ describe('translations', () => {
     });
 
     it.each([
-        [0, '0 / 10 bytes', 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', 'You can include up to 0 recipients in one payment. Create another payment for any additional recipients.', '0 of 0 history items shown', '0 Confirmations'],
-        [1, '1 / 10 byte', 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', 'You can include up to 1 recipient in one payment. Create another payment for any additional recipients.', '1 of 1 history item shown', '1 Confirmation'],
-        [3, '3 / 10 bytes', 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', 'You can include up to 3 recipients in one payment. Create another payment for any additional recipients.', '3 of 3 history items shown', '3 Confirmations'],
-    ])('pluralizes translated count copy for %i', (count, memo, recipients, maximum, shown, confirmations) => {
-        expect(t('send.memoCount', { used: count, max: 10 })).toBe(memo);
-        expect(t('send.recipient.total', { total: '5 XCP', count })).toBe(recipients);
-        expect(t('send.recipient.maximum', { count })).toBe(maximum);
+        [0, 'Total: 5 XCP to 0 recipients, in one transaction with one network fee.', 'One transaction carries at most 0 recipients. Send to anyone else in another payment.', '0 of 0 history items shown', '0 Confirmations'],
+        [1, 'Total: 5 XCP to 1 recipient, in one transaction with one network fee.', 'One transaction carries at most 1 recipient. Send to anyone else in another payment.', '1 of 1 history item shown', '1 Confirmation'],
+        [3, 'Total: 5 XCP to 3 recipients, in one transaction with one network fee.', 'One transaction carries at most 3 recipients. Send to anyone else in another payment.', '3 of 3 history items shown', '3 Confirmations'],
+    ])('pluralizes translated count copy for %i', (count, recipients, maximum, shown, confirmations) => {
+        // Send's Multi tab total and its one-transaction limit.
+        expect(t('send.multi.total', { total: '5 XCP', count })).toBe(recipients);
+        expect(t('send.multi.limit', { count })).toBe(maximum);
         expect(t('history.itemsShown', { shown: count, total: count })).toBe(shown);
         expect(t('history.row.confirmations', { count })).toBe(confirmations);
     });
 
     it('pluralizes audited English address, token, and confirmation copy', () => {
-        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address');
-        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses');
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 Hidden Address');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 Hidden Addresses');
         expect(t('balanceList.hiddenTokens.show', { count: 1 })).toBe('Show 1 hidden token');
         expect(t('balanceList.hiddenTokens.show', { count: 2 })).toBe('Show 2 hidden tokens');
         expect(t('transactionStatus.confirmations', { count: 1 })).toBe('1 confirmation');
         expect(t('transactionStatus.confirmations', { count: 2 })).toBe('2 confirmations');
-        expect(t('manageToken.officialProjectNoun', { count: 1 })).toBe('project.');
-        expect(t('manageToken.officialProjectNoun', { count: 2 })).toBe('projects.');
-        expect(t('manageToken.subassetCount', { count: 1 })).toBe('Subasset (1)');
-        expect(t('manageToken.subassetCount', { count: 2 })).toBe('Subassets (2)');
     });
 
     it.each([
@@ -475,22 +473,306 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // The account picker's default account name and a found account's row name on the hardware connect flow.
+            ['accountPicker.defaultName', 'hardwareConnect.accounts.accountName'],
+            // The account picker title, the hardware connect Accounts tab and its third step name.
+            ['accountPicker.title', 'hardwareConnect.accounts.accountsTab', 'hardwareConnect.step.accounts'],
+            // The Action detail Verification field and About's Verification section title.
+            ['actionDetail.field.verification', 'settings.about.sectionVerification'],
+            // The Action detail status step a transaction has passed, the transaction timeline label for the same stage, and the BROADCAST wallet menu row.
+            ['actionDetail.step.broadcast', 'txTimeline.broadcast.label', 'walletMenu.row.broadcast'],
+            // The Action detail step and the transaction timeline label for a processed transaction.
+            ['actionDetail.step.processed', 'txTimeline.processed.label'],
+            // The Action detail step and the transaction timeline label for a signed transaction.
+            ['actionDetail.step.signed', 'txTimeline.signed.label'],
+            // A finished Action detail step and a finished transaction timeline stage.
+            ['actionDetail.stepState.done', 'txTimeline.state.complete'],
+            // The address detail's Actions heading reuses the menu group, token page heading and tab, and multisig start label.
+            ['addressList.detail.actions', 'multisig.start.actionsLabel', 'routes.manageToken.actions', 'tokenDetail.tabs.actions', 'walletMenu.group.actions'],
+            // The address detail's Balance row and Manage token's Balance row.
+            ['addressList.detail.balance', 'routes.manageToken.balance'],
+            // The address detail's card name, its unlabelled fallback, and the Address field on Address preferences, Verify signature and the unbind form.
+            ['addressList.detail.card', 'addressList.detail.unlabelled', 'addressPreferences.address', 'unbindForm.targetAddress', 'verifySignature.address'],
+            // Copy confirmation on the address detail and in History.
+            ['addressList.detail.copied', 'history.copy.copied'],
+            // Copying an address from the address detail and History.
+            ['addressList.detail.copy', 'history.copy.walletAddress'],
+            // Delete on the address detail and on a notification.
+            ['addressList.detail.delete', 'settings.notifications.delete'],
+            // The account path row on the address detail and on the multisig share page.
+            ['addressList.detail.derivationPath', 'multisig.share.derivationPath'],
+            // The Details heading on the address detail, the reachability line's link and the token page's Details tab.
+            ['addressList.detail.details', 'components.reachabilityLine.details', 'tokenDetail.tabs.details'],
+            // The address detail's Dispensers row and the wallet menu row.
+            ['addressList.detail.dispensers', 'walletMenu.row.dispensers'],
+            // The address detail's block explorer link and the Explorer donation recipient on the confirm line and Settings.
+            ['addressList.detail.explorer', 'components.confirmSummary.donationRecipientExplorer'],
+            // Hiding an address and hiding a developer value.
+            ['addressList.detail.hide', 'settings.developer.hide'],
+            // The address detail's Label section and the address list's Label field.
+            ['addressList.detail.labelSection', 'routes.addressList.label'],
+            // The loading state of the address detail and the common loading label.
+            ['addressList.detail.loading', 'common.loading'],
+            // The address detail's Multisig row and the wallet menu row.
+            ['addressList.detail.multisig', 'walletMenu.row.multisig'],
+            // Network names the address detail row, side-menu group, Send field and Settings row.
+            ['addressList.detail.network', 'components.leftNav.groupNetwork', 'send.fields.chain', 'settings.network.label'],
+            // The protocol fee row on the address detail and on Execute contract.
+            ['addressList.detail.protocolFee', 'execute.protocolFee'],
+            // The Receive action on the address detail, Home and the token page, its menu row and its intent title.
+            ['addressList.detail.receive', 'home.receive', 'tokenDetail.actions.receive', 'uri.intent.receive', 'walletMenu.row.receive'],
+            // The type row on the address detail, Home's Balances Type filter field, the Publish File review and the wallet details.
+            ['addressList.detail.type', 'home.filter.type', 'publishFile.details.type', 'walletDetails.type'],
+            // Unhiding an address and the display settings' unhide action.
+            ['addressList.detail.unhide', 'settings.display.unhide2'],
+            // A closed section's empty summary (Address preferences, Issue) and the shortcut help's unset binding state.
+            ['addressPreferences.notSet', 'issue.summary.notSet', 'keyboard.shortcutHelp.notSet'],
+            // The Continue button on the donations notice and on the hardware connect step.
+            ['adsNotice.continue', 'hardwareConnect.connect.continue'],
+            // The feature's one name: the onboarding notice title, the command palette entry and the Settings page title.
+            ['adsNotice.title', 'palette.settings.ads', 'settings.page.automaticDonations'],
+            // The Airdrop form's token picker and section title reuse the wording of the Roster picker and the palette command.
+            ['airdrop.picker.addToken', 'projectRoster.pickerTitle'],
+            // The wallet menu's Assets row carries the same name.
+            ['airdrop.section.airdrop', 'palette.createAirdrop.title', 'walletMenu.row.airdrop'],
+            // The alerts page title, its notifications heading, the header bell label and the wallet menu row.
+            ['alerts.notificationsTitle', 'alerts.title', 'shell.header.notifications', 'walletMenu.row.alerts'],
+            // An action count: a Batch transaction's summary and a co-signer account's window.
+            ['batch.actionCount', 'coSigner.detail.windowCount'],
+            // The network fee line on Batch and on Send.
+            ['batch.networkFeeFor', 'send.networkFeeValue'],
+            // The command title, Settings row and wallet menu row for the action queue.
+            ['commandPalette.actionQueue.title', 'settings.developer.actionQueue', 'walletMenu.row.actionQueue'],
             // A shared reachability retry label and the settings backup checker.
             ['common.checking', 'settings.backup.checking'],
+            // The shared Done button and Multisig Sessions' Done tab (finished sessions).
+            ['common.done', 'multisig.sessions.tabDone'],
+            // The confirm summary's Batch verb and the wallet menu row that opens Batch.
+            ['components.confirmSummary.verbBatch', 'walletMenu.row.batch'],
+            // The confirm summary verb and wallet menu row name the same action.
+            ['components.confirmSummary.verbCreatePoll', 'walletMenu.row.createPoll'],
+            // The prediction purchase and order purchase buttons share the short action label.
+            ['components.confirmSummary.verbPlaceBet', 'components.placeOrderPanel.buy'],
+            // The confirm summary's verb names the same action as the Trade page's one button.
+            ['components.confirmSummary.verbPlaceOrder', 'market.trade.placeOrder'],
+            // The confirm summary's verb names the token page's Sell Ownership action (operator 2026-11-15 rename).
+            ['components.confirmSummary.verbSellOwnership', 'routes.manageToken.sellName'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['components.contactsPickerScreen.contacts', 'walletMenu.row.contacts'],
+            // Draft notices and the Send draft use the same restore action.
+            ['components.draftNotice.restore', 'send.draft.restore'],
+            // The trade forms' shared Expiration field and the Place order panel's.
+            ['components.expiration.label', 'components.placeOrderPanel.expiration'],
+            // The side menu, command palette and wallet menu share the prediction markets label.
+            ['components.leftNav.bettingMarkets', 'palette.navBetting.title', 'walletMenu.row.betting'],
+            // The side-menu destination and full-menu group use the same short governance label.
+            ['components.leftNav.governance', 'walletMenu.group.governance'],
+            // The side menu, command palette and menu model share the Trade group label.
+            ['components.leftNav.groupTrade', 'palette.category.trade', 'walletMenu.group.trade'],
+            // The side menu, Settings and menu model share the Wallet group label.
+            ['components.leftNav.groupWallet', 'settings.thisWallet.wallet', 'walletMenu.group.wallet'],
+            // The order book's size column and its size field label, and the Publish File review's size row.
+            ['components.orderbookPanel.size', 'components.orderbookPanel.sizeLabel', 'publishFile.details.size'],
+            // The order panel's Market label and the token page's Market section.
+            ['components.placeOrderPanel.market', 'tokenMarket.label'],
+            // The order panel's price field and the token page's price row.
+            ['components.placeOrderPanel.price', 'tokenMarket.price'],
+            // The Trade page's Swap mode in its Swap | Limit | Market toggle and the command palette's Swap entry.
+            ['components.placeOrderPanel.swap', 'palette.tradeSwap.title'],
+            // The signing screen's title and the wallet menu row that opens Sign transaction.
+            ['components.psbtConfirmScreen.signTransaction', 'walletMenu.row.signTransaction'],
+            // (The queued banner's Send Now is a Title Case button now, so it no
+            // longer shares the multisig pill's "Send now" text.)
+            // The token list editor's field label and the Home Tokens tab.
+            ['components.tickItemsEditor.tokens', 'home.tabs.tokens'],
+            // The token field's empty state and the unbind form's token placeholder.
+            ['components.tokenField.selectAToken', 'unbindForm.selectToken'],
+            // The header badge and the wallet mode it names: Signs on another phone (§20).
+            ['components.watchOnlyBadge.watchOnly', 'walletDetails.walletMode.watcher'],
+            // The Compose message byte counter's encrypted and plain forms read the same.
+            ['composeMessage.byteCountEncrypted', 'composeMessage.byteCountPlain'],
+            // The address-load failure on Compose message and on the unbind form.
+            ['composeMessage.loadFailed', 'unbindForm.loadFailed'],
+            // The Compose message page title and the wallet menu's People row.
+            ['composeMessage.newTitle', 'walletMenu.row.newMessage'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
             ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
+            // The confirm page's change-back fact row and a governance proposal's Change field.
+            ['confirmStandard.change', 'governance.detail.change'],
+            // The confirmation fact and Issue section share the Locks label.
+            ['confirmStandard.fact.locks', 'issue.section.locks'],
+            // The confirmation headline and status share the unknown-action label.
+            ['confirmStandard.sentence.unknownAction', 'confirmStandard.status.unknownAction'],
+            // The empty-activity title on a co-signer's detail page and on History.
+            ['coSigner.detail.activityEmptyTitle', 'history.empty.noActivityTitle'],
+            // Turning an agent account on (an action row) and a Settings switch's on label.
+            ['coSigner.detail.turnOn', 'settings.toggle.turnOn'],
+            // A token count on an agent account and the Project Tokens section's closed summary.
+            ['coSigner.tokenCount', 'projectRoster.tokenCount'],
+            // The Extra Passphrase section's closed summary reads Off or On, as the Settings switch states do;
+            // Off is also the localhost password timeout's off choice (its help says Off asks every time),
+            // the form-draft dropdown's off choice and the Settings row status for a feature that is off.
+            ['createWallet.extraPassphraseOff', 'settings.developer.offAlwaysPrompt', 'settings.privacy.off'],
+            ['createWallet.extraPassphraseOn', 'settings.page.on'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
-            // The History status filter header and the parallel composer's status-pill label prefix.
-            ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
-            ['home.receive', 'uri.intent.receive'],
-            // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
-            ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
-            // The Send form's network field and the Settings network row.
-            ['send.fields.chain', 'settings.network.label'],
-            ['send.title', 'uri.intent.send'],
-            // Leads the blocked-site pattern hint and the biometric unlock sentence.
-            ['settings.biometric.use', 'settings.connectedSites.blockPatternLead'],
+            // Every action form's From field: Execute contract, Send and Unbind controller.
+            ['execute.caller', 'send.fields.from', 'unbindForm.from'],
+            // Loading addresses on Execute contract and on the unbind form.
+            ['execute.loadingAddresses', 'unbindForm.loadingAddresses'],
+            // The Token field on Execute contract's Deposit section, on Send and on the unbind form.
+            ['execute.tokenLabel', 'send.fields.token', 'unbindForm.token'],
+            // Connect field help uses the shared field help label.
+            ['extension.connect.aboutField', 'ui.field.about'],
+            // The dApp connect page's network list and the hardware connect Networks tab and list.
+            ['extension.connect.chains', 'hardwareConnect.accounts.networksLabel', 'hardwareConnect.accounts.networksTab'],
+            // Both shell recovery paths use the same concise reload action.
+            ['extension.connection.reload', 'home.sdkLoadFailure.reload'],
+            // The empty token list on Gated publish and on the unbind form.
+            ['gatedPublish.tokens.noneTitle', 'unbindForm.noTokensTitle'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['governance.myDelegations', 'walletMenu.row.myDelegations'],
+            // Poll and History filters share the same all-status label.
+            ['governance.statusFilter.all', 'history.filters.allStatuses'],
+            // Closed is the same status on a poll and a swap.
+            ['governance.statusFilter.closed', 'mySwaps.status.closed'],
+            // The filter heading and action-status prefix use the same noun.
+            ['governance.statusFilter.label', 'history.filters.statusHeader', 'parallelComposer.statusPrefix'],
+            // Open is the status label and the developer folder action.
+            ['governance.statusFilter.open', 'settings.developer.open'],
+            // A governance proposal that has not opened and a transaction timeline stage not reached yet.
+            ['governance.statusFilter.pending', 'txTimeline.state.notStarted'],
+            // The Add Wallet button on the hardware connect flow and on the wallet picker.
+            ['hardwareConnect.accounts.addWallet', 'walletPicker.add'],
+            // A found account's balance line and the faucet's amount line: the amount and its ticker.
+            ['hardwareConnect.accounts.amount', 'settings.testNetworks.faucet.amountLine'],
+            // The Wallet name field on the hardware connect flow and on Rename wallet.
+            ['hardwareConnect.accounts.name', 'renameWallet.name'],
+            // The Help with connecting row on the connect step and the help page's form label.
+            ['hardwareConnect.connect.help', 'hardwareConnect.help.formLabel'],
+            // The Try again row on the connect step and the vault-unavailable retry row.
+            ['hardwareConnect.connect.tryAgain', 'vaultUnavailable.actions.retry.title'],
+            // The Unlock step on the hardware connect status line, Import's unlock action and the demo unlock button.
+            ['hardwareConnect.connect.unlock', 'importWallet.unlockExisting', 'onboarding.demo.unlock'],
+            // The Open in tab button on the hardware connect flow and on Import wallet.
+            ['hardwareConnect.openInTab', 'importWallet.openInTab'],
+            // The vendor brand names on the hardware connect flow and on Send's device line.
+            ['hardwareConnect.vendor.ledger', 'send.device.ledger'],
+            ['hardwareConnect.vendor.trezor', 'send.device.trezor'],
+            // Saving a custom notification sound and a contact share the action label.
+            ['history.contact.save', 'settings.notifications.saveSound'],
+            // Loading the History page and the token page's History tab.
+            ['history.loading', 'tokenDetail.history.loading'],
+            // The History status chip and the timeline stage heading for a confirmed transaction.
+            ['history.status.confirmed', 'txTimeline.confirmed.label'],
+            // The History status chip and the timeline label for a transaction that failed.
+            ['history.status.failed', 'txTimeline.mempool.failedLabel'],
+            // The History page, its menu row and the token page's History tab.
+            ['history.title', 'tokenDetail.tabs.history', 'walletMenu.row.history'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.addresses', 'walletMenu.row.addresses'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.lockWallet', 'walletMenu.row.lock'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.settings', 'walletMenu.row.settings'],
+            // The two-phone signer mode's one name: Home's signer card title and the Wallet Details mode row.
+            ['home.signer.title', 'walletDetails.walletMode.signer'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.title', 'walletMenu.row.home'],
+            // Wide Home's Allocation table header over the ticker column, and the Send form's Asset field.
+            ['home.wide.allocation.asset', 'send.asset'],
+            // The Allocation table's Share column header (a portion of the wallet), and the multisig signing link's Share action (a verb).
+            ['home.wide.allocation.share', 'multisig.share.button', 'multisig.signingLink.share'],
+            // The password that opens a backup file, on the restore tab and where Settings saves one.
+            ['importWallet.backup.password', 'settings.backup.backupPassword'],
+            // Import and locked recovery use the same backup page title.
+            ['importWallet.backup.title', 'locked.forgot.backup.pageTitle'],
+            // A backup's name when its file header names no wallet, and the backup file type in Settings.
+            ['importWallet.backup.unnamed', 'settings.backup.walletBackupFileType'],
+            // The wallet's own password: the restore tab's second field and a gated send's password field.
+            ['importWallet.backup.walletPassword', 'send.gated.passwordLabel'],
+            // The import screen's short Backup lane tab (G42) and the Settings Backup page.
+            ['importWallet.tab.backup', 'settings.page.backup'],
+            // Import and Receive share the address-type field label.
+            ['importWallet.wif.addressType', 'receive.addressType'],
+            // The Issue form's supply cap field and Manage token's supply cap lock.
+            ['issue.maxSupply', 'routes.manageToken.lockMaxSupply'],
+            // The Issue form's Callback section header and Manage token's callback lock.
+            ['issue.section.callback', 'routes.manageToken.lockCallback'],
+            // The Issue form's Description section header and Manage token's description action and detail row.
+            ['issue.section.description', 'routes.manageToken.description'],
+            // The issue list summary and the duress settings action.
+            ['issue.summary.set', 'settings.duress.set'],
+            // Locked recovery uses the same phrase title for its page and action.
+            ['locked.forgot.phrase.pageTitle', 'locked.forgot.phrase.submit'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['market.myOrders', 'walletMenu.row.myOrders'],
+            // The 24-hour high on the market page and on the token page.
+            ['market.stats.high24h', 'tokenMarket.high24h'],
+            // The 24-hour low on the market page and on the token page.
+            ['market.stats.low24h', 'tokenMarket.low24h'],
+            // The Multisig Sessions list's name, and the palette command and wallet menu row that open it.
+            ['multisig.sessions.listLabel', 'palette.navMultisigSign.title', 'walletMenu.row.multisigSigning'],
+            // A ready-to-finalize session's pill and the Ready tab (sessions that need you).
+            ['multisig.sessions.pillReady', 'multisig.sessions.tabReady'],
+            // The Send page, its menu row and intent title, the token page's Send action and the multisig start action.
+            ['multisig.start.actionSend', 'send.title', 'tokenDetail.actions.send', 'uri.intent.send', 'walletMenu.row.send'],
+            // The raw action tool in the palette, Settings and the wallet menu.
+            ['palette.createAdvanced.title', 'settings.developer.advancedAction', 'walletMenu.row.advancedAction'],
+            // The wallet menu rows reuse the palette command they replace in search.
+            ['palette.createDispenser.title', 'walletMenu.row.createDispenser'],
+            // The wallet menu row, the palette entry it replaces in search and the Publish File form's label.
+            ['palette.createPublishFile.title', 'publishFile.formLabel', 'walletMenu.row.publishFile'],
+            ['palette.createToken.title', 'walletMenu.row.createToken'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['palette.navBrowseDispensers.title', 'walletMenu.row.browseDispensers'],
+            ['palette.navMySwaps.title', 'walletMenu.row.mySwaps'],
+            ['palette.tradeCoinpay.title', 'walletMenu.row.payOrder'],
+            ['palette.tradeOrder.title', 'walletMenu.row.createOrder'],
+            ['palette.tradeXchainOrder.title', 'walletMenu.row.crossChainOrder'],
+            ['palette.tradeXchainSwap.title', 'walletMenu.row.crossChainSwap'],
+            // The pending detail headline for a transaction replaced elsewhere and the timeline label for one the user replaced.
+            ['pending.detail.replacedElsewhere', 'txTimeline.mempool.replacedLabel'],
+            // The command palette's About entry and the About page's title name the same destination.
+            ['routes.addressList.about', 'settings.about.pageTitle'],
+            // An address list row's Hidden state and the Hide Small Balances preview's tag on a folded balance.
+            ['routes.addressList.hidden', 'settings.smallBalances.tagHidden'],
+            // Manage token's controller row and the unbind form's Controller section.
+            ['routes.manageToken.controller', 'unbindForm.section'],
+            // Manage token's dispenser action and the token page's dispenser row.
+            ['routes.manageToken.dispenser', 'tokenMarket.dispenser'],
+            // Manage token's Unbind controller action and the form it opens.
+            ['routes.manageToken.unbindController', 'unbindForm.label'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['scan.title', 'walletMenu.row.scan'],
+            // An empty value on Send's advanced options and in the unbind form's summary.
+            ['send.advanced.none', 'unbindForm.none'],
+            // The From address picker title on Send and on the unbind form.
+            ['send.fromAddress', 'unbindForm.fromPickerTitle'],
+            // The Memo field on Send and on the unbind form.
+            ['send.memo', 'unbindForm.memo'],
+            // Multi-send updates a recipient while About updates the application.
+            ['send.multi.save', 'settings.about.updateAction'],
+            // The source-address picker button on Send and on the unbind form.
+            ['send.source.choose', 'unbindForm.choosePicker'],
+            // The transaction ID row on Send's result and on the unbind form's result.
+            ['send.txid', 'unbindForm.transactionId'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['settings.connectedSites.connectedSites', 'walletMenu.row.connectedSites'],
+            // The backup help names the Wallet Details action it describes.
+            ['settings.help.backup.exportBackup', 'walletDetails.exportBackupAction'],
+            // The governance notification switch and the wallet menu row name the same polls.
+            ['settings.notifications.governancePolls', 'walletMenu.row.governancePolls'],
+            // A custom sound and wallet detail share the Name field label.
+            ['settings.notifications.soundName', 'walletDetails.name'],
+            // The Settings Wallets page and the wallet menu's Wallets group.
+            ['settings.page.walletsList', 'walletMenu.group.wallets'],
+            // The Hide Small Balances page's Options tab and the icon dropdown's list of options.
+            ['settings.smallBalances.tabOptions', 'ui.iconSelect.options'],
+            // The This wallet remove button and the Wallet Details remove page title name the same action.
+            ['settings.thisWallet.removeWalletAction', 'walletDetails.remove.title'],
+            // The Normal fee level and the Normal wallet mode (§20).
+            ['ui.feeSelector.normal', 'walletDetails.walletMode.full'],
         ]);
     });
 

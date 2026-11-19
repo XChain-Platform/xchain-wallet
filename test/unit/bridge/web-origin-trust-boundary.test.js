@@ -343,18 +343,18 @@ describe('ChromeRuntimeAdapter connected-tab reporting', () => {
 describe('ChromeRuntimeAdapter publishes a BridgeErrorCode on every web-visible failure', () => {
     it('stamps INVALID_PARAMS on an unknown bridge.* type', async () => {
         const runtime = fakeRuntime();
-        // A hand-rolled postMessage with a bogus bridge.* type passes the
-        // relay's prefix gate and misses the handler map; MessageHost
-        // serializes UnknownMessageTypeError, which carries no code.
+        // A listed bridge type whose handler is missing from the map (a build
+        // that dropped one) reaches MessageHost, which serializes
+        // UnknownMessageTypeError, and that error carries no code.
         const host = {
             handle: async () => ({
                 ok: false,
-                error: { name: 'UnknownMessageTypeError', message: 'unknown message type "bridge.nope"' },
+                error: { name: 'UnknownMessageTypeError', message: 'unknown message type "bridge.connect"' },
             }),
         };
         attachChromeRuntime(host, runtime);
         const responses = [];
-        runtime.emit({ type: 'bridge.nope', request: {} }, WEB_SENDER, (r) => responses.push(r));
+        runtime.emit({ type: 'bridge.connect', request: {} }, WEB_SENDER, (r) => responses.push(r));
         await flush();
         expect(responses[0].error.code).toBe('INVALID_PARAMS');
         // The precise cause must survive for a Developer-Mode log.

@@ -7,59 +7,8 @@
     color: var(--xc-text-muted);
 }
 
-.options {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-}
+/* The two choices are the shared ActionList (bare icon, chevron), which owns
+   the card, dividers and icon size, so this sheet holds only the lede. */
 
-.optionIcon {
-    flex: 0 0 auto;
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.optionBody {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    /* The paired title and description need an optical gap below the spacing scale. */
-    gap: 2px;
-}
-
-.optionTitle {
-    font-weight: 600;
-    font-size: var(--xc-text-md);
-}
-
-.optionDesc {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-}
-
-/* Inline network step (validator arm, >1 Bitcoin chain only). */
-.chainList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.chainLabel {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.chainIcon {
-    width: var(--xc-icon-xl);
-    height: var(--xc-icon-xl);
-    border-radius: 50%;
-    object-fit: cover;
-    display: block;
-}
+/* The inline network step (validator arm, more than one Bitcoin chain) uses
+   the standard network rows from NetworkPicker, so it has no rules here. */

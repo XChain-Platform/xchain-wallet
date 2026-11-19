@@ -150,16 +150,22 @@ function button(utils, re) {
 
 // Drive a stake all the way through the confirm page's Approve.
 async function placeBet(utils) {
+    // Details is the default tab; the bet form shows only on the Bet tab.
     await domAct(async () => {
-        fireEvent.click(button(utils, /^Yes$/));
+        fireEvent.click(utils.getByRole('tab', { name: /^Buy$/ }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.change(utils.getByLabelText('Stake (XCHAIN)'), { target: { value: '100' } });
+        fireEvent.click(utils.getByRole('button', { name: /^Buy Yes,/ }));
+        await drain();
+    });
+    // Bet opens the Buy a position step, where the stake is.
+    await domAct(async () => {
+        fireEvent.change(utils.getByLabelText('Amount (XCHAIN)'), { target: { value: '100' } });
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(button(utils, /Review bet/i));
+        fireEvent.click(utils.container.querySelector('button[type="submit"]'));
         await drain();
     });
     await domAct(async () => {
@@ -182,12 +188,14 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         expect(calls.find((c) => c.method === 'placeBetAction')).toBeTruthy();
-        // The card the receipt used to live in is correctly gone.
-        expect(utils.container.textContent).not.toContain('Place a bet');
+        // The Buy a position step the receipt used to live in is correctly gone,
+        // and so is the Bet button of a market that no longer takes bets.
+        expect(utils.queryByRole('form', { name: 'Buy a position' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Buy' })).toBeNull();
         // The receipt is not.
         const receipt = utils.getByTestId('bet-result');
         expect(receipt.textContent).toContain('cafebabe');
-        expect(receipt.textContent).toMatch(/betting closed while you were confirming/i);
+        expect(receipt.textContent).toMatch(/purchases closed while you were confirming/i);
     });
 
     it('says plainly that a bet placed on a still-open market went through', async () => {
@@ -200,9 +208,9 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         const receipt = utils.getByTestId('bet-result');
-        expect(receipt.textContent).toContain('Bet placed.');
+        expect(receipt.textContent).toContain('Position bought.');
         expect(receipt.textContent).toContain('cafebabe');
-        expect(receipt.textContent).not.toMatch(/betting closed while you were confirming/i);
+        expect(receipt.textContent).not.toMatch(/purchases closed while you were confirming/i);
     });
 
     // leg (a), applied to the receipt this file introduced. useConfirmAction
@@ -223,7 +231,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         const receipt = utils.getByTestId('bet-result');
-        expect(receipt.textContent).not.toContain('Bet placed.');
+        expect(receipt.textContent).not.toContain('Position bought.');
         // the receipt promises a reminder, never an automatic send.
         expect(receipt.textContent).toMatch(/waiting in the queued-transactions banner/i);
         expect(receipt.textContent).not.toMatch(/automatically/i);
@@ -232,7 +240,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         expect(receipt.textContent).not.toContain('Transaction ID');
     });
 
-    it('shows a failed submit even when the market has stopped taking bets', async () => {
+    it('shows a failed submit even when the market has stopped offering positions', async () => {
         const { messaging } = harness({
             feedStatuses: ['open', 'open', 'open', 'closed'],
             submitThrows: Object.assign(new Error('Encoder RPC error: Broadcast refused by the node.'), {
@@ -268,9 +276,9 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         const { messaging } = harness();
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Resolve/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Review resolve/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');
@@ -287,9 +295,9 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         messaging.resolveMarketAction = () => Promise.resolve({ queued: true, broadcast: 'queued' });
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Resolve/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Review resolve/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');
@@ -303,8 +311,8 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         const { messaging } = harness();
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /Cancel and refund/i)); await drain(); });
-        await domAct(async () => { fireEvent.click(button(utils, /Review cancel/i)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Cancel and refund/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /Cancel Market/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 
         const receipt = utils.getByTestId('oracle-result');

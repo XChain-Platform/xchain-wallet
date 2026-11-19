@@ -26,15 +26,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    Button,
+    Icon,
     Input,
     Textarea,
-    ChainPicker,
-    FormPage,
+    NetworkField,
     PageHeader,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+// The Wallet Form Standard frame.
+import { FormAction, FormFrame, FormSection, SummaryAddress, joinSummaryParts } from '../components/formStandard/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -93,6 +94,9 @@ export function VerifySignatureForm({ onBack }) {
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid' | 'malformed'} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Set by a Verify press; each empty required field then shows red
+    // with its own message until it is filled.
+    const [showMissing, setShowMissing] = useState(false);
     const requestGenerationRef = useRef(0);
     const requestPendingRef = useRef(false);
 
@@ -108,9 +112,13 @@ export function VerifySignatureForm({ onBack }) {
         setError(null);
         setResult(null);
         if (!chainId) { setError('Pick a network.'); return; }
-        if (address.trim().length === 0) { setError('Enter an address.'); return; }
-        if (message.length === 0) { setError('Enter the original message.'); return; }
-        if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
+        if (address.trim().length === 0 || message.length === 0 || signature.trim().length === 0) {
+            setShowMissing(true);
+            const firstEmpty = address.trim().length === 0 ? 'verify-address'
+                : message.length === 0 ? 'verify-message' : 'verify-signature';
+            document.getElementById(firstEmpty)?.focus();
+            return;
+        }
         const normalizedSignature = normalizeSignatureInput(signature);
         if (!normalizedSignature) { setResult('malformed'); return; }
         if (typeof messaging.verifyMessageRequest !== 'function') {
@@ -145,13 +153,12 @@ export function VerifySignatureForm({ onBack }) {
         <PageHeader onBack={onBack} backDisabled={busy} title={t('verifySignature.title')} />
     );
 
-    const disabledReason = address.trim().length === 0
-        ? 'Enter the signer address to continue.'
-        : message.length === 0
-            ? 'Enter the original message to continue.'
-            : signature.trim().length === 0
-                ? 'Enter the signature to continue.'
-                : null;
+    // No disabled button and no standing hint; a Verify press marks the empty
+    // fields instead.
+    const disabledReason = null;
+    const addressMissing = showMissing && address.trim().length === 0 ? 'Enter the signer address.' : undefined;
+    const messageMissing = showMissing && message.length === 0 ? 'Enter the original message.' : undefined;
+    const signatureMissing = showMissing && signature.trim().length === 0 ? 'Enter the signature.' : undefined;
 
     // Shown just above the Verify button by FormPage's status slot.
     const status = (error || result) ? (
@@ -175,20 +182,24 @@ export function VerifySignatureForm({ onBack }) {
 
     const fields = (
         <>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <ChainPicker
-                    chainIds={chainIds}
-                    chainRegistry={chainRegistry}
-                    value={chainId || ''}
-                    onChange={(nextChainId) => {
-                        setChainId(nextChainId);
-                        clearSettledFeedback();
-                    }}
-                    label={t('send.fields.chain')}
-                />
-            </div>
+            <NetworkField
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+                value={chainId || ''}
+                onChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    clearSettledFeedback();
+                }}
+                label={t('send.fields.chain')}
+                help={t('verifySignature.networkHelp')}
+                // The chain to verify on, not a source network (no From here).
+                notSource
+            />
             <Input
+                id="verify-address"
+                error={addressMissing}
                 label={t('verifySignature.address')}
+                help={t('verifySignature.addressHelp')}
                 value={address}
                 onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
@@ -197,8 +208,10 @@ export function VerifySignatureForm({ onBack }) {
             />
             <Textarea
                 id="verify-message"
+                error={messageMissing}
                 dir="auto"
                 label={t('verifySignature.message')}
+                help={t('verifySignature.messageHelp')}
                 value={message}
                 onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
                 placeholder={t('verifySignature.messagePlaceholder')}
@@ -207,8 +220,10 @@ export function VerifySignatureForm({ onBack }) {
             />
             <Textarea
                 id="verify-signature"
+                error={signatureMissing}
                 dir="ltr"
                 label={t('verifySignature.signature')}
+                help={t('verifySignature.signatureHelp')}
                 value={signature}
                 onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
                 placeholder={t('verifySignature.signaturePlaceholder')}
@@ -219,26 +234,38 @@ export function VerifySignatureForm({ onBack }) {
         </>
     );
 
+    // The closed summary names the network and the signer address.
+    const networkName = chainId ? (chainRegistry.get(chainId)?.displayName || chainId) : '';
+    const signatureSummary = joinSummaryParts([
+        networkName,
+        String(address || '').trim() ? <SummaryAddress address={address} /> : null,
+    ]) || null;
+
+    // The Wallet Form Standard. Verify never sends or signs, so it
+    // has no From section; the network names the chain of a typed (often
+    // someone else's) address, so it stays with that address in the one
+    // open Signature section. Notices sit in the status slot above Verify.
     return (
         <Screen variant={variant} header={header}>
-            <FormPage
+            <FormFrame
                 label={t('verifySignature.title')}
                 onSubmit={handleSubmit}
                 status={status}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
+                action={(
+                    <FormAction
+                        icon={<Icon.VerifyIcon />}
                         loading={busy}
                         disabled={Boolean(disabledReason)}
                         aria-describedby={disabledReason ? 'verify-signature-disabled-reason' : undefined}
                     >
                         {busy ? t('verifySignature.verifying') : t('verifySignature.title')}
-                    </Button>
+                    </FormAction>
                 )}
             >
-                {fields}
-            </FormPage>
+                <FormSection id="signature" title={t('verifySignature.signature')} icon={Icon.VerifyIcon} defaultOpen main summary={signatureSummary}>
+                    {fields}
+                </FormSection>
+            </FormFrame>
         </Screen>
     );
 }

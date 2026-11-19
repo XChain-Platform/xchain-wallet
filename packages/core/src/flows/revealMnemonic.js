@@ -30,6 +30,7 @@
 
 import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { assertWalletUnlockedForReveal } from './revealAccess.js';
 
 export class NoMnemonicForWifOnlyError extends Error {
@@ -66,6 +67,8 @@ export async function revealMnemonic({ vault, walletId, password }) {
         throw new Error('revealMnemonic: walletId is required');
     }
     if (typeof password !== 'string' || password.length === 0) {
+        // No phrase exists for a hardware wallet, so no password could help.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'a recovery phrase');
         throw new Error('revealMnemonic: password is required');
     }
     const wallet = await vault.wallets.get(walletId);
@@ -74,6 +77,7 @@ export async function revealMnemonic({ vault, walletId, password }) {
     if (format === 'wif-only') {
         throw new NoMnemonicForWifOnlyError();
     }
+    refuseHardwareWallet(wallet, 'a recovery phrase');
     // Only a wallet with a stored passphrase needs the derived master key
     // kept around past the seed decrypt; every other wallet lets it go.
     const hasStoredPassphrase = Boolean(wallet.passphraseEnabled && wallet.encryptedPassphrase);
@@ -82,7 +86,6 @@ export async function revealMnemonic({ vault, walletId, password }) {
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
-        aad: wallet.aad,
         retainMasterKey: hasStoredPassphrase ? (key) => { masterKey = key; } : undefined,
     });
     let passphraseBytes = null;

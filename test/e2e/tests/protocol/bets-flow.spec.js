@@ -8,6 +8,7 @@ import {
     expect,
     test,
 } from '../../fixtures/wallet.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -21,11 +22,11 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
-// Betting is not a nav destination; it opens from the command palette.
+// Prediction markets opens from the wallet menu.
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(dialog, 'the wallet menu is not open').toBeVisible({ timeout: 15_000 });
     const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeEditable({ timeout: 15_000 });
     await combobox.fill(title);
@@ -254,18 +255,20 @@ async function openCreateReview(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Open a market' })).toBeVisible();
 
-    await page.getByRole('button', { name: /^Token bets are placed in:/ }).click();
-    await expect(page.getByRole('heading', { name: 'Token bets are placed in' })).toBeVisible();
+    await page.getByRole('button', { name: /^Token:/ }).click();
+    await searchTokenPicker(page, 'Example');
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     await page.getByRole('button', { name: /^Select Example Token on Bitcoin/ }).click();
 
-    await page.getByLabel('What is being bet on').fill('Will the XChain release ship this week?');
-    await page.getByLabel('Outcome 0').fill('Yes');
-    await page.getByLabel('Outcome 1').fill('No');
-    await page.getByLabel('Betting closes').fill(
+    await page.getByLabel('Question', { exact: true }).fill('Will the XChain release ship this week?');
+    await page.getByLabel('Outcome 1', { exact: true }).fill('Yes');
+    await page.getByLabel('Outcome 2', { exact: true }).fill('No');
+    await page.getByLabel('Closes', { exact: true }).fill(
         new Date(Date.now() + 86_400_000).toISOString().slice(0, 16),
     );
-    await page.getByLabel('Your fee (optional)').fill('2.5');
-    await page.getByLabel('Smallest bet allowed (optional)').fill('25');
+    await page.getByRole('button', { name: /^Default Terms/ }).click();
+    await page.getByLabel('Your Fee', { exact: true }).fill('2.5');
+    await page.getByLabel('Minimum Purchase', { exact: true }).fill('25');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -276,22 +279,23 @@ for (const viewport of VIEWPORTS) {
         await createWallet(page);
         await installBetFixture(page);
 
-        await gotoPalette(page, 'Betting');
-        await expect(page.getByRole('button', { name: new RegExp(`^#${FEED_INDEX}\\b`) }))
+        await gotoPalette(page, 'Prediction markets');
+        await expect(page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`).first())
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} bet feeds`);
 
-        await page.getByRole('button', { name: new RegExp(`^#${FEED_INDEX}\\b`) }).click();
+        await page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`).first().click();
         await expect(page.getByRole('heading', { name: 'Will the XChain release ship this week?' }))
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} feed detail`);
 
-        await page.getByRole('button', { name: /^Back/ }).click();
-        await expect(page.getByRole('heading', { name: 'Betting' })).toBeVisible();
+        // Wide screens show the detail beside the list, so only phones have a Back.
+        if (viewport.name === 'phone') await page.getByRole('button', { name: /^Back/ }).click();
+        await expect(page.getByRole('heading', { name: 'Prediction Markets' })).toBeVisible();
         await openCreateReview(page);
         await expectScreenLayout(page, `${viewport.name} create market`);
 
-        const reviewButton = page.getByRole('button', { name: 'Review market', exact: true });
+        const reviewButton = page.getByRole('button', { name: 'Open Market', exact: true });
         await reviewButton.scrollIntoViewIfNeeded();
         await reviewButton.click();
         const confirm = page.getByTestId('confirm-modal');
@@ -305,17 +309,19 @@ for (const viewport of VIEWPORTS) {
         expect(scroll.main, `${viewport.name} review main scroll position`).toBeLessThanOrEqual(1);
         expect(scroll.document, `${viewport.name} review document scroll position`).toBeLessThanOrEqual(1);
 
-        const intent = page.getByTestId('action-intent');
-        await expect(intent.getByText('2.5%', { exact: true })).toBeVisible();
-        await expect(intent.getByText('25 EXAMPLE', { exact: true })).toBeVisible();
+        const facts = page.getByTestId('confirm-facts');
+        await expect(facts.getByText('2.5%', { exact: true })).toBeVisible();
+        await expect(facts.getByText('25 EXAMPLE', { exact: true })).toBeVisible();
         await expectScreenLayout(page, `${viewport.name} market review`);
 
         await page.keyboard.press('Escape');
         await expect(page.getByRole('heading', { name: 'Open a market' })).toBeVisible();
         await page.getByRole('button', { name: /^Back/ }).click();
-        await expect(page.getByRole('heading', { name: 'Betting' })).toBeVisible();
-        await page.getByRole('button', { name: 'My bets', exact: true }).click();
-        await expect(page.getByText(`Market #${FEED_INDEX}`, { exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Prediction Markets' })).toBeVisible();
+        // My bets is the All list narrowed to the markets bet in (ruling
+        // 2026-11-13): the same card, found by its market number.
+        await page.getByRole('tab', { name: 'My predictions', exact: true }).click();
+        await expect(page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`)).toBeVisible();
         await expectScreenLayout(page, `${viewport.name} my bets`);
     });
 }

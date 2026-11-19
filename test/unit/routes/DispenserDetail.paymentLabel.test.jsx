@@ -14,7 +14,7 @@
 // tests drive only that line.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -73,7 +73,9 @@ afterEach(() => cleanup());
 
 // The stats-hero Payment value only: the Pay to buy panel states the same
 // fill price, so a page-wide match cannot tell which of the two printed it.
+// The page opens on Actions (G102); the stats are on the Details tab.
 async function paymentLine(expected) {
+    fireEvent.click(await screen.findByRole('tab', { name: /^Details$/ }));
     const dt = await screen.findByText('Payment', { selector: 'dt' });
     const dd = dt.nextElementSibling;
     await waitFor(() => expect(dd.textContent).toMatch(expected));

@@ -22,7 +22,7 @@ import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testi
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { PENDING_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import {
     dismissAllOverlays,
     resetBackStackForTests,
@@ -262,7 +262,7 @@ describe('History pending detail branch', () => {
             + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
         expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
-        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
+        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy Address' }))
             .toHaveTextContent(/^Copy$/);
     });
 
@@ -286,7 +286,8 @@ describe('History pending detail branch', () => {
         const region = await openRow(view, 'seen');
         const favicons = Array.from(region.querySelectorAll('img[class*="detailActionFavicon"]'));
         expect(favicons.length).toBeGreaterThan(0);
-        const label = favicons[0].closest('a, button').textContent.trim().charAt(0);
+        // The favicon sits in an Actions tab row titled "View on <explorer>".
+        const label = favicons[0].closest('a, button').textContent.trim().replace(/^View on /, '').charAt(0);
         fireEvent.error(favicons[0]);
         expect(region.querySelectorAll('img[class*="detailActionFavicon"]').length)
             .toBe(favicons.length - 1);
@@ -318,7 +319,7 @@ describe('History pending detail branch', () => {
         // focus inside that window is dropped by design; age the rows past
         // one interval first. Only Date is faked: waitFor polls on setInterval.
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + PENDING_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {
@@ -338,9 +339,8 @@ describe('History offers replacement only where it can still work', () => {
         // that this shell cannot execute.
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
         const region = await openRow(view, 'not-seen');
-        // The More menu still opens (Copy receipt applies to every entry),
-        // but it must not offer a replacement this shell cannot run.
-        fireEvent.click(within(region).getByText('More'));
+        // The Actions tab still lists Copy receipt (it applies to every
+        // entry), but it must not offer a replacement this shell cannot run.
         expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
@@ -352,9 +352,73 @@ describe('History offers replacement only where it can still work', () => {
             replaceTx: vi.fn(),
         });
         const region = await openRow(view, 'not-seen');
-        fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Speed up transaction')).toBeTruthy();
         expect(within(region).getByText('Cancel transaction')).toBeTruthy();
+    });
+
+    it('opens on the Actions tab, first and selected, with the actions as one ActionList', async () => {
+        const { view } = mountHistory({
+            pendingTxs: [staleLocalSend()],
+            replaceTx: vi.fn(),
+        });
+        const region = await openRow(view, 'not-seen');
+        const tabs = within(region).getAllByRole('tab');
+        // Two views only, the shared Actions | Details toggle (2026-11-13).
+        expect(tabs.map((tab) => tab.textContent.trim())).toEqual(['Actions', 'Details']);
+        expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+        const list = within(region).getByRole('list', { name: 'Transaction actions' });
+        const titles = within(list).getAllByRole('button').map((row) => row.querySelector('[class*="titleText"]')?.textContent);
+        expect(titles).toEqual(['Speed up transaction', 'Cancel transaction', 'Share receipt', 'Copy receipt']);
+        // Cancel is the danger row; the rest keep the default tone.
+        const cancel = within(list).getByRole('button', { name: /^Cancel transaction/ });
+        expect(cancel).toHaveAttribute('data-tone', 'danger');
+        expect(within(list).getByRole('button', { name: /^Speed up transaction/ })).toHaveAttribute('data-tone', 'default');
+        // Every row says what it does.
+        expect(cancel).toHaveTextContent('Send the coins back to this wallet before it confirms');
+        // The More pill and its menu are gone.
+        expect(within(region).queryByText('More')).toBeNull();
+        expect(within(region).queryByRole('menu')).toBeNull();
+    });
+
+    it('runs Cancel from its danger row into the cancel confirmation', async () => {
+        const replaceTx = vi.fn(async (request) => (request.preview ? {
+            originalFee: '0.00001',
+            replacementFee: '0.00003',
+            feeIncrease: '0.00002',
+        } : { replacementTxHash: REPLACEMENT_HASH }));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByRole('button', { name: /^Cancel transaction/ }));
+        const dialog = await screen.findByRole('dialog', { name: 'Cancel this transaction?' });
+        expect(within(dialog).getByText('Broadcast cancellation')).toBeTruthy();
+        expect(replaceTx.mock.calls[0][0]).toMatchObject({ strategy: 'cancel', preview: true });
+    });
+
+    it('opens the Save as contact form inside the Actions panel from its row', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const row = await within(region).findByRole('button', { name: /^Save as contact/ });
+        expect(row).toHaveTextContent('Add the other address to your contacts');
+        fireEvent.click(row);
+        const panel = within(region).getByRole('tabpanel');
+        const field = within(panel).getByRole('textbox', { name: /^Save .* as/ });
+        expect(field).toBeTruthy();
+        expect(within(panel).getByRole('list', { name: 'Transaction actions' })).toBeTruthy();
+    });
+
+    it('lists the explorer links first as "View on" rows that open in a new tab', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const list = within(region).getByRole('list', { name: 'Transaction actions' });
+        const rows = within(list).getAllByRole('link');
+        expect(rows.length).toBeGreaterThan(0);
+        for (const row of rows) {
+            expect(row.textContent).toMatch(/^View on /);
+            expect(row).toHaveAttribute('target', '_blank');
+            expect(row).toHaveAttribute('rel', 'noopener noreferrer');
+        }
+        // The explorer rows come before every other row.
+        expect(list.querySelector(':scope > li').querySelector('a')).toBe(rows[0]);
     });
 
     it('retains RBF availability when a local record merges with its mempool row', async () => {
@@ -364,7 +428,6 @@ describe('History offers replacement only where it can still work', () => {
             replaceTx: vi.fn(),
         });
         const region = await openRow(view, 'seen');
-        fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Speed up transaction')).toBeTruthy();
     });
 
@@ -374,8 +437,7 @@ describe('History offers replacement only where it can still work', () => {
             replaceTx: vi.fn(),
         });
         const region = await openRow(view, 'not-seen');
-        const more = within(region).queryByText('More');
-        if (more) fireEvent.click(more);
+        expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
@@ -388,7 +450,6 @@ describe('History offers replacement only where it can still work', () => {
         } : { replacementTxHash: REPLACEMENT_HASH }));
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
-        fireEvent.click(within(region).getByText('More'));
         fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
@@ -413,7 +474,6 @@ describe('History offers replacement only where it can still work', () => {
             .mockRejectedValueOnce(new Error('This transaction is already confirmed.'));
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
-        fireEvent.click(within(region).getByText('More'));
         fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
@@ -431,11 +491,9 @@ describe('History offers replacement only where it can still work', () => {
             replaceTx: vi.fn(),
         });
         const region = await openRow(view, 'replaced');
-        // The follow-up menu only renders when something is on offer, so
-        // open it if it is there at all: with the guard removed the
-        // button comes back carrying exactly the option under test.
-        const more = within(region).queryByText('More');
-        if (more) fireEvent.click(more);
+        // The Actions tab lists every follow-up on offer: with the guard
+        // removed it would carry exactly the rows under test.
+        expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
@@ -467,19 +525,19 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed, no effect')).toBeTruthy();
-        const confirmedBlock = (67881853).toLocaleString();
-        expect(within(panel).getByText(`Included in block ${confirmedBlock}`)).toBeTruthy();
+        // Block numbers are shown raw, never grouped (ruling G123).
+        expect(within(panel).getByText('Included in block 67881853')).toBeTruthy();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
         expect(region.textContent).not.toMatch(/may never have reached/i);
         expect(region.textContent).not.toMatch(/no longer in (the )?mempool/i);
         expect(region.textContent).not.toContain('Pending, not yet validated by the service.');
-        // The timeline reads the same proof: the block is a done stage.
-        expect(within(region).getByText(`Confirmed at block ${confirmedBlock}`)).toBeTruthy();
-        // And a mined transaction is not offered a fee bump.
-        const more = within(region).queryByText('More');
-        if (more) fireEvent.click(more);
+        // A mined transaction is not offered a fee bump on the Actions tab.
+        expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
+        // The status above is the one status the card shows: no Status view
+        // repeats it as a timeline (operator ruling 2026-11-13).
+        expect(within(region).queryByRole('tab', { name: 'Status' })).toBeNull();
     });
 
     it('reads a plain coin transfer as confirmed on the network, with its outputs and no pending note', async () => {

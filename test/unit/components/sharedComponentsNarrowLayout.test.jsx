@@ -122,16 +122,17 @@ describe('shared components at a 320px viewport', () => {
 
         expect(await screen.findByRole('region', { name: 'Back up your wallet' }))
             .toHaveTextContent('Save your recovery phrase or export an encrypted backup');
-        expect(screen.getByRole('button', { name: 'Back up now' })).toBeInTheDocument();
-        expect(ruleBody(css.backupReminder, '.card')).toMatch(/flex-wrap:\s*wrap/);
-        expect(ruleBody(css.backupReminder, '.body')).toMatch(/min-width:\s*0/);
+        expect(screen.getByRole('button', { name: 'Back Up Now' })).toBeInTheDocument();
+        // The box and its wrapping row are the kit Notice's; the card only
+        // lets its wrapper shrink with the viewport.
+        expect(ruleBody(css.backupReminder, '.region')).toMatch(/min-width:\s*0/);
         expectNoFixedWidthBeyondViewport(css.backupReminder);
     });
 
     it('renders every BottomTabBar label without ellipsis', () => {
         renderNarrow(<BottomTabBar currentView="home" onSelect={() => {}} />);
 
-        for (const label of ['Home', 'History', 'Send', 'Scan', 'More']) {
+        for (const label of ['Home', 'Send', 'Receive', 'History', 'Settings']) {
             expect(screen.getByRole('button', { name: label })).toHaveTextContent(label);
         }
         const labelRule = ruleBody(css.bottomTabs, '.tabLabel');
@@ -179,7 +180,7 @@ describe('shared components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByText('Derivation path')).toHaveTextContent('Derivation path');
+        expect(screen.getByText('Account path')).toHaveTextContent('Account path');
         expect(screen.getByText(path)).toHaveTextContent(path);
         expect(ruleBody(css.derivation, '.grid')).toMatch(/grid-template-columns:\s*auto 1fr/);
         expect(ruleBody(css.derivation, '.value')).toMatch(/word-break:\s*break-word/);
@@ -203,7 +204,7 @@ describe('shared components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByRole('button', { name: 'Filter by network' }))
+        expect(screen.getByRole('button', { name: /^Filter by network/ }))
             .toHaveTextContent(networkLabel);
         const narrow = mediaBlock(css.homeFilter, '(max-width: 360px)');
         expect(ruleBody(narrow, '.bar')).toMatch(/flex-wrap:\s*wrap/);

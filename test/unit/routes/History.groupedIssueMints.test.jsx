@@ -123,11 +123,19 @@ function launchCard() {
     return screen.queryByRole('button', { name: /Launched/ });
 }
 
+/** Search and the Grouped | Flat switch live in the History filters popover. */
+function openFilters() {
+    const trigger = screen.getByRole('button', { name: 'History filters' });
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+}
+
 function setSearch(value) {
+    openFilters();
     fireEvent.change(screen.getByLabelText('Search history'), { target: { value } });
 }
 
 async function clickGroupingMode(name) {
+    openFilters();
     fireEvent.click(screen.getByRole('radio', { name }));
     await waitFor(() => expect(screen.getByRole('radio', { name }).getAttribute('aria-checked'))
         .toBe('true'));
@@ -153,6 +161,7 @@ describe('History collapses an ISSUE and its two MINTs', () => {
         await waitForHistory(view);
 
         // Grouped is the persisted default and this store was just cleared.
+        openFilters();
         await waitFor(() => expect(screen.getByRole('radio', { name: 'Grouped' })
             .getAttribute('aria-checked')).toBe('true'));
 

@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -62,27 +62,31 @@ describe('A-D route keyboard flows', () => {
 
         const savings = (await screen.findByText('Savings')).closest('button');
         const spending = screen.getByText('Spending').closest('button');
+        // My Accounts: Back, the filter button and the plus on the title bar,
+        // then one row per account (a row switches to it; renaming lives on the
+        // account's page).
+        const filter = screen.getByRole('button', { name: 'Filter accounts' });
         const stops = [
             screen.getByRole('button', { name: 'Back to previous screen' }),
+            filter,
+            screen.getByRole('button', { name: 'Add Account' }),
             savings,
-            screen.getByRole('button', { name: 'Rename Savings' }),
             spending,
-            screen.getByRole('button', { name: 'Rename Spending' }),
-            screen.getByRole('button', { name: 'Add account' }),
-            screen.getByRole('button', { name: 'Manage' }),
         ];
 
         for (const stop of stops) {
             await user.tab();
             expect(stop).toHaveFocus();
-            await user.keyboard('{Enter}');
+            // The filter opens its own popover; its keyboard flow is covered elsewhere.
+            if (stop !== filter) await user.keyboard('{Enter}');
         }
 
-        expect(onBack).toHaveBeenCalledTimes(3);
+        // Back is pressed once, and switching to the other account returns once more.
+        expect(onBack).toHaveBeenCalledTimes(2);
+        // The active account's row does nothing; the other switches.
+        expect(onSwitch).toHaveBeenCalledOnce();
         expect(onSwitch).toHaveBeenCalledWith('a2');
-        expect(onRenameAccount).toHaveBeenNthCalledWith(1, accounts[0]);
-        expect(onRenameAccount).toHaveBeenNthCalledWith(2, accounts[1]);
-        expect(onRenameAccount).toHaveBeenNthCalledWith(3, accounts[0]);
+        expect(onRenameAccount).not.toHaveBeenCalled();
         expect(onAddAccount).toHaveBeenCalledOnce();
     });
 
@@ -111,7 +115,7 @@ describe('A-D route keyboard flows', () => {
         );
 
         const stops = [
-            screen.getByRole('button', { name: 'Back to home' }),
+            screen.getByRole('button', { name: 'Back to previous screen' }),
             screen.getByRole('button', { name: 'First action' }),
             screen.getByRole('button', { name: /Unavailable action/ }),
             screen.getByRole('button', { name: 'Second action' }),
@@ -147,16 +151,23 @@ describe('A-D route keyboard flows', () => {
         await waitFor(() => expect(name).toHaveFocus());
 
         await user.tab({ shift: true });
+        expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
+        // One flat form now: no section header between the help tip and Back.
+        await user.tab({ shift: true });
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
         await user.tab();
+        expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
+        await user.tab();
         expect(name).toHaveFocus();
         await user.clear(name);
         await user.type(name, 'Trading');
-        await user.tab();
-        expect(screen.getByRole('button', { name: 'Add account' })).toHaveFocus();
+        // The Look section's controls come before the action; keep tabbing until it is reached.
+        const action = screen.getByRole('button', { name: 'Add Account' });
+        for (let i = 0; i < 20 && document.activeElement !== action; i += 1) await user.tab();
+        expect(action).toHaveFocus();
         await user.keyboard('{Enter}');
 
         await waitFor(() => expect(onCreated).toHaveBeenCalledWith(account));
@@ -167,7 +178,7 @@ describe('A-D route keyboard flows', () => {
         });
     });
 
-    it('operates AddAddressModal fields with arrows and closes its picker with Escape', async () => {
+    it('operates AddAddressModal fields by keyboard and closes its picker with Escape', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();
         const onGenerated = vi.fn();
@@ -195,28 +206,52 @@ describe('A-D route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onClose).toHaveBeenCalledOnce();
 
+        // The Coin label's help tip comes before the field.
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Coin' })).toHaveFocus();
         await user.tab();
         expect(coin).toHaveFocus();
-        await user.keyboard('{ArrowDown}');
-        expect(screen.getByRole('listbox', { name: 'Coin' })).toBeInTheDocument();
+        await user.keyboard('{Enter}');
+        expect(screen.getByRole('dialog', { name: 'Coin' })).toBeInTheDocument();
         await user.keyboard('{Escape}');
-        expect(screen.queryByRole('listbox', { name: 'Coin' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Coin' })).toBeNull();
         expect(coin).toHaveFocus();
 
-        await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+        await user.keyboard('{Enter}');
+        const picker = screen.getByRole('dialog', { name: 'Coin' });
+        await user.tab();
+        expect(within(picker).getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: /^Select Bitcoin/ })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: /^Select Litecoin/ })).toHaveFocus();
+        await user.keyboard('{Enter}');
         expect(coin).toHaveAccessibleName(/^Coin: Litecoin/);
 
+        // Each label's '?' help tip comes before its field (ruling 2026-11-13).
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Type' })).toHaveFocus();
         await user.tab();
         const type = screen.getByLabelText('Type');
         expect(type).toHaveFocus();
-        await user.keyboard('{ArrowDown}');
+        // The themed dropdown: Arrow Down opens the list on the current
+        // option, Arrow Down moves to the next one and Enter picks it.
+        const typeBefore = type.value;
+        await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+        expect(type).toHaveFocus();
+        expect(type.value).not.toBe(typeBefore);
 
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Purpose' })).toHaveFocus();
         await user.tab();
         const purpose = screen.getByLabelText('Purpose');
         expect(purpose).toHaveFocus();
-        await user.keyboard('{ArrowDown}');
+        await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
         expect(purpose).toHaveValue('dispenser');
+        expect(purpose).toHaveFocus();
 
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Number of addresses' })).toHaveFocus();
         await user.tab();
         const count = screen.getByLabelText('Number of addresses');
         expect(count).toHaveFocus();
@@ -224,7 +259,13 @@ describe('A-D route keyboard flows', () => {
         await user.type(count, '2');
 
         await user.tab();
-        expect(screen.getByRole('button', { name: 'Generate 2' })).toHaveFocus();
+        expect(screen.getByRole('button', { name: 'About Address index' })).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByTestId('add-address-index')).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Add 2 Addresses' })).toHaveFocus();
         await user.keyboard('{Enter}');
 
         await waitFor(() => expect(generateDispenserAddress).toHaveBeenCalledTimes(2));

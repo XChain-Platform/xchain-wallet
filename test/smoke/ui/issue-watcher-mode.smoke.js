@@ -49,7 +49,7 @@ assert.match(
 
 assert.match(
     formSrc,
-    /const \{ isWatcherMode \} = useWalletMode\(\);/,
+    /const \{ walletMode, isWatcherMode \} = useWalletMode\(\);/,
     'derives isWatcherMode via the shared hook',
 );
 
@@ -94,13 +94,18 @@ assert.match(
 
 assert.match(
     formSrc,
-    /\{isWatcherMode \? \([\s\S]+?Watcher mode/,
-    'review stage shows watcher-mode hint copy when in watcher mode',
+    /credentials=\{<p[\s\S]{0,120}Another phone signs for this wallet/,
+    'watcher review puts the unsigned-build hint inside Confirm Standard',
 );
 assert.match(
     formSrc,
-    /Create transaction for signing/,
-    'submit button reads "Create transaction for signing" in watcher mode',
+    /<ConfirmActionModal[\s\S]{0,500}onApprove=\{\(\) => handleSubmit/,
+    'watcher review uses the standard Approve decision to build the unsigned transaction',
+);
+assert.doesNotMatch(
+    formSrc,
+    /Create Transaction for Signing/,
+    'watcher review does not restore a nonstandard approve label',
 );
 
 console.log('issue-watcher-mode smoke OK');

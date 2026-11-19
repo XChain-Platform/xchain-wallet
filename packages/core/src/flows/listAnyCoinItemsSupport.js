@@ -15,15 +15,21 @@
 // list's own coin. The wallet has no copy of that activation height, and a
 // hand-copied height can drift from the chain's, which would sell the user an
 // item the indexer then drops into list_items_invalid. So the explorer's own
-// reading decides: /api/status publishes `list_any_coin_items` keyed by
-// explorer coin code (`TBTC`, `RLTC`, ...). The chain's own flag must be
-// exactly true, and the other coins are the ones the same status lists on the
-// same network. Any failure, a missing flag or a flag that is not true answers
-// [], which keeps the list on its own coin, the pre-activation rule.
+// reading decides WHEN: /api/status publishes `list_any_coin_items` keyed by
+// explorer coin code (`TBTC`, `RLTC`, ...), and the chain's own flag must be
+// exactly true. WHICH coins is the indexer's fixed coin set, because the
+// indexer reads the gate for the list's own coin only and then accepts every
+// coin it is configured with; the other coins' flags, and whether this explorer
+// measures them at all, change nothing there. Any failure, a missing flag or a
+// flag that is not true answers [], which keeps the list on its own coin, the
+// pre-activation rule. Staying on one network is the recipient classifier's
+// job (isOtherCoinItem checks each candidate against the list's own network).
 
 import { explorerCoinCode } from '../registry/coinTicker.js';
 
 // The coins whose addresses the wallet can validate (addressValidation.js).
+// Mirrors config['COINS'] in the indexer's src/config/currencies.js; the two
+// change together.
 const WALLET_COINS = ['bitcoin', 'litecoin', 'dogecoin'];
 const STATUS_READ_CAP_MS = 10_000;
 
@@ -40,8 +46,8 @@ function withCap(promise, ms) {
 /**
  * The wallet coins (`bitcoin`, `litecoin`, ...) whose addresses a list on the
  * given chain may hold, read off an explorer status body. Empty unless the
- * chain's own flag is exactly true; never crosses networks, because each coin
- * is looked up under its code for THIS network kind.
+ * chain's own flag is exactly true; once it is, every wallet coin, whichever
+ * other flags the status carries.
  *
  * @param {any} status  /api/status body
  * @param {{ coin?: string, networkKind?: string }} chain
@@ -52,8 +58,7 @@ export function anyCoinItemCoins(status, chain) {
     if (!flags || typeof flags !== 'object') return [];
     const ownCode = explorerCoinCode(chain);
     if (!ownCode || flags[ownCode] !== true) return [];
-    return WALLET_COINS.filter((coin) => coin === chain.coin
-        || Object.prototype.hasOwnProperty.call(flags, explorerCoinCode({ coin, networkKind: chain.networkKind })));
+    return [...WALLET_COINS];
 }
 
 /**

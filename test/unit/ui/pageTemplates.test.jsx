@@ -21,7 +21,7 @@ import { parse } from '@babel/parser';
 import postcss from 'postcss';
 import { createRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary.jsx';
@@ -31,6 +31,11 @@ import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import { EmptyState } from '../../../packages/core/src/ui/EmptyState.jsx';
 import { SectionHeader } from '../../../packages/core/src/ui/SectionHeader.jsx';
 import * as ui from '../../../packages/core/src/ui/index.js';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
+import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreatePollForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 // Walk up from the cwd: under jsdom import.meta.url is an http: URL.
 function uiDir() {
@@ -135,6 +140,7 @@ function baseLayer(text) {
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    resetWalletModes();
 });
 
 describe('page templates: exported from @xchain-wallet/core/ui', () => {
@@ -146,7 +152,10 @@ describe('page templates: exported from @xchain-wallet/core/ui', () => {
 });
 
 describe('<FormErrorSummary>', () => {
-    it('takes focus and links every error to its field', () => {
+    // Notice Standard (2026-11-15): the summary lists the problems in plain
+    // text (no links) and marks every field it names invalid, which draws
+    // the field's red border.
+    it('takes focus, lists every error in plain text and marks each field', () => {
         render(
             <form>
                 <label htmlFor="ticker">Ticker</label>
@@ -162,12 +171,12 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(document.activeElement).toBe(summary);
-        expect(within(summary).getByText('Fix these 2 fields:')).toBeInTheDocument();
-        const links = within(summary).getAllByRole('link');
-        expect(links.map((link) => link.getAttribute('href'))).toEqual(['#ticker', '#amount']);
-
-        fireEvent.click(links[1]);
-        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+        expect(within(summary).getByText('Fix 2 things to continue')).toBeInTheDocument();
+        expect(within(summary).queryByRole('link')).toBeNull();
+        expect(within(summary).getAllByRole('listitem').map((item) => item.getAttribute('data-error-for')))
+            .toEqual(['ticker', 'amount']);
+        expect(screen.getByLabelText('Ticker')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByLabelText('Amount')).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('names the field once when the message already opens with its label', () => {
@@ -180,8 +189,8 @@ describe('<FormErrorSummary>', () => {
             ]} focusKey={1} />,
         );
 
-        const links = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('link');
-        expect(links.map((link) => link.textContent)).toEqual([
+        const lines = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('listitem');
+        expect(lines.map((line) => line.textContent)).toEqual([
             'Password must be at least 8 characters.',
             'Word 5 does not match your written copy.',
             'Word 1: Word 12 is missing.',
@@ -228,7 +237,7 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(within(summary).getByText("Couldn't send. Something went wrong. Try again.")).toBeInTheDocument();
-        expect(within(summary).queryByText(/Fix (?:this|these).*field/)).not.toBeInTheDocument();
+        expect(within(summary).queryByText(/Fix \d+ things? to continue/)).not.toBeInTheDocument();
         expect(within(summary).queryByRole('link')).not.toBeInTheDocument();
     });
 });
@@ -253,15 +262,13 @@ describe('<FormPage>', () => {
             </FormPage>,
         );
         const form = container.querySelector('form');
-        // The notice leads the page just above the form (its card, when wide).
-        const page = [...form.parentElement.children];
-        expect(page).toHaveLength(2);
-        expect(page[0]).toHaveTextContent('Problem');
-        expect(page[1]).toBe(form);
+        // The notice is the form's first item, so from 600px the one form card
+        // wraps it with the fields (operator 2026-11-16).
         const kids = [...form.children];
+        expect(kids).toHaveLength(3);
+        expect(kids[0]).toHaveTextContent('Problem');
         expect(kids.at(-1)).toContainElement(screen.getByRole('button', { name: 'Go' }));
         expect(kids.at(-2)).toContainElement(screen.getByLabelText('Amount'));
-        expect(form).not.toHaveTextContent('Problem');
     });
 
     it('keeps the same form and the focused field when a notice comes and goes', () => {
@@ -285,7 +292,7 @@ describe('<FormPage>', () => {
         expect(document.activeElement).toBe(amount);
     });
 
-    it('lets an error summary above the form take focus and lead to its field', () => {
+    it('lets an error summary at the top of the form take focus and mark its field', () => {
         render(
             <FormPage
                 label="Pay"
@@ -297,10 +304,9 @@ describe('<FormPage>', () => {
         );
         const summary = screen.getByRole('alert');
         const form = screen.getByRole('form', { name: 'Pay' });
-        expect(form).not.toContainElement(summary);
+        expect(form.firstElementChild).toContainElement(summary);
         expect(document.activeElement).toBe(summary);
-        fireEvent.click(within(summary).getByRole('link'));
-        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+        expect(screen.getByLabelText('Amount')).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('calls onSubmit when the form is submitted, and skips browser validation by default', () => {
@@ -521,10 +527,11 @@ describe('ListPage.module.css: fluid list width', () => {
         expect(ruleBody(text, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('uses the shared section rhythm and tightens a header to its content', () => {
-        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+    it('spaces blocks by its own 8px list gap and tightens a header to its content', () => {
+        expect(ruleBody(text, '.page')).toMatch(/--xc-list-page-gap:\s*var\(--xc-space-2\)/);
+        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-list-page-gap\)/);
         expect(ruleBody(text, '.page > [data-xc-section-header] + *'))
-            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-section-gap\)\)/);
+            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-list-page-gap\)\)/);
     });
 });
 
@@ -536,17 +543,28 @@ describe('page gutter ownership', () => {
     it('keeps page gutter use in Screen and tier values in the shell', () => {
         const users = filesBelow(coreSrcDir(), '.module.css')
             .filter((file) => readFileSync(file, 'utf8').includes('var(--xc-page-gutter)'));
-        expect(users).toEqual([screenPath]);
+        // The app bar uses the same gutter on every side so its buttons sit on the page's lines.
+        // The wide wallet menu sheet floats one gutter in from each edge (layout 1, ruling 2026-11-14).
+        // Wide Home's divider runs edge to edge across the content area and its
+        // split reaches the bottom edge (G115, revised 2026-11-15), so it reads
+        // the gutter to bleed through Screen's padding; it adds none of its own.
+        expect(users).toEqual([
+            join(coreSrcDir(), 'shared', 'commandPalette', 'CommandPalette.module.css'),
+            join(coreSrcDir(), 'shared', 'components', 'AppHeader.module.css'),
+            join(coreSrcDir(), 'shared', 'components', 'HomeWideLayout.module.css'),
+            screenPath,
+        ]);
 
         const tokens = css('tokens.css');
-        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-3\)/);
-        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-3\)/);
+        // The gutter and the top inset are 8px at every width.
+        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-2\)/);
+        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-2\)/);
 
         const shell = readFileSync(join(coreSrcDir(), 'shared', 'components', 'LeftNav.module.css'), 'utf8');
         // One gutter on every tier: the shell sets only the top inset per tier.
         expect(shell).not.toMatch(/--xc-page-gutter:/);
-        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
-        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-2\)/s);
+        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-2\)/s);
         expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
     });
 
@@ -669,7 +687,8 @@ describe('list page rhythm tokens', () => {
     it('defines one section gap, header gap, and list row padding', () => {
         expect(tokens).toMatch(/--xc-section-gap:\s*var\(--xc-space-4\)/);
         expect(tokens).toMatch(/--xc-section-header-gap:\s*var\(--xc-space-2\)/);
-        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-3\)/);
+        // List rows use 8px padding everywhere.
+        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-2\)/);
     });
 
     it('uses gaps instead of child margins inside headers and empty states', () => {
@@ -693,5 +712,926 @@ describe('template stylesheets: WebView 102 safe', () => {
             // Colours come from tokens only, so dark mode and forced colors follow.
             expect(text, file).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
         }
+    });
+});
+
+// Every early return of a route's wrap() helper (the load error, the loading
+// line and the done stage) lays out through a template, the same as the form
+// and review stages, so the notice and the result panel keep the template
+// rhythm instead of sitting bare in the Screen content box.
+function wrapCallRoots(fileName) {
+    const path = join(coreSrcDir(), 'shared', 'routes', fileName);
+    const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+    const roots = [];
+    const visit = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'CallExpression'
+            && node.callee.type === 'Identifier'
+            && node.callee.name === 'wrap'
+        ) {
+            const arg = node.arguments[0];
+            const line = node.loc.start.line;
+            if (arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier') {
+                roots.push({ line, name: arg.openingElement.name.name });
+            } else {
+                roots.push({ line, name: arg?.type || 'none' });
+            }
+        }
+        for (const value of Object.values(node)) {
+            if (Array.isArray(value)) value.forEach(visit);
+            else if (value && typeof value === 'object') visit(value);
+        }
+    };
+    visit(tree.program);
+    return roots;
+}
+
+describe('route wrap() returns: every stage lays out through a template', () => {
+    it('TokenAdminForm passes ListPage, FormPage or ResultScreen to every wrap() call', () => {
+        const roots = wrapCallRoots('TokenAdminForm.jsx');
+        expect(roots.length).toBeGreaterThan(4);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame', 'ResultScreen'].includes(name))
+            .map(({ line, name }) => `TokenAdminForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+});
+
+// DelegateVoteForm's wrap() helper is a bare Screen. The load error, the
+// loading line, both ResultScreen states and the done panel reach the page
+// through the ListPage each wrap() call passes, and the form stage through
+// FormPage. Review uses ConfirmActionModal, so no state draws straight into
+// the Screen box.
+describe('DelegateVoteForm: every wrap() call passes ListPage or FormPage', () => {
+    it('roots non-review states in templates and review in ConfirmActionModal', () => {
+        const roots = wrapCallRoots('DelegateVoteForm.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'DelegateVoteForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `DelegateVoteForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+});
+
+// A route's load error, loading line and result panel lay out through a page
+// template like its form does, so the page edge and rhythm match the form
+// stage on every shell. MintForm puts each one inside ListPage within the
+// same Screen.
+describe('MintForm: every stage renders inside a page template', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+    const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
+    const ADDRESSES = {
+        [CHAIN_ID]: [{
+            id: 'addr-1',
+            address: ADDRESS,
+            publicKey: '02ab',
+            derivationPath: "m/84'/0'/0'/0/0",
+            source: 'hd',
+        }],
+    };
+
+    afterEach(() => {
+        __clearTokenInfoCache();
+    });
+
+    // The root class of each template, read from the component itself so the
+    // check follows the CSS-module naming the test run uses.
+    function templateClasses() {
+        const list = render(<ListPage><p>x</p></ListPage>);
+        const listClass = list.container.firstChild.className.split(' ')[0];
+        list.unmount();
+        const form = render(<FormPage onSubmit={() => {}} label="x"><p>x</p></FormPage>);
+        const formClass = form.container.querySelector('form').className.split(' ')[0];
+        form.unmount();
+        return [listClass, formClass];
+    }
+
+    function expectInsideTemplate(element) {
+        const selector = templateClasses().map((name) => `.${CSS.escape(name)}`).join(', ');
+        expect(element.closest(selector), 'inside ListPage or FormPage').not.toBeNull();
+    }
+
+    function mountMint(overrides = {}) {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            isUnlocked: vi.fn().mockResolvedValue(true),
+            getTokenInfo: vi.fn(async () => ({
+                chainId: CHAIN_ID,
+                tick: 'CAPTEST',
+                creator: ADDRESS,
+                maxSupply: '5000',
+                totalSupply: '1000',
+                mintMax: null,
+                divisibility: 0,
+                locks: {},
+            })),
+            composeForConfirm: vi.fn(async () => ({
+                psbt: 'aa00',
+                encoding: 'psbt',
+                actionString: 'MINT|0|CAPTEST|4000',
+                version: 1,
+                chainId: CHAIN_ID,
+                decoded: { summary: 'Mint 4,000 CAPTEST', details: [], warnings: [] },
+            })),
+            preflight: vi.fn(async () => ({
+                schemaVersion: 1, verdict: 'pass', restricted: false, checksRun: ['local'],
+                findings: [], unverified: [], quote: null, stateHeight: 1, elapsedMs: 1,
+            })),
+            checkInputLiveness: vi.fn(async () => ({ verdict: 'live' })),
+            releaseEncoderInputs: vi.fn(async () => undefined),
+            reserve: vi.fn(async () => ({ id: 'reservation' })),
+            releaseReservation: vi.fn(async () => undefined),
+            mintToken: vi.fn(async () => ({ txid: 'ab'.repeat(32) })),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                return property in target ? target[property] : undefined;
+            },
+        });
+        render(
+            <MessagingProvider shell="desktop" messaging={proxy}>
+                <MintForm walletId="w" initialChainId={CHAIN_ID} initialTick="CAPTEST" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        return messaging;
+    }
+
+    it('lays out the load error inside a template', async () => {
+        mountMint({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        const status = await screen.findByText(/Address store unavailable|Failed to load addresses/);
+        expectInsideTemplate(status);
+    });
+
+    it('lays out the loading line inside a template', () => {
+        mountMint({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        expectInsideTemplate(screen.getByText('Loading…'));
+    });
+
+    it('lays out the done result inside a template', async () => {
+        const messaging = mountMint();
+        await screen.findByText(/4,000 CAPTEST available to mint/);
+        fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '4000' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Mint$/ }));
+        const approve = await screen.findByRole('button', { name: /^Approve$/ });
+        await waitFor(() => expect(approve).not.toBeDisabled());
+        fireEvent.click(approve);
+        const title = await screen.findByText('Minted');
+        expect(messaging.mintToken).toHaveBeenCalledTimes(1);
+        expectInsideTemplate(title);
+        expectInsideTemplate(screen.getByRole('button', { name: 'Done' }));
+    });
+});
+
+// SleepForm's wrap() helper is a bare Screen, so the load error, the loading
+// line and every done-stage panel reach the page only through the FormPage
+// each wrap() call passes; a StatusMessage, hint line, ResultScreen or
+// fragment handed straight to wrap() sits in the Screen box with no template.
+describe('SleepForm: every wrap() call passes a FormPage', () => {
+    function sleepFormWrapRoots() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'SleepForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                const name = arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                    ? arg.openingElement.name.name
+                    : (arg?.type || 'none');
+                roots.push({ line: node.loc.start.line, name, arg });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return roots;
+    }
+
+    const hasDescendant = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => hasDescendant(item, test))
+            : (value && typeof value === 'object' ? hasDescendant(value, test) : false)));
+    };
+    const opens = (name) => (node) => node.type === 'JSXOpeningElement'
+        && node.name.type === 'JSXIdentifier' && node.name.name === name;
+
+    it('roots non-review states in FormPage and review in ConfirmActionModal', () => {
+        const roots = sleepFormWrapRoots();
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'SleepForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
+        const faults = roots
+            .filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `SleepForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+
+    it('keeps the load error, the loading line and both ResultScreen states inside those FormPages', () => {
+        const roots = sleepFormWrapRoots();
+        const holding = (test) => roots.filter(({ arg }) => hasDescendant(arg, test));
+        expect(holding((node) => node.type === 'Identifier' && node.name === 'loadError')
+            .map(({ name }) => name)).toEqual(['FormPage']);
+        expect(holding((node) => node.type === 'JSXText' && node.value.includes('Loading…'))
+            .map(({ name }) => name)).toEqual(['FormPage']);
+        expect(holding(opens('ResultScreen')).map(({ name }) => name)).toEqual(['FormPage', 'FormPage']);
+        expect(holding((node) => node.type === 'JSXText' && node.value.includes('broadcast'))
+            .map(({ name }) => name)).toContain('FormPage');
+    });
+});
+
+// DividendForm's wrap() helper is a bare Screen. The load error, the loading
+// line and the done-stage result reach the page through the FormPage each
+// wrap() call passes, the same template the form and review stages use, so
+// none of them sits in the Screen box with no template edge or rhythm.
+describe('DividendForm: every stage renders inside FormPage', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+
+    function formPageClass() {
+        const form = render(<FormPage onSubmit={() => {}} label="x"><p>x</p></FormPage>);
+        const name = form.container.querySelector('form').className.split(' ')[0];
+        form.unmount();
+        return name;
+    }
+
+    function expectInsideFormPage(element) {
+        expect(element.closest(`.${CSS.escape(formPageClass())}`), 'inside FormPage').not.toBeNull();
+    }
+
+    async function mountDividend(overrides = {}) {
+        const { MessagingProvider: Provider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+        const { DividendForm } = await import('../../../packages/core/src/shared/routes/DividendForm.jsx');
+        const messaging = {
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            isUnlocked: vi.fn().mockResolvedValue(true),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                return property in target ? target[property] : undefined;
+            },
+        });
+        render(
+            <Provider shell="desktop" messaging={proxy}>
+                <DividendForm walletId="w" initialChainId={CHAIN_ID} onBack={() => {}} />
+            </Provider>,
+        );
+    }
+
+    it('lays out the load error inside FormPage', async () => {
+        await mountDividend({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        expectInsideFormPage(await screen.findByText('Address store unavailable'));
+    });
+
+    it('lays out the loading line inside FormPage while addresses are unloaded', async () => {
+        await mountDividend({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        expectInsideFormPage(screen.getByText('Loading…'));
+    });
+
+    it('templates every wrap() call and uses ConfirmActionModal for review', () => {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'DividendForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                roots.push({
+                    line: node.loc.start.line,
+                    name: arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                        ? arg.openingElement.name.name
+                        : (arg?.type || 'none'),
+                });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(path, 'utf8')).toContain('<ConfirmActionModal');
+        expect(roots.filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `DividendForm.jsx:${line} wrap(${name})`)).toEqual([]);
+    });
+});
+
+// GatedPublishForm's wrap() helper is a bare Screen. The load error reaches
+// the page as the FormPage status, and the broadcast result as FormPage
+// content with Done in its action row, the same template the form and
+// review stages use, so neither sits in the Screen box with no template edge.
+describe('GatedPublishForm: the load error and the broadcast result render inside FormPage', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+
+    async function mountGatedPublish(overrides = {}) {
+        const { MessagingProvider: Provider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+        const { GatedPublishForm } = await import('../../../packages/core/src/shared/routes/GatedPublishForm.jsx');
+        const messaging = {
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listContacts: vi.fn().mockResolvedValue([]),
+            listGatedKeys: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            isUnlocked: vi.fn().mockResolvedValue(true),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                return property in target ? target[property] : undefined;
+            },
+        });
+        render(
+            <Provider shell="desktop" messaging={proxy}>
+                <GatedPublishForm walletId="w" chainId={CHAIN_ID} tick="GATE" onBack={() => {}} />
+            </Provider>,
+        );
+    }
+
+    function gatedPublishWrapCalls() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'GatedPublishForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const calls = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                calls.push(node.arguments[0]);
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return calls;
+    }
+
+    const hasDescendant = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => hasDescendant(item, test))
+            : (value && typeof value === 'object' ? hasDescendant(value, test) : false)));
+    };
+    const rootName = (arg) => (arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+        ? arg.openingElement.name.name
+        : (arg?.type || 'none'));
+
+    it('lays out the load error in the FormPage status region', async () => {
+        await mountGatedPublish({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        const error = await screen.findByText('Address store unavailable');
+        expect(error.closest('[data-form-status]'), 'inside the FormPage status region').not.toBeNull();
+    });
+
+    it('lays out the broadcast result in FormPage with Done in its action row', () => {
+        const calls = gatedPublishWrapCalls();
+        const success = calls.filter((arg) => hasDescendant(arg, (node) => node.type === 'StringLiteral'
+            && node.value === 'gatedPublish.success'));
+        expect(success.map(rootName)).toEqual(['FormPage']);
+        const actions = success[0].openingElement.attributes.find((attribute) => attribute.type === 'JSXAttribute'
+            && attribute.name.name === 'actions');
+        expect(actions, 'the result FormPage has an actions prop').toBeDefined();
+        expect(hasDescendant(actions, (node) => node.type === 'StringLiteral' && node.value === 'common.done')).toBe(true);
+        expect(calls.filter((arg) => hasDescendant(arg, (node) => node.type === 'Identifier' && node.name === 'loadError'))
+            .map(rootName)).toEqual(['FormPage']);
+    });
+});
+
+// AdvancedActionsForm's wrap() helper is a bare Screen. The signer-mode
+// notice, the load error, the loading line and every done-stage panel reach
+// the page through the ListPage each wrap() call passes, and the form and
+// review stages through FormPage, so no state draws straight into the
+// Screen content box.
+describe('AdvancedActionsForm: every wrap() call passes a page template', () => {
+    function advancedWrapRoots() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'AdvancedActionsForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                const name = arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                    ? arg.openingElement.name.name
+                    : (arg?.type || 'none');
+                roots.push({ line: node.loc.start.line, name, arg });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return roots;
+    }
+
+    const holds = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => holds(item, test))
+            : (value && typeof value === 'object' ? holds(value, test) : false)));
+    };
+
+    it('roots non-review states in templates and review in ConfirmActionModal', () => {
+        const roots = advancedWrapRoots();
+        expect(roots.length).toBeGreaterThanOrEqual(7);
+        expect(readFileSync(join(coreSrcDir(), 'shared', 'routes', 'AdvancedActionsForm.jsx'), 'utf8'))
+            .toContain('<ConfirmActionModal');
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `AdvancedActionsForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+
+    it('keeps the signer notice, load error, loading line and both ResultScreen states inside ListPage', () => {
+        const roots = advancedWrapRoots();
+        const rootsHolding = (test) => roots.filter(({ arg }) => holds(arg, test)).map(({ name }) => name);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('signer mode'))).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'Identifier' && node.name === 'loadError')).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Loading…'))).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXOpeningElement'
+            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['ListPage', 'ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Broadcast complete.'))).toEqual(['ListPage']);
+    });
+});
+
+// The official-token list flow roots every wrap() state in a template: the
+// watcher-mode refusal, both load errors, the loading line, the queued panel,
+// the done panel and the wait for indexing sit in ListPage, and the compose
+// and review stages in FormPage.
+describe('ProjectRosterForm: every wrap() state lays out through a template', () => {
+    it('roots each of its wrap() calls in ListPage or FormPage', () => {
+        const roots = wrapCallRoots('ProjectRosterForm.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(10);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `ProjectRosterForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+});
+
+// BatchComposerForm's wrap() helper is a bare Screen. The load error, the
+// loading line, both ResultScreen states and the broadcast panel reach the
+// page through the ListPage each wrap() call passes, and the review stage
+// through FormPage, so no state draws straight into the Screen content box.
+describe('BatchComposerForm: every wrap() call passes a page template', () => {
+    function batchWrapRoots() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'BatchComposerForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                const name = arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                    ? arg.openingElement.name.name
+                    : (arg?.type || 'none');
+                roots.push({ line: node.loc.start.line, name, arg });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return roots;
+    }
+
+    const holds = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => holds(item, test))
+            : (value && typeof value === 'object' ? holds(value, test) : false)));
+    };
+
+    it('roots the load error, loading line, done panels and review in ListPage or FormPage', () => {
+        const roots = batchWrapRoots();
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `BatchComposerForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+
+    it('keeps the load error, loading line, both ResultScreen states and the broadcast panel inside ListPage', () => {
+        const roots = batchWrapRoots();
+        const rootsHolding = (test) => roots.filter(({ arg }) => holds(arg, test)).map(({ name }) => name);
+        expect(rootsHolding((node) => node.type === 'Identifier' && node.name === 'loadError')).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Loading wallet'))).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXOpeningElement'
+            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['ListPage', 'ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Batch broadcast'))).toEqual(['ListPage']);
+    });
+});
+
+// CreatePollForm's wrap() helper is a bare Screen. The load error and the
+// loading line reach the page through a ListPage inside that Screen, the same
+// as the done panel, so neither draws straight into the Screen content box.
+describe('CreatePollForm: the load error and loading line render inside ListPage', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+
+    function listPageClass() {
+        const list = render(<ListPage><p>x</p></ListPage>);
+        const name = list.container.firstChild.className.split(' ')[0];
+        list.unmount();
+        return name;
+    }
+
+    function mountPoll(overrides = {}) {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                if (property in target) return target[property];
+                if (typeof property !== 'string') return undefined;
+                return vi.fn().mockResolvedValue(null);
+            },
+        });
+        return render(
+            <MessagingProvider shell="desktop" messaging={proxy}>
+                <CreatePollForm walletId="w" chainId={CHAIN_ID} presetTick="VOTE" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+    }
+
+    function expectInListPageWithinScreen(element, container) {
+        const page = element.closest(`.${CSS.escape(listPageClass())}`);
+        expect(page, 'inside ListPage').not.toBeNull();
+        expect(page.parentElement, 'ListPage is not the Screen root').not.toBe(container);
+        expect(container.contains(page)).toBe(true);
+    }
+
+    it('lays out the load error inside ListPage', async () => {
+        const { container } = mountPoll({
+            getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')),
+        });
+        const status = await screen.findByText('Address store unavailable');
+        expectInListPageWithinScreen(status, container);
+    });
+
+    it('lays out the loading line inside ListPage', () => {
+        const { container } = mountPoll({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        expectInListPageWithinScreen(screen.getByText('Loading addresses…'), container);
+    });
+});
+
+// SwapForm's wrap() helper is a bare Screen. The load error, the loading
+// line, both ResultScreen states and the sent panel reach the page through
+// the FormPage each wrap() call passes, like the review and form stages, and
+// the offline notice sits in that FormPage's status region instead of
+// straight in the Screen content box.
+describe('SwapForm: every stage renders inside FormPage', () => {
+    const SWAP_CHAIN = 'bitcoin-mainnet';
+
+    async function mountSwap(overrides = {}) {
+        const { SwapForm } = await import('../../../packages/core/src/shared/routes/SwapForm.jsx');
+        const { createElement } = await import('react');
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [SWAP_CHAIN]: [{ id: 'swap-a1', address: 'bc1qsendersendersendersendersendersendersa', source: 'hd', signerId: 's' }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                if (property in target) return target[property];
+                if (typeof property !== 'string') return undefined;
+                return vi.fn().mockResolvedValue(null);
+            },
+        });
+        return render(createElement(
+            MessagingProvider,
+            { shell: 'web', messaging: proxy },
+            createElement(SwapForm, { walletId: 'w', onBack() {} }),
+        ));
+    }
+
+    afterEach(() => {
+        delete navigator.onLine;
+    });
+
+    it('passes a FormPage to every wrap() call, the done-stage results included', () => {
+        const roots = wrapCallRoots('SwapForm.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(6);
+        const faults = roots
+            .filter(({ name }) => !['FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `SwapForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+
+    it('lays out the load error in the FormPage status region', async () => {
+        await mountSwap({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        const status = await screen.findByText('Address store unavailable');
+        expect(status.closest('[data-form-status]'), 'inside the FormPage status').not.toBeNull();
+    });
+
+    it('lays out the loading line in the FormPage body', async () => {
+        await mountSwap({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        const line = screen.getByText('Loading wallet…');
+        expect(line.closest('[data-form-stack]'), 'inside the FormPage body').not.toBeNull();
+    });
+
+    it('lays out the offline notice in the FormPage status region', async () => {
+        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+        await mountSwap();
+        // The Network field sits in the closed From section, so it is queried as hidden.
+        await screen.findByRole('button', { name: /^Network: /, hidden: true });
+        const notices = screen.getAllByText('Swapping needs a network connection.');
+        expect(notices).toHaveLength(1);
+        expect(notices[0].closest('[data-form-status]'), 'inside the FormPage status').not.toBeNull();
+    });
+});
+
+// The Staking form's wrap() helper is a bare Screen. On a contract target the
+// load error, the loading line, the not-stakeable notice and every result
+// reach the page through the FormPage each wrap() call passes, like the
+// review and form stages, so no state draws straight into the Screen box.
+describe('StakingForm on a contract: every stage renders inside a page template', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+    const ADDRESSES = {
+        [CHAIN_ID]: [{
+            id: 'stake-a1',
+            address: 'bc1qstakerstakerstakerstakerstakerstakers',
+            publicKey: '02ab',
+            derivationPath: "m/84'/0'/0'/0/0",
+            source: 'hd',
+        }],
+    };
+
+    function formPageClass() {
+        const page = render(<FormPage label="x"><p>x</p></FormPage>);
+        const name = page.container.firstChild.className.split(' ')[0];
+        page.unmount();
+        return name;
+    }
+
+    async function mountStake(overrides = {}) {
+        const { StakingForm } = await import('../../../packages/core/src/shared/routes/StakingForm.jsx');
+        const { createElement } = await import('react');
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getContractByActionIndex: vi.fn().mockResolvedValue({ row: { cooldown_blocks: 10, slash_destination: null } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                if (property in target) return target[property];
+                if (typeof property !== 'string') return undefined;
+                return vi.fn().mockResolvedValue(null);
+            },
+        });
+        return render(createElement(
+            MessagingProvider,
+            { shell: 'desktop', messaging: proxy },
+            createElement(StakingForm, {
+                walletId: 'w',
+                target: { kind: 'contract', chainId: CHAIN_ID, contractActionIndex: '7' },
+                action: 'stake',
+                onBack() {},
+            }),
+        ));
+    }
+
+    function expectInFormPageWithinScreen(element, container) {
+        const page = element.closest(`.${CSS.escape(formPageClass())}`);
+        expect(page, 'inside FormPage').not.toBeNull();
+        expect(page.parentElement, 'FormPage is not the Screen root').not.toBe(container);
+        expect(container.contains(page)).toBe(true);
+    }
+
+    it('lays out the load error as a FormPage notice', async () => {
+        const { container } = await mountStake({
+            getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')),
+        });
+        const status = await screen.findByText('Address store unavailable');
+        expectInFormPageWithinScreen(status, container);
+    });
+
+    it('lays out the loading line inside FormPage', async () => {
+        const { container } = await mountStake({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        expectInFormPageWithinScreen(screen.getByText('Loading…'), container);
+    });
+
+    it('lays out the not-stakeable notice inside FormPage', async () => {
+        const { container } = await mountStake({
+            getContractByActionIndex: vi.fn().mockResolvedValue({ row: { cooldown_blocks: null } }),
+        });
+        const notice = await screen.findByText(/is not stakeable/);
+        expectInFormPageWithinScreen(notice, container);
+    });
+
+    it('roots both ResultScreen states and the broadcast panel in FormPage', () => {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'StakingForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                const name = arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                    ? arg.openingElement.name.name
+                    : (arg?.type || 'none');
+                roots.push({ line: node.loc.start.line, name, arg });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        const holds = (node, test) => {
+            if (!node || typeof node !== 'object') return false;
+            if (test(node)) return true;
+            return Object.values(node).some((value) => (Array.isArray(value)
+                ? value.some((item) => holds(item, test))
+                : (value && typeof value === 'object' ? holds(value, test) : false)));
+        };
+        const rootsHolding = (test) => roots.filter(({ arg }) => holds(arg, test)).map(({ name }) => name);
+
+        expect(roots.length).toBeGreaterThanOrEqual(7);
+        expect(roots.filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `StakingForm.jsx:${line} wrap(${name})`)).toEqual([]);
+        expect(rootsHolding((node) => node.type === 'JSXOpeningElement'
+            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['FormPage', 'FormPage']);
+        // The broadcast panel: the page holding the result's Done action.
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.trim() === 'Done')).toEqual(['FormPage']);
+    });
+});
+
+// ComposeMessage's wrap() helper is a bare Screen. The load error and the
+// loading line reach the page through a FormPage (the error in its status
+// region), the sent panel through a FormPage with Done in its action row,
+// and the queued and unsigned states through ResultScreen, so no state draws
+// straight into the Screen content box.
+describe('ComposeMessage: the load error, the loading line and the sent panel render inside FormPage', () => {
+    async function mountCompose(overrides = {}) {
+        const { MessagingProvider: Provider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+        const { ComposeMessage } = await import('../../../packages/core/src/shared/routes/ComposeMessage.jsx');
+        const messaging = {
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            isUnlocked: vi.fn().mockResolvedValue(true),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                return property in target ? target[property] : undefined;
+            },
+        });
+        render(
+            <Provider shell="desktop" messaging={proxy}>
+                <ComposeMessage walletId="w" onBack={() => {}} />
+            </Provider>,
+        );
+    }
+
+    it('lays out the load error in the FormPage status region', async () => {
+        await mountCompose({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        const error = await screen.findByText('Address store unavailable');
+        expect(error.closest('[data-form-status]'), 'inside the FormPage status region').not.toBeNull();
+    });
+
+    it('lays out the loading line inside the FormPage group, not bare in the Screen', async () => {
+        await mountCompose({ getAddressesByChain: vi.fn(() => new Promise(() => {})) });
+        const loading = await screen.findByText('Loading wallet…');
+        const group = screen.getByRole('group', { name: 'New Message' });
+        expect(group.contains(loading), 'the loading line sits in the FormPage').toBe(true);
+    });
+
+    it('passes only FormPage or ResultScreen to every wrap() call', () => {
+        const roots = wrapCallRoots('ComposeMessage.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(7);
+        const faults = roots
+            .filter(({ name }) => !['FormPage', 'FormFrame', 'ResultScreen'].includes(name))
+            .map(({ line, name }) => `ComposeMessage.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+});
+
+// Send's wrap() helper is a bare Screen. The loading line, the signer-mode
+// refusal, the no-networks state, the load error, the empty state and every
+// result panel reach the page through the ListPage each wrap() call passes,
+// and the review and form stages through FormPage, so no Send state draws
+// straight into the Screen box with no template edge or rhythm.
+describe('Send: every stage renders inside FormPage or ListPage, not bare Screen', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+    const FROM = 'bc1qsendersendersendersendersendersendersa';
+    const ADDRESSES = {
+        [CHAIN_ID]: [{ id: 'addr-1', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' }],
+    };
+
+    function templateSelector() {
+        const list = render(<ListPage><p>x</p></ListPage>);
+        const listClass = list.container.firstChild.className.split(' ')[0];
+        list.unmount();
+        const form = render(<FormPage onSubmit={() => {}} label="x"><p>x</p></FormPage>);
+        const formClass = form.container.querySelector('form').className.split(' ')[0];
+        form.unmount();
+        return [listClass, formClass].map((name) => `.${CSS.escape(name)}`).join(', ');
+    }
+
+    function expectInsideTemplate(element) {
+        expect(element.closest(templateSelector()), 'inside ListPage or FormPage').not.toBeNull();
+    }
+
+    async function mountSend({
+        quantity = '100000000', settings = { grace: { testSendThresholdSats: 0 } }, walletMode = 'full', overrides = {},
+    } = {}) {
+        const { Send } = await import('../../../packages/core/src/shared/routes/Send.jsx');
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
+        const balances = { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
+        const base = {
+            getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+            getAddressBalances: vi.fn().mockResolvedValue(balances),
+            getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN_ID]: [{ address: FROM, balances, error: null }] }),
+            getSettings: vi.fn().mockResolvedValue(settings),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            ...overrides,
+        };
+        const messaging = new Proxy(base, {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                if (typeof prop !== 'string') return undefined;
+                const stub = vi.fn().mockResolvedValue(null);
+                target[prop] = stub;
+                return stub;
+            },
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Send walletId="w" onBack={() => {}} onReceive={() => {}} />
+            </MessagingProvider>,
+        );
+    }
+
+    it('lays out the loading line inside a template', async () => {
+        await mountSend({ overrides: { getAddressesByChain: vi.fn(() => new Promise(() => {})) } });
+        expectInsideTemplate(await screen.findByText('Loading…'));
+    });
+
+    it('lays out the signer-mode refusal inside a template', async () => {
+        await mountSend({ walletMode: 'signer' });
+        expectInsideTemplate(await screen.findByText(/This wallet is the signer for another phone/));
+    });
+
+    it('lays out the no-networks state inside a template', async () => {
+        await mountSend({ settings: { walletMode: 'full', fees: {} } });
+        expectInsideTemplate(await screen.findByRole('heading', { name: 'No networks available' }));
+    });
+
+    it('lays out the load error inside a template', async () => {
+        await mountSend({ overrides: { getAddressesByChain: vi.fn().mockRejectedValue(new Error('offline')) } });
+        expectInsideTemplate(await screen.findByText(/Couldn't load addresses/));
+    });
+
+    it('lays out the empty state inside a template', async () => {
+        await mountSend({ quantity: '0' });
+        expectInsideTemplate(await screen.findByRole('heading', { name: 'Nothing to send yet' }));
+    });
+
+    it('passes ListPage or FormPage to every wrap() call, the result panels included', () => {
+        const roots = wrapCallRoots('Send.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(13);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
+            .map(({ line, name }) => `Send.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
     });
 });

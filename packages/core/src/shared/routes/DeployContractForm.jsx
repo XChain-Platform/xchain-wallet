@@ -10,9 +10,12 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector render inside the standard
+// FromSection and FeeSection.
+import { Button, ChainBadge, FieldIconButton, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from '../../flows/variadicActionSize.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -22,7 +25,10 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import { isHwSignBack } from '../../signers/hardwareSession.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+// The Fees card renders inside the standard FeeSection.
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
@@ -51,14 +57,43 @@ import contractStyles from './ContractScreens.module.css';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { formatBytes } from '../utils/formatBytes.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+// Publish contract is laid out on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    useFormSections,
+} from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 /** Why a resumed publish's gas, constructor and staking fields cannot be edited. */
 const RESUME_FIELD_HINT = 'Fixed when this publish started. Discard it to change this.';
 
 /** How often a running chunked deploy's record is re-read for an indexer wait. */
 const INDEXER_WAIT_POLL_MS = 5000;
+
+/** How long typing must pause before the code source is checked. */
+const CODE_CHECK_DELAY_MS = 500;
+
+/**
+ * The protocol's code size limit in bytes (the SDK's MAX_CODE_SIZE), used
+ * until the SDK's own size answer, which carries the limit, comes back.
+ */
+const DEFAULT_CODE_SIZE_LIMIT = 65536;
+
+const utf8 = new TextEncoder();
+
+// Sizes read through the shared formatBytes: the source rounds up, the
+// limit rounds down, so a source just over the limit never reads as under it.
 
 // Which chains this form may deploy on, asked of the LIVE registry inside the
 // component (useSupportedChains, filtered on supportedActions.includes('DEPLOY'))
@@ -135,9 +170,13 @@ function countLabel(count, noun) {
  *   Gas limit:          [ input, auto-suggested ]
  *   Constructor params: [ pipe-delimited ]
  *
- *   [Validate code]   sdk.validateContract (legacy: sdk.contracts.validate)
- *   [Estimate size]   sdk.contracts.checkCodeSize
- *   [Suggest gas]     sdk.contracts.suggestGasLimit
+ *   About 500 ms after typing stops in Code source, the form checks the code
+ *   by itself, with no buttons:
+ *     validation   sdk.validateContract (legacy: sdk.contracts.validate)
+ *     size         sdk.contracts.checkCodeSize
+ *     gas          sdk.contracts.suggestGasLimit, once the code is valid; it
+ *                  fills Gas limit unless the user typed their own value, and
+ *                  the icon in the Gas limit field puts it back.
  *
  *   [Preview] [Sign]
  *
@@ -218,12 +257,20 @@ export function DeployContractForm({ walletId, onBack }) {
     const validationRequestRef = useRef(0);
     const sizeRequestRef = useRef(0);
     const gasRequestRef = useRef(0);
-    const [validationBusy, setValidationBusy] = useState(false);
-    const [sizeBusy, setSizeBusy] = useState(false);
-    const [gasBusy, setGasBusy] = useState(false);
+    // True while Gas limit holds a value the user typed (or a resumed run
+    // restored), which the automatic suggestion never overwrites.
+    const gasTypedRef = useRef(false);
     const [sizeInfo, setSizeInfo] = useState(
-        /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
+        /** @type {{ bytes: number, withinLimit: boolean, limit?: number } | null} */ (null),
     );
+    // Size of the source as the network counts it (UTF-8 bytes), live while
+    // typing; the SDK's answer replaces it once the check has run.
+    const localCodeBytes = useMemo(() => utf8.encode(code).length, [code]);
+    const codeBytes = sizeInfo ? sizeInfo.bytes : localCodeBytes;
+    const codeSizeLimit = sizeInfo && Number.isFinite(sizeInfo.limit) && sizeInfo.limit > 0
+        ? sizeInfo.limit
+        : DEFAULT_CODE_SIZE_LIMIT;
+    const codeOverLimit = codeBytes > codeSizeLimit || sizeInfo?.withinLimit === false;
     const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
     // The one gas value the form checks, plans with and composes: the typed
     // field with its spaces trimmed, else the suggestion. Validating one string
@@ -236,6 +283,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const [metaRead, setMetaRead] = useState(
         /** @type {{ status: string, name?: string, description?: string, version?: string, computed?: string[] } | null} */ (null),
     );
+    const metaAbsent = metaRead?.status === 'absent';
 
     // PC-38: the SDK's audited template library. Sync + no network host-side,
     // so this is a cheap one-shot load per chain.
@@ -267,11 +315,25 @@ export function DeployContractForm({ walletId, onBack }) {
     // the transaction.
     const [resumeFieldsFrom, setResumeFieldsFrom] = useState(/** @type {string | null} */ (null));
     const assembleLocked = resumeId !== null && resumeId === resumeFieldsFrom;
+    // Read by the automatic gas fill, which runs after an await.
+    const assembleLockedRef = useRef(assembleLocked);
+    assembleLockedRef.current = assembleLocked;
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The standard section a Publish refusal belongs to, and a counter
+    // bumped on every attempt, so that section reopens each time.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Open state held above the picker and review early returns.
+    // From starts closed, Contract open, the rest closed.
+    const formSections = useFormSections({ from: false, contract: true, constructor: false, staking: false, fee: false });
+    const failIn = (section, message) => {
+        setFormError(message);
+        setFormErrorSection(section);
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
     const confirmDialog = useConfirmModal();
@@ -402,6 +464,63 @@ export function DeployContractForm({ walletId, onBack }) {
         return p;
     }, [code, effectiveGasLimit, constructorParams, cooldownBlocks, slashDestination]);
 
+    const deployQuoteActionData = useMemo(() => {
+        if (!fromAddress?.address || !chainId || !code.trim()) return null;
+        if (!/^\d+$/.test(effectiveGasLimit) || !/[1-9]/.test(effectiveGasLimit)) return null;
+        if (validation?.ok === false || metaAbsent) return null;
+        const cooldownText = cooldownBlocks.trim();
+        if (cooldownText) {
+            const cooldown = Number(cooldownText);
+            if (!/^\d+$/.test(cooldownText) || !Number.isInteger(cooldown)
+                || cooldown < 1 || cooldown > 100000) return null;
+        } else if (slashDestination.trim()) {
+            return null;
+        }
+        const slashTo = slashDestination.trim();
+        if (slashTo && slashTo !== 'BURN' && (!descriptor?.coin || !descriptor?.networkKind
+            || !isValidAddressForChain(slashTo, descriptor.coin, descriptor.networkKind))) return null;
+        const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
+        if (constructorParams.trim() && constructorParts.some((part) => part === '')) return null;
+        if (constructorParts.some((part) => part.includes(';'))) return null;
+        if (cooldownText && constructorParts.filter(Boolean).length > 1) return null;
+        if (!cooldownText && variadicSizeMessage(deployActionFit({
+            code,
+            gasLimit: effectiveGasLimit,
+            constructorParams: normalizeConstructorParams(constructorParams),
+        }), DEPLOY_ARGUMENT_WORDS)) return null;
+        return { action: 'DEPLOY', params: actionParams };
+    }, [fromAddress?.address, chainId, code, effectiveGasLimit, validation?.ok, metaAbsent,
+        cooldownBlocks, slashDestination, descriptor, constructorParams, actionParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: deployQuoteActionData,
+    });
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const legacyDecoded = useMemo(() => ({
+        summary: t('components.confirmSummary.verbDeployContract'),
+        details: [],
+        warnings: [
+            ...(nativeFee.payFeeInNativeCoin ? [NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE] : []),
+            ...((validation?.warnings || []).map((warning) => humanizeDeployDiagnostic(warning).message)),
+        ],
+    }), [nativeFee.payFeeInNativeCoin, validation?.warnings]);
+    const legacyComposed = useMemo(() => ({
+        action: 'DEPLOY',
+        chainId,
+        decoded: legacyDecoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+    }), [chainId, legacyDecoded, protocolFeeQuote, quotedProtocolFee.free, quotedProtocolFee.known]);
+    const deployNetworkFeeAmount = useMemo(() => {
+        if (!feeEstimate?.coinAmount) return null;
+        const transactionCount = plan && plan.single === false ? plan.totalChunks + 1 : 1;
+        return trimAmountTail(sumDecimalStrings(
+            new Array(transactionCount).fill(String(feeEstimate.coinAmount)),
+        ));
+    }, [feeEstimate?.coinAmount, plan]);
+
     // PC-38: load the template list + any resumable run once the chain is known.
     useEffect(() => {
         let cancelled = false;
@@ -486,6 +605,22 @@ export function DeployContractForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [messaging, chainId, code]);
 
+    // Validate, size and suggest gas by themselves once typing pauses. A new
+    // edit (or a chain switch) clears the pending run and bumps the request
+    // counters, so an answer about older code is dropped when it lands.
+    useEffect(() => {
+        if (!chainId || !code.trim()) return undefined;
+        const timer = setTimeout(() => { runCodeChecks(); }, CODE_CHECK_DELAY_MS);
+        return () => {
+            clearTimeout(timer);
+            validationRequestRef.current += 1;
+            sizeRequestRef.current += 1;
+            gasRequestRef.current += 1;
+        };
+        // runCodeChecks reads this render's code and chain, the two deps.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chainId, code]);
+
     // What the chain will record, hardened for display: these are strings out
     // of a source the user may have pasted from anywhere, rendered on a
     // signing-adjacent screen.
@@ -499,8 +634,6 @@ export function DeployContractForm({ walletId, onBack }) {
     // before anything is composed and therefore before any fee is spent. An
     // `undecidable` read (a computed meta) never refuses; the chain may accept
     // it, and refusing would block a legal deploy.
-    const metaAbsent = metaRead?.status === 'absent';
-
     async function handleUseTemplate(templateName) {
         if (!chainId || toolBusy) return;
         setToolBusy(`template:${templateName}`);
@@ -517,18 +650,31 @@ export function DeployContractForm({ walletId, onBack }) {
         }
     }
 
+    // The automatic checks, run once typing pauses. Size and validation run
+    // side by side; gas is only suggested for code that validated.
+    async function runCodeChecks() {
+        handleCheckSize();
+        if (await handleValidate()) await handleSuggestGas();
+    }
+
+    /** Validates this render's source; resolves true only when it is valid and still current. */
     async function handleValidate() {
-        if (!chainId || toolBusy) return;
+        if (!chainId) return false;
         const source = code;
         const request = ++validationRequestRef.current;
-        setFormError(null);
-        setValidationBusy(true);
         try {
             const res = await messaging.validateContractCode({ chainId, code: source });
-            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return false;
+            // No yes-or-no answer (a shell relaying a mock answers every
+            // method with {}) is no verdict, so it neither passes nor blocks.
+            if (typeof res?.valid !== 'boolean') {
+                setValidation(null);
+                return false;
+            }
             const warnings = normalizeValidationDiagnostics(res?.warnings);
-            if (res?.valid) {
-                setValidation({ ok: true, msg: 'Syntax OK.', warnings, errors: [] });
+            if (res.valid) {
+                setValidation({ ok: true, msg: 'Valid', warnings, errors: [] });
+                return true;
             } else {
                 const rawErrors = Array.isArray(res?.errors) && res.errors.length > 0
                     ? res.errors
@@ -539,17 +685,17 @@ export function DeployContractForm({ walletId, onBack }) {
                     warnings,
                     errors: normalizeValidationDiagnostics(rawErrors),
                 });
+                return false;
             }
         } catch (e) {
-            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return false;
             setValidation({
                 ok: false,
                 msg: 'Validation failed.',
                 warnings: [],
                 errors: normalizeValidationDiagnostics(e),
             });
-        } finally {
-            if (validationRequestRef.current === request) setValidationBusy(false);
+            return false;
         }
     }
 
@@ -566,17 +712,43 @@ export function DeployContractForm({ walletId, onBack }) {
         textarea.setSelectionRange(offset, offset);
     }
 
-    function renderValidationSummary(result) {
+    // The one status line under Code source once the checks have answered:
+    // "Valid, 2.4 KB of 64 KB", the size refusal, or the first error with its
+    // line (a link that puts the cursor there). Nothing while the box is empty
+    // or the checks have not run yet.
+    function renderCodeStatus() {
+        if (!code.trim() || (!validation && !sizeInfo)) return null;
+        const size = `${formatBytes(codeBytes)} of ${formatBytes(codeSizeLimit, { limit: true })}`;
+        /** @type {{ tone: 'success' | 'error', text: string, line?: number | null } | null} */
+        let status = null;
+        if (codeOverLimit) {
+            status = { tone: 'error', text: `Too large, ${size}` };
+        } else if (validation && !validation.ok) {
+            const first = validation.errors[0];
+            const more = validation.errors.length > 1 ? ` (${countLabel(validation.errors.length - 1, 'more error')})` : '';
+            status = first
+                ? { tone: 'error', text: `${first.line ? `Line ${first.line}: ` : ''}${first.message}${more}`, line: first.line }
+                : { tone: 'error', text: validation.msg };
+        } else if (validation && validation.ok) {
+            const warned = validation.warnings.length > 0 ? ` (${countLabel(validation.warnings.length, 'warning')})` : '';
+            status = { tone: 'success', text: `Valid, ${size}${warned}` };
+        }
+        if (!status) return null;
         return (
-            <>
-                {result.msg}
-                {result.errors.length > 0 || result.warnings.length > 0 ? (
-                    <> ({[
-                        result.errors.length > 0 ? countLabel(result.errors.length, 'error') : null,
-                        result.warnings.length > 0 ? countLabel(result.warnings.length, 'warning') : null,
-                    ].filter(Boolean).join(', ')})</>
-                ) : null}
-            </>
+            <FieldNote variant={status.tone} testId="deploy-code-status">
+                {status.line ? (
+                    <Button
+                        type="button"
+                        className={styles.validationLink}
+                        icon={<Icon.ArrowRightIcon />}
+                        onClick={() => moveToCodeLine(status.line)}
+                    >
+                        {/* A diagnostic sentence from the validator, not a
+                            Title Case label, as in the warnings list. */}
+                        <span className={styles.validationMessage}>{status.text}</span>
+                    </Button>
+                ) : status.text}
+            </FieldNote>
         );
     }
 
@@ -603,6 +775,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                 <Button
                                     type="button"
                                     className={styles.validationLink}
+                                    icon={<Icon.ArrowRightIcon />}
                                     onClick={() => moveToCodeLine(entry.line)}
                                 >
                                     {content}
@@ -626,44 +799,53 @@ export function DeployContractForm({ walletId, onBack }) {
         );
     }
 
+    // The automatic checks never clear the form error first: one landing
+    // after a Publish click would erase the refusal the user is reading, and
+    // typing in Code source already clears it.
     async function handleCheckSize() {
-        if (!chainId || toolBusy) return;
+        if (!chainId) return;
         const source = code;
         const request = ++sizeRequestRef.current;
-        setFormError(null);
-        setSizeBusy(true);
         try {
             const res = await messaging.checkContractCodeSize({ chainId, code: source });
             if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
-            setSizeInfo(res);
+            // Only a real byte count is an answer; anything else leaves the
+            // form's own UTF-8 count in place.
+            if (res && Number.isFinite(res.bytes)) setSizeInfo(res);
         } catch (e) {
             if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(userFacingMessage(e, 'Size check failed.'));
-        } finally {
-            if (sizeRequestRef.current === request) setSizeBusy(false);
         }
     }
 
     async function handleSuggestGas() {
-        if (!chainId || toolBusy) return;
+        if (!chainId) return;
         const source = code;
         const request = ++gasRequestRef.current;
-        setFormError(null);
-        setGasBusy(true);
         try {
             // sdk.contracts.suggestGasLimit returns { suggested, rationale };
             // pull the scalar out (rendering the object crashed the form).
-            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code: source });
+            const res = await messaging.suggestContractGasLimit({ chainId, code: source });
             if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
+            const suggested = Number(res?.suggested);
+            if (!Number.isSafeInteger(suggested) || suggested <= 0) return;
             setSuggestedGas(suggested);
-            setSuggestedRationale(rationale || null);
-            if (!gasLimit) setGasLimit(String(suggested));
+            setSuggestedRationale(res.rationale || null);
+            // Fill the field unless it holds the user's own value or a
+            // resumed run's fixed one.
+            if (!gasTypedRef.current && !assembleLockedRef.current) setGasLimit(String(suggested));
         } catch (e) {
             if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(userFacingMessage(e, 'Gas suggestion failed.'));
-        } finally {
-            if (gasRequestRef.current === request) setGasBusy(false);
         }
+    }
+
+    /** The icon in Gas limit: put the suggestion back over a typed value. */
+    function handleUseSuggestedGas() {
+        if (suggestedGas === null || assembleLocked) return;
+        gasTypedRef.current = false;
+        setGasLimit(String(suggestedGas));
+        setFormError(null);
     }
 
     async function handleDiscardPending(id) {
@@ -696,27 +878,35 @@ export function DeployContractForm({ walletId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt may reopen the section holding the refusal;
+        // failIn names it (From, Contract, Constructor, Staking or the fee).
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { failIn('fee', feeStop.formError); return; }
         if (!chainId || !fromAddress) {
-            setFormError('No address available to publish from on this network.');
+            failIn('from', 'No address available to publish from on this network.');
             return;
         }
         if (!code.trim()) {
-            setFormError('Contract source is required.');
+            failIn('contract', 'Contract source is required.');
+            return;
+        }
+        if (codeOverLimit) {
+            failIn('contract', `Contract source is ${formatBytes(codeBytes)}, over the ${formatBytes(codeSizeLimit, { limit: true })} limit. `
+                + 'Shorten it before publishing.');
             return;
         }
         const gas = effectiveGasLimit;
         if (!/^\d+$/.test(gas) || !/[1-9]/.test(gas)) {
-            setFormError('Gas limit must be a positive whole number. Tap "Suggest gas" for a heuristic estimate.');
+            failIn('contract', 'Gas limit must be a positive whole number. Tap "Use Suggested Gas" in the field for an estimate.');
             return;
         }
         if (validation?.ok === false) {
-            setFormError('Fix the syntax error before previewing (see Validate code).');
+            failIn('contract', 'Fix the code error shown under Code source before publishing.');
             return;
         }
         if (metaAbsent) {
-            setFormError('This contract exports no meta.name and meta.description, so the network '
+            failIn('contract', 'This contract exports no meta.name and meta.description, so the network '
                 + `would reject the publication (${CONTRACT_META_REQUIRED}) after you paid for it. `
                 + 'Add a meta block to the source and try again.');
             return;
@@ -727,11 +917,11 @@ export function DeployContractForm({ walletId, onBack }) {
             // Digits only: Number() also reads "1e3", "1.0" and "0x10" as whole
             // numbers, and the encoder is handed the text as typed.
             if (!/^\d+$/.test(cooldownText) || !Number.isInteger(cb) || cb < 1 || cb > 100000) {
-                setFormError('Cooldown blocks must be an integer between 1 and 100000.');
+                failIn('staking', 'Cooldown blocks must be an integer between 1 and 100000.');
                 return;
             }
         } else if (slashDestination.trim() !== '') {
-            setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
+            failIn('staking', 'Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
             return;
         }
         const slashTo = slashDestination.trim();
@@ -740,20 +930,20 @@ export function DeployContractForm({ walletId, onBack }) {
             descriptor.coin,
             descriptor.networkKind,
         )) {
-            setFormError(`Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
+            failIn('staking', `Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
             return;
         }
         const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
         if (constructorParams.trim() && constructorParts.some((part) => part === '')) {
-            setFormError('Constructor arguments cannot be blank between "|" separators.');
+            failIn('constructor', 'Constructor arguments cannot be blank between "|" separators.');
             return;
         }
         if (constructorParts.some((part) => part.includes(';'))) {
-            setFormError('Constructor arguments cannot contain ";".');
+            failIn('constructor', 'Constructor arguments cannot contain ";".');
             return;
         }
         if (cooldownBlocks.trim() !== '' && constructorParts.filter(Boolean).length > 1) {
-            setFormError('A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
+            failIn('constructor', 'A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
             return;
         }
         // The deploy's action ends in a repeating constructor-argument field, which
@@ -765,9 +955,10 @@ export function DeployContractForm({ walletId, onBack }) {
                 gasLimit: String(gasLimit || suggestedGas || ''),
                 constructorParams: normalizeConstructorParams(constructorParams),
             }), DEPLOY_ARGUMENT_WORDS);
-            if (tooLarge) { setFormError(tooLarge); return; }
+            if (tooLarge) { failIn(constructorParams.trim() ? 'constructor' : 'contract', tooLarge); return; }
         }
         setFormError(null);
+        setFormErrorSection(null);
         // The PLAN decides the lane, not just the wallet mode. `openConfirmScreen`
         // composes ONE `{ action: 'DEPLOY' }` and never consults `plan`, so routing
         // a chunked source there attempted a single-shot deploy of a source this
@@ -888,8 +1079,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 if (isWatcherMode) {
                     throw new Error(
                         `This contract needs ${plan.totalChunks} chunk transactions plus an assembling one, `
-                        + 'each signed only after the previous is confirmed. A watch-only wallet cannot '
-                        + 'complete that sequence; publish it from the wallet holding the key.',
+                        + 'each signed only after the previous is confirmed. A wallet that signs on another '
+                        + 'phone cannot complete that sequence; publish it from the wallet holding the key.',
                     );
                 }
                 const chunkedBase = {
@@ -936,17 +1127,20 @@ export function DeployContractForm({ walletId, onBack }) {
             setPassword('');
             setStage('done');
         } catch (err) {
+            // Back on the hardware sign page returns to this review with no
+            // error. Chunks signed before it stay paid for, so the resume
+            // list below is still refreshed.
+            const signBack = isHwSignBack(err);
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFee.mandatory,
-                        fallback: userFacingMessage(err, 'Publish failed.'),
-                    }),
-            );
+            const failure = isBadPassword
+                ? 'Incorrect password.'
+                : submitFailureMessage(err, {
+                    chainId,
+                    coinTicker,
+                    mandatory: nativeFee.mandatory,
+                    fallback: userFacingMessage(err, 'Publish failed.'),
+                });
+            setSubmitError(signBack ? null : failure);
             setChunkProgress(null);
             // PC-38: a failed chunked run leaves its record behind on purpose -
             // the chunks already on chain are paid for, so re-list so the resume
@@ -980,6 +1174,8 @@ export function DeployContractForm({ walletId, onBack }) {
         // form shows exactly the plan the run will assemble and nothing typed
         // before Resume survives beside it.
         setGasLimit(assembleParams.GAS_LIMIT ? String(assembleParams.GAS_LIMIT) : '');
+        // The run's own gas counts as typed: a suggestion never replaces it.
+        gasTypedRef.current = Boolean(assembleParams.GAS_LIMIT);
         const ctor = assembleParams.CONSTRUCTOR_PARAMS;
         // v2 stores the REST field as an array, v3 as a single value; the
         // form collects both as one pipe-delimited string.
@@ -1000,13 +1196,14 @@ export function DeployContractForm({ walletId, onBack }) {
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review publish'
-                    : 'Publish contract'}
+                    ? 'Review Publish'
+                    : 'Publish Contract'}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -1064,170 +1261,101 @@ export function DeployContractForm({ walletId, onBack }) {
                     ) : null}
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review contract publication"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || (
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+        const constructorValue = actionParams.CONSTRUCTOR_PARAMS
+            ? (Array.isArray(actionParams.CONSTRUCTOR_PARAMS)
+                ? actionParams.CONSTRUCTOR_PARAMS.map((value) => revealHiddenText(value)).join(', ')
+                : revealHiddenText(actionParams.CONSTRUCTOR_PARAMS))
+            : '';
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={legacyDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={isWatcherMode || (isHwSource
+                    ? hwStatus === 'available'
+                    : (signerReady || password.length > 0))}
+                credentials={(
+                    <>
+                        {isWatcherMode ? (
+                            <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        ) : (
+                            <SignCredentials
+                                unlocked={signerReady}
+                                fromAddress={fromAddress}
+                                chainId={chainId}
+                                password={password}
+                                onPasswordChange={(value) => { setPassword(value); if (submitError) setSubmitError(null); }}
+                                onStatusChange={onHwStatusChange}
+                                passwordRef={passwordRef}
+                                submitError={submitError}
+                                disabled={stage === 'submitting'}
+                                getSignerStatus={messaging.getSignerStatus}
+                            />
                         )}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Publish'}
-                    </Button>
+                        {chunkProgress ? (
+                            <p className={styles.summary} role="status">
+                                Publishing {chunkProgress.total} chunk transactions, then the assembling one.
+                                Each waits for confirmation before the next is signed. Leave the wallet open;
+                                if interrupted, you can resume without paying again for chunks already sent.
+                            </p>
+                        ) : null}
+                        {chunkProgress && indexerWaitMessage(indexerWait) ? (
+                            <p className={styles.summary} role="status" data-testid="deploy-indexer-wait">
+                                {indexerWaitMessage(indexerWait)}
+                            </p>
+                        ) : null}
+                    </>
                 )}
-            >
-                <p className={styles.summary}>
-                    Publish contract {metaName ? `"${metaName}"` : ''} with gas limit {actionParams.GAS_LIMIT}.
-                </p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {/* The identity the CHAIN will record, off the source
-                        itself: what the review screen names has to be what the
-                        contract exports, not something typed beside it. */}
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{metaName || 'Unnamed contract'}</dd>
-                    {metaVersion ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Version</dt>
-                            <dd className={styles.detailsValue}>{metaVersion}</dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>Code</dt>
-                    <dd className={styles.detailsValue}>
-                        {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Gas limit</dt>
-                    <dd className={styles.detailsValue}>{actionParams.GAS_LIMIT}</dd>
-                    <dt className={styles.detailsLabel}>Network fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}${
-                                // Every leg of a chunked run is its own transaction with its own fee.
-                                plan && plan.single === false ? ` for each of ${plan.totalChunks + 1} transactions` : ''}`
-                            : 'Estimate unavailable'}
-                    </dd>
-                    {actionParams.CONSTRUCTOR_PARAMS ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Constructor</dt>
-                            <dd className={styles.detailsValue}>
-                                {Array.isArray(actionParams.CONSTRUCTOR_PARAMS) ? (
-                                    <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                                        {actionParams.CONSTRUCTOR_PARAMS.map((value, index) => (
-                                            <li key={index} className={contractStyles.monospaceValue}>{revealHiddenText(value)}</li>
-                                        ))}
-                                    </ol>
-                                ) : revealHiddenText(actionParams.CONSTRUCTOR_PARAMS)}
-                            </dd>
-                        </>
-                    ) : null}
-                    {actionParams.COOLDOWN_BLOCKS ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Cooldown</dt>
-                            <dd className={styles.detailsValue}>{actionParams.COOLDOWN_BLOCKS} blocks</dd>
-                            <dt className={styles.detailsLabel}>Slash to</dt>
-                            <dd className={styles.detailsValue}>{actionParams.SLASH_DESTINATION}</dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>Protocol fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {nativeFee.payFeeInNativeCoin
-                            ? `Paid in ${coinTicker || 'the native coin'}`
-                            : 'Paid from your XCHAIN balance'}
-                    </dd>
-                </dl>
-                {/* The review stage is the watcher lane's last stop before the
-                    PSBT leaves for a signer wallet, so the forfeiture terms are
-                    stated here rather than only on the confirm page. */}
-                {nativeFee.payFeeInNativeCoin ? (
-                    <FormNotice variant="warning" role="alert" lines={[NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]} />
-                ) : null}
-                {/* Lint advisories are already written for a contract author
-                    (line number, symbol, prescribed fix), so deployDiagnostic
-                    passes them through and rewrites only the ones stated in SDK
-                    internals. */}
-                {validation?.warnings && validation.warnings.length > 0 ? (
-                    <FormNotice
-                        variant="warning"
-                        role="alert"
-                        lines={validation.warnings.map((w) => humanizeDeployDiagnostic(w).message)}
-                    />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-                {/* A chunked run lives entirely in `submitting`, which renders THIS
-                    screen - so the explanation has to be here. It used to sit in the
-                    form-stage JSX, i.e. on a screen the user has already left by the
-                    time the run starts, which left a multi-minute, multi-transaction
-                    deploy showing nothing but a spinning button. States what is
-                    happening without claiming a live count it cannot know (a frozen
-                    "0 of N" would read as a stall); per-leg progress is in the
-                    pendingDeploy record the resume banner reads. */}
-                {chunkProgress ? (
-                    <p className={styles.summary} role="status">
-                        Publishing {chunkProgress.total} chunk transactions, then the assembling one.
-                        Each waits for confirmation before the next is signed, so this takes a
-                        few minutes. Leave the wallet open; if it is interrupted you can resume
-                        without re-paying for the chunks already sent.
-                    </p>
-                ) : null}
-                {chunkProgress && indexerWaitMessage(indexerWait) ? (
-                    <p className={styles.summary} role="status" data-testid="deploy-indexer-wait">
-                        {indexerWaitMessage(indexerWait)}
-                    </p>
-                ) : null}
-            </FormPage>,
+                summary={{
+                    verb: t('components.confirmSummary.verbDeployContract'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        { label: 'Name', value: metaName || 'Unnamed contract' },
+                        ...(metaVersion ? [{ label: 'Version', value: metaVersion }] : []),
+                        { label: 'Code', value: formatBytes(sizeInfo ? sizeInfo.bytes : new Blob([code]).size) },
+                        { label: 'Gas limit', value: actionParams.GAS_LIMIT },
+                        ...(constructorValue ? [{ label: 'Constructor', value: constructorValue }] : []),
+                        ...(actionParams.COOLDOWN_BLOCKS ? [
+                            { label: 'Cooldown', value: `${actionParams.COOLDOWN_BLOCKS} blocks` },
+                            { label: 'Slash to', value: actionParams.SLASH_DESTINATION },
+                        ] : []),
+                        ...(plan && plan.single === false ? [{
+                            label: 'Transactions',
+                            value: `${plan.totalChunks} chunks and 1 assembling transaction`,
+                        }] : []),
+                    ],
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={deployNetworkFeeAmount ? {
+                    amount: deployNetworkFeeAmount, ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -1237,8 +1365,15 @@ export function DeployContractForm({ walletId, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('components.confirmSummary.verbDeployContract'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1261,27 +1396,39 @@ export function DeployContractForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
         );
     }
 
+    // Reveal keys and closed summaries of the standard sections.
+    const sectionErrorKey = (section) => (formError && formErrorSection === section && reviewAttempt > 0 ? reviewAttempt : 0);
+    const contractSummary = joinSummary(
+        metaName || (code.trim() ? 'Custom source' : 'No source yet'),
+        effectiveGasLimit ? `gas ${effectiveGasLimit}` : null,
+    );
+    const stakingSummary = cooldownBlocks.trim()
+        ? joinSummary(`${cooldownBlocks.trim()} blocks cooldown`, `slash to ${slashDestination.trim() || 'BURN'}`)
+        : 'Off';
+    const chainRecords = addressesByChain && chainId ? (addressesByChain[chainId] || []) : null;
+
     return wrap(
         <>
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Publish contract"
             onSubmit={handleReview}
             status={[
-                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                formError ? <StatusMessage key="form" variant="error">{formError}</StatusMessage> : null,
                 // PC-38: resume an interrupted chunked deploy. Those chunks are
                 // already on chain and already paid for; restarting re-pays.
                 resumable.length > 0 ? (
-                    <StatusMessage variant="warning" role={null}>
+                    <StatusMessage key="resume" variant="warning" role={null}>
                         {resumable.map((r) => {
                             // Count a chunk as SENT on its txid, not only on
                             // its action_index. The index is written after the
@@ -1322,7 +1469,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                                 setResumeFieldsFrom(r.assembleParams && typeof r.assembleParams === 'object' ? r.id : null);
                                             }}
                                         >
-                                            Resume publishing
+                                            Resume Publishing
                                         </Button>
                                         <Button
                                             type="button"
@@ -1340,34 +1487,68 @@ export function DeployContractForm({ walletId, onBack }) {
                     </StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.UploadIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Publish' : 'Preview'}
-                </Button>
+                    Publish Contract
+                </FormAction>
+            )}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain the contract is published on. The From address, the publishing fee and the network fee are on this network."
+                    address={fromAddress?.address || null}
+                    addressLabel="From"
+                    addressHelp="The address that publishes the contract, pays the network and publishing fees, and becomes its owner."
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    revealKey={sectionErrorKey('from')}
+                    // Only once this network's addresses are known to be
+                    // empty, so the moment before the source resolves does not
+                    // open From for good.
+                    missing={chainRecords && chainRecords.length === 0 ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        children: <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />,
+                    }}
+                />
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
+            {/* The main section holds the contract itself: its
+                identity, templates, source, the helper tools and their
+                results, and the gas limit. */}
+            <FormSection
+                id="contract"
+                title="Contract"
+                icon={Icon.ContractIcon}
+                {...formSections.bind('contract')}
+                revealKey={sectionErrorKey('contract')}
+                summary={contractSummary}
+            >
 
             {/* Contract identity, READ-ONLY, off the source below. Nothing is
                 rendered when the installed SDK or this shell cannot answer:
@@ -1411,7 +1592,10 @@ export function DeployContractForm({ walletId, onBack }) {
             {/* PC-38: the SDK ships audited scaffolds; the wallet had no path to them. */}
             {templates && (templates.templates?.length || templates.patterns?.length) ? (
                 <div style={{ marginBottom: '0.75rem' }}>
-                    <p className={styles.detailsLabel}>Start from an audited template</p>
+                    <p className={styles.detailsLabel}>
+                        Start from an audited template{' '}
+                        <InfoTip aria="About templates" label="Loading a template replaces the code source below. Review and customize it before publishing." />
+                    </p>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {[...(templates.templates || []), ...(templates.patterns || [])].map((t) => (
                             <Button
@@ -1419,8 +1603,9 @@ export function DeployContractForm({ walletId, onBack }) {
                                 type="button"
                                 variant="ghost"
                                 // A template name is data; the label lookup would
-                                // give "validation" a check icon as if it were chosen.
-                                icon={null}
+                                // give "validation" a check icon as if it were chosen,
+                                // so every template carries the contract icon.
+                                icon={<Icon.ContractIcon />}
                                 onClick={() => handleUseTemplate(t)}
                                 loading={toolBusy === `template:${t}`}
                                 disabled={toolBusy !== null}
@@ -1429,14 +1614,12 @@ export function DeployContractForm({ walletId, onBack }) {
                             </Button>
                         ))}
                     </div>
-                    <p className={styles.hint}>
-                        Loading a template replaces the source below. Review and customize it before publishing.
-                    </p>
                 </div>
             ) : null}
 
             <Textarea
                 label="Code source"
+                help="The contract's JavaScript source. It must export a name and description, and is published exactly as written."
                 ref={codeRef}
                 value={code}
                 onChange={(e) => {
@@ -1446,11 +1629,11 @@ export function DeployContractForm({ walletId, onBack }) {
                     validationRequestRef.current += 1;
                     sizeRequestRef.current += 1;
                     gasRequestRef.current += 1;
-                    setValidationBusy(false);
-                    setSizeBusy(false);
-                    setGasBusy(false);
                     setFormError(null);
                 }}
+                // The source size against the limit, at the header's trailing
+                // edge like the memo's character count.
+                counter={code ? `${formatBytes(codeBytes)} / ${formatBytes(codeSizeLimit, { limit: true })}` : undefined}
                 rows={10}
                 spellCheck={false}
                 autoCapitalize="off"
@@ -1461,35 +1644,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 className={contractStyles.codeSource}
             />
 
-            <div className={contractStyles.toolActions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleValidate}
-                    loading={validationBusy}
-                    disabled={!code.trim() || validationBusy || toolBusy !== null}
-                >
-                    Validate code
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleCheckSize}
-                    loading={sizeBusy}
-                    disabled={!code.trim() || sizeBusy || toolBusy !== null}
-                >
-                    Estimate size
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleSuggestGas}
-                    loading={gasBusy}
-                    disabled={!code.trim() || gasBusy || toolBusy !== null}
-                >
-                    Suggest gas
-                </Button>
-            </div>
+            {renderCodeStatus()}
+            {validation ? renderDiagnostics(validation.warnings, 'warning') : null}
 
             {/* PC-38: how many transactions this deploy actually costs. */}
             {planError ? (
@@ -1511,29 +1667,6 @@ export function DeployContractForm({ walletId, onBack }) {
                 live count it cannot know (a frozen "0 of N" would read as a
                 stall). Per-leg progress is recorded in the pendingDeploy
                 record, which is what the resume banner reads. */}
-            {validation ? (
-                <div role={validation.ok ? undefined : 'alert'}>
-                    {validation.ok ? (
-                        <p className={styles.summary}>{renderValidationSummary(validation)}</p>
-                    ) : (
-                        <FieldNote variant="error" role={null}>
-                            <p>{renderValidationSummary(validation)}</p>
-                            {validation.errors.length > 0 ? renderDiagnosticList(validation.errors, 'error') : null}
-                        </FieldNote>
-                    )}
-                    {validation.ok ? renderDiagnostics(validation.errors, 'error') : null}
-                    {renderDiagnostics(validation.warnings, 'warning')}
-                </div>
-            ) : null}
-            {sizeInfo ? (
-                sizeInfo.withinLimit ? (
-                    <p className={styles.summary}>
-                        {sizeInfo.bytes} bytes (within 64KB limit)
-                    </p>
-                ) : (
-                    <FieldNote variant="error">{sizeInfo.bytes} bytes (exceeds 64KB limit)</FieldNote>
-                )
-            ) : null}
             {suggestedGas !== null ? (
                 <p className={styles.summary}>
                     Suggested gas limit: {suggestedGas}
@@ -1552,27 +1685,65 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Maximum computation allowed when deploying or calling the contract.'}
+                help="Maximum computation allowed when deploying or calling the contract."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 inputMode="numeric"
                 value={gasLimit}
-                onChange={(e) => { setGasLimit(e.target.value); setFormError(null); }}
+                onChange={(e) => {
+                    gasTypedRef.current = e.target.value.trim() !== '';
+                    setGasLimit(e.target.value);
+                    setFormError(null);
+                }}
+                fieldAction={(
+                    <FieldIconButton
+                        icon={<Icon.RefreshIcon />}
+                        label="Use Suggested Gas"
+                        onClick={handleUseSuggestedGas}
+                        disabled={suggestedGas === null}
+                        lockedReason={assembleLocked ? RESUME_FIELD_HINT : undefined}
+                    />
+                )}
                 autoComplete="off"
             />
+            </FormSection>
 
+            {/* Constructor arguments and the staking settings are optional
+                closed sections; the sections carry the Optional tags. */}
+            <FormSection
+                id="constructor"
+                title="Constructor"
+                icon={Icon.PencilIcon}
+                optional
+                {...formSections.bind('constructor')}
+                revealKey={sectionErrorKey('constructor')}
+                summary={constructorParams.trim() || 'None'}
+            >
             <Input
-                label="Constructor params (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Values passed to the contract when it is created. Separate them with |.'}
+                label="Constructor params"
+                help="Values passed to the contract when it is created. Separate them with |."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 value={constructorParams}
                 onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
                 className={contractStyles.monospaceInput}
                 autoComplete="off"
             />
+            </FormSection>
 
+            <FormSection
+                id="staking"
+                title="Staking"
+                icon={Icon.StakeIcon}
+                optional
+                {...formSections.bind('staking')}
+                revealKey={sectionErrorKey('staking')}
+                summary={stakingSummary}
+            >
             <Input
-                label="Cooldown blocks (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking.'}
+                label="Cooldown blocks"
+                help="Enables contract staking and sets the blocks between unstaking and token release. Leave blank to disable staking."
+                hint={assembleLocked ? RESUME_FIELD_HINT : '1–100000 blocks.'}
                 disabled={assembleLocked}
                 inputMode="numeric"
                 value={cooldownBlocks}
@@ -1581,8 +1752,9 @@ export function DeployContractForm({ walletId, onBack }) {
             />
 
             <Input
-                label="Slash destination (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment.'}
+                label="Slash destination"
+                help="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
@@ -1592,21 +1764,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
             />
-
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
-
-        </FormPage>
+            </FormSection>
+        </FormFrame>
         {confirmDialog.request ? (
             <ConfirmModal
                 {...confirmDialog.request}

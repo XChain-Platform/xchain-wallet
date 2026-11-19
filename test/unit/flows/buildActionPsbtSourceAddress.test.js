@@ -91,4 +91,10 @@ describe('the watcher build names its spender', () => {
         expect(calls[0].change).toBe('bcrt1qsomewhereelse');
         expect(calls[0].sourceAddress).toBe(SOURCE.address);
     });
+
+    it('uses the Normal chain rate when the watcher form supplies none', async () => {
+        const chainRegistry = { get: () => ({ coin: 'bitcoin', networkKind: 'regtest' }) };
+        const { calls } = await build({ chainRegistry });
+        expect(calls[0].feePerKb).toBe(6_000);
+    });
 });

@@ -301,6 +301,75 @@ describe('reloading the web queue store on a fresh lease', () => {
         expect(hexes(blob.queues[W])).toEqual(['mid', 'x']);
     });
 
+    it('keeps live sibling links when a stored row replaces the same id', async () => {
+        stubLocalStorage();
+        const { store, queue } = buildTab();
+        await queue.ensureQueueLoaded();
+        const linked = queue.pushQueueEntry(W, { ...entry('same'), pendingTxId: 'p1' });
+        await queue.persistQueue();
+        linked.siblingPendingTxIds = ['p2'];
+        const held = queue.getQueue(W);
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+
+        expect(queue.getQueue(W)).toBe(held);
+        expect(held[0].siblingPendingTxIds).toEqual(['p2']);
+    });
+
+    it('keeps live sibling links when storage replaces by pending transaction id', async () => {
+        const ls = stubLocalStorage();
+        const { store, queue } = buildTab();
+        await queue.ensureQueueLoaded();
+        const linked = queue.pushQueueEntry(W, { ...entry('same'), pendingTxId: 'p1' });
+        await queue.persistQueue();
+        linked.siblingPendingTxIds = ['p2'];
+        ls.writeBlob({
+            queues: { [W]: [{ ...ls.blob().queues[W][0], id: 'stored-id' }] },
+            settlements: [],
+        });
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+
+        expect(queue.getQueue(W)[0]).toMatchObject({
+            id: 'stored-id',
+            siblingPendingTxIds: ['p2'],
+        });
+    });
+
+    it('refuses sibling links supplied only by queue storage', async () => {
+        const ls = stubLocalStorage();
+        const { store, queue } = buildTab();
+        ls.writeBlob({
+            queues: {
+                [W]: [{ id: 'stored', ...entry('same'), pendingTxId: 'p1', siblingPendingTxIds: ['unrelated'] }],
+            },
+            settlements: [],
+        });
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+
+        expect(queue.getQueue(W)[0].siblingPendingTxIds).toBeUndefined();
+    });
+
+    it('strips sibling links from refresh write-back without changing live links', async () => {
+        const ls = stubLocalStorage();
+        const { store, queue } = buildTab();
+        await queue.ensureQueueLoaded();
+        const linked = queue.pushQueueEntry(W, { ...entry('same'), pendingTxId: 'p1' });
+        await queue.persistQueue();
+        linked.siblingPendingTxIds = ['p2'];
+        ls.faults.refuseWrites = true;
+        queue.pushQueueEntry(W, entry('memory-only'));
+        await queue.persistQueue();
+        ls.faults.refuseWrites = false;
+
+        expect(await refreshBroadcastQueueStore(store)).toBe(true);
+        await settle();
+
+        expect(queue.getQueue(W)[0].siblingPendingTxIds).toEqual(['p2']);
+        expect(ls.blob().queues[W].every((row) => row.siblingPendingTxIds === undefined)).toBe(true);
+    });
+
     it('keeps a wallet removed while dormant out of the reloaded queue', async () => {
         const ls = stubLocalStorage();
         const { store, queue } = buildTab();

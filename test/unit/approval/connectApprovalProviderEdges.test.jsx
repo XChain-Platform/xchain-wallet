@@ -16,7 +16,7 @@ import PROVIDER_SRC from '../../../packages/extension/src/inject/xchainProvider.
 import CONTENT_SRC from '../../../packages/extension/src/content/contentScript.js?raw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
+import { BUNDLED_DESCRIPTORS, defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { MessageHost } from '../../../packages/extension/src/background/MessageHost.js';
 import { ApprovalBroker } from '../../../packages/extension/src/background/approvalBroker.js';
 import { registerBridgeHandlers } from '../../../packages/extension/src/bridge/handlers.js';
@@ -94,14 +94,15 @@ function fakeChrome() {
 function fakeVault(accounts = [
     { id: 'acct-1', name: 'Account 1' },
     { id: 'acct-2', name: 'Account 2' },
-]) {
+], addresses = []) {
     const sites = new Map();
-    const state = { accounts };
+    const state = { accounts, addresses, activeNetwork: 'mainnet' };
     return {
         _sites: sites,
         _state: state,
-        settings: { get: async () => ({ developerMode: false, fees: {} }) },
+        settings: { get: async () => ({ developerMode: false, fees: {}, activeNetwork: state.activeNetwork }) },
         accounts: { list: async () => state.accounts.slice() },
+        addresses: { list: async () => state.addresses.slice() },
         connectedSites: {
             findBy: async (field, value) => [...sites.values()].filter((s) => s[field] === value),
             put: async (s) => { sites.set(s.id, s); return s; },
@@ -111,9 +112,12 @@ function fakeVault(accounts = [
     };
 }
 
-const chainRegistry = { get: () => null, supportedChains: () => [] };
+const chainRegistry = {
+    get: (id) => (id === chain.id ? chain : null),
+    supportedChains: () => [chain],
+};
 
-function makeBackground({ vault = fakeVault(), approvals } = {}) {
+function makeBackground({ vault = fakeVault(), approvals, registry = chainRegistry } = {}) {
     const windows = {
         create: vi.fn(async () => ({ id: windows.create.mock.calls.length })),
         remove: vi.fn(async () => {}),
@@ -128,7 +132,7 @@ function makeBackground({ vault = fakeVault(), approvals } = {}) {
         setTimer: () => 0,
         clearTimer: () => {},
     });
-    const host = new MessageHost({ vault, chainRegistry, sdkRegistry: {} });
+    const host = new MessageHost({ vault, chainRegistry: registry, sdkRegistry: {} });
     registerBridgeHandlers(host, { approvals: broker });
     const call = (type, request) => host.handle({ type, request });
     return { vault, broker, windows, call };
@@ -291,6 +295,52 @@ describe('bridge.connect edges with the real approval broker', () => {
         expect(other.error.code).toBe('NOT_CONNECTED');
     });
 
+    it('keeps family grants as network ids and returns addresses per requested network', async () => {
+        const bitcoinChains = BUNDLED_DESCRIPTORS.filter((descriptor) => descriptor.coin === 'bitcoin');
+        const familyGrant = bitcoinChains.map((descriptor) => descriptor.id);
+        const addresses = bitcoinChains.map((descriptor) => ({
+            id: `addr-${descriptor.networkKind}`,
+            accountId: 'acct-1',
+            chain: descriptor.coin,
+            network: descriptor.networkKind,
+            addressType: 'p2wpkh',
+            address: `${descriptor.networkKind}-address`,
+            label: `${descriptor.displayName} ${descriptor.networkKind}`,
+        }));
+        const vault = fakeVault(undefined, addresses);
+        const bg = makeBackground({
+            vault,
+            registry: defaultRegistry(),
+            approvals: {
+                connect: async () => ({ ...APPROVE, chains: familyGrant }),
+            },
+        });
+
+        const connected = await bg.call('bridge.connect', {
+            origin: ORIGIN,
+            requestedChains: ['bitcoin-testnet'],
+        });
+        expect(connected.result.chains).toEqual(familyGrant);
+        expect(connected.result.accounts).toEqual([{ id: 'acct-1', name: 'Account 1' }]);
+
+        const mainnet = await bg.call('bridge.getAddresses', {
+            origin: ORIGIN,
+            chainId: 'bitcoin-mainnet',
+        });
+        expect(mainnet.result.map((address) => [address.network, address.address])).toEqual([
+            ['mainnet', 'mainnet-address'],
+        ]);
+
+        vault._state.activeNetwork = 'testnet';
+        const testnet = await bg.call('bridge.getAddresses', {
+            origin: ORIGIN,
+            chainId: 'bitcoin-testnet',
+        });
+        expect(testnet.result.map((address) => [address.network, address.address])).toEqual([
+            ['testnet', 'testnet-address'],
+        ]);
+    });
+
     it('ends a disconnect sent while the approval is open in one grant', async () => {
         const bg = makeBackground();
         const pending = bg.call('bridge.connect', { origin: ORIGIN, requestedChains: [chain.id] });
@@ -395,7 +445,7 @@ describe('ConnectApproval prompt edges', () => {
         mount({ origin, requestedChains: [chain.id], accountOptions: [{ id: 'acct-1' }] });
 
         expect(screen.getByRole('alert')).toHaveTextContent('This connection request is missing or invalid.');
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
@@ -413,7 +463,7 @@ describe('ConnectApproval prompt edges', () => {
         await vi.waitFor(() => expect(mocks.resolveApproval).toHaveBeenCalledOnce());
     });
 
-    it('offers no grant for an unknown chain id and keeps reject live', () => {
+    it('starts with no grant for an unknown chain id and keeps reject live', () => {
         const onReject = vi.fn();
         render(
             <ConnectApproval
@@ -425,21 +475,23 @@ describe('ConnectApproval prompt edges', () => {
 
         expect(screen.queryAllByRole('checkbox', { name: /^Allow / })).toHaveLength(0);
         const approve = screen.getByRole('button', { name: 'Approve' });
-        expect(approve).toBeDisabled();
+        expect(approve).not.toBeDisabled();
         fireEvent.click(approve);
         fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
         expect(onReject).toHaveBeenCalledOnce();
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 
-    it('grants only the known chain when the request mixes known and unknown ids', async () => {
+    it('grants the known chain family when the request mixes known and unknown ids', async () => {
         mocks.resolveApproval.mockResolvedValue(undefined);
         vi.spyOn(window, 'close').mockImplementation(() => {});
         mount({ origin: ORIGIN, requestedChains: ['not-a-chain', chain.id], accountOptions: [{ id: 'acct-1' }] });
 
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         await vi.waitFor(() => expect(mocks.resolveApproval).toHaveBeenCalledOnce());
-        expect(mocks.resolveApproval.mock.calls[0][1].chains).toEqual([chain.id]);
+        expect(mocks.resolveApproval.mock.calls[0][1].chains).toEqual(
+            defaultRegistry().byCoin(chain.coin).map((descriptor) => descriptor.id),
+        );
     });
 
     it.each([
@@ -449,6 +501,9 @@ describe('ConnectApproval prompt edges', () => {
     ])('blocks requestedChains given as %s', (_label, requestedChains) => {
         mount({ origin: ORIGIN, requestedChains, accountOptions: [{ id: 'acct-1' }] });
         expect(screen.getByRole('alert')).toHaveTextContent('This connection request is missing or invalid.');
-        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        expect(approve).not.toBeDisabled();
+        fireEvent.click(approve);
+        expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 });

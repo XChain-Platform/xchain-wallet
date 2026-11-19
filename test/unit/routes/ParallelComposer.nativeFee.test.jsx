@@ -71,8 +71,8 @@ async function signFirstRow(chainId, params) {
             />
         </MessagingProvider>,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+    await screen.findByRole('button', { name: 'Sign all' });
     fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
     await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));

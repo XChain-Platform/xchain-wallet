@@ -405,7 +405,18 @@ function ipcGuardCensus(src) {
         [],
         `index.js: these ipcMain handlers must check isTrustedSender(event) as their first statement: ${failures.join(', ')}`,
     );
-    assert.ok(count >= 7, `the ipcMain census found ${count} handlers, fewer than the 7 index.js registers, so it may check nothing`);
+    // The floor is every distinct channel the renderer preload invokes: each
+    // one needs a main-process handler, so a census that finds fewer has
+    // stopped matching registrations rather than found a smaller app.
+    const preloadSrc = readFileSync(join(desktop, 'preload.cjs'), 'utf8');
+    const invoked = new Set([...preloadSrc.matchAll(/ipcRenderer\.invoke\(\s*([A-Z_]+)\b/g)].map((m) => m[1]));
+    assert.ok(invoked.size > 0, 'the preload scan found no invoked channels, so the census floor proves nothing');
+    assert.ok(
+        count >= invoked.size,
+        `the ipcMain census found ${count} handlers for ${invoked.size} channels the preload invokes, so it may check nothing`,
+    );
+    const blinded = ipcGuardCensus(mainIndex.replaceAll('ipcMain.handle(', 'ipcMainX.handle('));
+    assert.ok(blinded.count < invoked.size, 'the census floor trips when the registrations stop matching its scan');
 
     // Negative controls: the census must flag each of these shapes.
     for (const [probe, why] of [

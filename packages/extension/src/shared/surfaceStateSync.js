@@ -13,6 +13,8 @@
 // changes through
 // chrome.storage.session so every open trusted extension surface sees them.
 
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+
 export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
 // 'wallet' names the newly active wallet; 'wallets' reports a change to the
@@ -124,15 +126,20 @@ export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
     }
     const listener = (message, sender) => {
         if (message?.type !== AUTO_LOCK_UNSAVED_MESSAGE) return undefined;
-        // Only this extension's own background may say the wallet locked.
-        const ownId = globalThis.chrome?.runtime?.id;
-        if (ownId && sender?.id !== ownId) return undefined;
+        // Accept lock notices only from this extension's trusted contexts.
+        if (!isTrustedExtensionSender(sender, globalThis.chrome?.runtime?.id)) return undefined;
         onUnsaved();
         return undefined;
     };
     events.addListener(listener);
     return () => events.removeListener(listener);
 }
+
+// Names this page's realm. A request that changes wallet records carries it,
+// the background echoes it on the broadcast, and the realm that asked skips
+// its own echo: it already knows the outcome and is about to navigate itself.
+export const SURFACE_ID = globalThis.crypto?.randomUUID?.()
+    ?? `surface-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 
 /**
  * Apply a validated background event to one popup or side-panel realm.
@@ -181,6 +188,9 @@ export function applySurfaceStateEvent(event, handlers) {
         if (event.payload?.change === 'removed') {
             const walletId = event.payload?.walletId;
             if (typeof walletId !== 'string' || !walletId) return undefined;
+            // The removing window handles its own outcome; reacting to the
+            // echo too could reload it onto Home before its page has moved on.
+            if (event.payload?.originSurface === SURFACE_ID) return undefined;
             return handlers.walletRemoved?.(walletId);
         }
         return undefined;

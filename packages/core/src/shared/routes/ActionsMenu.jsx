@@ -8,14 +8,53 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionsMenu.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import styles from './ActionsMenu.module.css';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 
 const SIGNER_ACTION_IDS = new Set(['sign-psbt', 'sign-message', 'verify-signature']);
+
+export const ENTRY_ICON = {
+    issue: Icon.PlusIcon,
+    mint: Icon.MintIcon,
+    destroy: Icon.TrashIcon,
+    sweep: Icon.SweepIcon,
+    lock: Icon.LockIcon,
+    description: Icon.PencilIcon,
+    transfer: Icon.HandshakeIcon,
+    broadcast: Icon.BroadcastIcon,
+    oracle: Icon.ClockIcon,
+    dispenser: Icon.TokenIcon,
+    'dispensers-list': Icon.TokenListIcon,
+    'dispenser-explorer': Icon.SearchIcon,
+    dividend: Icon.DollarIcon,
+    airdrop: Icon.UsersIcon,
+    coinpay: Icon.SendIcon,
+    swap: Icon.SwapIcon,
+    'create-order': Icon.MarketIcon,
+    'my-orders': Icon.MarketIcon,
+    'my-swaps': Icon.SwapIcon,
+    'publish-file': Icon.FileTypeIcon,
+    link: Icon.LinkIcon,
+    batch: Icon.MenuIcon,
+    'cross-chain-swap': Icon.SwapIcon,
+    'cross-chain-order': Icon.MarketIcon,
+    'bridge-move': Icon.MigrateIcon,
+    'bridge-settings': Icon.GearIcon,
+    'multisig-create': Icon.MultisigIcon,
+    'governance-polls': Icon.ThumbsUpIcon,
+    'bet-markets': Icon.LineChartIcon,
+    'cosigner-accounts': Icon.UserIcon,
+    contacts: Icon.BookIcon,
+    'sign-message': Icon.SignIcon,
+    'verify-signature': Icon.VerifyIcon,
+    'sign-psbt': Icon.KeyIcon,
+    'lock-address': Icon.LockIcon,
+    'pair-signer': Icon.UsbIcon,
+};
 
 /**
  * Actions menu: secondary authoring surface listed in §40.
@@ -39,7 +78,6 @@ export function ActionsMenu({ entries, onBack }) {
     const { shell } = useMessaging();
     const { isSignerMode } = useWalletMode();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const visibleEntries = entries.filter((entry) => {
         if (isSignerMode && !SIGNER_ACTION_IDS.has(entry.id)) return false;
         return typeof entry.onSelect === 'function'
@@ -59,7 +97,6 @@ export function ActionsMenu({ entries, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel={t('common.backToHome')}
             title={t('actionsMenu.title')}
         />
     );
@@ -71,52 +108,29 @@ export function ActionsMenu({ entries, onBack }) {
                     return (
                         <section key={group.id} aria-labelledby={headingId}>
                             <SectionHeader id={headingId} title={group.label} />
-                            <ul
-                                className={isFull ? styles.listFull : styles.listPopup}
-                                data-xc-menu-list="cards"
-                            >
+                            {/* One ActionList per group (G101): icon square, title,
+                                description and chevron; an unavailable entry stays as
+                                an off row whose line says why. */}
+                            <ActionList label={group.label}>
                                 {group.entries.map((entry) => {
-                                    const EntryIcon = Icon.iconForLabel(entry.label);
-                                    const descriptionId = entry.description
-                                        ? `action-${entry.id}-description`
-                                        : undefined;
-                                    const reasonId = entry.disabledReason
-                                        ? `action-${entry.id}-reason`
-                                        : undefined;
+                                    const EntryIcon = ENTRY_ICON[entry.id]
+                                        || Icon.iconForLabel(entry.label)
+                                        || Icon.MoreIcon;
                                     return (
-                                        <li key={entry.id} className={styles.listItem}>
-                                            <Button
-                                                type="button"
-                                                className={styles.entry}
-                                                data-xc-menu-item
-                                                data-destructive={entry.id === 'destroy' ? 'true' : undefined}
-                                                onClick={entry.disabled ? undefined : entry.onSelect}
-                                                aria-disabled={entry.disabled ? 'true' : undefined}
-                                                aria-describedby={[descriptionId, reasonId].filter(Boolean).join(' ') || undefined}
-                                            >
-                                                {EntryIcon ? (
-                                                    <span className={styles.entryIcon} aria-hidden="true">
-                                                        <EntryIcon />
-                                                    </span>
-                                                ) : null}
-                                                <span className={styles.entryText}>
-                                                    <span className={styles.entryLabel}>{entry.label}</span>
-                                                    {entry.description ? (
-                                                        <span id={descriptionId} className={styles.entryDescription}>
-                                                            {entry.description}
-                                                        </span>
-                                                    ) : null}
-                                                    {entry.disabledReason ? (
-                                                        <span id={reasonId} className={styles.entryReason}>
-                                                            {t('actionsMenu.unavailable', { reason: entry.disabledReason })}
-                                                        </span>
-                                                    ) : null}
-                                                </span>
-                                            </Button>
-                                        </li>
+                                        <ActionListItem
+                                            key={entry.id}
+                                            icon={<EntryIcon />}
+                                            title={entry.label}
+                                            description={entry.description}
+                                            onClick={entry.onSelect}
+                                            disabled={entry.disabled === true}
+                                            disabledReason={entry.disabledReason
+                                                ? t('actionsMenu.unavailable', { reason: entry.disabledReason })
+                                                : undefined}
+                                        />
                                     );
                                 })}
-                            </ul>
+                            </ActionList>
                         </section>
                     );
                 })}

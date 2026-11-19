@@ -14,27 +14,22 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- shell ---------------------------------------------------
-    'shell.markets.selectAsset': 'Select coin or token',
+    'shell.markets.selectAsset': 'Choose Asset',
     'shell.markets.back': 'Back to markets',
     'shell.settings.back': 'Back to settings',
     'shell.privateKeyQr': 'Private key QR',
     'shell.messageSent': 'Message sent',
     'shell.cannotOpenLink': "Can't open link",
     'shell.waitingLinkDropped': 'The waiting payment link was dropped.',
-    'shell.dismiss': 'Dismiss notice',
+    'shell.dismiss': 'Dismiss Notice',
     'shell.unknownState': 'unknown state "{state}"',
 
     // Copy moved out of JSX literals by the i18n sweep.
     'shell.header.appHeader': 'App header',
-    'shell.settingsButton.walletSettings': 'Wallet settings',
-    'shell.settingsButton.chooseWallet': 'Choose wallet',
+    'shell.header.notifications': 'Notifications',
+    'shell.header.notificationsUnread': 'Notifications, {count} unread',
+    'shell.header.notificationsAction': 'Notifications, {count} unread, {action} needs your action',
     'shell.settingsButton.noWallet': 'No wallet',
-    'shell.settingsButton.account': 'Account',
-    'shell.settingsButton.chooseAccount': 'Choose account',
-    'shell.settingsButton.account1': 'Account 1',
-    'shell.settingsButton.activeNetworkInHeader': 'Active network in header',
-    'shell.settingsButton.chainFilter': 'Network filter',
-    'shell.settingsButton.allSettings': 'All settings',
     'shell.devVariantBadge.devVariant': 'Dev variant: {variant}',
     'shell.devVariantBadge.dragToMove': 'Drag to move',
     'shell.devVariantBadge.variant': 'variant',
@@ -45,15 +40,6 @@ const messages = {
     'shell.devVariantBadge.fullDesktop': 'full · desktop',
     'shell.devVariantBadge.sidebarChromePanel': 'sidebar · chrome panel',
     'shell.devVariantBadge.extensionChromePopup': 'extension · chrome popup',
-    'shell.platformLinks.main': 'Main site',
-    'shell.platformLinks.docs': 'Documentation',
-    'shell.platformLinks.encoder': 'Encoder status',
-    'shell.platformLinks.sync': 'Bootstraps & sync',
-    'shell.platformLinks.hub': 'Validator hub',
-    'shell.platformLinks.mcp': 'MCP for agents',
-    'shell.headerMenu.manageAddresses': 'Manage addresses',
-    'shell.headerMenu.moreWalletActions': 'More wallet actions',
-    'shell.header.walletPrefix': 'Wallet: ',
 };
 
 addEnglish(messages);

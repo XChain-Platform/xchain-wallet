@@ -1,0 +1,95 @@
+/* Settings, Notifications, Price alerts (2026-11-14): the alert list, the
+   Price Alert page (identity card, Actions | Details) and its fact rows. */
+.list {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.list > li {
+    min-width: 0;
+}
+
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.subtitle {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+/* The alert's identity card: asset mark, the terms once, then its state. */
+.identity {
+    /* The padded card: its inset (--xc-card-pad, 8px) is the one this card drew by hand. */
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    text-align: start;
+}
+
+.identityText {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--xc-space-1) / 2);
+    min-width: 0;
+}
+
+.identityName {
+    font-size: var(--xc-text-md, 1rem);
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.identityMeta {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.detailList {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+}
+
+.detailRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+}
+
+.detailRow + .detailRow {
+    border-top: 1px solid var(--xc-border);
+}
+
+.detailLabel {
+    flex: 0 0 auto;
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.detailValue {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: end;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

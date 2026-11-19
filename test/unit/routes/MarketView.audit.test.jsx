@@ -5,8 +5,12 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
+import homeTabsStyles from '../../../packages/core/src/shared/components/HomeTabs.module.css';
+import portfolioChartStyles from '../../../packages/core/src/shared/components/PortfolioChart.module.css';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let messaging;
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -26,12 +30,22 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
     };
 });
 
-vi.mock('../../../packages/core/src/shared/components/MarketChart.jsx', () => ({
-    MarketChart: () => {
-        if (widgetFailure.current === 'chart') throw new Error('market chart failed');
-        return React.createElement('div', null, 'Chart panel');
-    },
-}));
+// The price chart behind the market card is a Sparkline.
+vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        Sparkline: (props) => {
+            if (widgetFailure.current === 'chart') throw new Error('market chart failed');
+            return React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(actual.Sparkline, props),
+                React.createElement('span', { className: 'sr-only' }, 'Chart panel'),
+            );
+        },
+    };
+});
 
 vi.mock('../../../packages/core/src/shared/components/OrderbookPanel.jsx', () => ({
     OrderbookPanel: ({ onPickPrice }) => {
@@ -143,6 +157,20 @@ describe('MarketView market state', () => {
         expect(screen.getByText('Recent trades panel')).toBeInTheDocument();
     });
 
+    it('gives every market navigation button an icon', async () => {
+        renderMarket({ onSwap: () => {} });
+
+        for (const name of ['Book', 'Trades', 'My Orders']) {
+            expect(screen.getByRole('tab', { name }).querySelector('svg')).not.toBeNull();
+        }
+        // Buy and Sell open the Trade page, each with its own glyph.
+        for (const name of ['Buy', 'Sell']) {
+            expect(screen.getByRole('button', { name }).querySelector('svg')).not.toBeNull();
+        }
+        expect((await screen.findByRole('button', { name: 'Reverse pair to BTC/XCHAIN' })).querySelector('svg'))
+            .not.toBeNull();
+    });
+
     it('announces the initial market load and replaces it with a load error', async () => {
         const request = deferred();
         messaging.getMarket = vi.fn(() => request.promise);
@@ -152,7 +180,7 @@ describe('MarketView market state', () => {
             .toHaveAttribute('aria-busy', 'true');
         const loadingStatus = screen.getByRole('status', { name: 'Loading market' });
         expect(loadingStatus.querySelector('[aria-hidden="true"]'))
-            .toHaveStyle({ height: '159px' });
+            .toHaveStyle({ height: '190px' });
 
         await act(async () => request.reject(new Error('network unavailable')));
 
@@ -164,12 +192,16 @@ describe('MarketView market state', () => {
         const onSwap = vi.fn();
         renderMarket({ onSwap });
 
+        // A book pick opens the Trade page in place with that price filled.
         fireEvent.click(screen.getByRole('button', { name: 'Pick exact price' }));
         expect(screen.getByText('Prefill: 0.010000')).toBeInTheDocument();
 
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Reverse pair to BTC/XCHAIN' }));
-
         expect(onSwap).toHaveBeenCalledTimes(1);
+
+        // The next trade starts with no price carried over from the pick.
+        fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         expect(screen.getByText('Prefill: none')).toBeInTheDocument();
     });
 
@@ -185,15 +217,50 @@ describe('MarketView market state', () => {
         renderMarket();
 
         expect(await screen.findByText(/latest trade is over 24 hours old/i)).toBeInTheDocument();
-        expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.010000 BTC');
+        // The card's price is its own element, named "<price> <quote>".
+        expect(within(screen.getByRole('region', { name: 'Market summary' })).getByLabelText('0.010000 BTC')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh prices' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh Prices' }));
 
         await waitFor(() => {
             expect(screen.queryByText(/latest trade is over 24 hours old/i)).toBeNull();
         });
-        expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.020000 BTC');
+        expect(within(screen.getByRole('region', { name: 'Market summary' })).getByLabelText('0.020000 BTC')).toBeInTheDocument();
         expect(messaging.getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the shared full-height hero scale for market prices', async () => {
+        const now = Date.UTC(2026, 10, 16, 12) / 1000;
+        vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
+        messaging.getMarketHistory = vi.fn().mockResolvedValue([
+            { price: '1000', amount: '2', type: 'buy', timestamp: now - 6 * 3600 },
+            { price: '3000', amount: '2', type: 'buy', timestamp: now - 2 * 3600 },
+        ]);
+        messaging.getSettings = vi.fn().mockResolvedValue({
+            ...createDefaultSettings(),
+            language: 'fr-FR',
+        });
+        const { container } = renderMarket();
+
+        const chart = await screen.findByRole('img', { name: /XCHAIN\/BTC price\./i });
+        const behind = container.querySelector('[data-chart-behind="true"]');
+        expect(behind).toHaveClass(portfolioChartStyles.wrap, portfolioChartStyles.behind);
+        expect(behind.parentElement).toHaveClass(homeTabsStyles.heroStack, homeTabsStyles.heroStackWithChart);
+
+        expect(chart.querySelector('polyline')).toHaveAttribute('stroke', 'var(--xc-hero-chart-up)');
+        expect(chart.querySelector('polyline')).toHaveAttribute('stroke-width', '2');
+        expect(chart.querySelectorAll('[data-chart-guide]')).toHaveLength(9);
+        expect(chart.querySelectorAll('[data-chart-guide-kind="labelled"]')).toHaveLength(5);
+        expect(chart.querySelectorAll('[data-chart-guide-kind="halfway"]')).toHaveLength(4);
+        await waitFor(() => {
+            expect(Array.from(behind.querySelectorAll('[data-chart-scale]'), (mark) => mark.textContent)).toEqual([
+                '3 k BTC',
+                '2,5 k BTC',
+                '2 k BTC',
+                '1,5 k BTC',
+                '1 k BTC',
+            ]);
+        });
     });
 
     it('ignores malformed history rows while rendering usable partial data', async () => {
@@ -205,7 +272,7 @@ describe('MarketView market state', () => {
         const { container } = renderMarket();
 
         await waitFor(() => {
-            expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.020000 BTC');
+            expect(within(screen.getByRole('region', { name: 'Market summary' })).getByLabelText('0.020000 BTC')).toBeInTheDocument();
         });
         expect(container).not.toHaveTextContent('NaN');
         expect(container).not.toHaveTextContent('undefined');
@@ -232,8 +299,8 @@ describe('MarketView market state', () => {
         expect(screen.getByRole('tab', { name: 'Trades' })).toHaveFocus();
 
         fireEvent.keyDown(document.activeElement, { key: 'End' });
-        expect(screen.getByText('Trade history panel')).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'History' })).toHaveFocus();
+        expect(screen.getByText('Open orders panel')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'My Orders' })).toHaveFocus();
 
         fireEvent.keyDown(document.activeElement, { key: 'Home' });
         expect(screen.getByRole('button', { name: 'Pick exact price' })).toBeInTheDocument();
@@ -267,12 +334,15 @@ describe('MarketView market state', () => {
         await screen.findByRole('button', { name: 'Open AAA market' });
         expect(screen.queryByRole('button', { name: 'Open FFF market' })).toBeNull();
 
-        const popular = screen.getByRole('tab', { name: 'Popular' });
-        popular.focus();
-        fireEvent.keyDown(popular, { key: 'ArrowLeft' });
-        const all = screen.getByRole('tab', { name: 'All' });
-        expect(all).toHaveFocus();
-        expect(all).toHaveAttribute('aria-selected', 'true');
+        // Show (Popular, All, Watchlist) is a select in the title-line filter.
+        const filter = screen.getByRole('button', { name: 'Filter markets' });
+        filter.focus();
+        fireEvent.click(filter);
+        // The select carries no visible label; its options read "Show ...".
+        const show = screen.getByLabelText('Show markets');
+        expect(show).toHaveValue('popular');
+        selectOption(show, 'all');
+        expect(show).toHaveValue('all');
 
         const lastRow = await screen.findByRole('button', { name: 'Open FFF market' });
         lastRow.focus();
@@ -286,6 +356,12 @@ describe('MarketView market state', () => {
         ['market panel', 'panel', 'Pick exact price'],
     ])('keeps the market screen usable when its %s throws and retries it inline', async (_label, failure, recoveredText) => {
         widgetFailure.current = failure;
+        // The chart only draws when the market has a trade to plot.
+        if (failure === 'chart') {
+            messaging.getMarketHistory = vi.fn().mockResolvedValue([
+                { price: '0.01', amount: '2', type: 'buy', timestamp: Math.floor(Date.now() / 1000) },
+            ]);
+        }
         renderMarket();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');

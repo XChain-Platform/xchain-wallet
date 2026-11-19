@@ -46,14 +46,16 @@ for (const id of expectedDrills) {
     assert.ok(idx >= 0, `section id:${id} present`);
     const block = src.slice(idx, idx + 800);
     assert.match(block, /kind:\s*'internal-drill'/, `${id} is internal-drill`);
-    assert.match(block, /summary:/, `${id} carries a summary string`);
+    // About rows open pages of their own (Titled Sections, 2026-11-15), so it has no state summary.
+    if (id !== 'about') assert.match(block, /summary:/, `${id} carries a summary string`);
 }
 
-// Accounts & Addresses stays as external-drill since it routes to the
-// existing AccountPicker route, not into the Settings sub-page tree.
-const accIdx = src.indexOf("id: 'accounts-addresses'");
-const accBlock = src.slice(accIdx, accIdx + 600);
-assert.match(accBlock, /kind:\s*'external-drill'/, 'accounts-addresses uses external-drill');
+// Account switching lives inside the This wallet sub-page; the top level has
+// no separate Accounts & Addresses row.
+assert.equal(src.indexOf("id: 'accounts-addresses'"), -1, 'no accounts-addresses row at the top level');
+const walletIdx = src.indexOf("id: 'this-wallet'");
+assert.match(src.slice(walletIdx, walletIdx + 800), /onOpenAccountPicker/,
+    'this-wallet hands the account picker to its sub-page');
 
 const expectedPanels = ['appearance', 'language-region', 'notifications', 'contacts'];
 for (const id of expectedPanels) {
@@ -66,8 +68,8 @@ for (const id of expectedPanels) {
 
 assert.match(src, /\[subpageId, setSubpageId\]\s*=\s*useState/, 'subpageId state added');
 assert.match(src, /if \(subpageId\)\s*\{/, 'subpage branch in render');
-assert.match(src, /backLabel="Back to settings"/, 'subpage header has back-to-settings affordance');
-assert.match(src, /<SectionComponent(?:\s+key=\{[^}]*\})?\s+\{\.\.\.\(section\.props \|\| \{\}\)\}\s*\/>/, 'subpage renders the section component with its props');
+assert.match(src, /backLabel=(?:\{t\('shell\.settings\.back'\)\}|"Back to settings")/, 'subpage header has back-to-settings affordance');
+assert.match(src, /<SectionComponent\s+key=\{[^\n]*\}\s+\{\.\.\.\(section\.props \|\| \{\}\)\}\s*\/>/, 'subpage renders the section component with its props');
 
 // ─── 3. DrillRow primitive renders summary + chevron ─────────────
 
@@ -94,7 +96,7 @@ assert.match(src, /offByDefault\.filter\(\(k\) => p\[k\] === true\)\.length/, 'p
 assert.match(src, /strategy === 'custom'/, 'fees summary detects custom strategy');
 // endpoints: counts custom flag
 assert.match(src, /Object\.values\(eps\)\.filter\(\(e\) => e\?\.custom\)\.length/, 'endpoints summary counts custom overrides');
-// ads: sums lifetimeDonatedSats across chains
-assert.match(src, /lifetimeDonatedSats/, 'ads summary aggregates lifetimeDonatedSats');
+// ads: the wallet-wide per-transaction amount, or Off at None
+assert.match(src, /function adsSummary\(settings\) \{[\s\S]{0,300}isAdsOn\(settings\)[\s\S]{0,200}ads\.perTransaction/, 'ads summary states the per-transaction amount');
 
 console.log('settings-drilldown-refactor smoke OK');

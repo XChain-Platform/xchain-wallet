@@ -102,8 +102,10 @@ async function atStepTwo(vault) {
     return { session: stepTwo, partials, xOnlyPublicKey };
 }
 
+// A cosigner fingerprints the request sessionRef, which names the session chain.
 function sessionRefOf(session) {
     return {
+        chainId: session.chainId,
         scheme: session.scheme,
         threshold: session.threshold,
         cosignerPubkeys: session.cosignerPubkeys,
@@ -205,7 +207,7 @@ describe('MuSig2 step 1 replies are checked before they count', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const reply = buildReplyEnvelope({
             kind: 'multisig-round-1-reply',
             fingerprint: fingerprintSessionRef(sessionRefOf(session)),
@@ -214,10 +216,10 @@ describe('MuSig2 step 1 replies are checked before they count', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: encodeXcwChunks(encodeMultisigEnvelope(reply)).join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/step 1 reply isn't a valid response for this signing session/);
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
         expect((await vault.multisigSigningSessions.get(session.id)).nonces).toEqual([]);
     });
 });
@@ -285,7 +287,7 @@ describe('MuSig2 step 2 partials are verified before they count', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import partial signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import partial signature/ }));
         const reply = buildReplyEnvelope({
             kind: 'multisig-round-2-reply',
             fingerprint: fingerprintSessionRef(sessionRefOf(session)),
@@ -294,10 +296,10 @@ describe('MuSig2 step 2 partials are verified before they count', () => {
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
             target: { value: encodeXcwChunks(encodeMultisigEnvelope(reply)).join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Submit chunks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Chunks' }));
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/signature doesn't match this signing session/);
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
         expect((await vault.multisigSigningSessions.get(session.id)).partialSigs).toEqual([]);
     });
 });

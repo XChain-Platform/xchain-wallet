@@ -26,7 +26,7 @@ function harness(overrides = {}) {
         getAddressesByChain: () => Promise.resolve({}),
         getActiveAddresses: () => Promise.resolve({}),
         getContractByActionIndex: () => Promise.resolve({
-            data: { action_index: '49', status: 'valid', meta_name: 'Escrow', meta_version: '1.0.0', owner_withdraw: true },
+            data: { action_index: '49', status: 'valid', meta_name: 'Escrow', meta_version: '9.8.7', owner_withdraw: true },
         }),
         getActionByIndex: () => Promise.resolve({}),
         getContractState: () => Promise.resolve({}),

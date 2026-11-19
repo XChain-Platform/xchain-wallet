@@ -1,0 +1,143 @@
+/* The one quick-action tile every screen shares: a square with rounded
+   corners, the icon centred and the label on its own line under it. The
+   corners come from the kit Button radius; the screen's own row decides the
+   track width, so the tile fills its cell. */
+.tile {
+    flex-direction: column;
+    aspect-ratio: 1 / 1;
+    white-space: normal;
+    text-align: center;
+}
+
+/* Two classes so the tile look outranks the kit Button variant whatever
+   order the bundler emits the stylesheets in. */
+.tile.tile {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-accent-primary);
+    --xc-button-font-size: var(--xc-text-xs);
+    --xc-icon-size: var(--xc-icon-md);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-space-1);
+    background: var(--xc-surface-raised);
+    border-color: var(--xc-accent-primary);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.tile.tile:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+/* A long label wraps inside the square instead of growing it. */
+.tile > span:last-child {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.icon {
+    /* An 18px glyph in a 32px tinted circle. */
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Round buttons: the tile has no outline or fill; the action is a 52px round
+   tinted button with its label beneath. */
+.tile.tile.tile {
+    aspect-ratio: auto;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    padding: var(--xc-space-1) 0;
+    gap: var(--xc-space-2);
+    --xc-icon-size: 22px;
+    /* One-word labels at a readable 14px. */
+    --xc-button-font-size: var(--xc-text-md);
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.tile.tile.tile:hover:not(:disabled) {
+    background: transparent;
+}
+
+.tile.tile.tile .icon {
+    width: 52px;
+    height: 52px;
+    transition: background var(--xc-transition);
+}
+
+.tile.tile.tile:hover:not(:disabled) .icon {
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+}
+
+/* The square tile, for grids of actions (the coin and token Actions tab): an outlined
+   rounded square, the tinted icon circle and the label under it. Four classes so it
+   outranks the round override above. */
+.tile.tile.tile.square {
+    aspect-ratio: 1 / 1;
+    background: var(--xc-surface-raised);
+    border-color: var(--xc-accent-primary);
+    padding: var(--xc-space-2) var(--xc-space-1);
+    gap: var(--xc-space-1);
+    --xc-icon-size: var(--xc-icon-md);
+    --xc-button-font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.tile.tile.tile.square:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.tile.tile.tile.square .icon {
+    width: 32px;
+    height: 32px;
+}
+
+.tile.tile.tile.square:hover:not(:disabled) .icon {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+}
+
+/* A locked tile reads as locked at a glance: dashed grey edge, muted fill, faded icon and
+   label, and a small lock in the top corner. An enabled tile keeps the solid blue edge. */
+.tile.tile.tile.square:disabled {
+    position: relative;
+    border-color: var(--xc-border-strong);
+    border-style: dashed;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+.tile.tile.tile.square:disabled .icon {
+    background: transparent;
+    color: var(--xc-text-muted);
+    opacity: 0.7;
+}
+
+.tile.tile.tile.square:disabled::after {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+    width: 12px;
+    height: 12px;
+    background: var(--xc-text-muted);
+    /* lucide Lock, drawn through a mask so it takes the muted text colour. */
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+    pointer-events: none;
+}

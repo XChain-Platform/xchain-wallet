@@ -73,7 +73,7 @@ describe('TokenPicker empty list and the balance check', () => {
         expect(screen.queryByText('Nothing to send yet')).toBeNull();
 
         const loadsBefore = messaging.getWalletBalances.mock.calls.length;
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(reachability.refresh).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(messaging.getWalletBalances.mock.calls.length).toBeGreaterThan(loadsBefore));
     });

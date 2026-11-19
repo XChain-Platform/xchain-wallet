@@ -8,6 +8,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const confirmFailure = vi.hoisted(() => ({ message: null }));
@@ -84,6 +85,11 @@ function listedNames() {
         .map((row) => row.getAttribute('aria-label'));
 }
 
+// Search, Network and Sort live in the title bar filter panel.
+function openFilter() {
+    fireEvent.click(screen.getByRole('button', { name: 'Filter contacts' }));
+}
+
 afterEach(() => {
     cleanup();
     confirmFailure.message = null;
@@ -101,17 +107,29 @@ describe('ContactsList audited behavior', () => {
         const row = await screen.findByRole('button', { name: 'Alice' });
         row.focus();
         await user.keyboard('{Enter}');
-        const edit = screen.getByRole('button', { name: 'Edit' });
+        // Edit is an action-list row (G101): its name carries its description.
+        const edit = screen.getByRole('button', { name: /^Edit/ });
         edit.focus();
         await user.keyboard('{Enter}');
 
         const name = screen.getByLabelText('Name');
         name.focus();
+        // The look fields (Edit Wallet's TileLookFields) follow the name,
+        // starting with Icon colour's help tip.
+        await user.tab();
+        expect(document.activeElement).toHaveAccessibleName('About Icon colour');
+        // Tab through the swatches, Icon shape and Icon image to Notes' help
+        // tip (U57), which sits on its label line, before the field.
+        for (let i = 0; i < 30 && !/Notes/.test(document.activeElement.getAttribute('aria-label') || ''); i += 1) {
+            await user.tab();
+        }
+        expect(document.activeElement.tagName).toBe('BUTTON');
+        expect(document.activeElement).toHaveAccessibleName(/Notes/);
         await user.tab();
         const notes = screen.getByLabelText('Notes');
         expect(document.activeElement).toBe(notes);
         await user.tab();
-        expect(document.activeElement).toHaveAccessibleName('Save');
+        expect(document.activeElement).toHaveAccessibleName('Update Contact');
 
         fireEvent.change(name, { target: { value: '' } });
         name.focus();
@@ -129,20 +147,21 @@ describe('ContactsList audited behavior', () => {
 
     it('leaves an empty contact form directly but confirms before discarding real input', async () => {
         mount(makeMessaging([]));
-        const add = await screen.findByRole('button', { name: 'Create first contact' });
+        await screen.findByText('No contacts yet');
+        const add = screen.getByRole('button', { name: 'Add contact' });
 
         fireEvent.click(add);
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('dialog')).toHaveTextContent('Discard changes?');
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'New Contact' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard and leave' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy());
@@ -158,7 +177,7 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bob' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         expect(await screen.findByText('This address is already saved for Alice.')).toBeTruthy();
         expect(messaging.saveContact).not.toHaveBeenCalled();
@@ -172,11 +191,17 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
 
         fireEvent.click(await screen.findByRole('button', { name: 'Bob' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
+        // The addresses sit under the Addresses tab; Actions opens first (G102).
+        fireEvent.click(screen.getByRole('tab', { name: /Addresses/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add address/ }));
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+        const save = screen.getByRole('button', { name: 'Save Address' });
+        expect(save.className).toMatch(/success/);
+        fireEvent.click(save);
 
-        const error = await screen.findByText('This address is already saved for Alice.');
+        const errors = await screen.findAllByText('This address is already saved for Alice.');
+        expect(errors).toHaveLength(2);
+        const error = errors.find((node) => node.id);
         const address = screen.getByLabelText('Address');
         expect(address).toHaveAttribute('aria-invalid', 'true');
         expect(address.getAttribute('aria-describedby').split(' ')).toContain(error.id);
@@ -190,13 +215,15 @@ describe('ContactsList audited behavior', () => {
         ];
         const first = mount(makeMessaging(rows));
         await waitFor(() => expect(listedNames()).toEqual(['Alice', 'Zed']));
-        fireEvent.change(screen.getByLabelText('Sort contacts'), { target: { value: 'newest' } });
+        openFilter();
+        selectOption(screen.getByLabelText('Sort contacts'), 'newest');
         expect(listedNames()).toEqual(['Zed', 'Alice']);
         first.unmount();
 
         mount(makeMessaging(rows));
-        await waitFor(() => expect(screen.getByLabelText('Sort contacts').value).toBe('newest'));
-        expect(listedNames()).toEqual(['Zed', 'Alice']);
+        await waitFor(() => expect(listedNames()).toEqual(['Zed', 'Alice']));
+        openFilter();
+        expect(screen.getByLabelText('Sort contacts').value).toBe('newest');
     });
 
     it('keeps sort preferences separate for each wallet', async () => {
@@ -206,11 +233,14 @@ describe('ContactsList audited behavior', () => {
         ];
         const first = mount(makeMessaging(rows), 'wallet-a');
         await screen.findByText('Alice');
-        fireEvent.change(screen.getByLabelText('Sort contacts'), { target: { value: 'newest' } });
+        openFilter();
+        selectOption(screen.getByLabelText('Sort contacts'), 'newest');
         first.unmount();
 
         mount(makeMessaging(rows), 'wallet-b');
-        await waitFor(() => expect(screen.getByLabelText('Sort contacts').value).toBe('name'));
+        await screen.findByText('Alice');
+        openFilter();
+        expect(screen.getByLabelText('Sort contacts').value).toBe('name');
         expect(listedNames()).toEqual(['Alice', 'Zed']);
     });
 
@@ -242,10 +272,29 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
         await screen.findByText('Alice');
 
+        openFilter();
         fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'conference' } });
         expect(listedNames()).toEqual(['Alice']);
         fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'treasury' } });
         expect(listedNames()).toEqual(['Bob']);
+    });
+
+    it('names the new-contact action and gives every field a help tip, Notes optional (U56, U57, U63)', async () => {
+        mount(makeMessaging([]));
+        await screen.findByText('No contacts yet');
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+
+        const submit = screen.getByRole('button', { name: 'Create contact' });
+        expect(submit.className).toMatch(/success/);
+        expect(submit.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+        const form = submit.closest('form');
+        const tips = Array.from(form.querySelectorAll('[role="tooltip"]')).map((tip) => tip.textContent);
+        expect(tips.some((text) => /name shown in place of this contact/.test(text))).toBe(true);
+        expect(tips.some((text) => /network is read from the address/.test(text))).toBe(true);
+        expect(tips.some((text) => /notes about this contact/.test(text))).toBe(true);
+        const notesLabel = Array.from(form.querySelectorAll('label')).find((label) => label.textContent.startsWith('Notes'));
+        expect(notesLabel.closest('div').parentElement.textContent).toMatch(/Optional/);
     });
 
     it('stores an ambiguous valid address under the chain the user selects', async () => {
@@ -253,11 +302,18 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
         await screen.findByText('No contacts yet');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Testnet friend' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: AMBIGUOUS_TESTNET } });
-        fireEvent.change(screen.getByLabelText('Network for this address'), { target: { value: 'litecoin' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        // U59: the undecided network is the standard Network field, empty until
+        // picked, and its picker offers only the networks the address fits.
+        const networkField = screen.getByRole('button', { name: /^Network:/ });
+        expect(networkField.querySelector('img')).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Network for this address' })).toBeNull();
+        fireEvent.click(networkField);
+        const picker = await screen.findByRole('dialog');
+        fireEvent.click(within(picker).getByRole('button', { name: /^Select Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledOnce());
         expect(messaging.saveContact.mock.calls[0][0].input.entries[0]).toMatchObject({
@@ -274,17 +330,17 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
         await screen.findByText('No contacts yet');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not save this contact. Try again.',
         );
         expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
         expect(screen.getByLabelText('Name')).toHaveValue('Alice');
-        expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Create contact' })).not.toBeDisabled();
     });
 
     it('keeps a contact visible and hides storage internals when deletion is refused', async () => {
@@ -296,7 +352,7 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
 
         fireEvent.click((await screen.findByText('Alice')).closest('button'));
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Delete/ }));
         const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
 
@@ -314,7 +370,7 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
 
         fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Delete/ }));
         const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
         expect(within(dialog).getByText('Alice and all saved addresses will be removed. You can restore the contact with Undo.')).toBeTruthy();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
@@ -336,7 +392,7 @@ describe('ContactsList audited behavior', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
         confirmFailure.message = 'Confirmation failed.';
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Delete/ }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Confirmation failed.');
         expect(messaging.deleteContact).not.toHaveBeenCalled();
@@ -363,7 +419,7 @@ describe('ContactsList audited behavior', () => {
         try {
             mount(makeMessaging([alice]));
             fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Share/ }));
 
             await waitFor(() => expect(share).toHaveBeenCalledWith({
                 title: 'Alice contact',
@@ -402,7 +458,7 @@ describe('ContactsList audited behavior', () => {
                 contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
             ]));
             fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Share/ }));
 
             await waitFor(() => expect(writeText).toHaveBeenCalledWith(`Alice\nBitcoin: ${BTC}`));
             expect(await screen.findByText('Contact copied.')).toBeInTheDocument();

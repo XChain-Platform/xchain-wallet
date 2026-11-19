@@ -70,7 +70,10 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -110,13 +113,12 @@ async function stakesForSource(address) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
-/** Navigates through the command palette, the way a returning user reaches
+/** Navigates through the wallet menu, the way a returning user reaches
  * anything that is not one of the four primary tabs. Staking is not a nav
  * destination at any width; it hangs off Home's secondary actions
  * and off the palette, so the palette is what works identically in every
@@ -255,7 +257,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             pubkey = newSigningPubkey();
 
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
 
@@ -266,15 +268,15 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await validatorOption.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toBeVisible({ timeout: 30_000 });
 
             // The address that will sign must be the one that was funded and
             // minted to: the form resolves its own source from wallet state.
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the stake form signs with the funded address').toBe(staker);
 
-            await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
+            await fieldByLabel(main, 'Signing public key').fill(pubkey);
             // Auto-detect (new-vs-topup) is what StakeForm actually gates the
             // wire's VERSION on; wait for it rather than trusting the radio's
             // default, so a detection regression would fail HERE, not silently
@@ -316,8 +318,10 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
-            const unstakeBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Unstake', exact: true });
+            // The stake's actions are a list of action rows, each named by its
+            // title and description ("Unstake Start the cooldown...").
+            const unstakeBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Unstake\b/ });
             await expect(unstakeBtn).toBeVisible({ timeout: 30_000 });
             await expect(unstakeBtn).toBeEnabled();
             await unstakeBtn.click();
@@ -325,7 +329,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             const main = page.getByRole('main');
             // Prefilled from the stake this address owns; asserting it is the
             // same guard as the STAKE step's From check.
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toHaveValue(pubkey, { timeout: 30_000 });
 
             // The encoder is faked from here, deliberately breaking the ONLY
@@ -338,7 +342,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
 
             const confirm = await expectConfirmModal(page, 'the (faked-failure) partial UNSTAKE');
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await approveConfirmBounded(page, 'the (faked-failure) partial UNSTAKE');
 
@@ -381,7 +385,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await amountField(main).fill(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await expectConfirmModal(page, 'the real partial UNSTAKE');
-            const realPassword = page.getByLabel('Password', { exact: true });
+            const realPassword = fieldByLabel(page, 'Password');
             if (await realPassword.count() > 0 && await realPassword.isVisible()) await realPassword.fill(PASSWORD);
             await approveConfirmBounded(page, 'the real partial UNSTAKE');
 
@@ -431,7 +435,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
 
         await test.step('Top-up mode: staking again under the SAME pubkey broadcasts as VERSION 2', async () => {
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
 
@@ -440,9 +444,9 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await validatorOption.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
+            await fieldByLabel(main, 'Signing public key').fill(pubkey);
 
             // The original stake (still active) plus the just-unstaked residual
             // both carry this pubkey, so detection must find SOME active row and

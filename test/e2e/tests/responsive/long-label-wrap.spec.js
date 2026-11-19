@@ -11,6 +11,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORT = { width: 360, height: 800 };
@@ -52,6 +53,8 @@ async function measureLongLabelLayout(page) {
                 seenButtonLabels.add(element);
                 const text = (element.textContent || '').trim();
                 if (!text || element.scrollWidth <= element.clientWidth + 1) continue;
+                // Asset marks are icons, and a 1px-wide clipped span is the visually hidden full name behind a short tab label.
+                if (element.closest('[data-asset-mark]') || element.querySelector('[data-asset-mark]') || element.clientWidth <= 1) continue;
                 buttonLabels.push({
                     ...describe(element),
                     clientWidth: element.clientWidth,
@@ -76,7 +79,7 @@ async function measureLongLabelLayout(page) {
             for (let node = walker.nextNode(); node; node = walker.nextNode()) {
                 const text = node.textContent.trim().replace(/\s+/g, ' ');
                 const parent = node.parentElement;
-                if (!text || !parent || parent.closest('svg, [aria-hidden="true"]') || !visible(parent)) continue;
+                if (!text || !parent || parent.closest('svg, .sr-only, [aria-hidden="true"]') || !visible(parent)) continue;
                 const range = document.createRange();
                 range.selectNodeContents(node);
                 const textBox = range.getBoundingClientRect();
@@ -94,6 +97,29 @@ async function measureLongLabelLayout(page) {
                     cardRight: Math.round(cardBox.right),
                 });
             }
+        }
+
+        const addressText = [];
+        for (const element of document.querySelectorAll('[class*="readOnlyValue"] > [aria-label]')) {
+            if (!(element instanceof HTMLElement) || !visible(element)) continue;
+            const holder = element.parentElement;
+            const full = element.getAttribute('aria-label') || '';
+            const shown = element.textContent.trim();
+            if (!holder || !full || !shown) continue;
+
+            const middle = shown.split('…');
+            const middleTrimmed = middle.length === 2
+                && middle.every(Boolean)
+                && full.startsWith(middle[0])
+                && full.endsWith(middle[1]);
+            const fullFits = shown === full && element.scrollWidth <= holder.clientWidth + 1;
+            if (fullFits || middleTrimmed) continue;
+            addressText.push({
+                full,
+                shown,
+                availableWidth: holder.clientWidth,
+                contentWidth: element.scrollWidth,
+            });
         }
 
         const controls = [];
@@ -126,6 +152,7 @@ async function measureLongLabelLayout(page) {
 
         const root = document.documentElement;
         return {
+            addressText,
             buttonLabels,
             cardText,
             controls,
@@ -142,6 +169,10 @@ async function expectLongLabelsFit(page, label) {
     await settle(page);
 
     const report = await measureLongLabelLayout(page);
+    expect(
+        report.addressText,
+        `${label}: addresses neither fit nor trim from the middle`,
+    ).toEqual([]);
     expect(report.buttonLabels, `${label}: button labels are clipped`).toEqual([]);
     expect(report.cardText, `${label}: text overflows its card`).toEqual([]);
     expect(report.controls, `${label}: controls extend outside the viewport`).toEqual([]);
@@ -206,7 +237,7 @@ test.describe('long labels at 360px', () => {
         const words = await readRecoveryPhrase(page);
         expect(words).toHaveLength(12);
         await expectLongLabelsFit(page, 'onboarding recovery phrase');
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await expect(page.getByRole('button', { name: 'Create wallet' })).toBeVisible();
         await expectLongLabelsFit(page, 'onboarding phrase verification');
@@ -219,9 +250,11 @@ test.describe('long labels at 360px', () => {
         await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
         await expectLongLabelsFit(page, 'onboarding encrypted backup import');
 
+        // FreeWallet import is a Wallet type on the Import Wallet page.
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'From FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
         await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
+        await pickOption(page.getByRole('button', { name: /^Wallet type:/ }), { label: /FreeWallet/ });
         await expectLongLabelsFit(page, 'onboarding FreeWallet import');
     });
 });

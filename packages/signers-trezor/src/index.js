@@ -33,4 +33,5 @@ export {
     chainIdToTrezorCoin,
     toTrezorSignTransaction,
     pathToAddressN,
+    TREZOR_NETWORK_SUPPORT,
 } from './trezorFormat.js';

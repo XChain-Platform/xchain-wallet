@@ -42,7 +42,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_CHECK_INTERVAL_MS, BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const homeTabsRender = vi.hoisted(() => vi.fn());
@@ -182,7 +182,8 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
         writeBalanceCache(WALLET.id, null, {
             balances: funded,
             activeByChain: {},
-            fetchedAt: Date.now() - 60_000,
+            // Older than the five-minute reuse window, so the open refreshes.
+            fetchedAt: Date.now() - 6 * 60_000,
         });
         const messaging = baseMessaging();
         messaging.getWalletBalances
@@ -209,7 +210,8 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
         await settle();
 
         expect(onScreen()).toContain('Fund your wallet');
-        expect(onScreen()).toMatch(/Updated just now/);
+        // U72: the balance box shows no "Updated ..." line; Settings, About does.
+        expect(onScreen()).not.toMatch(/Updated just now/);
         expect(onScreen()).not.toContain("Couldn't load balances");
     });
 });
@@ -221,7 +223,8 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         writeBalanceCache(WALLET.id, null, {
             balances: funded,
             activeByChain: {},
-            fetchedAt: Date.now() - 60_000,
+            // Older than the five-minute reuse window, so the open refreshes.
+            fetchedAt: Date.now() - 6 * 60_000,
         });
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_WITH_SECONDS));
@@ -337,7 +340,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         await advance(3_000);
         expect(onScreen()).not.toMatch(/slow down/);
         // ...and it stays gone across the next beat.
-        await advance(BALANCE_POLL_INTERVAL_MS);
+        await advance(BALANCE_MAX_AGE_MS);
         expect(onScreen()).not.toMatch(/slow down/);
     });
 
@@ -377,10 +380,10 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         await settle();
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
 
-        await advance(BALANCE_POLL_INTERVAL_MS);
+        await advance(BALANCE_MAX_AGE_MS);
         expect(messaging.getWalletBalances, 'the beat stacked a load on one in flight')
             .toHaveBeenCalledTimes(1);
-        await advance(BALANCE_POLL_INTERVAL_MS * 2);
+        await advance(BALANCE_MAX_AGE_MS * 2);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
     });
 
@@ -407,15 +410,16 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         await act(async () => { landFirst(landed); });
         await settle();
 
-        // First beat, 19.5 s after that landing: it fires a load that will hang.
-        await advance(BALANCE_POLL_INTERVAL_MS - 500);
+        // The first check after that landing ages past five minutes: it fires
+        // a load that will hang.
+        await advance(BALANCE_MAX_AGE_MS + BALANCE_CHECK_INTERVAL_MS - 500);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
-        // Second beat: the load the first beat fired is still open.
-        await advance(BALANCE_POLL_INTERVAL_MS);
+        // Next check: the load the previous check fired is still open.
+        await advance(BALANCE_CHECK_INTERVAL_MS);
         expect(messaging.getWalletBalances, 'the beat\'s own load ran unmarked, so the next beat stacked on it')
             .toHaveBeenCalledTimes(2);
-        await advance(BALANCE_POLL_INTERVAL_MS * 2);
+        await advance(BALANCE_MAX_AGE_MS * 2);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
     });
 });

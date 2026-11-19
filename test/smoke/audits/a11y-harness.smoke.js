@@ -137,10 +137,9 @@ for (const tag of ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']) {
 
 // --- 6. The confirm surface (§8.6 "axe-core popup + full") ----
 
-// This is the screen every signature passes through, and it went unscanned
-// while coverage stopped at the Send FORM. Both verdict states matter: only
-// the fail state renders the error list, the per-finding override checkboxes
-// and aria-live="assertive".
+// This is the screen every signature passes through. Confirm Standard has no
+// pass banner, so the ready arm is pinned by the absent warning slot; the fail
+// arm is pinned by its danger warning and override control.
 const confirmScan = readFileSync(
     join(e2e, 'tests', 'a11y', 'confirm-a11y.regtest.spec.js'), 'utf8',
 );
@@ -148,9 +147,16 @@ assert.ok(
     /from '\.\.\/\.\.\/fixtures\/a11y\.js'/.test(confirmScan),
     'the confirm scan uses the same harness as every other screen',
 );
-for (const state of ['Looks good', 'Will likely fail']) {
-    assert.ok(confirmScan.includes(state), `the confirm scan covers the "${state}" verdict`);
-}
+// G127 revised 2026-11-16: the pre-flight verdict is the status notice
+// first on the page, green on a pass and red on a fail.
+assert.match(confirmScan, /getByTestId\('confirm-status'\)\)\.toHaveAttribute\('data-state', 'pass'\)/,
+    'the confirm scan covers the ready state with its pass status');
+assert.match(confirmScan, /getByTestId\('confirm-status'\)\)\.toHaveAttribute\('data-state', 'fail'\)/,
+    'the confirm scan covers the failed pre-flight status');
+assert.match(confirmScan, /getByTestId\('ack-DRYRUN_INVALID'\)/,
+    'the failed pre-flight scan waits for its override control');
+assert.ok(confirmScan.includes('Confirm surface (ready,'), 'the ready Confirm Standard is scanned');
+assert.ok(confirmScan.includes('Confirm surface (pre-flight fail,'), 'the failed Confirm Standard is scanned');
 // A mid-test resize does not re-mount the responsive shell, so the narrow
 // arm has to be its own context or it is not testing the popup layout.
 assert.ok(

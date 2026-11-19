@@ -1,0 +1,300 @@
+// Copyright (c) 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import React, { useState } from 'react';
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { LIST_DETAIL_MIN_WIDTH } from '../../../packages/core/src/shared/components/PanelSplit.jsx';
+import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
+import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+
+const CHAIN = 'bitcoin-testnet';
+const OWNER = 'tb1qownerownerownerownerownerownerownerow';
+const ROWS = [
+    {
+        action_index: '40', block_index: 200, source: OWNER,
+        give_tick: 'ALPHA', give_amount: '2', get_coin: 'BTC', get_amount: '0.00001',
+        status: 'valid', current_status: 'open', escrow_remaining: '48',
+    },
+    {
+        action_index: '31', block_index: 150, source: OWNER,
+        give_tick: 'BETA', give_amount: '1', get_coin: 'BTC', get_amount: '0.00002',
+        status: 'valid', current_status: 'open', escrow_remaining: '24',
+    },
+];
+const listSource = readFileSync('packages/core/src/shared/routes/DispensersList.jsx', 'utf8');
+const detailSource = readFileSync('packages/core/src/shared/routes/DispenserDetail.jsx', 'utf8');
+const shellSources = [
+    'packages/web/src/App.jsx',
+    'packages/extension/src/popup/App.jsx',
+    'packages/desktop/renderer/App.jsx',
+].map((path) => readFileSync(path, 'utf8'));
+
+let layoutWidth = 0;
+const realRect = HTMLElement.prototype.getBoundingClientRect;
+
+beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
+        if (this.hasAttribute('data-list-detail')) {
+            return {
+                width: layoutWidth, height: 800, top: 0, left: 0,
+                right: layoutWidth, bottom: 800, x: 0, y: 0, toJSON() {},
+            };
+        }
+        return realRect.call(this);
+    });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    layoutWidth = 0;
+    try { globalThis.localStorage?.clear(); } catch { /* no storage */ }
+});
+
+function makeMessaging() {
+    return {
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }],
+        }),
+        getDispensersForSource: vi.fn().mockResolvedValue({ data: ROWS }),
+        getDispensersForToken: vi.fn().mockResolvedValue({ data: ROWS }),
+    };
+}
+
+function Shell({ route = 'dispensers-list', initialRef = null, onOpenDispenser = vi.fn(), onPick = vi.fn() }) {
+    const [selected, setSelected] = useState(initialRef);
+    return (
+        <DispensersList
+            walletId="wallet-1"
+            onBack={() => {}}
+            onOpenDispenser={onOpenDispenser}
+            selectedDispenser={selected}
+            onSelectDispenser={(ref) => { onPick(ref); setSelected(ref); }}
+            renderDispenser={(ref) => <h2 tabIndex={-1} data-panel-detail-heading="">{`Detail ${ref.actionIndex}`}</h2>}
+            renderDispenserPage={route === 'dispenser-detail'
+                ? (ref, page) => (
+                    <main ref={page.measureRef} data-list-detail="page">
+                        <h1>{`Dispenser ${ref.actionIndex}`}</h1>
+                    </main>
+                )
+                : undefined}
+        />
+    );
+}
+
+function renderShell(messaging, props = {}) {
+    return render(
+        <MessagingProvider shell="web" messaging={messaging}>
+            <Shell {...props} />
+        </MessagingProvider>,
+    );
+}
+
+describe('DispensersList two panels', () => {
+    it('wires the embedded and standalone detail into every shell', () => {
+        expect(detailSource).toMatch(/if \(embedded\) \{\s*return \(\s*<>\s*<h1 className="sr-only" tabIndex=\{-1\} data-panel-detail-heading="">\{DETAIL_TITLE\}<\/h1>\s*\{page\}/);
+        for (const source of shellSources) {
+            expect(source).toContain('selectedDispenser={dispenserRef}');
+            expect(source).toContain('marketAsset={dispenserMarketAsset}');
+            expect(source).toContain("setUnlockedView('dispensers-picker')");
+            expect(source).toContain('renderDispenser={(ref) => renderDispenserDetail(ref, { embedded: true })}');
+            expect(source).toContain("renderDispenserPage={unlockedView === 'dispenser-detail'");
+        }
+    });
+
+    it('shows the list beside the first dispenser and remembers its divider width', async () => {
+        layoutWidth = 1046;
+        const onPick = vi.fn();
+        renderShell(makeMessaging(), { onPick });
+        fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
+
+        const panel = await screen.findByRole('region', { name: 'ALPHA dispenser #40' });
+        expect(within(panel).getByRole('heading', { name: 'Detail 40' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Dispensers' })).toBeInTheDocument();
+        expect(document.querySelectorAll('main')).toHaveLength(1);
+        const first = screen.getByRole('button', { name: 'Open ALPHA dispenser #40' });
+        expect(first).toHaveAttribute('aria-current', 'true');
+        expect(first.closest('li')).toHaveAttribute('data-selected', 'true');
+        await waitFor(() => expect(onPick).toHaveBeenCalledWith({ chainId: CHAIN, actionIndex: '40' }));
+
+        const divider = screen.getByRole('separator', { name: 'Resize the dispensers list' });
+        const before = Number(divider.getAttribute('aria-valuenow'));
+        fireEvent.keyDown(divider, { key: 'ArrowRight' });
+        expect(Number(divider.getAttribute('aria-valuenow'))).toBeGreaterThan(before);
+        expect(listSource).toContain('storageKey="dispensers"');
+    });
+
+    it('swaps the detail in place without invoking narrow navigation', async () => {
+        layoutWidth = 1686;
+        const onOpenDispenser = vi.fn();
+        renderShell(makeMessaging(), { onOpenDispenser });
+        fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
+        const list = await screen.findByRole('region', { name: 'Dispensers' });
+        expect(screen.getByRole('separator', { name: 'Resize the dispensers list' }))
+            .toHaveAttribute('aria-valuenow', '420');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open BETA dispenser #31' }));
+        const panel = await screen.findByRole('region', { name: 'BETA dispenser #31' });
+        expect(within(panel).getByRole('heading', { name: 'Detail 31' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Dispensers' })).toBe(list);
+        expect(onOpenDispenser).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Open BETA dispenser #31' })).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('moves focus to the detail heading when a row is picked, not for the default dispenser', async () => {
+        layoutWidth = 1046;
+        renderShell(makeMessaging());
+        fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
+        const first = await screen.findByRole('heading', { name: 'Detail 40' });
+        expect(document.activeElement).not.toBe(first);
+
+        const row = screen.getByRole('button', { name: 'Open BETA dispenser #31' });
+        row.focus();
+        fireEvent.click(row);
+        const picked = await screen.findByRole('heading', { name: 'Detail 31' });
+        await waitFor(() => expect(picked).toHaveFocus());
+    });
+
+    it('keeps two panels and shows a quiet detail state when the first list is empty', async () => {
+        layoutWidth = 1046;
+        const messaging = makeMessaging();
+        messaging.getDispensersForSource.mockResolvedValue({ data: [] });
+        renderShell(messaging);
+
+        expect(await screen.findByRole('heading', { name: 'No dispensers yet' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Dispensers' }))
+            .toContainElement(screen.getByRole('heading', { name: 'No dispensers yet' }));
+        const detail = screen.getByRole('region', { name: 'Dispenser' });
+        expect(within(detail).getByRole('heading', { name: 'Select a dispenser' })).toBeInTheDocument();
+        expect(detail).not.toHaveAttribute('aria-busy');
+        expect(screen.getByRole('separator', { name: 'Resize the dispensers list' })).toBeInTheDocument();
+    });
+
+    it.each([
+        ['iPad beside its icon rail', 756, true],
+        ['phone landscape', 640, false],
+        ['just below the threshold', LIST_DETAIL_MIN_WIDTH - 1, false],
+    ])('uses the responsive layout at %s', async (_label, width, split) => {
+        layoutWidth = width;
+        const onOpenDispenser = vi.fn();
+        renderShell(makeMessaging(), { onOpenDispenser });
+        fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
+        const row = await screen.findByRole('button', { name: 'Open BETA dispenser #31' });
+        if (split) {
+            expect(await screen.findByRole('region', { name: 'ALPHA dispenser #40' })).toBeInTheDocument();
+            expect(screen.getByRole('separator')).toBeInTheDocument();
+            return;
+        }
+        expect(screen.queryByRole('separator')).toBeNull();
+        expect(row).not.toHaveAttribute('aria-current');
+        fireEvent.click(row);
+        expect(onOpenDispenser).toHaveBeenCalledWith(CHAIN, '31');
+    });
+});
+
+describe('Dispenser detail route', () => {
+    it('keeps a deep-linked dispenser selected in the wide split', async () => {
+        layoutWidth = 1046;
+        renderShell(makeMessaging(), {
+            route: 'dispenser-detail',
+            initialRef: { chainId: CHAIN, actionIndex: '31' },
+        });
+        const panel = await screen.findByRole('region', { name: 'BETA dispenser #31' });
+        expect(within(panel).getByText('Detail 31')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Open BETA dispenser #31' })).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps the standalone detail page below the breakpoint and skips list reads', async () => {
+        layoutWidth = 640;
+        const messaging = makeMessaging();
+        renderShell(messaging, {
+            route: 'dispenser-detail',
+            initialRef: { chainId: CHAIN, actionIndex: '31' },
+        });
+        expect(await screen.findByRole('heading', { level: 1, name: 'Dispenser 31' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Open .* dispenser/ })).toBeNull();
+        expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
+        expect(messaging.getDispensersForSource).not.toHaveBeenCalled();
+    });
+});
+
+// The real detail in both slots: a fiat-priced dispenser from another seller
+// must be buyable in the wide side panel, and the narrow full page keeps its
+// Buy row in front of the same Pay to buy block.
+const SELLER = 'tb1qsellersellersellersellersellersellersell';
+const FIAT_ROW = {
+    action_index: '50', block_index: 210, source: SELLER, address: SELLER,
+    give_tick: 'GAMMA', give_amount: '5', get_tick: null, get_coin: 'BTC', get_amount: '0',
+    fiat: 'USD', fiat_amount: '10', oracle_address: null,
+    status: 'valid', current_status: 'open', escrow_remaining: '50',
+};
+
+function realMessaging() {
+    const host = {
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }],
+        }),
+        getDispensersForSource: vi.fn().mockResolvedValue({ data: [FIAT_ROW, ...ROWS] }),
+        getDispensersForToken: vi.fn().mockResolvedValue({ data: [FIAT_ROW, ...ROWS] }),
+        getDispenserByActionIndex: vi.fn().mockResolvedValue(FIAT_ROW),
+        getDispenses: vi.fn().mockResolvedValue({ data: [] }),
+        getDispenserLifecycle: vi.fn().mockResolvedValue({ data: [] }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue({}),
+    };
+    return new Proxy(host, {
+        get(target, property) {
+            if (property in target) return target[property];
+            return vi.fn().mockResolvedValue(null);
+        },
+    });
+}
+
+function RealShell() {
+    const [selected, setSelected] = useState({ chainId: CHAIN, actionIndex: '50' });
+    const detail = (ref, extra) => (
+        <DispenserDetail walletId="wallet-1" chainId={ref.chainId} actionIndex={ref.actionIndex} onBack={() => {}} {...extra} />
+    );
+    return (
+        <DispensersList
+            walletId="wallet-1"
+            onBack={() => {}}
+            onOpenDispenser={() => {}}
+            selectedDispenser={selected}
+            onSelectDispenser={setSelected}
+            renderDispenser={(ref) => detail(ref, { embedded: true })}
+            renderDispenserPage={(ref, page) => (
+                <main ref={page.measureRef} data-list-detail="page">{detail(ref)}</main>
+            )}
+        />
+    );
+}
+
+describe('Fiat-priced dispenser through the real detail', () => {
+    it('offers Pay to buy in the wide side panel', async () => {
+        layoutWidth = 1046;
+        render(<MessagingProvider shell="web" messaging={realMessaging()}><RealShell /></MessagingProvider>);
+        const buy = await screen.findByTestId('embedded-buy');
+        const pay = within((await within(buy).findByText('Pay to buy')).closest('section'));
+        expect(pay.getByText(SELLER)).toBeVisible();
+        expect(pay.getByText(/10 USD/)).toBeVisible();
+        expect(screen.queryByText('This dispenser has no price this wallet can pay.')).toBeNull();
+    });
+
+    it('keeps the narrow full page: Buy row first, then the same Pay to buy block', async () => {
+        layoutWidth = 640;
+        render(<MessagingProvider shell="web" messaging={realMessaging()}><RealShell /></MessagingProvider>);
+        const row = await screen.findByTestId('dispenser-buy-row');
+        expect(screen.queryByTestId('embedded-buy')).toBeNull();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+        await waitFor(() => expect(row.getAttribute('aria-disabled')).toBeNull());
+        fireEvent.click(row);
+        expect(await screen.findByText('Pay to buy')).toBeInTheDocument();
+        expect(screen.getAllByText(SELLER).length).toBeGreaterThan(0);
+    });
+});

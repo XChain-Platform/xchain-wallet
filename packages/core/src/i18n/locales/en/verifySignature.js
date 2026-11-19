@@ -16,16 +16,21 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- signature verification ---------------------------------
-    'verifySignature.title': 'Verify signature',
+    'verifySignature.title': 'Verify Signature',
     'verifySignature.valid': 'Valid signature. Signature matches this message and address.',
     'verifySignature.invalid': "Invalid signature. Signature doesn't match this message and address.",
     'verifySignature.malformed': 'Malformed signature. Enter a base64-encoded signature.',
     'verifySignature.address': 'Address',
     'verifySignature.addressPlaceholder': 'The address that produced the signature',
+    'verifySignature.networkHelp':
+        "The network the signing address belongs to. The signature is checked using that network's message rules.",
     'verifySignature.message': 'Message',
     'verifySignature.messagePlaceholder': 'The exact text that was signed',
     'verifySignature.signature': 'Signature',
     'verifySignature.signaturePlaceholder': 'Base64 signature blob',
+    'verifySignature.addressHelp': 'The address that produced the signature.',
+    'verifySignature.messageHelp': 'The exact text that was signed, character for character.',
+    'verifySignature.signatureHelp': 'The base64 signature the sender shared with you.',
     'verifySignature.verifying': 'Verifying…',
 };
 

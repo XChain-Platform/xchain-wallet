@@ -5,6 +5,14 @@
     gap: var(--xc-space-2);
 }
 
+/* One market: its card, its action list 8px under it, then any open form. */
+.market {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--xc-space-2);
+}
+
 .card {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -25,18 +33,22 @@
     overflow-wrap: anywhere;
 }
 
-.actionRow {
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
 .outcomeRow {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     margin: var(--xc-space-2) 0;
+}
+
+/* The resolve picker's question reads as a field label, with its help tip. */
+.groupLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 500;
 }
 
 .inlineForm {
@@ -48,10 +60,5 @@
     .card {
         margin-top: var(--xc-space-3);
         padding: var(--xc-space-3);
-    }
-
-    .actionRow > * {
-        max-width: 100%;
-        white-space: normal;
     }
 }

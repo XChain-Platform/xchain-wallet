@@ -14,6 +14,7 @@ import {
     documentOverflow,
     overflowingElements,
 } from '../../fixtures/responsive.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const CONTRACT_INDEX = '4242';
 const CONTRACT_NAME = 'E2E Escrow';
@@ -192,22 +193,8 @@ async function expectReviewAtTop(page, viewport, heading) {
 }
 
 function definitionValue(main, term) {
-    return main.locator('dt').filter({ hasText: new RegExp(`^${term}$`) })
+    return main.locator('dt').filter({ hasText: new RegExp(`^${term}(?: \\d+)?$`) })
         .locator('xpath=following-sibling::dd[1]');
-}
-
-async function setWatcherMode(page) {
-    await gotoSection(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet mode/ }).click();
-    const watcher = page.getByRole('radio', { name: /^Watcher/ });
-    await expect(watcher).toBeVisible();
-    await watcher.click();
-    const confirm = page.getByRole('button', { name: 'Confirm mode change' });
-    if (await confirm.count() > 0) {
-        await confirm.click();
-        await expect(confirm).toBeHidden();
-    }
-    await expect(watcher).toBeChecked();
 }
 
 async function openContract(page) {
@@ -218,51 +205,62 @@ async function openContract(page) {
     await expect(page.getByRole('heading', { name: CONTRACT_LABEL, exact: true })).toBeVisible();
 }
 
+// Phones open the detail as its own screen; wide screens keep the Contracts header.
+const detailHeading = (viewport) => (viewport.width < 640 ? 'Contract Detail' : 'Contracts');
+
 async function walkExecute(page, viewport) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Call method', exact: true }).click();
-    await expectScreen(page, viewport, `Call contract #${CONTRACT_INDEX}`);
+    // Each function is its own row under Contract Functions on the Actions
+    // tab; its name carries the description and the Writes tag too. The row
+    // opens the call form with that function chosen.
+    await main.getByRole('button', { name: /^release\b/ }).click();
+    await expectScreen(page, viewport, 'Execute Contract');
+    await expect(main.getByText(`#${CONTRACT_INDEX}`, { exact: true })).toBeVisible();
 
     await main.getByLabel('amount (amount)', { exact: true }).fill(CALL_AMOUNT);
-    await main.getByRole('button', { name: /^Deposit \(optional\):/ }).click();
-    await expectScreen(page, viewport, 'Token to deposit');
-    await main.getByLabel('Search coins or tokens').fill(DEPOSIT_TICK);
+    await main.getByRole('button', { name: /^Deposit\b/ }).click();
+    await main.getByRole('button', { name: /^Token:/ }).click();
+    await expectScreen(page, viewport, 'Token to Deposit');
+    await searchTokenPicker(page, DEPOSIT_TICK);
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     await main.locator(`[data-balance-key="${FIXTURE_CHAIN}:${DEPOSIT_TICK}"]`).first().click();
     await main.getByRole('textbox', { name: /^Deposit amount/ }).fill(DEPOSIT_AMOUNT);
 
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expectReviewAtTop(page, viewport, 'Review contract call');
+    // Each form's main action names what it does (U63).
+    await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
+    await expectReviewAtTop(page, viewport, 'Confirm');
     await expect(definitionValue(main, 'Contract')).toHaveText(`#${CONTRACT_INDEX}`);
-    await expect(definitionValue(main, 'Deposit')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
+    await expect(definitionValue(main, 'You send')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
     await expect(definitionValue(main, 'Method')).toHaveText('release');
     await expect(definitionValue(main, 'Arguments')).toContainText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: `Call contract #${CONTRACT_INDEX}`, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execute Contract', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: 'Contract detail', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: detailHeading(viewport), exact: true })).toBeVisible();
 }
 
 async function walkDeploy(page, viewport) {
-    await page.getByRole('button', { name: 'Back to contracts list' }).click();
+    if (viewport.width < 640) await page.getByRole('button', { name: 'Back to contracts list' }).click();
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: '+ Publish contract', exact: true }).click();
-    await expectScreen(page, viewport, 'Publish contract');
+    await page.getByRole('button', { name: 'Publish contract', exact: true }).click();
+    await expectScreen(page, viewport, 'Publish Contract');
 
     await main.getByLabel('Code source', { exact: true }).fill(DEPLOY_SOURCE);
     await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
-    await main.getByLabel('Constructor params (optional)', { exact: true }).fill(CALL_AMOUNT);
+    await main.getByRole('button', { name: /^Constructor\b/ }).click();
+    await main.getByLabel('Constructor params', { exact: true }).fill(CALL_AMOUNT);
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish Contract', exact: true }).click();
 
-    await expectReviewAtTop(page, viewport, 'Review publish');
+    await expectReviewAtTop(page, viewport, 'Confirm');
     await expect(definitionValue(main, 'Name')).toHaveText('Review Contract');
     await expect(definitionValue(main, 'Gas limit')).toHaveText(DEPLOY_GAS);
     await expect(definitionValue(main, 'Constructor')).toHaveText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: 'Publish contract', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Publish Contract', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: 'Contracts', exact: true })).toBeVisible();
 }
@@ -270,8 +268,7 @@ async function walkDeploy(page, viewport) {
 test('contract browse, detail, execute, and deploy reviews fit phone and desktop', async ({ page }) => {
     test.slow();
     await installContractFixture(page);
-    await createWallet(page);
-    await setWatcherMode(page);
+    await createWallet(page, { walletMode: 'watcher' });
 
     for (const viewport of VIEWPORTS) {
         await test.step(viewport.name, async () => {
@@ -283,11 +280,14 @@ test('contract browse, detail, execute, and deploy reviews fit phone and desktop
             })).toBeVisible();
             await openContract(page);
 
-            await page.getByRole('button', { name: 'Back to contracts list' }).click();
-            await expectScreen(page, viewport, 'Contracts');
+            // Wide screens list the contracts beside the detail, so only phones go Back.
+            if (viewport.width < 640) {
+                await page.getByRole('button', { name: 'Back to contracts list' }).click();
+                await expectScreen(page, viewport, 'Contracts');
+            }
             await page.getByRole('button', { name: `Open ${CONTRACT_LABEL}`, exact: true }).first().click();
             await expect(page.getByRole('heading', { name: CONTRACT_LABEL, exact: true })).toBeVisible();
-            await expectScreen(page, viewport, 'Contract detail');
+            await expectScreen(page, viewport, detailHeading(viewport));
 
             await walkExecute(page, viewport);
             await walkDeploy(page, viewport);

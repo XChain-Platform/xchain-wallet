@@ -22,6 +22,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const BTC = 'bitcoin-mainnet';
 const REGTEST = 'bitcoin-regtest';
@@ -37,6 +38,7 @@ const REGTEST_ADDRESS = { ...ADDRESS, id: 'btc-regtest-a', address: 'bcrt1qexamp
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
     delete navigator.onLine;
 });
@@ -48,6 +50,9 @@ function deferred() {
 }
 
 function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequest } = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [BTC]: [ADDRESS],
@@ -84,7 +89,7 @@ function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequ
 async function fillSwap() {
     await screen.findByRole('button', { name: /Get token:/ });
     fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
     fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
 }
@@ -119,10 +124,14 @@ describe('swap form submit safety', () => {
 
         await fillSwap();
         expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
-        const review = screen.getByRole('button', { name: 'Review' });
-        expect(review).toBeDisabled();
+        const review = screen.getByRole('button', { name: 'Create Swap' });
+        // G130: enabled offline; the press is refused and the one offline
+        // notice is brought into view and focused, never repeated.
+        expect(review).toBeEnabled();
         fireEvent.submit(review.closest('form'));
         expect(composeForConfirm).not.toHaveBeenCalled();
+        expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
+        expect(document.activeElement?.matches('[data-form-status]')).toBe(true);
     });
 
     it('stops preparing and shows one plain error when composition rejects', async () => {
@@ -134,10 +143,10 @@ describe('swap form submit safety', () => {
         );
 
         await fillSwap();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Swap' })).toBeEnabled());
         const errors = screen.getAllByRole('alert');
         expect(errors).toHaveLength(1);
         expect(errors[0]).toHaveTextContent(/connection|try again/i);
@@ -146,7 +155,7 @@ describe('swap form submit safety', () => {
     it('locks and de-duplicates SwapForm while its exact terms compose', async () => {
         await expectOneLockedCompose({
             children: <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />,
-            actionName: 'Review',
+            actionName: 'Create Swap',
             fill: fillSwap,
         });
     });
@@ -154,7 +163,7 @@ describe('swap form submit safety', () => {
     it('locks and de-duplicates SellOwnershipForm while its price composes', async () => {
         await expectOneLockedCompose({
             children: <SellOwnershipForm walletId="w" onBack={() => {}} chainId={BTC} tick="ALPHA" />,
-            actionName: 'List name for sale',
+            actionName: /^List ownership for sale$/i,
             fill: async () => {
                 const price = await screen.findByLabelText(/^Price/);
                 fireEvent.change(price, { target: { value: '5' } });
@@ -184,11 +193,10 @@ describe('swap form submit safety', () => {
             </MessagingProvider>,
         );
         await fillSwap();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        const action = await screen.findByRole('button', { name: 'Create unsigned transaction' });
-        const form = action.closest('form');
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
+        const action = await screen.findByRole('button', { name: 'Approve' });
+        fireEvent.click(action);
+        fireEvent.click(action);
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
@@ -205,17 +213,16 @@ describe('swap form submit safety', () => {
         );
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        const action = await screen.findByRole('button', { name: /Create unsigned transaction/ });
-        const form = action.closest('form');
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        fireEvent.click(screen.getByRole('button', { name: /^List ownership for sale$/i }));
+        const action = await screen.findByRole('button', { name: 'Approve' });
+        fireEvent.click(action);
+        fireEvent.click(action);
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
 
     it.each([
-        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
         // The shared action-text refusal answers first, before the memo's own check.
         ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
         ['a tab', 'a\tb', /Memo cannot contain control characters/],
@@ -228,7 +235,7 @@ describe('swap form submit safety', () => {
         );
         await fillSwap();
         fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: memo } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
@@ -242,7 +249,7 @@ describe('swap form submit safety', () => {
         );
         await fillSwap();
         fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: 'x'.repeat(250) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
     });
 });

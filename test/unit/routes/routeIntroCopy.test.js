@@ -34,19 +34,25 @@ describe('route intro copy', () => {
         const roster = readRoute('ProjectRosterForm.jsx');
         const signer = readRoute('SignerSelectForm.jsx');
 
-        expect(oracle).toContain('<InfoTip label={`Dispensers can use an oracle');
-        expect(pairing).toContain('hint={lane.help}');
-        expect(pairing).toContain('<InfoTip label="Pairing codes contain public keys only');
-        expect(roster).toContain('official-token list show an "Official" badge in explorers and wallets');
-        expect(signer).toContain('<InfoTip label={t(\'signerSelect.intro\')} />');
+        const rosterCopy = readFileSync('packages/core/src/i18n/locales/en/projectRoster.js', 'utf8');
+
+        expect(oracle).toContain('help="Dispensers pricing in this currency can use this oracle."');
+        expect(pairing).toContain('help={lane.help}');
+        expect(pairing).toContain('<Notice key="public-code" tone="info" title="Public Codes"');
+        // The token list is a text field now (operator 2026-11-15), so its
+        // guidance is that field's own help tip.
+        expect(roster).toContain("help={t('projectRoster.tokensHelp'");
+        expect(rosterCopy).toContain('show an "Official" badge in explorers and wallets');
+        expect(signer).toContain("help={t('signerSelect.intro')}");
     });
 
     it('retains irreversible-action and fee safety copy', () => {
         expect(readRoute('ParallelComposer.jsx')).toContain('<strong>No rollback:</strong>');
-        expect(readRoute('PublishFileForm.jsx')).toContain('Permanent: the published bytes live on-chain forever');
+        expect(readFileSync('packages/core/src/i18n/locales/en/publishFile.js', 'utf8'))
+            .toContain('Permanent: the published bytes live on-chain forever');
         expect(readRoute('OracleForm.jsx')).toContain('typedConfirmationCopy.oracle(');
         expect(readFileSync('packages/core/src/i18n/locales/en/common.js', 'utf8'))
             .toContain("can't be undone for 24 hours");
-        expect(readRoute('SellOwnershipForm.jsx')).toContain('label="Network fee"');
+        expect(readRoute('SellOwnershipForm.jsx')).toContain('<FeeSection');
     });
 });

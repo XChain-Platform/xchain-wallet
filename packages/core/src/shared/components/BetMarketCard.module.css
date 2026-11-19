@@ -1,0 +1,206 @@
+/* The Bet Markets gauge card. The card is one button, so
+   every block inside is a span set to block or flex layout. It holds only
+   the question, the odds and the pool line, compact: 8px insets and gaps. */
+
+.card {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
+    margin: 0;
+    padding: var(--xc-space-2);
+    text-align: start;
+    font: inherit;
+    color: var(--xc-text);
+    box-shadow: var(--xc-list-shadow);
+    cursor: pointer;
+}
+
+.card:hover {
+    border-color: var(--xc-border-strong);
+}
+
+.card:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.question {
+    display: block;
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    line-height: 1.35;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* The odds and the pool line: the button's description. */
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.gauge {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.donut {
+    position: relative;
+    flex: 0 0 auto;
+    width: 64px;
+    height: 64px;
+}
+
+.donut svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.donutCenter {
+    position: absolute;
+    inset: 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-width: 0;
+}
+
+.donutPct {
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.donutLabel {
+    max-width: 100%;
+    font-size: 0.62rem;
+    line-height: 1.15;
+    color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legend {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.legendRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+}
+
+.swatch {
+    flex: 0 0 auto;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+}
+
+.legendLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legendPct {
+    flex: 0 0 auto;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.pool {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.pool strong {
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
+.poolIcon {
+    display: inline-flex;
+}
+
+.poolIcon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.chip {
+    min-width: 0;
+    border-radius: var(--xc-radius-pill);
+    padding: 0.1rem 0.5rem;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--xc-brand-blue) 12%, var(--xc-surface));
+    color: var(--xc-accent-text);
+    overflow-wrap: anywhere;
+}
+
+.chipYours {
+    background: color-mix(in srgb, var(--xc-brand-purple) 12%, var(--xc-surface));
+    color: var(--xc-brand-purple);
+}
+
+/* The wallet's stake summary and the chevron, pinned to the row's right end. */
+.right {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin-inline-start: auto;
+    flex: 0 0 auto;
+}
+
+.right .chip {
+    max-width: min(12rem, 40vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chevron {
+    display: inline-flex;
+    color: var(--xc-accent-text);
+}
+
+.chevron svg {
+    width: 1rem;
+    height: 1rem;
+}

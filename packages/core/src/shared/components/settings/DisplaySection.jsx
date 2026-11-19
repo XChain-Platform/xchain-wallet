@@ -10,249 +10,62 @@
 
 // DisplaySection: §27.3 / §27.4 / Cluster I FOLLOWUP 1.
 //
-// Pinned / hidden token management. Pinned tokens float to the top of
-// the balance list in the array's order; hidden tokens collapse into
-// each tab's "Show N hidden" footer. Until this panel landed, the
-// only way to manage either list was the per-row star / hide affordance
-// on Home. There was no surface to see the whole list at a glance,
-// reorder pinned tokens, or bulk-unhide.
-//
-// MVP scope (per FOLLOWUPS.md note "drag-reorder is non-trivial; an
-// MVP without reorder still closes the gap"): up / down buttons rather
-// than drag handles. Bulk "Unhide all" + per-row Unpin / Unhide.
-// Token keys render as `chainId:tick`, sufficient to identify a row
-// without a separate `messaging.getTokenInfo` round-trip.
+// Balance display options, the row pin and hide buttons, saved network
+// filters and the reset. The watched, pinned and hidden token lists are the
+// Tokens page (TokenListsSection), with the Add Watched Token page beside it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     Button,
-    EmptyState,
     FormPage,
     FormSection,
     Icon,
-    Input,
+    InfoTip,
     Select,
     StatusMessage,
-    Switch,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
-import { useSupportedChains } from '../../hooks/useSupportedChains.js';
-import { useMessaging } from '../../useMessaging.js';
-import { tickerReferenceError } from '../../utils/tickerGrammar.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import layoutStyles from './DisplaySection.module.css';
 import {
     NUMBER_FORMAT_DEFAULT,
+    SMALL_BALANCE_FIAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
-    pinnedTokensForWallet,
-    pinnedTokensPatchForWallet,
+    resolveSmallBalanceFiat,
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
-import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { formatFiatAmount } from '../../utils/fiatAmountFormat.js';
+
+// The small-balance amounts this section offers, in the display currency; a
+// stored amount off the list (typed on the Hide Small Balances page) is
+// listed as its own choice.
+const SMALL_BALANCE_PRESETS = ['0.01', '0.1', '1', '10'];
+import {
+    ROW,
+    ROW_COPY,
+    ROW_HINT,
+    ROW_LABEL,
+    SettingsLoadError,
+    Status,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
-import '../../../i18n/locales/en/issue.js';
 import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
-const chainRegistry = registryLib.defaultRegistry();
-const SEARCH_DEBOUNCE_MS = 200;
-
-function tokenDisplayName(key, chains) {
-    const tokenKey = String(key);
-    const separator = tokenKey.lastIndexOf(':');
-    if (separator < 0) return tokenKey;
-    const chainId = tokenKey.slice(0, separator);
-    const ticker = tokenKey.slice(separator + 1);
-    const descriptor = chains.find((chain) => chain.id === chainId) || chainRegistry.get(chainId);
-    const chainName = descriptor?.displayName
-        || chainId.replace(/-(?:mainnet|testnet|regtest)$/i, '');
-    return `${chainName}:${ticker}`;
-}
-
-const KEY_TEXT = {
-    color: 'var(--xc-text)',
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    flex: 1,
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-};
-const ACTIONS = {
-    display: 'flex',
-    gap: 'var(--xc-space-1)',
-    flexShrink: 0,
-};
-export function DisplaySection() {
-    const { messaging } = useMessaging();
+// `only` renders one part for its own Settings page: 'balances' (small
+// balances, unknown tokens, threshold, number format), 'rows' (pin and hide
+// buttons), 'lists' (saved network filters) or 'reset'. With no `only` every part renders.
+export function DisplaySection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
-    const chains = useSupportedChains();
     const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {{ text: string, variant: 'info' | 'success' } | null} */ (null));
     const [displayMessage, setDisplayMessage] = useState(/** @type {string | null} */ (null));
     const [saveError, setSaveError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
-    const [watchChainId, setWatchChainId] = useState(() => chains[0]?.id || '');
-    const [watchTicker, setWatchTicker] = useState('');
-    const [watchMessage, setWatchMessage] = useState(/** @type {{ text: string, variant: 'info' | 'success' | 'error' } | null} */ (null));
-    const [watching, setWatching] = useState(false);
-    const [tokenQuery, setTokenQuery] = useState('');
-    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState('');
-    const tokenSearchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const tokenListsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const watchRequestRef = useRef(0);
-
-    const walletId = readActiveWallet();
-    const legacyPinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
-    const pinned = walletId ? pinnedTokensForWallet(settings, walletId) : legacyPinned;
-    const watched = Array.isArray(settings?.watchedTokens) ? settings.watchedTokens : [];
-    const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
-
-    useEffect(() => {
-        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), SEARCH_DEBOUNCE_MS);
-        return () => clearTimeout(handle);
-    }, [tokenQuery]);
-
-    useEffect(() => () => { watchRequestRef.current += 1; }, []);
-
-    const tokenMatches = useCallback((key) => {
-        const query = debouncedTokenQuery.trim().toLowerCase();
-        if (!query) return true;
-        const tokenKey = String(key);
-        const separator = tokenKey.lastIndexOf(':');
-        const chainId = separator >= 0 ? tokenKey.slice(0, separator) : '';
-        const ticker = separator >= 0 ? tokenKey.slice(separator + 1) : tokenKey;
-        const descriptor = chainRegistry.get(chainId);
-        return [tokenKey, ticker, descriptor?.displayName, descriptor?.coin]
-            .some((value) => String(value || '').toLowerCase().includes(query));
-    }, [debouncedTokenQuery]);
-    const filteredPinned = useMemo(() => pinned.filter(tokenMatches), [pinned, tokenMatches]);
-    const filteredHidden = useMemo(() => hidden.filter(tokenMatches), [hidden, tokenMatches]);
-
-    const handleTokenSearchKeyDown = (event) => {
-        if (event.key !== 'ArrowDown') return;
-        const result = tokenListsRef.current?.querySelector('[data-token-setting-result="true"] button:not(:disabled)');
-        if (!result) return;
-        event.preventDefault();
-        result.focus();
-    };
-    const clearTokenSearch = () => {
-        setTokenQuery('');
-        setDebouncedTokenQuery('');
-        tokenSearchRef.current?.focus();
-    };
-
-    const writePinned = useCallback(async (next) => {
-        setSaveError(null);
-        try {
-            if (walletId) await update(pinnedTokensPatchForWallet(walletId, next));
-            else await update({ pinnedTokens: next });
-        } catch (err) {
-            setSaveError({ key: 'pinnedTokens', message: 'Could not save the pinned tokens. Try again.' });
-            // eslint-disable-next-line no-console
-            console.error('display.pinnedTokens update failed:', err);
-        }
-    }, [update, walletId]);
-
-    const writeHidden = useCallback(async (next) => {
-        setSaveError(null);
-        try {
-            await update({ hiddenTokens: next });
-        } catch (err) {
-            setSaveError({ key: 'hiddenTokens', message: 'Could not save the hidden tokens. Try again.' });
-            // eslint-disable-next-line no-console
-            console.error('display.hiddenTokens update failed:', err);
-        }
-    }, [update]);
-
-    const movePin = useCallback((idx, delta) => {
-        const next = pinned.slice();
-        const target = idx + delta;
-        if (target < 0 || target >= next.length) return;
-        const [row] = next.splice(idx, 1);
-        next.splice(target, 0, row);
-        writePinned(next);
-    }, [pinned, writePinned]);
-
-    const unpin = useCallback((key) => {
-        writePinned(pinned.filter((k) => k !== key));
-    }, [pinned, writePinned]);
-
-    const unhide = useCallback((key) => {
-        writeHidden(hidden.filter((k) => k !== key));
-    }, [hidden, writeHidden]);
-
-    const unhideAll = useCallback(() => {
-        if (hidden.length === 0) return;
-        writeHidden([]);
-    }, [hidden, writeHidden]);
-
-    const addWatchedToken = useCallback(async (event) => {
-        event.preventDefault();
-        const request = ++watchRequestRef.current;
-        setWatchMessage(null);
-        const tick = watchTicker.trim();
-        const grammarError = tickerReferenceError(tick, { allowRef: true });
-        if (grammarError) {
-            setWatchMessage({ text: grammarError, variant: 'error' });
-            return;
-        }
-        if (!watchChainId) {
-            setWatchMessage({ text: 'Choose a network.', variant: 'error' });
-            return;
-        }
-        const chain = chains.find((candidate) => candidate.id === watchChainId);
-        const chainLabel = chain?.displayName || watchChainId;
-        const enteredKey = `${watchChainId}:${tick}`;
-        if (watched.includes(enteredKey)) {
-            setWatchMessage({ text: `${tick} is already watched on ${chainLabel}.`, variant: 'info' });
-            return;
-        }
-        if (typeof messaging?.getTokenInfo !== 'function') {
-            setWatchMessage({ text: 'Token lookup is unavailable in this app.', variant: 'error' });
-            return;
-        }
-        setWatching(true);
-        try {
-            const info = await messaging.getTokenInfo({ chainId: watchChainId, tick, demo: false });
-            if (request !== watchRequestRef.current) return;
-            const canonicalTick = typeof info?.canonicalTick === 'string'
-                ? info.canonicalTick.trim()
-                : '';
-            if (!canonicalTick) {
-                setWatchMessage({ text: `Token "${tick}" was not found on ${chainLabel}.`, variant: 'error' });
-                return;
-            }
-            const key = `${watchChainId}:${canonicalTick}`;
-            if (watched.includes(key)) {
-                setWatchMessage({ text: `${canonicalTick} is already watched on ${chainLabel}.`, variant: 'info' });
-                return;
-            }
-            await update({
-                watchedTokens: [...watched, key],
-                hiddenTokens: hidden.filter((candidate) => candidate !== key),
-            });
-            if (request !== watchRequestRef.current) return;
-            setWatchTicker('');
-            setWatchMessage({ text: `${canonicalTick} is now shown in balances.`, variant: 'success' });
-        } catch {
-            if (request === watchRequestRef.current) {
-                setWatchMessage({ text: `Could not look up ${tick} on ${chainLabel}. Try again.`, variant: 'error' });
-            }
-        } finally {
-            if (request === watchRequestRef.current) setWatching(false);
-        }
-    }, [chains, hidden, messaging, update, watchChainId, watchTicker, watched]);
-
-    const removeWatchedToken = useCallback((key) => {
-        setWatchMessage(null);
-        update({ watchedTokens: watched.filter((candidate) => candidate !== key) })
-            .catch(() => setWatchMessage({ text: 'Could not remove the watched token. Try again.', variant: 'error' }));
-    }, [update, watched]);
 
     // Cluster O FOLLOWUP 3: reset all per-list chain-filter memory
     // entries. Affects History's enabledChains + the Home tab's coin-
@@ -319,6 +132,7 @@ export function DisplaySection() {
             showPinAffordance: false,
             showHideAffordance: false,
             smallBalanceThreshold: SMALL_BALANCE_THRESHOLD_DEFAULT,
+            smallBalanceFiat: SMALL_BALANCE_FIAT_DEFAULT,
             numberFormat: NUMBER_FORMAT_DEFAULT,
             privacy: { hideSmallBalances: false },
         })
@@ -334,290 +148,105 @@ export function DisplaySection() {
     };
 
     return (
-        <FormPage ref={tokenListsRef} as="div" sectioned fullWidth label={t('settings.display.displaySettings')}>
-            <FormSection title={t('settings.display.balanceDisplay')}>
-            <div style={ROW}>
-                <Switch
+        <FormPage as="div" sectioned fullWidth label={t('settings.display.displaySettings')}>
+            {/* On its own page the page title names the part, so each section
+                drops its heading rather than repeat it (U18). */}
+            {show('balances') ? (
+            <FormSection title={only ? undefined : t('settings.display.balanceDisplay')}>
+                <ToggleRow
                     label={t('settings.display.hideSmallBalances')}
-                    description={t('settings.display.collapseBalancesBelowTheSelected')}
+                    help={t('settings.display.collapseBalancesBelowTheSelected')}
                     checked={settings.privacy?.hideSmallBalances === true}
-                    onChange={(event) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: event.target.checked } })}
+                    onChange={(checked) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: checked } })}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div style={ROW}>
-                <Switch
+                <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
+                <ToggleRow
                     label={t('settings.display.hideUnknownTokens')}
-                    description={t('settings.display.collapseUnpricedTokensWithoutA')}
+                    help={t('settings.display.collapseUnpricedTokensWithoutA')}
                     checked={settings.hideUnknownTokens === true}
-                    onChange={(event) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: event.target.checked })}
+                    onChange={(checked) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: checked })}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="hideUnknownTokens" />
-            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
-                <div style={ROW_COPY}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.smallBalanceThreshold')}</span>
-                    <span style={ROW_HINT}>{t('settings.display.useEachNetworkSRelay')}</span>
-                </div>
-                <Select
-                    aria-label={t('settings.display.smallBalanceThreshold')}
-                    value={settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT}
-                    onChange={(e) => updateDisplay('smallBalanceThreshold', { smallBalanceThreshold: e.target.value })}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="dust">{t('settings.display.networkDustRecommended')}</option>
-                    <option value="0.0001">{t('settings.display.lessThan00001')}</option>
-                    <option value="0.01">{t('settings.display.lessThan001')}</option>
-                    <option value="1">{t('settings.display.lessThan1')}</option>
-                </Select>
-            </div>
-            <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
-            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
-                <div style={ROW_COPY}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.balanceNumberFormat')}</span>
-                    <span style={ROW_HINT}>{t('settings.display.changeDisplayedFormattingWithoutChanging')}</span>
-                </div>
-                <Select
-                    aria-label={t('settings.display.balanceNumberFormat')}
-                    value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
-                    onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="full">1,234.50000000</option>
-                    <option value="trim">1,234.5</option>
-                    <option value="plain">1234.50000000</option>
-                </Select>
-            </div>
-            <DisplaySaveError error={saveError} controlKey="numberFormat" />
-            </FormSection>
-
-            <FormSection
-                title={t('settings.display.rowAffordances')}
-            >
-            <div style={ROW}>
-                <Switch
-                    label={t('settings.display.showPinButtonOnRows')}
-                    description={t('settings.display.displayAStarOnEach')}
-                    checked={showPinAffordance}
-                    onChange={(event) => setPinAffordance(event.target.checked)}
-                />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
-            <div style={ROW}>
-                <Switch
-                    label={t('settings.display.showHideButtonOnRows')}
-                    description={t('settings.display.displayAHideAffordanceOn')}
-                    checked={showHideAffordance}
-                    onChange={(event) => setHideAffordance(event.target.checked)}
-                />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
-            </FormSection>
-
-            <FormSection
-                title={t('settings.display.watchedTokens', { length: watched.length })}
-                description={t('settings.display.addATokenByChain')}
-            >
-            <FormPage onSubmit={addWatchedToken} submitFromAnyField label={t('settings.display.tokenToWatch')}>
-                {/* A plain label: ROW_COPY carries a 280px flex basis that is a width in a row and a height in the form's column. */}
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.tokenToWatch')}</span>
-                <div className={layoutStyles.watchControls}>
+                <DisplaySaveError error={saveError} controlKey="hideUnknownTokens" />
+                <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
+                    <div style={ROW_COPY}>
+                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                            {t('settings.display.smallBalanceThreshold')}{' '}
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('settings.display.smallBalanceThreshold') })}
+                                label={t('settings.smallBalances.noPriceNote')}
+                            />
+                        </span>
+                    </div>
                     <Select
-                        aria-label={t('settings.display.tokenChain')}
-                        value={watchChainId}
-                        onChange={(event) => {
-                            watchRequestRef.current += 1;
-                            setWatching(false);
-                            setWatchChainId(event.target.value);
-                        }}
+                        aria-label={t('settings.display.smallBalanceThreshold')}
+                        value={resolveSmallBalanceFiat(settings)}
+                        onChange={(e) => updateDisplay('smallBalanceFiat', { smallBalanceFiat: e.target.value })}
                     >
-                        {/* Native options remain because Select owns the listbox control, not its choices. */}
-                        {chains.map((chain) => (
-                            <option key={chain.id} value={chain.id}>
-                                {chain.displayName}
-                            </option>
+                        {(SMALL_BALANCE_PRESETS.includes(resolveSmallBalanceFiat(settings))
+                            ? SMALL_BALANCE_PRESETS
+                            : [...SMALL_BALANCE_PRESETS, resolveSmallBalanceFiat(settings)]).map((value) => (
+                            <Select.Option key={value} value={value} icon={<Icon.FilterIcon />}>
+                                {t('settings.smallBalances.summaryUnder', { amount: formatFiatAmount(value, settings.fiatCurrency || 'USD') })}
+                            </Select.Option>
                         ))}
                     </Select>
-                    <Input
-                        size="md"
-                        aria-label={t('settings.display.tokenTicker')}
-                        value={watchTicker}
-                        onChange={(event) => {
-                            watchRequestRef.current += 1;
-                            setWatching(false);
-                            setWatchTicker(event.target.value);
-                        }}
-                        placeholder={t('issue.ticker')}
-                        autoComplete="off"
-                    />
-                    <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
-                        {watching ? t('settings.backup.checking') : t('settings.display.watchToken')}
-                    </Button>
                 </div>
-            </FormPage>
-            {watchMessage ? <StatusMessage variant={watchMessage.variant}>{watchMessage.text}</StatusMessage> : null}
-            {watched.map((storedKey) => {
-                const key = tokenDisplayName(storedKey, chains);
-                return (
-                    <div key={storedKey} style={ROW}>
-                        <span style={KEY_TEXT} title={key}>{key}</span>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={null}
-                            onClick={() => removeWatchedToken(storedKey)}
-                            aria-label={t('settings.display.removeWatchedToken', { key })}
-                        >
-                            {t('send.recipient.remove')}
-                        </Button>
+                <DisplaySaveError error={saveError} controlKey="smallBalanceFiat" />
+                <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
+                    <div style={ROW_COPY}>
+                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                            {t('settings.display.balanceNumberFormat')}{' '}
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('settings.display.balanceNumberFormat') })}
+                                label={t('settings.display.changeDisplayedFormattingWithoutChanging')}
+                            />
+                        </span>
                     </div>
-                );
-            })}
+                    <Select
+                        aria-label={t('settings.display.balanceNumberFormat')}
+                        value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
+                        onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
+                    >
+                        <Select.Option value="full" icon={<Icon.ListIcon />}>1,234.50000000</Select.Option>
+                        <Select.Option value="trim" icon={<Icon.MinusIcon />}>1,234.5</Select.Option>
+                        <Select.Option value="plain" icon={<Icon.DocumentIcon />}>1234.50000000</Select.Option>
+                    </Select>
+                </div>
+                <DisplaySaveError error={saveError} controlKey="numberFormat" />
             </FormSection>
-
-            <FormSection
-                title={t('settings.display.pinnedTokens', { length: pinned.length })}
-                description={t('settings.display.pinnedTokensFloatToThe')}
-            >
-            {(pinned.length > 0 || hidden.length > 0) ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <Input
-                            ref={tokenSearchRef}
-                            size="md"
-                            type="search"
-                            value={tokenQuery}
-                            onChange={(event) => setTokenQuery(event.target.value)}
-                            onKeyDown={handleTokenSearchKeyDown}
-                            placeholder={t('settings.display.searchTokenLists')}
-                            aria-label={t('settings.display.searchPinnedAndHiddenTokens')}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
-                    </div>
-                    {tokenQuery ? (
-                        <Button size="md" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label={t('settings.display.clearSettingsTokenSearch')}>
-                            <Icon.XIcon />
-                        </Button>
-                    ) : null}
-                </div>
             ) : null}
 
-                <DisplaySaveError error={saveError} controlKey="pinnedTokens" />
-                {pinned.length === 0 ? (
-                    <EmptyState
-                        title={t('settings.display.noPinnedTokens')}
-                        titleAs="p"
-                        body={t('settings.display.tapTheStarOnA')}
-                    />
-                ) : filteredPinned.length === 0 ? (
-                    <EmptyState
-                        title={t('settings.display.noMatchingPinnedTokens')}
-                        titleAs="p"
-                        body={t('settings.display.noPinnedTokensMatch', { value: debouncedTokenQuery.trim() })}
-                    />
-                ) : (
-                    filteredPinned.map((storedKey) => {
-                        const idx = pinned.indexOf(storedKey);
-                        const key = tokenDisplayName(storedKey, chains);
-                        return (
-                            <div key={storedKey} style={ROW} data-token-setting-result="true">
-                                <span style={KEY_TEXT} title={key}>{key}</span>
-                                <div style={ACTIONS}>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon={null}
-                                        onClick={() => movePin(idx, -1)}
-                                        disabled={idx === 0}
-                                        aria-label={t('settings.display.moveUp', { key })}
-                                    >
-                                        ↑
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon={null}
-                                        onClick={() => movePin(idx, 1)}
-                                        disabled={idx === pinned.length - 1}
-                                        aria-label={t('settings.display.moveDown', { key })}
-                                    >
-                                        ↓
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon={null}
-                                        onClick={() => unpin(storedKey)}
-                                        aria-label={t('settings.display.unpin', { key })}
-                                    >
-                                        <Icon.XIcon />
-                                    </Button>
-                                </div>
-                            </div>
-                        );
-                    })
-                )}
-            </FormSection>
-
+            {show('rows') ? (
             <FormSection
-                title={t('settings.display.hiddenTokens', { length: hidden.length })}
-                description={t('settings.display.hiddenTokensCollapseIntoThe')}
+                title={only ? undefined : t('settings.display.rowAffordances')}
             >
-                <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
-                {hidden.length === 0 ? (
-                    <EmptyState
-                        title={t('settings.display.noHiddenTokens')}
-                        titleAs="p"
-                        body={t('settings.display.tapTheHideControlOn')}
-                    />
-                ) : filteredHidden.length === 0 ? (
-                    <EmptyState
-                        title={t('settings.display.noMatchingHiddenTokens')}
-                        titleAs="p"
-                        body={t('settings.display.noHiddenTokensMatch', { value: debouncedTokenQuery.trim() })}
-                    />
-                ) : (
-                    <>
-                        {filteredHidden.map((storedKey) => {
-                            const key = tokenDisplayName(storedKey, chains);
-                            return (
-                                <div key={storedKey} style={ROW} data-token-setting-result="true">
-                                    <span style={KEY_TEXT} title={key}>{key}</span>
-                                    <div style={ACTIONS}>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            icon={null}
-                                            onClick={() => unhide(storedKey)}
-                                            aria-label={t('settings.display.unhide', { key })}
-                                        >
-                                            {t('settings.display.unhide2')}
-                                        </Button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        <div style={ROW}>
-                            <span style={ROW_LABEL}>{hidden.length} {t('settings.display.hidden')}</span>
-                            <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
-                                {t('settings.display.unhideAll')}
-                            </Button>
-                        </div>
-                    </>
-                )}
+                <ToggleRow
+                    label={t('settings.display.showPinButtonOnRows')}
+                    help={t('settings.display.displayAStarOnEach')}
+                    checked={showPinAffordance}
+                    onChange={setPinAffordance}
+                />
+                <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
+                <ToggleRow
+                    label={t('settings.display.showHideButtonOnRows')}
+                    help={t('settings.display.displayAHideAffordanceOn')}
+                    checked={showHideAffordance}
+                    onChange={setHideAffordance}
+                />
+                <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
             </FormSection>
+            ) : null}
 
+            {show('lists') ? (
             <FormSection
-                title={t('settings.display.listPreferences')}
+                title={only ? undefined : t('settings.display.listPreferences')}
                 description={t('settings.display.rememberTheLastSelectedChain')}
             >
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>{t('settings.display.savedChainFilters')}</span>
                 </div>
-                <Button size="sm" variant="secondary" icon={null} onClick={resetChainFilters}>
+                <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={resetChainFilters}>
                     {t('settings.display.resetListPreferences')}
                 </Button>
             </div>
@@ -627,19 +256,24 @@ export function DisplaySection() {
                 <StatusMessage variant={resetMessage.variant}>{resetMessage.text}</StatusMessage>
             ) : null}
             </FormSection>
+            ) : null}
 
-            <FormSection title={t('settings.display.defaults')}>
+            {show('reset') ? (
+            <FormSection title={only ? undefined : t('settings.display.defaults')}>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>{t('settings.display.resetDisplaySettings')}</span>
                     <span style={ROW_HINT}>{t('settings.display.restoresBalanceDisplayOptionsAnd')}</span>
                 </div>
-                <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>
+                <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={resetDisplay}>
                     {t('settings.display.resetToDefaults')}
                 </Button>
             </div>
             {displayMessage ? <StatusMessage variant="success">{displayMessage}</StatusMessage> : null}
             <DisplaySaveError error={saveError} controlKey="reset" />
+            </FormSection>
+            ) : null}
+            {/* Any part may ask to confirm, so the dialog sits outside the parts. */}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -647,7 +281,6 @@ export function DisplaySection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-            </FormSection>
         </FormPage>
     );
 }

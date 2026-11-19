@@ -20,8 +20,38 @@
 // vault-backed handlers aren't registered until a session key exists.
 
 import { crypto as cryptoLib, flows, registry, storage as storageLib } from '@xchain-wallet/core';
+import { addHardwareWallet } from '@xchain-wallet/core/flows/hardwareWallet.js';
+import {
+    BALANCES_BATCH_MAX_ADDRESSES,
+    readsFromBatchEntry,
+    shapeFromReads,
+} from '@xchain-wallet/core/flows/balances.js';
 import { saveSigningSecret } from './signingSecretSession.js';
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
+
+/**
+ * Write the recovery-phrase reset record for the vault just committed, off the
+ * reply path (operator ruling 2026-11-16). Copies the key before returning,
+ * so the caller zeroes its own as usual; a failure costs only the backfill at
+ * the next unlock.
+ *
+ * @param {{ storageBackend: any, metaBackend: any, onPhraseRecoveryReconcile?: (p: Promise<boolean>) => void }} deps
+ * @param {Uint8Array} masterKey
+ * @param {string} password
+ * @param {Map<string, Uint8Array>} [knownWalletKeys]   wallet seal keys already derived (a restore's lent key)
+ */
+export function startPhraseRecoveryReconcile(deps, masterKey, password, knownWalletKeys) {
+    const pending = flows.reconcilePhraseRecoveryDetached({
+        storageBackend: deps.storageBackend,
+        metaBackend: deps.metaBackend,
+        vaultKey: masterKey,
+        password,
+        knownWalletKeys,
+        onError: (err) => console.warn('[xchain] phrase recovery not written:', /** @type {any} */ (err)?.name || err),
+    });
+    deps.onPhraseRecoveryReconcile?.(pending);
+    return pending;
+}
 
 // Read from the registry's bundled descriptors, so a new bundled chain reaches
 // new wallets with no shell edit; the web shell imports this same binding.
@@ -44,7 +74,11 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
  * Returns the mnemonic so a popup running the §19.2 seed-phrase display
  * ceremony can show it before the success transition.
  */
-export async function handleWalletCreateWithMnemonic(request, deps) {
+export function handleWalletCreateWithMnemonic(request, deps) {
+    return withOnboardingLock(deps, () => createWithMnemonic(request, deps));
+}
+
+async function createWithMnemonic(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.create: password is required');
@@ -55,6 +89,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         strengthBits = 128,
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        walletMode,
     } = /** @type {any} */ (request);
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -84,6 +119,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
                 // The wallet seal shares the vault key because the password
                 // and KDF params are identical for a fresh create.
                 masterKey,
+                walletMode,
             });
             await vault.save();
             mnemonic = result.mnemonic;
@@ -107,12 +143,14 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+        startPhraseRecoveryReconcile(deps, masterKey, password);
     } catch (err) {
         // A create that fails after pooling opens no session, so no unlocked
         // signer may stay behind in the background's pool.
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -124,7 +162,11 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
     return { mnemonic, walletName: name };
 }
 
-export async function handleWalletImport(request, deps) {
+export function handleWalletImport(request, deps) {
+    return withOnboardingLock(deps, () => importWallet(request, deps));
+}
+
+async function importWallet(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     const mnemonic = /** @type {any} */ (request)?.mnemonic;
     const wif = /** @type {any} */ (request)?.wif;
@@ -143,7 +185,9 @@ export async function handleWalletImport(request, deps) {
         origin,
         format,
         chainId,
+        addressType,
         activeNetwork,
+        walletMode,
     } = /** @type {any} */ (request);
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -169,11 +213,13 @@ export async function handleWalletImport(request, deps) {
                     password,
                     wif: wif.trim(),
                     chainId,
+                    addressType,
                     vault,
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,
                     name,
                     kdfParams,
+                    walletMode,
                 })
                 : await flows.importMnemonic({
                     password,
@@ -192,6 +238,7 @@ export async function handleWalletImport(request, deps) {
                     // for mainnet). Undefined keeps the flow's own inference
                     // from the first chain id.
                     activeNetwork,
+                    walletMode,
                 });
             await vault.save();
             importedFormat = result.format ?? result.wallet.format;
@@ -204,7 +251,9 @@ export async function handleWalletImport(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+        startPhraseRecoveryReconcile(deps, masterKey, password);
     } catch (err) {
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -282,7 +331,11 @@ export async function restoreLabelSyncBestEffort({ vault, walletId, password, bi
  * nothing to re-mint ids against, and the backup's own settings are adopted
  * (the restoring user's network / fee choices ARE the ones being restored).
  */
-export async function handleWalletImportBackup(request, deps) {
+export function handleWalletImportBackup(request, deps) {
+    return withOnboardingLock(deps, () => importBackupFresh(request, deps));
+}
+
+async function importBackupFresh(request, deps) {
     const req = /** @type {any} */ (request) ?? {};
     const password = req.password;
     const backupPassword = req.backupPassword;
@@ -326,6 +379,7 @@ export async function handleWalletImportBackup(request, deps) {
                 walletPassword,
                 devicePassword: password,
                 mode: 'fresh',
+                chainRegistry: deps.chainRegistry,
                 // Core zeroes the lent buffer when this returns, so keep a copy;
                 // the outer finally zeroes it whether or not the restore succeeds.
                 onDeviceKey: (key, params) => {
@@ -370,12 +424,17 @@ export async function handleWalletImportBackup(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+        // The restored wallet was re-sealed under fresh params and its key lent
+        // here, so the record needs no second derivation of it.
+        startPhraseRecoveryReconcile(deps, masterKey, password,
+            deviceKey && result?.walletId ? new Map([[result.walletId, deviceKey]]) : undefined);
     } catch (err) {
         // A restore that fails after pooling opens no session, so no unlocked
         // signer may stay behind in the background's pool.
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -395,12 +454,339 @@ export async function handleWalletImportBackup(request, deps) {
 }
 
 /**
+ * Fresh install, first wallet a hardware wallet (`wallet.create.hardware`).
+ *
+ * The connect flow reads the device's accounts first and asks for the
+ * password last, on the standard Set Password page, so this lane receives both
+ * at once: `{ password, name, device, accounts }`, the `addHardwareWallet`
+ * input plus the password that seals the new vault. Same shape of work as
+ * `wallet.create`: one blob write, then the kdf params, session key and
+ * signing secret, with a failed save leaving the install fresh. A hardware
+ * wallet has no seed, so nothing is pooled and no label-sync restore runs.
+ *
+ * @returns {Promise<{ walletId: string, walletName: string, signer: object | null, accounts: object[], addresses: object[] }>}
+ */
+export function handleWalletCreateHardware(request, deps) {
+    return withOnboardingLock(deps, () => createHardware(request, deps));
+}
+
+async function createHardware(request, deps) {
+    const req = /** @type {any} */ (request) ?? {};
+    const password = req.password;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.create.hardware: password is required');
+    }
+    await assertFreshVault(deps);
+    const input = hardwareWalletInput(req);
+
+    const kdfParams = cryptoLib.makeFreshKdfParams();
+    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    let result;
+    try {
+        const vault = new storageLib.Vault({
+            backend: deps.storageBackend,
+            masterKey,
+            // One blob write at `vault.save()`, as wallet.create.
+            autoSave: false,
+        });
+        try {
+            await vault.open();
+            await seedHardwareSettings(vault, deps.chainRegistry, input.accounts);
+            result = await addHardwareWallet({ ...input, vault, chainRegistry: deps.chainRegistry });
+            await vault.save();
+        } finally {
+            vault.close();
+        }
+
+        await deps.metaBackend.save({ kdfParams });
+        await deps.sessionBackend.save(masterKey);
+        await saveSigningSecret(deps.signingSecretBackend, password);
+        startPhraseRecoveryReconcile(deps, masterKey, password);
+    } catch (err) {
+        if (isVaultConflict(err)) throw walletExistsError();
+        await discardPartialWallet(deps);
+        throw err;
+    } finally {
+        masterKey.fill(0);
+    }
+    if (typeof deps.onUnlocked === 'function') {
+        await deps.onUnlocked();
+    }
+    return hardwareWalletResult(result);
+}
+
+/**
+ * The request fields `addHardwareWallet` takes, and nothing else, so a caller
+ * can never hand the flow its own vault or registry.
+ *
+ * @param {any} req
+ * @returns {{ name: unknown, device: unknown, accounts: any[] }}
+ */
+export function hardwareWalletInput(req) {
+    return {
+        name: req?.name,
+        device: req?.device,
+        accounts: Array.isArray(req?.accounts) ? req.accounts : [],
+    };
+}
+
+/**
+ * What both hardware lanes answer: the new wallet's id and name, the signer
+ * record (its id is what the renderer registers the device transport under),
+ * and the accounts and addresses written.
+ *
+ * @param {{ wallet: { id: string, name: string }, signer?: object, accounts?: object[], addresses?: object[] }} r
+ */
+export function hardwareWalletResult(r) {
+    return {
+        walletId: r.wallet.id,
+        walletName: r.wallet.name,
+        signer: r.signer ?? null,
+        accounts: r.accounts ?? [],
+        addresses: r.addresses ?? [],
+    };
+}
+
+/**
+ * Settings for a fresh hardware vault: fee entries for the chains the device
+ * accounts live on, and the network those accounts are on as the active one,
+ * so the wallet opens on its own coins. Merges into settings already present.
+ * Exported for the web shell's in-page twin of this lane.
+ */
+export async function seedHardwareSettings(vault, chainRegistry, accounts) {
+    const has = (id) => typeof id === 'string' && typeof chainRegistry?.has === 'function' && chainRegistry.has(id);
+    const chainIds = [...new Set(accounts.map((a) => a?.chainId).filter(has))];
+    const seedIds = chainIds.length > 0 ? chainIds : DEFAULT_ACTIVE_CHAIN_IDS;
+    const activeNetwork = chainRegistry?.descriptorFor?.(seedIds[0])?.networkKind;
+    await flows.ensureSettings(vault, chainRegistry, seedIds, activeNetwork ? { activeNetwork } : {});
+}
+
+/**
+ * Most addresses one `wallet.hardware.balances` call reads per network. It is
+ * the explorer's batch size, so every network costs exactly one balance read
+ * whatever the row count; a longer list is refused rather than split.
+ */
+export const HARDWARE_BALANCES_MAX_PER_CHAIN = BALANCES_BATCH_MAX_ADDRESSES;
+
+let sharedPriceOracle = null;
+function defaultPriceOracle() {
+    if (sharedPriceOracle) return sharedPriceOracle;
+    if (typeof globalThis.fetch !== 'function' || typeof flows.createPriceOracle !== 'function') return null;
+    sharedPriceOracle = flows.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+    return sharedPriceOracle;
+}
+
+/**
+ * `wallet.hardware.balances`: the coin balance and fiat value of each account
+ * the connect flow found on a device. Pre-host on purpose: on a fresh install
+ * the accounts step comes before any vault exists.
+ *
+ * @param {{ items?: Array<{ chainId: string, address: string }> }} request
+ * @param {{ chainRegistry?: any, sdkRegistry?: any, priceOracle?: any, readSettings?: () => Promise<any> | any }} deps
+ *   `readSettings` returns the open vault's settings (or null), so a user who
+ *   turned price data off gets no fiat lookup; `priceOracle` is injectable for tests
+ */
+export async function handleHardwareWalletBalances(request, deps = {}) {
+    let settings = null;
+    if (typeof deps.readSettings === 'function') {
+        try { settings = await deps.readSettings(); } catch { settings = null; }
+    }
+    return readHardwareWalletBalances({
+        items: /** @type {any} */ (request)?.items,
+        chainRegistry: deps.chainRegistry,
+        sdkRegistry: deps.sdkRegistry,
+        priceOracle: 'priceOracle' in deps ? deps.priceOracle : defaultPriceOracle(),
+        settings,
+    });
+}
+
+/**
+ * One balance read per network (the explorer batch route) and one price read
+ * for all networks, whatever the row count. No per-address fallback: a network
+ * whose explorer has no batch route reports its rows unavailable.
+ *
+ * @returns {Promise<Array<{ chainId: string, address: string, balance: string | null,
+ *   quantity: string | null, divisibility: number, fiat: number | null, currency: string, error: string | null }>>}
+ *   `balance` is whole coins as a decimal string, `quantity` the same in atomic
+ *   units; `fiat` is null when price data is off or has no price for the network
+ */
+export async function readHardwareWalletBalances({ items, chainRegistry, sdkRegistry, priceOracle, settings } = {}) {
+    if (!Array.isArray(items)) {
+        throw new Error('wallet.hardware.balances: items must be an array');
+    }
+    /** @type {Map<string, Set<string>>} */
+    const byChain = new Map();
+    const rows = items.map((item) => {
+        const chainId = item?.chainId;
+        const address = item?.address;
+        if (typeof chainId !== 'string' || !chainId || typeof address !== 'string' || !address) {
+            throw new Error('wallet.hardware.balances: every item needs a chainId and an address');
+        }
+        if (!byChain.has(chainId)) byChain.set(chainId, new Set());
+        byChain.get(chainId).add(address);
+        return { chainId, address };
+    });
+    for (const [chainId, addresses] of byChain) {
+        if (addresses.size > HARDWARE_BALANCES_MAX_PER_CHAIN) {
+            throw Object.assign(
+                new Error(`wallet.hardware.balances: at most ${HARDWARE_BALANCES_MAX_PER_CHAIN} addresses per network (${chainId} has ${addresses.size})`),
+                { code: 'HW_BALANCES_TOO_MANY' },
+            );
+        }
+    }
+
+    const key = (chainId, address) => `${chainId}\u0000${address}`;
+    /** @type {Map<string, { quantity: string | null, error: string | null }>} */
+    const reads = new Map();
+    const pricesRead = nativeFiatPrices({ chainIds: [...byChain.keys()], priceOracle, settings });
+    await Promise.all([...byChain.entries()].map(async ([chainId, addressSet]) => {
+        const addresses = [...addressSet];
+        const fail = (message) => {
+            for (const address of addresses) reads.set(key(chainId, address), { quantity: null, error: message });
+        };
+        let sdk = null;
+        try { sdk = sdkRegistry?.get?.(chainId) ?? null; } catch { sdk = null; }
+        if (!sdk || typeof sdk.getBalancesBatch !== 'function') {
+            fail('balance service unavailable');
+            return;
+        }
+        const descriptor = chainRegistry?.descriptorFor?.(chainId) ?? null;
+        const nativeTicker = descriptor?.nativeTicker || descriptor?.coin || chainId;
+        let resp;
+        try {
+            resp = await sdk.getBalancesBatch(addresses);
+        } catch (e) {
+            fail(e?.message ? String(e.message) : String(e));
+            return;
+        }
+        for (const address of addresses) {
+            const slot = resp && typeof resp === 'object' && Object.prototype.hasOwnProperty.call(resp, address)
+                ? resp[address]
+                : null;
+            try {
+                const shape = shapeFromReads({
+                    ...readsFromBatchEntry(slot, address), nativeTicker, descriptor, address,
+                });
+                reads.set(key(chainId, address), shape.native
+                    ? { quantity: String(shape.native.quantity), error: null }
+                    : { quantity: null, error: String(shape.unavailableReason || 'balance unavailable') });
+            } catch (e) {
+                reads.set(key(chainId, address), { quantity: null, error: e?.message ? String(e.message) : String(e) });
+            }
+        }
+    }));
+    const { currency, prices } = await pricesRead;
+
+    return rows.map(({ chainId, address }) => {
+        const read = reads.get(key(chainId, address)) ?? { quantity: null, error: 'balance unavailable' };
+        const balance = read.quantity == null ? null : coinsFromAtomic(read.quantity, NATIVE_DIVISIBILITY);
+        const price = prices?.[chainId]?.priceFiat;
+        const fiat = balance != null && typeof price === 'number' && Number.isFinite(price)
+            ? Math.round(Number(balance) * price * 100) / 100
+            : null;
+        return {
+            chainId,
+            address,
+            balance,
+            quantity: read.quantity,
+            divisibility: NATIVE_DIVISIBILITY,
+            fiat,
+            currency,
+            error: read.error,
+        };
+    });
+}
+
+// The explorer's native coin balance is always read at 8 decimals (balances.js).
+const NATIVE_DIVISIBILITY = 8;
+
+/** Atomic units to a whole-coin decimal string, trailing zeros dropped. */
+function coinsFromAtomic(quantity, decimals) {
+    let amount;
+    try { amount = BigInt(quantity); } catch { return null; }
+    const scale = 10n ** BigInt(decimals);
+    const whole = amount / scale;
+    const fraction = String(amount % scale).padStart(decimals, '0').replace(/0+$/, '');
+    return fraction ? `${whole}.${fraction}` : String(whole);
+}
+
+/**
+ * One price read for every network, behind the same privacy switch as
+ * `prices.native`. A failure or a switched-off source leaves fiat empty
+ * rather than failing the balances.
+ */
+async function nativeFiatPrices({ chainIds, priceOracle, settings }) {
+    const currency = typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency
+        ? settings.fiatCurrency
+        : 'USD';
+    if (settings?.privacy?.priceDataEnabled === false) return { currency, prices: {} };
+    if (!priceOracle || typeof priceOracle.getNativePrices !== 'function' || chainIds.length === 0) {
+        return { currency, prices: {} };
+    }
+    try {
+        const r = await priceOracle.getNativePrices({ chainIds, fiatCurrency: currency });
+        return { currency, prices: r?.prices ?? {} };
+    } catch {
+        return { currency, prices: {} };
+    }
+}
+
+/** Tail of the onboarding queue per install, keyed by its storage backend. */
+const onboardingQueues = new WeakMap();
+
+/**
+ * Run one create / import / fresh-restore at a time per install. Two windows
+ * (or a create beside an import) that start at once both meet an empty vault
+ * at `assertFreshVault`; run in order, the second meets the first one's
+ * wallet and refuses with WalletExistsError instead of racing it to the blob
+ * and then clearing the winner's blob and kdfParams in its own cleanup.
+ *
+ * @template T
+ * @param {{ storageBackend?: object, metaBackend?: object }} deps
+ * @param {() => Promise<T>} run
+ * @returns {Promise<T>}
+ */
+async function withOnboardingLock(deps, run) {
+    const key = deps?.storageBackend ?? deps?.metaBackend;
+    if (!key || typeof key !== 'object') return run();
+    const prior = onboardingQueues.get(key) ?? Promise.resolve();
+    let release = () => {};
+    const tail = prior.then(() => new Promise((resolve) => { release = resolve; }));
+    onboardingQueues.set(key, tail);
+    await prior;
+    try {
+        return await run();
+    } finally {
+        release();
+        if (onboardingQueues.get(key) === tail) onboardingQueues.delete(key);
+    }
+}
+
+function walletExistsError() {
+    return Object.assign(
+        new Error('A wallet already exists. Unlock or reset first.'),
+        { name: 'WalletExistsError' },
+    );
+}
+
+/**
+ * A conditional save on a vault this lane opened empty refuses only because
+ * another writer (a second process on the same file) stored a wallet first.
+ * That blob is the other writer's, so the lane reports WalletExistsError and
+ * clears nothing.
+ */
+function isVaultConflict(err) {
+    return err?.name === 'VaultConflictError';
+}
+
+/**
  * Remove what a failed create / import / fresh-restore wrote. These lanes write
  * the blob once, at their save, so a kdfParams, session or signing-secret save
  * that is refused after it leaves an encrypted blob the unlock path cannot
  * open and every onboarding lane refuses to replace. Callers
- * reach this only after `assertFreshVault` proved the install held nothing, so
- * it never discards a wallet that was already there. A clear that fails too is
+ * reach this only under the onboarding lock, after `assertFreshVault` proved
+ * the install held nothing and with no conditional-save conflict, so it never
+ * discards a wallet that was already there or that another writer stored. A clear that fails too is
  * left for the original error to report.
  *
  * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> } }} deps
@@ -426,16 +812,6 @@ async function discardPartialWallet(deps) {
  * @param {{ metaBackend: { load: () => Promise<any> }, storageBackend: { load: () => Promise<any> } }} deps
  */
 export async function assertFreshVault(deps) {
-    if (await deps.metaBackend.load()) {
-        throw Object.assign(
-            new Error('A wallet already exists. Unlock or reset first.'),
-            { name: 'WalletExistsError' },
-        );
-    }
-    if (await deps.storageBackend.load()) {
-        throw Object.assign(
-            new Error('A wallet already exists. Unlock or reset first.'),
-            { name: 'WalletExistsError' },
-        );
-    }
+    if (await deps.metaBackend.load()) throw walletExistsError();
+    if (await deps.storageBackend.load()) throw walletExistsError();
 }

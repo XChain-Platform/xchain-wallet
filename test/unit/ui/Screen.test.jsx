@@ -28,22 +28,22 @@ const REVIEW_SCROLL_FORMS = [
     ['CoinpayForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['ComposeMessage', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['ContractFundsForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
-    ['ContractStakeForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['ControllerBindForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['CreateOrderForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['CreatePollForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['CrossChainOrderForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['CrossChainSwapForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DelegateVoteForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
-    ['DelegationActionForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DestroyForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DispenserForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DividendForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
-    ['GatedPublishForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['IssueTokenForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['LinkForm', 'restoreScroll={!isReviewOrSubmitting}'],
     ['ListCreateForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
-    ['ListForkForm', "restoreScroll={stage !== 'review-1' && stage !== 'review-2'}"],
+    // The List form's Edit and Fork body (the old fork form's two reviews).
+    ['ListCreateForm', "restoreScroll={stage !== 'review-1' && stage !== 'review-2'}"],
+    // The one Staking form, which absorbed the contract stake and delegation forms.
+    ['StakingForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
 ];
 
 const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
@@ -59,6 +59,13 @@ afterEach(() => {
 });
 
 describe('<Screen>', () => {
+    it('disables native scroll anchoring on the route body', () => {
+        const css = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
+        const body = css.match(/\.body\s*\{([^}]*)\}/)?.[1] ?? '';
+
+        expect(body).toMatch(/overflow-anchor:\s*none/);
+    });
+
     it('renders the full variant with a named section body and optional landmarks', () => {
         const { container } = render(
             <Screen

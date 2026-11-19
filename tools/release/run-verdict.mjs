@@ -177,7 +177,7 @@ export function classifyJob(job) {
     }
 
     if (conclusion === 'success') {
-        return { name, state: JOB_STATE.PASSED, detail: `${steps.length} step(s) passed`, assertions: [] };
+        return { name, state: JOB_STATE.PASSED, detail: passedDetail(steps), assertions: [] };
     }
 
     if (conclusion === 'skipped') {
@@ -194,6 +194,20 @@ export function classifyJob(job) {
             + '(post-step or runner-side; read the check-run annotation)',
         assertions: [],
     };
+}
+
+/**
+ * The detail line for a job that concluded success. A step an `if:` turned off is recorded as
+ * `skipped` and is not a check that passed, so it is counted apart and named: a gate that was
+ * switched off must not read as one that ran. The state and exit code are unchanged, because a
+ * skipped step states no assertion.
+ */
+function passedDetail(steps) {
+    const skipped = steps
+        .filter((s) => s?.conclusion === 'skipped')
+        .map((s) => s?.name ?? '(unnamed step)');
+    if (skipped.length === 0) return `${steps.length} step(s) passed`;
+    return `${steps.length - skipped.length} step(s) passed, ${skipped.length} skipped: ${skipped.join(', ')}`;
 }
 
 /** Whether a job's check-run annotations say it exceeded its maximum execution time. */

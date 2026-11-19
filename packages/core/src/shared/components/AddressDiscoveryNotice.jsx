@@ -12,6 +12,7 @@
 // after a restore or from Wallet details. One message per state: checking,
 // the count found, or the networks that could not be checked with Try again.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
@@ -61,7 +62,9 @@ export function addressDiscoveryLine(value) {
 
 /**
  * @param {object} props
- * @param {(job: any) => void} [props.onFinished]  fires once when a scan this notice watched finishes
+ * @param {(job: any) => void} [props.onFinished]  fires once when a scan this notice watched finishes,
+ *                                                 and with dismissOnLeave also for a scan that finished
+ *                                                 unseen while the screen was closed
  * @param {boolean} [props.dismissOnLeave]          mark a finished scan as read when this notice unmounts
  */
 export function AddressDiscoveryNotice({ onFinished, dismissOnLeave = false }) {
@@ -94,7 +97,10 @@ export function AddressDiscoveryNotice({ onFinished, dismissOnLeave = false }) {
             if (relevant?.status === 'running') {
                 watchedRunningRef.current = relevant.id;
                 timer = setTimeout(poll, ADDRESS_DISCOVERY_POLL_MS);
-            } else if (relevant?.status === 'done' && watchedRunningRef.current === relevant.id) {
+            } else if (relevant?.status === 'done' && (watchedRunningRef.current === relevant.id
+                // A scan that finished while this screen was closed: its
+                // addresses arrived after the screen's saved balance read.
+                || (dismissOnLeave && watchedRunningRef.current === null))) {
                 watchedRunningRef.current = null;
                 if (typeof onFinishedRef.current === 'function') onFinishedRef.current(relevant);
             }
@@ -104,7 +110,7 @@ export function AddressDiscoveryNotice({ onFinished, dismissOnLeave = false }) {
             cancelled = true;
             if (timer) clearTimeout(timer);
         };
-    }, [messaging, generation]);
+    }, [messaging, generation, dismissOnLeave]);
 
     useEffect(() => {
         if (job?.status === 'done') shownDoneRef.current = job.id;
@@ -123,7 +129,7 @@ export function AddressDiscoveryNotice({ onFinished, dismissOnLeave = false }) {
             await messaging.discoverAddresses(walletIds.length === 1 ? { walletId: walletIds[0] } : {});
             setGeneration((g) => g + 1);
         } catch (err) {
-            setRetryError(err?.message || String(err));
+            setRetryError(userFacingMessage(err, 'Could not check for used addresses. Try again.'));
         }
     }
 

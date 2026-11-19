@@ -33,8 +33,11 @@
 //       heading, several paragraphs, a button group). `<StatusMessage>`
 //       now wraps its children in a block body, so a paragraph-per-line
 //       warning fits; a panel with a heading and controls still stays out.
-//   (f) field errors. These use the compact shared Input error row because
-//       the control references the message through `aria-describedby`.
+//   (f) field errors. These use the compact shared Input error row, or the
+//       host's own error style, because the control references the message
+//       through `aria-describedby`; the reference is what makes it a field error.
+//   (g) an error appended inside a shared StatusMessage. The outer primitive
+//       owns the status layout while the nested alert announces the new error.
 //
 // Static source-analysis smoke, matching error-recovery-sweep.smoke.js.
 
@@ -113,7 +116,7 @@ for (const el of elements) {
 // --- 5. every residual role="alert" falls in a declared carve-out -----
 
 // Walks the opening tag of each residual inline alert / aria-live row and
-// checks it against the four reasons above. A row matching none of them is a
+// checks it against the declared reasons above. A row matching none of them is a
 // genuine miss and fails here rather than sitting in the tree unnoticed.
 const CARVED_FILE = /(Toast|Banner|Overlay)[A-Za-z]*\.jsx$/;
 const BLOCK_CHILD = /<(div|p|ul|ol|table|li|section|pre|h[1-6])[\s/>]/;
@@ -130,6 +133,12 @@ for (const f of files) {
         if (/style=/.test(tag)) continue;                                    // (c)
         if (/data-testid/.test(tag)) continue;                               // (b)
         if (/className=\{inputStyles\.error\}/.test(tag)) continue;          // (f)
+        // (f) also covers a field error drawn in its host's own style, as long
+        // as a control in the same file names it through aria-describedby.
+        const idExpr = /\sid=\{([A-Za-z0-9_.]+)\}/.exec(tag);
+        if (idExpr && f.src.includes(`aria-describedby={${idExpr[1]}}`)) continue; // (f)
+        const before = f.src.slice(0, m.index);
+        if (before.lastIndexOf('<StatusMessage') > before.lastIndexOf('</StatusMessage>')) continue; // (g)
         const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(tag);
         if (cls && /warn/i.test(cls[1])) continue;                           // (a)
         // (e): peek at the body. A row whose children are block elements is a
@@ -150,7 +159,6 @@ assert.deepEqual(
 
 const named = {
     'packages/core/src/shared/components/TokenField.jsx': /<div id=\{errorId\} className=\{inputStyles\.error\} role="alert">\{error\}<\/div>/,
-    'packages/core/src/shared/routes/ResumeConfirm.jsx': /<StatusMessage variant="error">\{error\}<\/StatusMessage>/,
     // The address-load error carries a Try again recovery prop, so the row
     // may span lines; it must still be the error StatusMessage around loadError.
     'packages/core/src/shared/routes/Send.jsx': /<StatusMessage\s+variant="error"[\s\S]*?>\s*\{loadError\}\s*<\/StatusMessage>/,
@@ -163,11 +171,10 @@ for (const [path, re] of Object.entries(named)) {
 
 // --- 7. the carve-outs are still real, not stale -----------------------
 
-// The four warning-box copies (Send, TokenWizard, IssueTokenForm and
+// The warning-box copies (Send, IssueTokenForm and
 // ActionIntentSummary) are gone: their warnings render through the primitive.
 for (const path of [
     'routes/Send.module.css',
-    'routes/TokenWizard.module.css',
     'routes/IssueTokenForm.module.css',
     'components/ActionIntentSummary.module.css',
 ]) {
@@ -216,8 +223,8 @@ for (const variant of ['status', 'info', 'warning', 'error', 'success']) {
 }
 assert.match(
     primitiveCss,
-    /^\.row\.error \{[^}]*background: var\(--xc-danger\);[^}]*color: var\(--xc-on-danger\);/m,
-    'the error variant paints on-danger text over the danger background',
+    /^\.row\.error \{[^}]*background: var\(--xc-danger-bg\);[^}]*color: var\(--xc-danger-text\);[^}]*border: 1px solid var\(--xc-danger\);/m,
+    'the error variant paints the Notice Standard danger look (tint, dark red text, thin red border; 2026-11-15)',
 );
 
 console.log(

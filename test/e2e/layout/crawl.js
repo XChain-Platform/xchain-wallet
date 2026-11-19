@@ -174,9 +174,17 @@ function planFill([formIndex, address, mode]) {
     const form = forms[formIndex] || document.querySelectorAll('form')[formIndex];
     if (!form) return [];
     const plan = [];
-    const fields = [...form.querySelectorAll('input, textarea, select')];
+    const fields = [...form.querySelectorAll('input, textarea, select, [data-xc-select]')];
     fields.forEach((el, i) => {
         if (el.disabled || el.readOnly || el.getClientRects().length === 0) return;
+        // The themed dropdown (ruling G96) lists its options only while open,
+        // so the step picks the second option in the page when it runs.
+        if (el.hasAttribute('data-xc-select')) {
+            const labelText = [el.labels?.[0]?.innerText, el.getAttribute('aria-label'), el.id]
+                .filter(Boolean).join(' ').toLowerCase();
+            plan.push({ i, kind: 'xc-select', value: 1, label: labelText });
+            return;
+        }
         const type = (el.getAttribute('type') || el.tagName).toLowerCase();
         if (['checkbox', 'radio', 'hidden', 'file', 'submit', 'button', 'range', 'color'].includes(type)) return;
         const labelText = [
@@ -215,7 +223,7 @@ function planFill([formIndex, address, mode]) {
 function fieldAt([formIndex, i]) {
     const forms = [...document.querySelectorAll('main form')];
     const form = forms[formIndex] || document.querySelectorAll('form')[formIndex];
-    return form ? form.querySelectorAll('input, textarea, select')[i] : null;
+    return form ? form.querySelectorAll('input, textarea, select, [data-xc-select]')[i] : null;
 }
 
 /** Runs in the page: the form's submit control and its label. */
@@ -326,6 +334,10 @@ export function createCrawl(page, {
     start = null,
     directReentry = false,
     onScreen = null,
+    // Measure only: open each screen and hand it to onScreen, without
+    // pressing its controls or filling its forms. A layout measure needs one
+    // reading per screen; the full press-and-fill pass takes over 10 s a screen.
+    measureOnly = false,
 }) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
@@ -387,7 +399,7 @@ export function createCrawl(page, {
     async function enterDemo() {
         if (start) await start();
         else await page.goto('/');
-        const demo = page.getByRole('button', { name: 'Try in demo mode' });
+        const demo = page.getByRole('button', { name: 'Try Demo' });
         await demo.or(unlockedShell(page)).or(page.getByRole('button', { name: 'Skip' })).first()
             .waitFor({ state: 'visible', timeout: 60_000 });
         if (await unlockedShell(page).isVisible().catch(() => false)) return;
@@ -413,8 +425,8 @@ export function createCrawl(page, {
         await enterDemo();
     }
 
-    const paletteButton = () => page.getByRole('button', { name: 'Open command palette' }).first();
-    const palette = () => page.getByRole('dialog', { name: 'Command palette' });
+    const paletteButton = () => page.getByRole('button', { name: 'Open menu' }).first();
+    const palette = () => page.getByRole('dialog', { name: 'Wallet menu' });
     async function openPalette(timeout = 10_000) {
         if (await paletteButton().isVisible().catch(() => false)) {
             await paletteButton().click({ timeout });
@@ -428,63 +440,35 @@ export function createCrawl(page, {
         screens.push({ label: 'chrome: header and nav', open: async () => {}, chrome: true });
 
         await openPalette();
-        let destinations = await palette().getByRole('option').evaluateAll((els) => els
-            .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
-        destinations = [...new Set(destinations.filter((x) => x && !/^\d/.test(x)))];
+        const destinations = await palette().locator('[data-wallet-menu-row]').evaluateAll((els) => els
+            .map((e) => ({
+                id: e.getAttribute('data-wallet-menu-row'),
+                label: (e.textContent || '').trim(),
+            }))
+            .filter((row) => row.id && row.id !== 'lock' && row.label));
         await page.keyboard.press('Escape');
-        // Every coin and token has a palette entry, and they all open the
-        // same detail screen; two per chain cover it.
-        const perChain = new Map();
         for (const dest of destinations) {
-            if (DESTRUCTIVE.test(dest)) continue;
-            const chain = dest.match(/ on (\w+)$/)?.[1];
-            if (chain) {
-                perChain.set(chain, (perChain.get(chain) || 0) + 1);
-                if (perChain.get(chain) > 2) continue;
-            }
+            if (DESTRUCTIVE.test(dest.label)) continue;
             const openDestination = async (timeout = 10_000) => {
                 await openPalette(timeout);
-                await palette().getByRole('combobox').fill(dest, { timeout });
-                await palette().getByRole('option').filter({ hasText: dest }).first()
+                await palette().locator(`[data-wallet-menu-row="${dest.id}"]`)
                     .click({ timeout: Math.min(timeout, 5_000) });
             };
             screens.push({
-                label: `palette: ${dest}`,
+                label: `menu: ${dest.label}`,
                 open: openDestination,
                 reopen: () => openDestination(2_000),
             });
-        }
-
-        const menu = paletteButton().page().getByRole('button', { name: 'Open menu' }).first();
-        if (await menu.isVisible().catch(() => false)) {
-            await menu.click();
-            await page.waitForTimeout(300);
-            // The header menu is a role=menu popover in the header, not part
-            // of <main>; its rows are the buttons (links leave the app).
-            const rows = await page.getByRole('menu').getByRole('menuitem').evaluateAll((els) => els
-                .filter((e) => e.tagName === 'BUTTON' && !e.disabled)
-                .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
-            await home();
-            for (const row of [...new Set(rows)]) {
-                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row) || /new window/i.test(row)) continue;
-                screens.push({
-                    label: `menu: ${row}`,
-                    open: async () => {
-                        await page.getByRole('button', { name: 'Open menu' }).first().click();
-                        await page.waitForTimeout(300);
-                        await page.getByRole('menu').getByRole('menuitem').filter({ hasText: row }).first().click({ timeout: 5_000 });
-                    },
-                });
-            }
         }
 
         await openSettings(page);
         // Through a nav, openSettings returns on the click; the section list
         // renders a beat later, and reading it at once found no sections at
         // all on phone widths, so every Settings screen went uncrawled.
-        // Every shell's Settings list shows a Developer mode row (openSettings
-        // waits on it too), so it marks the list as rendered in each venue.
-        await page.locator('main button:visible:not([disabled])').filter({ hasText: /^Developer mode/ }).first()
+        // Every shell's Settings index shows an Advanced group row (the
+        // Developer mode row moved onto that group's page), so it marks the
+        // list as rendered in each venue.
+        await page.locator('main button:visible:not([disabled])').filter({ hasText: /^Advanced/ }).first()
             .waitFor({ timeout: 15_000 });
         const sections = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
             .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
@@ -669,7 +653,16 @@ export function createCrawl(page, {
                         const field = (await page.evaluateHandle(fieldAt, [f, step.i])).asElement();
                         if (!field) continue;
                         if (step.kind === 'select') await field.selectOption(step.value).catch(() => {});
-                        else await field.fill(step.value, { timeout: 2_000 }).catch(() => {});
+                        else if (step.kind === 'xc-select') {
+                            await field.evaluate(async (el, index) => {
+                                el.click();
+                                await new Promise((resolve) => { setTimeout(resolve, 0); });
+                                const listbox = document.getElementById(el.getAttribute('aria-controls') || '');
+                                const options = [...(listbox?.querySelectorAll('[role="option"]') || [])]
+                                    .filter((o) => o.getAttribute('aria-disabled') !== 'true' && o.getAttribute('data-value') !== '');
+                                (options[index] || options[0] || el).click();
+                            }, step.value).catch(() => {});
+                        } else await field.fill(step.value, { timeout: 2_000 }).catch(() => {});
                     }
                     await page.waitForTimeout(300);
                     const submit = await page.evaluate(submitOf, f);
@@ -743,6 +736,10 @@ export function createCrawl(page, {
         }
         for (const e of since(mark)) finding(screen.label, '(open)', e.kind, { error: e.text });
         if (onScreen) await onScreen(screen);
+        if (measureOnly) {
+            covered.push({ screen: screen.label, control: '(screen)', result: 'measured; controls not pressed' });
+            return;
+        }
         // Each pass reopens the screen first; a screen that will not reopen
         // is a finding for this screen, not the end of the shard.
         try {

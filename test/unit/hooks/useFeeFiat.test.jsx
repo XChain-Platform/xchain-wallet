@@ -92,9 +92,24 @@ describe('useFeeFiat', () => {
         const { result } = renderHook(() => useFeeFiat(options()));
 
         await waitFor(() => {
-            expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD');
-            expect(result.current.formatProtocolFee('5')).toBe('≈ $2.00 USD');
+            expect(result.current.formatNativeFee('0.00001')).toBe('~$1.00');
+            expect(result.current.formatProtocolFee('5')).toBe('~$2.00');
         });
+
+        // Every fiat fee reads as a tilde estimate with no approx sign, no
+        // spelled-out qualifier and no trailing currency code.
+        const outputs = [
+            result.current.formatNativeFee('0.00001'),
+            result.current.formatNativeFee('0.00002'),
+            result.current.formatProtocolFee('5'),
+        ].filter((text) => text != null);
+        expect(outputs.length).toBeGreaterThan(0);
+        for (const text of outputs) {
+            expect(text).toMatch(/^~/);
+            expect(text).not.toContain('≈');
+            expect(text).not.toMatch(/about/i);
+            expect(text).not.toMatch(/\bUSD\b/);
+        }
 
         expect(result.current.formatNativeFee('0')).toBeNull();
         expect(result.current.formatNativeFee('not-a-number')).toBeNull();
@@ -107,17 +122,17 @@ describe('useFeeFiat', () => {
             { initialProps: options() },
         );
 
-        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD'));
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('~$1.00'));
         const bitcoinFormatter = result.current.formatNativeFee;
 
         rerender(options({ chainCoin: 'litecoin', nativeTicker: 'LTC' }));
-        await waitFor(() => expect(result.current.formatNativeFee('0.01')).toBe('≈ $1.00 USD'));
+        await waitFor(() => expect(result.current.formatNativeFee('0.01')).toBe('~$1.00'));
         expect(result.current.formatNativeFee).not.toBe(bitcoinFormatter);
 
         rerender(options({
             settings: { fiatCurrency: 'EUR', privacy: { priceDataEnabled: true } },
         }));
-        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ €0.90 EUR'));
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('~€0.90'));
         expect(result.current.formatProtocolFee('5')).toBeNull();
         expect(calls.some((url) => url.includes('vs_currencies=eur'))).toBe(true);
     });
@@ -129,7 +144,7 @@ describe('useFeeFiat', () => {
             { initialProps: options() },
         );
 
-        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD'));
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('~$1.00'));
 
         rerender(options({
             settings: { fiatCurrency: 'EUR', privacy: { priceDataEnabled: false } },

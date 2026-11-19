@@ -20,12 +20,12 @@ import {
     importBackupFile,
 } from '../../../packages/core/src/flows/backupFile.js';
 import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
+import { chooseBackupFile, chooseRefusedBackupFile } from '../../helpers/backupFileChoice.js';
 
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const BACKUP_PASSWORD = 'backup-file-password';
 const WALLET_PASSWORD = 'source-wallet-password';
-const DEVICE_PASSWORD = 'current-device-password';
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
@@ -108,23 +108,8 @@ function RestoreFlow() {
     );
 }
 
-function fillPasswords(filePassword) {
-    fireEvent.change(screen.getByLabelText('Backup password'), {
-        target: { value: filePassword },
-    });
-    fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), {
-        target: { value: WALLET_PASSWORD },
-    });
-    fireEvent.change(screen.getByLabelText('Your password on this device'), {
-        target: { value: DEVICE_PASSWORD },
-    });
-}
-
-async function chooseFile(contents, name) {
-    fireEvent.change(screen.getByLabelText('Backup file'), {
-        target: { files: [new File([contents], name, { type: 'application/json' })] },
-    });
-    await screen.findByText(new RegExp(`Loaded ${name}`));
+function typePassword(label, value) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
 afterEach(cleanup);
@@ -149,28 +134,32 @@ describe('encrypted backup restore flow', () => {
         );
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
 
-        await chooseFile(fileContent, 'savings.xchain-wallet');
-        fillPasswords('wrong-backup-password');
+        await chooseBackupFile({ content: fileContent, name: 'savings.xchain-wallet' });
+        // The summary card reads the file's own header: the name it was saved under.
+        expect(screen.getByRole('region', { name: 'Chosen backup file' })).toHaveTextContent('Restored savings');
+        typePassword('Backup password', 'wrong-backup-password');
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'That password did not open the backup file',
-        );
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent("That password doesn't open this backup.");
         expect(await target.wallets.list()).toHaveLength(1);
 
-        await chooseFile('{not valid json', 'corrupt.xchain-wallet');
-        fireEvent.change(screen.getByLabelText('Backup password'), {
-            target: { value: BACKUP_PASSWORD },
-        });
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        // A corrupt file is refused where it is chosen; nothing is sent.
+        const refusal = await chooseRefusedBackupFile('{not valid json', 'corrupt.xchain-wallet');
+        expect(refusal).toHaveTextContent(/isn't a wallet backup file this app can read/i);
+        expect(messaging.importBackupRequest).toHaveBeenCalledTimes(1);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not a wallet backup file this app can read/i);
+        // The right file password opens the file, but the wallet inside was
+        // sealed under another one, so the screen asks for it in its own field.
+        await chooseBackupFile({ content: fileContent, name: 'savings.xchain-wallet' });
+        typePassword('Backup password', BACKUP_PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        await screen.findByLabelText('Wallet password');
         expect(await target.wallets.list()).toHaveLength(1);
 
-        await chooseFile(fileContent, 'savings.xchain-wallet');
+        typePassword('Wallet password', WALLET_PASSWORD);
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
         await waitFor(() => expect(messaging.listWallets).toHaveBeenCalledTimes(1));

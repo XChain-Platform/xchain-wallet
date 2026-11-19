@@ -8,16 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Settings sections a form sweep could not "open": Keyboard (not offered
-// at phone width, where there is no hardware keyboard), Notifications (a panel
-// on the settings page itself, not a drill-down row) and Network & endpoints
-// (offered only once Developer mode is on). Each is checked at a phone and a
-// desktop size against the form rulings: bordered fields of one height, a
-// visible label on every field, no sideways page scroll, and one message per
-// state.
+// Settings pages whose current layouts need checks beyond the broad form sweep:
+// Notifications keeps event switches on its group page and opens the price-alert
+// list and add form; Automatic Donations is one wallet-wide notice plus Donation
+// and Totals list cards; Network endpoints appears only in Developer mode; and
+// Keyboard is absent at phone width. Each is checked at phone and desktop sizes.
 
 import {
-    createWallet, expect, openSettings, test,
+    createWallet, expect, openAutomaticDonations, openSettings, test,
 } from '../../fixtures/wallet.js';
 
 const SIZES = [
@@ -66,58 +64,67 @@ for (const size of SIZES) {
     test.describe(`settings section forms at ${size.name}`, () => {
         test.use({ viewport: { width: size.width, height: size.height } });
 
-        test('Notifications fields are bordered and one height, and alerts-off says one thing', async ({ page }) => {
+        test('Notifications keeps price alerts in its group and opens their form', async ({ page }) => {
             await createWallet(page);
             await openSettings(page);
+            const main = page.getByRole('main');
+            // The app header's bell is also named Notifications; the row is in main.
+            await main.getByRole('button', { name: /^Notifications\b/ }).click();
 
-            await page.getByRole('switch', { name: 'Price alerts' }).scrollIntoViewIfNeeded();
-            const priceField = page.getByLabel('Target price', { exact: true });
-            await expect(priceField).toBeVisible();
-
-            await expectBorderedLabelledFields(page.getByRole('main'), `${size.name} Notifications`);
+            await expect(page.getByRole('heading', { level: 1, name: 'Notifications', exact: true })).toBeVisible();
+            await expect(main.getByRole('switch', { name: 'Price alerts', exact: true })).toBeVisible();
+            await expect(main.getByLabel('Target price', { exact: true })).toHaveCount(0);
+            await expect(main.getByText(/Turn on Price alerts above/)).toHaveCount(0);
             await expectNoSidewaysScroll(page, `${size.name} Notifications`);
 
-            // The currency symbol stays on its field's row.
+            await main.getByRole('button', { name: /^Your price alerts\b/ }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Price Alerts', exact: true })).toBeVisible();
+            await expect(main.getByText('No price alerts yet', { exact: true })).toBeVisible();
+            // A list page's create action is the title bar's plus (G95).
+            await page.getByRole('banner').getByRole('button', { name: 'Add Price Alert', exact: true }).click();
+
+            const priceField = main.getByLabel('Target price', { exact: true });
+            await expect(priceField).toBeVisible();
+            await expectBorderedLabelledFields(main, `${size.name} Add Price Alert`);
+            await expectNoSidewaysScroll(page, `${size.name} Add Price Alert`);
+
+            // The currency unit (USD, inside the field's trailing slot) stays on the field's row.
             const field = await priceField.boundingBox();
-            const symbol = await page.getByText('$', { exact: true }).last().boundingBox();
+            const symbol = await main.getByText('USD', { exact: true }).last().boundingBox();
             expect(Math.abs((symbol.y + symbol.height / 2) - (field.y + field.height / 2)),
                 `${size.name}: the currency symbol is stranded from its field`).toBeLessThan(field.height / 2);
-
-            // Alerts are off: the reason is the one message, not an empty-list line too.
-            await expect(page.getByText(/Turn on Price alerts above/)).toBeVisible();
-            await expect(page.getByText('No price alerts yet', { exact: true })).toHaveCount(0);
-
-            // An empty target is not a notice: the add button is just off. A notice here
-            // sat inside the indented alert block, narrower than the content column.
-            await expect(page.getByRole('main').locator('[data-variant]:visible')).toHaveCount(0);
         });
 
-        test('Automatic donation says its threshold sentence once, above the network cards', async ({ page }) => {
+        test('Automatic Donations uses one notice and wallet-wide list cards', async ({ page }) => {
             await createWallet(page);
-            await openSettings(page);
-            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
-            if (await back.count()) await back.click();
-            await page.getByRole('main').getByRole('button', { name: /^Automatic donation/ }).first().click();
-            await expect(page.getByRole('main').getByRole('heading').nth(1)).toBeVisible();
-
-            // Every network carries the same default amounts, so one sentence covers them all.
-            const sentence = page.getByRole('main').getByText(/outgoing transactions? to reach the threshold/);
-            await expect(sentence).toHaveCount(1);
-            const sentenceBox = await sentence.boundingBox();
-            const firstCard = await page.getByRole('main').getByRole('heading', { level: 3 }).first().boundingBox();
-            expect(sentenceBox.y, 'the sentence sits above the first network card').toBeLessThan(firstCard.y);
-            await expectNoSidewaysScroll(page, `${size.name} Automatic donation`);
+            await openAutomaticDonations(page);
+            const main = page.getByRole('main');
+            await expect(page.getByRole('heading', { level: 1, name: 'Automatic Donations', exact: true })).toBeVisible();
+            await expect(main.getByTestId('ads-hero')).toBeVisible();
+            await expect(main.getByRole('list', { name: 'Donation', exact: true })).toBeVisible();
+            await expect(main.getByRole('list', { name: 'Totals', exact: true })).toBeVisible();
+            await expect(main.getByRole('combobox', { name: 'Per transaction', exact: true })).toBeVisible();
+            await expect(main.getByRole('combobox', { name: 'Send at', exact: true })).toBeVisible();
+            await expect(main.getByRole('combobox', { name: 'Donate to', exact: true })).toBeVisible();
+            await expect(main.getByText(/outgoing transactions? to reach the threshold/)).toHaveCount(0);
+            await expectNoSidewaysScroll(page, `${size.name} Automatic Donations`);
         });
 
         test('Network & endpoints fields are bordered, labelled and one height', async ({ page }) => {
             await createWallet(page);
             await openSettings(page);
-            await page.getByRole('button', { name: /^Developer mode/ }).click();
-            const toggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+            await page.getByRole('button', { name: /^Advanced\b/ }).click();
+            // Developer mode is a switch on the Advanced page's own row.
+            const toggle = page.getByRole('switch', { name: 'Developer mode', exact: true });
             await toggle.click();
             await expect(toggle).toBeChecked();
-            await page.getByRole('button', { name: 'Back to settings' }).click();
-            await page.getByRole('button', { name: /^Network & endpoints/ }).click();
+            // Back once: the Advanced group page to the index.
+            const backToSettings = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+            await backToSettings.click();
+            await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+            await page.getByRole('button', { name: /^Network endpoints\b/ }).click();
+            // Endpoints is a list of networks; each network's page holds its fields.
+            await page.getByRole('main').getByRole('button', { name: /^Bitcoin\b/ }).first().click();
             await expect(page.getByLabel('Explorer URL').first()).toBeVisible();
 
             await expectBorderedLabelledFields(page.getByRole('main'), `${size.name} Network & endpoints`);
@@ -127,7 +134,8 @@ for (const size of SIZES) {
         test('Keyboard is offered where there is a keyboard and its rows fit', async ({ page }) => {
             await createWallet(page);
             await openSettings(page);
-            const row = page.getByRole('button', { name: /^Keyboard/ });
+            await page.getByRole('button', { name: /^Advanced\b/ }).click();
+            const row = page.getByRole('button', { name: /^Keyboard shortcuts\b/ });
             if (size.width < 480) {
                 await expect(row).toHaveCount(0);
                 return;

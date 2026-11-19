@@ -70,7 +70,7 @@ const REFUSAL = 'invalid: CONTRACT_MANIFEST (meta required)';
 
 const NAMELESS = 'module.exports = { permissions: [], release(xchain) {} };';
 const NAMED = "module.exports = { meta: { name: 'Escrow', description: 'Two-party escrow', "
-    + "version: '1.0.0' }, release(xchain) {} };";
+    + "version: '9.8.7' }, release(xchain) {} };";
 
 const FROM = Object.freeze({
     address: 'bcrt1qexample',
@@ -255,7 +255,7 @@ describe('the chunked deploy lane refuses before it plans or composes', () => {
 
     it("labels the run with the contract's own name when the meta is present", async () => {
         const vault = fakeVault();
-        const sdk = chunkedSdk({ status: 'present', name: 'Escrow', version: '1.0.0' });
+        const sdk = chunkedSdk({ status: 'present', name: 'Escrow', version: '9.8.7' });
         await deployChunkedRun({
             vault,
             walletId: 'w',

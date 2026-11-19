@@ -82,7 +82,7 @@ export function useActionForm({
 }) {
     const { messaging } = useMessaging();
     const signerReady = useSignerReady(walletId);
-    const { isWatcherMode } = useWalletMode();
+    const { walletMode, isWatcherMode } = useWalletMode();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -129,7 +129,7 @@ export function useActionForm({
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain, settings);
+                const signingByChain = signingAddressesByChain(byChain, walletMode);
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (!Object.keys(signingByChain)[0]) {
@@ -155,9 +155,10 @@ export function useActionForm({
         return () => { cancelled = true; };
         // noAddressMessage / lockedToken / initialChainId are read-once
         // inputs; re-running on their (usually inline) identity would
-        // refetch pointlessly.
+        // refetch pointlessly. The wallet mode decides which addresses can
+        // act, so a mode that lands after the first read re-reads.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [walletId, messaging]);
+    }, [walletId, messaging, walletMode]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 

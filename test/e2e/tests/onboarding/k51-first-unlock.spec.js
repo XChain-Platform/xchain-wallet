@@ -80,18 +80,20 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await expectActionReachable(page, 'welcome', create);
         await create.click();
 
-        await page.getByLabel('Wallet name').fill(WALLET_NAME);
+        await page.getByLabel('Wallet name', { exact: true }).fill(WALLET_NAME);
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
-        await expect(page.getByLabel('Wallet name')).toHaveValue(WALLET_NAME);
-        await expect(page.getByRole('radio', { name: /^12 words/ })).toBeChecked();
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
+        await expect(page.getByLabel('Wallet name', { exact: true })).toHaveValue(WALLET_NAME);
+        // G44: the word count is the icon dropdown; its trigger names the pick.
+        await expect(page.getByRole('button', { name: 'Recovery phrase length: 12 words' })).toBeVisible();
         const next = page.getByRole('button', { name: 'Next' });
         await expectActionReachable(page, 'wallet details', next);
         await next.click();
 
         const words = await readRecoveryPhrase(page);
         expect(words).toHaveLength(12);
-        const backupCheck = page.getByLabel(/saved my recovery phrase/i);
+        const backupCheck = page.getByRole('checkbox', { name: /saved my recovery phrase/i });
         await expect(backupCheck).not.toBeChecked();
         await backupCheck.check();
         await expect(backupCheck).toBeChecked();
@@ -118,14 +120,14 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await acknowledgeDonationNotice(page, 'on');
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
-        const bottomNav = page.getByRole('navigation', { name: 'Bottom navigation' });
-        await bottomNav.getByRole('button', { name: 'More', exact: true }).click();
-        const lock = page.getByRole('dialog', { name: 'More' })
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        const lock = page.getByRole('dialog', { name: 'Wallet menu' })
             .getByRole('button', { name: 'Lock wallet' });
-        await expectActionReachable(page, 'mobile navigation', lock);
+        await expectActionReachable(page, 'wallet menu', lock);
         await lock.click();
 
-        await expect(page.getByRole('heading', { name: WALLET_NAME })).toBeVisible();
+        // The unlock screen names the app, not the wallet.
+        await expect(page.getByRole('form', { name: 'Unlock wallet' })).toBeVisible();
         await page.getByRole('textbox', { name: 'Password' }).fill(PASSWORD);
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
         await expectActionReachable(page, 'first unlock', unlock);

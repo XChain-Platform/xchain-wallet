@@ -25,10 +25,12 @@ import {
  *
  * Returns the normalized `TokenInfo` record (description, creator,
  * supply, locks, market price, extracted imageUrl) for a (chainId,
- * tick) pair, or `null` when:
+ * tick) pair, or `null` while no record has resolved. A failed lookup resolves
+ * to a record with `loadError: true`, so issuer-only screens can explain the
+ * failure and offer recovery instead of looking like they are still loading.
+ * `null` is also returned when:
  *   - `chainId` or `tick` is missing,
  *   - `messaging.getTokenInfo` isn't wired in this build,
- *   - the lookup fails (silently; caller renders "no metadata" copy).
  *
  * The module-level cache keyed `chainId:tick` (see `utils/tokenInfoCache.js`)
  * still spares the re-fetch on Detail -> back -> Detail, but a later change gave it a
@@ -99,7 +101,9 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
                 writeTokenInfoCache(key, next);
                 setInfo(next);
             })
-            .catch(() => { /* silent; renderer falls back to "no metadata" copy */ });
+            .catch(() => {
+                if (!cancelled) setInfo({ chainId, tick, loadError: true });
+            });
         return () => { cancelled = true; };
     }, [key, skip, messaging, chainId, tick, demo, revision]);
 

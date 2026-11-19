@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/subtoken-issue.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssueParent, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -61,15 +61,19 @@ import {
     REGTEST_COIN,
     encoderRpc,
     fundAddress,
+    issuePlainToken,
     minerRpc,
     payProtocolFeeInCoin,
+    readIssueSource,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Every leg here (two ISSUEs, plus a refused one) pays a real coin fee. */
@@ -201,9 +205,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -214,26 +216,21 @@ async function approveAndGetTxid(page) {
 
 /** The composed PSBT's own network fee, in satoshis, off the confirm screen. */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(/([\d.]+)\s*[A-Z]{3,5}/)?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 /**
- * The protocol-fee row inside the balance projection, in satoshis, or null.
- *
- * Read out of the deltas panel because that is where that fix put it: the
- * row rides beside the coin balance it was folded into, so a fee claimed in
- * words but missing from the projection is exactly what this reads for.
+ * The protocol-fee fact in the Confirm Standard card, in satoshis, or null.
  */
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    // The row reads "Protocol fee 0.00001 BTC": amount first, then the coin
-    // ticker. An XCHAIN fee does not match, since it is not a coin amount.
-    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    // A 3-5 letter coin ticker matches; XCHAIN does not.
+    const coin = text.match(/^([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
     return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
@@ -253,10 +250,8 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-
-    const source = await main.getByLabel('From').inputValue();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -267,16 +262,12 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
 
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
-    await form.getByLabel('Ticker').fill(parentTick);
-    await form.getByLabel('Supply', { exact: true }).fill(String(PARENT_SUPPLY));
     // The coin lane, the one this spec measures the fee on (no XCHAIN needed).
-    await payProtocolFeeInCoin(form);
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await issuePlainToken(form, { ticker: parentTick, supply: PARENT_SUPPLY, feeInCoin: true });
 
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -289,7 +280,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
 }
 
 /**
- * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
+ * Fills the Issue Token form's Subtoken preset and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen at all (the
  * parent lookup or native-fee pre-flight answers in the wizard), so the caller
  * waits for whichever of the two outcomes it is asserting.
@@ -304,24 +295,34 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
     await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Subtoken/ }).click();
+    await pickIssuePreset(main, /Subtoken/);
+    // The network and the signer sit in the From section, closed until opened.
+    await openIssueSection(main, 'From');
 
     await selectVenueChain(main);
 
     // POLLED, not read once: the signer is resolved by an effect that re-runs
     // when the chain changes, so a single read straight after picking the
     // network catches the render before it and returns "" - which reads
-    // exactly like a wizard that names no signer at all. Cost a run.
-    const signerField = () => main.getByLabel('Fee paid by');
+    // exactly like a form that names no signer at all. Cost a run.
+    const signerField = () => fieldByLabel(main, 'From address');
     let feePaidBy = '';
     await expect.poll(async () => {
         feePaidBy = await signerField().inputValue().catch(() => '');
         return feePaidBy;
     }, {
         timeout: 30_000,
-        message: 'the wizard\'s chain step names no signing address at all, so there is nothing '
-            + 'to check the parent\'s owner against',
+        message: 'the Issue Token form\'s From section names no signing address at all, so there '
+            + 'is nothing to check the parent\'s owner against',
     }).toMatch(REGTEST_ADDRESS_RE);
+
+    // The parent is picked from the tokens this wallet owns, and the pick
+    // moves From to its owner, so a different signer is chosen after it.
+    await pickIssueParent(main, parent);
+    await expect.poll(async () => {
+        feePaidBy = await signerField().inputValue().catch(() => '');
+        return feePaidBy;
+    }, { timeout: 30_000 }).toMatch(REGTEST_ADDRESS_RE);
 
     if (signAs && signAs !== feePaidBy) {
         // Through the wallet's own picker, not by any back door: the point of
@@ -338,12 +339,8 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
         }, { timeout: 30_000 }).toBe(signAs);
     }
 
-    await main.getByRole('button', { name: 'Next', exact: true }).click();
-
-    await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Parent ticker').fill(parent);
-    await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    await fieldByLabel(main, 'Subtoken name').fill(child);
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);
@@ -381,7 +378,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
     const generated = (await listed()).filter((a) => !before.has(a));
     expect(generated.length, 'generating added exactly one address to the list').toBe(1);
@@ -447,18 +445,18 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             // Nothing is wrong with this action, and the wallet has to agree
             // before the fee assertion below means anything.
             //
-            // Asserted on `data-dryrun` rather than on the chip, because the
-            // chip reads "Review warnings" here for a reason that is not about
-            // the subtoken at all: every fee-bearing action on this chain
-            // carries the native-fee forfeiture notice, which is a warn. The
-            // machine-readable attribute says the stronger thing anyway - that
-            // the network was ASKED and approved, rather than that the client
-            // found nothing to say.
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel).toHaveAttribute('data-dryrun', 'approved');
-            expect(await panel.getAttribute('data-verdict'),
-                'the network refused a subtoken under a parent this address owns')
-                .not.toBe('fail');
+            // The clean network pass is the green status; the short warning
+            // carries only the native-fee forfeiture notice on this chain.
+            await expect(page.getByTestId('confirm-status'))
+                .toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
+            // The short warning is drawn only when there is something to say
+            // (G127 revised 2026-11-16), and on Bitcoin regtest an ISSUE has
+            // none; when it is drawn it is the irreversible kind, never a
+            // network verdict.
+            const warning = page.getByTestId('confirm-warning');
+            if (await warning.count() > 0) {
+                await expect(warning).toHaveAttribute('data-state', 'irreversible');
+            }
             await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
 
             // THE ASSERTION THIS TEST EXISTS FOR. Litecoin forces the native
@@ -567,13 +565,16 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             // THE GOOD HALF, and it is why this was a dead end rather than a
             // loss: the wallet's parent lookup refuses the wrong signer on the
             // Details form, so no confirm screen opens and no fee is attached.
+            // The refusal shows twice, in the Form errors summary and on the
+            // Parent field; the field's own alert is the one asserted.
             const alert = page.getByRole('alert')
-                .filter({ hasText: /owned by another address in this wallet/i });
+                .filter({ hasText: /owned by another address in this wallet/i })
+                .and(page.locator(':not([data-form-errors])'));
             await expect(alert,
                 'the wizard neither refused this nor explained it, so a doomed action reached the '
                 + 'signing screen')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Go back and choose it as the address that pays the fee/i);
+            await expect(alert).toContainText(/Choose it in From as the address that pays the fee/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'a subtoken the network has already refused reached the confirm screen')
                 .toBe(0);
@@ -588,12 +589,10 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(signer, 'the source picker did not move the signer to the parent\'s owner')
                 .toBe(owner);
 
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel).toHaveAttribute('data-dryrun', 'approved');
-            expect(await panel.getAttribute('data-verdict'),
+            await expect(page.getByTestId('confirm-status'),
                 'the network still refuses the child once the owner is signing, so the signer was '
                 + 'not what it was objecting to')
-                .not.toBe('fail');
+                .toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
 
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status),

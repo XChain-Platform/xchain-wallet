@@ -10,7 +10,7 @@
 
 // A demo wallet opened Send and sat on "Loading…" for 20 s or more while the
 // wallet-wide balance read ran against fixture addresses. Send now opens at
-// once with an inline note that demo wallets cannot move funds.
+// once, with no demo notice; pressing Send is refused instead.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { fireEvent, render, screen, cleanup } from '@testing-library/react';
@@ -56,18 +56,24 @@ beforeEach(() => { clearDemoWalletId(); });
 afterEach(() => { cleanup(); clearDemoWalletId(); });
 
 describe('Send in a demo wallet', () => {
-    it('opens the form at once with an inline demo note and a disabled Send', async () => {
+    it('opens the form at once with no demo notice and refuses Send when pressed', async () => {
         markDemoWallet('demo-w');
         const messaging = mount('demo-w');
 
         const form = await screen.findByRole('form', { name: 'Send' });
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
-        const note = screen.getAllByRole('status')
-            .find((node) => /Demo wallets can't move funds/.test(node.textContent || ''));
-        expect(note).toBeTruthy();
-        expect(form.querySelector('button[type="submit"]')).toBeDisabled();
+        expect(screen.queryByText(/Demo wallets can't move funds/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
+        const submit = form.querySelector('button[type="submit"]');
+        expect(submit).toBeEnabled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create a real wallet' }));
+        fireEvent.click(submit);
+        expect(await screen.findByText(/Demo wallets can't move funds/)).toBeInTheDocument();
+        const composeCalls = Object.keys(messaging).filter((name) => /compose|broadcast|sign[A-Z]/.test(name)
+            && messaging[name].mock?.calls.length > 0);
+        expect(composeCalls).toEqual([]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create a Real Wallet' }));
         expect(await screen.findByRole('dialog', { name: 'Exit demo and delete its data?' })).toBeInTheDocument();
     });
 

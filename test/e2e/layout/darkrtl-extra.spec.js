@@ -14,6 +14,7 @@ import {
     dismissIntroCarousel, expect, gotoSection, test, unlockedShell,
 } from '../fixtures/wallet.js';
 import { enterDemoWallet } from '../fixtures/responsive.js';
+import { pickOption } from '../fixtures/pickOption.js';
 import { createSweep, measureInPage, measureRulings } from './sweep.js';
 
 const OUT_ROOT = process.env.SWEEP_OUT
@@ -57,7 +58,7 @@ test('app dark setting sweep', async ({ page }, testInfo) => {
     });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     await gotoSection(page, 'Settings');
-    await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+    await pickOption(page.getByLabel('Theme', { exact: true }), 'dark');
     await expect(page.locator('html')).toHaveAttribute('data-xc-theme', 'dark');
     await sweep.measure('darkset: appearance');
     await sweep.unlocked();
@@ -72,14 +73,7 @@ test('dark focus rings and hover contrast', async ({ page }, testInfo) => {
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     const fine = await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches);
     for (const name of ['Home', 'History', 'Send', 'Receive', 'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts', 'Lists', 'Settings']) {
-        if (name === 'Marketplace') {
-            await page.keyboard.press('ControlOrMeta+k');
-            const palette = page.getByRole('dialog', { name: 'Command palette' });
-            await palette.getByRole('combobox').fill('Marketplace');
-            await palette.getByRole('option').filter({ hasText: 'Marketplace' }).first().click();
-        } else {
-            await gotoSection(page, name);
-        }
+        await gotoSection(page, name);
         await page.waitForTimeout(400);
         await page.mouse.move(0, 0);
         await page.screenshot({ path: join(outDir, `screen-${name.toLowerCase()}.png`) }).catch(() => {});
@@ -99,6 +93,21 @@ test('dark focus rings and hover contrast', async ({ page }, testInfo) => {
                     .trim().replace(/\s+/g, ' ').slice(0, 40));
                 for (const row of res.lowContrast || []) log({ kind: 'hover', screen: name, target, ...row });
             } catch { /* a control that moves away on hover is skipped */ }
+        }
+    }
+});
+
+test('Home has no quick action tiles at any width', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'dark-1440');
+    test.setTimeout(10 * 60 * 1000);
+    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    for (const width of [360, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await gotoSection(page, 'Home');
+        await expect(page.getByRole('group', { name: 'Quick actions' }), `quick actions at ${width}`).toHaveCount(0);
+        for (const name of ['Exchange', 'More']) {
+            await expect(page.getByRole('main').getByRole('button', { name, exact: true }), `${name} at ${width}`)
+                .toHaveCount(0);
         }
     }
 });

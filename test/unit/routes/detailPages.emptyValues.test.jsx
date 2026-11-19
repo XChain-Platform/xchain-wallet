@@ -12,6 +12,7 @@ import { DispenserDetail } from '../../../packages/core/src/shared/routes/Dispen
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
+import { OrderDetail } from '../../../packages/core/src/shared/routes/OrderDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-regtest';
@@ -144,7 +145,8 @@ describe('detail screens with sparse records', () => {
         expect(valueBeside('Total supply')).toHaveTextContent('1,234.56');
         expect(valueBeside('Current balance')).toHaveTextContent('1,234.56 PRECISE');
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        // Holders is a link row at the foot of the Details tab.
+        fireEvent.click(screen.getByRole('button', { name: 'Holders' }));
         const holders = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(holders).getByText('1,234.56')).toBeTruthy();
     });
@@ -163,6 +165,8 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
+        // The page opens on Actions (G102); the facts are on the Details tab.
+        fireEvent.click(await screen.findByRole('tab', { name: /^Details$/ }));
         await waitFor(() => expect(valueBeside('Dispensing')).toHaveTextContent('-'));
         expect(valueBeside('Dispensing')).toHaveTextContent('-');
         expect(valueBeside('Payment')).toHaveTextContent('-');
@@ -189,10 +193,13 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await waitFor(() => expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN'));
-        expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN');
-        expect(valueBeside('Delegated key')).toHaveTextContent('None');
-        const rewards = screen.getByRole('list');
+        // An unreadable amount reads "-", never a made-up zero.
+        expect(await screen.findByLabelText('- XCHAIN staked')).toBeInTheDocument();
+        // A delegation with no key is not a delegation: no Delegated to row.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(screen.queryByText('Delegated to')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Rewards' }));
+        const rewards = screen.getByRole('list', { name: 'Reward events' });
         for (const value of within(rewards).getAllByText('-', { exact: true })) {
             expect(value.textContent).toBe('-');
         }
@@ -242,12 +249,39 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        const list = await screen.findByRole('list', { name: 'Open orders' });
-        expect(within(list).getByText('Give - → get -')).toBeTruthy();
-        expect(list.textContent).toContain('#-');
-        fireEvent.click(within(list).getByRole('button', { name: 'Edit' }));
-        await screen.findByRole('heading', { name: 'Edit order' });
-        expect(valueBeside('Order')).toHaveTextContent('#-');
+        const list = await screen.findByRole('list', { name: 'Orders' });
+        // The ring layout says the trade in words; an unknown side reads as a dash.
+        expect(within(list).getByText('Sell -')).toBeTruthy();
+        expect(within(list).getByText('for -')).toBeTruthy();
         expectNoEmptyDetailCells(view.container);
+        cleanup();
+
+        // The order's detail page, read from a detail as sparse as the row.
+        const detailView = mount(
+            <OrderDetail walletId="wallet" chainId={CHAIN} actionIndex="9" onBack={() => {}} />,
+            messagingWith({
+                getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [owner] }),
+                getOrderDetail: vi.fn().mockResolvedValue({ source: ADDRESS, status: 'valid' }),
+                getOrderCancelsForAddress: vi.fn().mockResolvedValue({ data: [] }),
+                listAutopayOrders: vi.fn().mockResolvedValue([]),
+            }),
+        );
+        // The header card keeps status beside the verb; unknown sides read as dashes.
+        const header = await screen.findByRole('region', { name: 'Order' });
+        const topLine = header.querySelector('[data-trade-header-top-line]');
+        expect(within(topLine).getByText('Selling')).toBeTruthy();
+        expect(within(topLine).getByText('Open')).toBeTruthy();
+        expect(topLine.nextElementSibling).toHaveTextContent('-');
+        expect(topLine.nextElementSibling.nextElementSibling).toHaveTextContent('for -');
+        // The facts sit under Details (G102).
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        await screen.findByLabelText('Order details');
+        expect(valueBeside('Order')).toHaveTextContent('#9');
+        expectNoEmptyDetailCells(detailView.container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit order/ }));
+        await screen.findByRole('heading', { name: 'Edit Order' });
+        expect(valueBeside('Give')).toHaveTextContent('-');
+        expectNoEmptyDetailCells(detailView.container);
     });
 });

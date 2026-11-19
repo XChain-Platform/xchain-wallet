@@ -51,7 +51,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -129,13 +131,12 @@ async function mineToHeight(target, timeoutMs = 240_000) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
-/** Navigates through the command palette, the way Staking is reached (it
+/** Navigates through the wallet menu, the way Staking is reached (it
  * hangs off Home's secondary actions and the palette, never a nav tab). */
 
 /** Reads the full txid from either action or SEND completion markup: the
@@ -256,7 +257,7 @@ async function arrangeValidatorReward({ address, pubkey, amount }) {
 async function fundRewardPool(page, amount) {
     await gotoSection(page, 'Send');
     await selectVenueSendAsset(page, 'XCHAIN');
-    await page.getByLabel('To', { exact: true }).fill(REWARD_POOL_ADDRESS);
+    await fieldByLabel(page, 'To').fill(REWARD_POOL_ADDRESS);
     await amountField(page.getByRole('main')).fill(amount);
     await mainButton(page, 'Send').click();
     await approveConfirm(page);
@@ -306,7 +307,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
 
             pubkey = newSigningPubkey();
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
             const validatorOption = page.getByRole('button', { name: /^Validator staking/ });
@@ -314,8 +315,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await validatorOption.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Signing public key', { exact: true })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
+            await expect(fieldByLabel(main, 'Signing public key')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Signing public key').fill(pubkey);
             await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 30_000 });
             await amountField(main).fill(STAKE_AMOUNT);
@@ -347,8 +348,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeVisible({ timeout: 30_000 });
             await expect(claimBtn).toBeEnabled();
             await claimBtn.click();
@@ -359,7 +360,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             encoder.composedData = null;
             encoder.rejectNextBroadcast = true;
             await amountField(main).fill(PARTIAL_CLAIM);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -384,8 +385,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeEnabled({ timeout: 30_000 });
             await claimBtn.click();
 
@@ -394,7 +395,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
                 .toBeVisible({ timeout: 30_000 });
             encoder.composedData = null;
             await amountField(main).fill(PARTIAL_CLAIM);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });

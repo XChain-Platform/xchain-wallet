@@ -159,11 +159,13 @@ describe('broadcast queue engine restart invariant', () => {
         let resolved = false;
         const done = hook({
             chainId: 'c1', signedTxHex: 'hex-ads', pendingTxId: 'p1',
-            adsCommit: { chainId: 'c1', donationIncluded: true },
+            adsCommit: { chainId: 'c1', donationIncluded: true, donatedFiat: '25', currency: 'USD' },
         }).then((verdict) => { resolved = true; return verdict; });
         for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
         expect(resolved).toBe(false);
-        expect(saved.at(-1).w1[0].adsCommit).toEqual({ chainId: 'c1', donationIncluded: true });
+        expect(saved.at(-1).w1[0].adsCommit).toEqual({
+            chainId: 'c1', donationIncluded: true, donatedFiat: '25', currency: 'USD',
+        });
         release();
         expect(await done).toBe(true);
         expect(resolved).toBe(true);

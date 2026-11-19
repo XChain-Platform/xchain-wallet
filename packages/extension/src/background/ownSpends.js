@@ -22,11 +22,12 @@
 // refused before anything is signed. A send that ends unbroadcast drops its
 // claim. With a store the claims outlive a restart of the extension worker.
 //
-// A send that is signed but waiting in the broadcast queue keeps its coins
+// A send that is signed but waiting in the broadcast queue keeps its coins and
+// any name it sells
 // until it goes out, is discarded, or is refused for good. The queue itself is
-// the record of those coins (it outlives a browser restart, which session
+// the record of that spend (it outlives a browser restart, which session
 // storage does not), so the caller passes the queued outpoints to each claim,
-// and a queued send that does go out holds its coins from then on.
+// and a queued send that does go out holds its coins and names from then on.
 //
 // A claim that went out records its transaction id, so the same signed bytes
 // sent again (a pasted copy of a send the wallet made) are not refused over
@@ -121,12 +122,14 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
          *
          * @param {string} chainId
          * @param {Array<{ txid: string, vout: number }>} outpoints
-         * @param {{ queued?: Array<{ txid: string, vout: number }>, txid?: string }} [opts]
+         * @param {{ queued?: Array<{ txid: string, vout: number }>, queuedNames?: string[], txid?: string, names?: string[] }} [opts]
          *   `queued`: outpoints of signed transactions waiting in the broadcast
          *   queue; `txid`: the transaction being sent, whose own earlier claims pass
          * @returns {Promise<string>} the claim id, '' when there was nothing to claim
          */
-        async claim(chainId, outpoints, { queued = [], txid = '', names = [] } = {}) {
+        async claim(chainId, outpoints, {
+            queued = [], queuedNames = [], txid = '', names = [],
+        } = {}) {
             await hydrated;
             const coins = Array.isArray(outpoints) ? outpoints : [];
             const sold = (Array.isArray(names) ? names : []).filter(Boolean).map((n) => String(n).toUpperCase());
@@ -137,7 +140,10 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             const keys = new Set(held.filter((e) => !same || e.txid !== same).map((e) => e.key));
             // A name another sale from this wallet holds stays in escrow until
             // that sale ends, so the network would refuse this one after its fees.
-            const listed = sold.find((n) => keys.has(nameKeyOf(chainId, n)));
+            const namesInQueue = new Set((Array.isArray(queuedNames) ? queuedNames : [])
+                .filter(Boolean)
+                .map((n) => String(n).toUpperCase()));
+            const listed = sold.find((n) => keys.has(nameKeyOf(chainId, n)) || namesInQueue.has(n));
             if (listed) {
                 const err = new Error(flows.nameSaleInFlightMessage(listed));
                 err.name = flows.NAME_SALE_IN_FLIGHT_NAME;
@@ -169,17 +175,22 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             }
             await persist();
         },
-        /** A queued send went out: hold its inputs for another holdMs. */
-        async hold(chainId, outpoints, txid) {
+        /** A queued send went out: hold its inputs and sold names for another holdMs. */
+        async hold(chainId, outpoints, txid, { names = [] } = {}) {
             await hydrated;
-            if (!Array.isArray(outpoints) || outpoints.length === 0) return;
+            const coins = Array.isArray(outpoints) ? outpoints : [];
+            const sold = (Array.isArray(names) ? names : []).filter(Boolean).map((n) => String(n).toUpperCase());
+            if (coins.length === 0 && sold.length === 0) return;
             const at = now();
             nextClaim += 1;
             const claim = `${at}-${nextClaim}`;
             held = held.filter((e) => e.until > at);
             const sent = txidKey(txid);
-            for (const o of outpoints) {
+            for (const o of coins) {
                 held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs, ...(sent ? { txid: sent } : {}) });
+            }
+            for (const name of sold) {
+                held.push({ key: nameKeyOf(chainId, name), claim, until: at + holdMs, ...(sent ? { txid: sent } : {}) });
             }
             await persist();
         },
@@ -261,9 +272,10 @@ export function createRouteClaims(ledger, queuedOutpoints) {
 
 /**
  * A view of an SDK registry whose encoders report each transaction they build
- * and each one they broadcast, so a route can claim the coins of a PSBT built
- * at submit time before anything signs it. Everything else reads through to
- * the real registry and SDKs.
+ * and each one they broadcast, including bytes the node reports as already
+ * known, so a route can claim the coins of a PSBT built at submit time before
+ * anything signs it. Everything else reads through to the real registry and
+ * SDKs.
  *
  * @param {any} registry
  * @param {{
@@ -290,7 +302,15 @@ export function claimingSdkRegistry(registry, { onBuilt, onSent }) {
         };
         if (typeof encoder.broadcastTx === 'function') {
             watched.broadcastTx = async (txHex) => {
-                const sent = await encoder.broadcastTx(txHex);
+                let sent;
+                try {
+                    sent = await encoder.broadcastTx(txHex);
+                } catch (err) {
+                    if (flows.isAlreadyOnNetworkRejection(err)) {
+                        try { await onSent(chainId, txHex); } catch { /* Preserve the node response. */ }
+                    }
+                    throw err;
+                }
                 await onSent(chainId, txHex);
                 return sent;
             };

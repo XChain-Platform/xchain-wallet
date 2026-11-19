@@ -73,9 +73,8 @@
 
     // The primitives the wallet cannot fake, in the same order and with the
     // same names webviewFloor.js reports them.
-    var subtle = window.crypto ? window.crypto.subtle : null;
-    if (!subtle || typeof subtle.importKey !== 'function' || typeof subtle.encrypt !== 'function') {
-        missing.push('crypto.subtle');
+    if (window.isSecureContext !== true) {
+        missing.push('secure context');
     }
     if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
         missing.push('crypto.getRandomValues');
@@ -103,8 +102,8 @@
 
     function message() {
         return 'XChain Wallet cannot run safely on this device.'
-            + ' The browser engine here is missing: ' + missing.join(', ') + '.'
-            + ' These are the parts that encrypt your wallet and generate your keys.'
+            + ' Required security capabilities are unavailable: ' + missing.join(', ') + '.'
+            + ' The wallet needs these capabilities to protect and access your wallet.'
             + ' Updating Android System WebView (or your system browser) usually fixes it.'
             + ' Your recovery phrase is unaffected: it can be imported on any device'
             + ' that does support them.';

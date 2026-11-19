@@ -50,14 +50,16 @@ describe('command palette titles follow the active locale', () => {
         expect(commands.map((c) => c.id)).toEqual(english.map((c) => c.id));
         for (const [index, c] of commands.entries()) {
             expect(c.title, c.id).toBe(wrap(english[index].title));
-            expect(c.subtitle, c.id).toBe(wrap(english[index].subtitle));
+            expect(c.subtitle, c.id).toBe(english[index].subtitle === undefined
+                ? undefined
+                : wrap(english[index].subtitle));
         }
     });
 
     it('translates settings, help and free-form rows', async () => {
         await useNonEnglish();
         const settings = settingsSectionsToCommands({ openSettings() {} });
-        expect(byId(settings, 'settings-backup').title).toBe(wrap('Settings → ' + wrap('Backup')));
+        expect(byId(settings, 'settings-backup').title).toBe(wrap('Settings › ' + wrap('Backup')));
         const help = helpToCommands({ openSettings() {}, openHelp() {} });
         expect(byId(help, 'help-panic').title).toBe(wrap('What is panic mode?'));
         const [send] = parseFreeformCommands('send 5 abc', { composeSend() {} });
@@ -84,8 +86,10 @@ describe('command palette titles follow the active locale', () => {
     it('keeps English output in the English locale', () => {
         const commands = buildCommands({ navigate() {} });
         expect(byId(commands, 'nav-send').title).toBe('Send');
+        expect(byId(commands, 'create-action-queue').title).toBe('Action queue');
         expect(byId(commands, 'nav-send').keywords).toEqual(['pay', 'transfer', 'spend']);
         render(<CommandPalette open onClose={() => {}} commands={commands} />);
+        expect(screen.getByRole('dialog', { name: 'Command Palette' })).toBeTruthy();
         fireEvent.change(screen.getByRole('combobox'), { target: { value: 'sen' } });
         expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
     });

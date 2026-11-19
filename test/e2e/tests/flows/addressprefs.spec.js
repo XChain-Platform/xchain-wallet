@@ -29,7 +29,7 @@ async function settle(page) {
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     const search = palette.getByRole('combobox').first();
     await search.fill(title);
@@ -94,13 +94,20 @@ async function expectScreenLayout(page, heading, label) {
                 top: box.top,
                 center: (box.top + box.bottom) / 2,
                 bottom: box.bottom,
+                left: box.left,
+                right: box.right,
                 height: box.height,
             });
         }
 
-        controls.sort((a, b) => a.center - b.center);
+        // A button drawn inside a field box (the From address picker, U53) is
+        // part of that field, not a second control on its line.
+        const lineControls = controls.filter((control) => !controls.some((field) => field !== control
+            && field.left <= control.left && field.right >= control.right
+            && field.top <= control.top && field.bottom >= control.bottom));
+        lineControls.sort((a, b) => a.center - b.center);
         const lines = [];
-        for (const control of controls) {
+        for (const control of lineControls) {
             const line = lines.find((entry) => entry.controls.some((item) => (
                 Math.abs(item.top - control.top) <= 2
                 || Math.abs(item.center - control.center) <= 2
@@ -139,6 +146,12 @@ async function expectScreenLayout(page, heading, label) {
     ).toEqual([]);
 }
 
+// Sections start closed apart from the main one; open one by its header button.
+async function openSection(main, name) {
+    const toggle = main.locator('button[aria-expanded]').filter({ hasText: name }).first();
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+}
+
 async function listedAddresses(page) {
     return page.getByRole('button', { name: /^View address / }).evaluateAll((buttons) => (
         buttons.map((button) => button.getAttribute('aria-label')?.replace(/^View address /, ''))
@@ -164,7 +177,7 @@ for (const viewport of VIEWPORTS) {
             await page.getByRole('button', { name: 'Add or import address' }).click();
             await expectScreenLayout(page, 'Addresses', 'open add-address menu');
             await page.getByRole('menuitem', { name: 'Add address' }).click();
-            await expectScreenLayout(page, 'Add addresses', 'add-address form');
+            await expectScreenLayout(page, 'Add Addresses', 'add-address form');
             await page.getByTestId('add-address-generate').click();
 
             await expectScreenLayout(page, 'Addresses', 'address list after generation');
@@ -182,52 +195,58 @@ for (const viewport of VIEWPORTS) {
             await page.getByRole('button', {
                 name: `View address ${generatedAddress}`,
             }).click();
-            await expectScreenLayout(page, 'View address', 'address detail');
+            await expectScreenLayout(page, 'View Address', 'address detail');
 
+            // Labelling is the Edit label tile, then its small form; saving
+            // closes the form and returns to the detail, titled by the label.
+            await page.getByRole('button', { name: /^Edit label/ }).click();
             const label = page.getByRole('textbox', { name: 'Address label' });
-            const save = page.getByRole('button', { name: 'Save', exact: true });
             await label.fill(LABEL);
-            await save.click();
-            await expect(save).toBeDisabled();
-            await expect(label).toHaveValue(LABEL);
-            await expectScreenLayout(page, 'View address', 'labelled address detail');
+            await page.getByRole('button', { name: 'Save Label', exact: true }).click();
+            await expect(page.getByTestId('address-detail-label')).toHaveText(LABEL);
+            await expectScreenLayout(page, 'View Address', 'labelled address detail');
 
-            await page.getByRole('button', { name: 'Edit on-chain preferences' }).click();
-            await expectScreenLayout(page, 'On-chain preferences', 'preferences form');
+            await page.getByRole('button', { name: /^On-chain prefs/ }).click();
+            await expectScreenLayout(page, 'Address Preferences', 'preferences form');
         });
 
         await test.step('review changed preferences from the top with exact values', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).check();
-            await main.getByRole('checkbox', {
-                name: 'Require a memo on any send to this address',
-            }).check();
-            await main.getByRole('radio', {
-                name: 'Anyone may open a dispenser funded by this address',
-            }).check();
-            await main.getByLabel('Memo (optional)').fill(MEMO);
+            // Each preference is the themed dropdown (G119): open it, pick the option.
+            await main.getByRole('button', { name: /^How the protocol fee is handled: / }).click();
+            await main.getByRole('option', { name: 'Destroy (reduces supply)' }).click();
+            await openSection(main, /^Incoming Sends/);
+            await main.getByRole('button', { name: /^Require memo on incoming sends: / }).click();
+            await main.getByRole('option', { name: 'Yes' }).click();
+            await openSection(main, /^Dispensers/);
+            await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
+            await main.getByRole('option', { name: 'Anyone' }).click();
+            await openSection(main, /^Memo/);
+            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Update Preferences', exact: true }).click();
 
-            await expectScreenLayout(page, 'Review preferences', 'preferences review');
+            await expectScreenLayout(page, 'Confirm', 'preferences review');
             expect(
                 await main.evaluate((element) => element.scrollTop),
                 'preferences review did not open at the top',
             ).toBeLessThanOrEqual(1);
 
-            const review = main.getByRole('form', { name: 'Review preferences' });
+            const review = main.getByLabel('Confirm Set Address Preferences', { exact: true });
             // AddressText middle-truncates on screen and carries the full address
             // as its accessible name.
             await expect(review.getByLabel(generatedAddress, { exact: true })).toBeVisible();
-            await expect(review).toContainText('Destroy the fee (reduces supply) - CHANGED');
-            await expect(review).toContainText('Memo required on incoming sends - CHANGED');
-            await expect(review).toContainText('Anyone may open a dispenser here - CHANGED');
+            await expect(review).toContainText('Destroy the fee (reduces supply) - changed');
+            await expect(review).toContainText('Memo required on incoming sends - changed');
+            await expect(review).toContainText('Anyone may open a dispenser here - changed');
             await expect(review).toContainText(MEMO);
         });
 
         await test.step('mark the labelled address active through Use', async () => {
             await page.getByRole('button', { name: 'Back to previous screen' }).click();
-            await expectScreenLayout(page, 'On-chain preferences', 'preferences after review');
+            await expectScreenLayout(page, 'Address Preferences', 'preferences after review');
+            await page.getByRole('button', { name: 'Back to previous screen' }).click();
+            await expectScreenLayout(page, 'View Address', 'address detail after preferences');
             await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expectScreenLayout(page, 'Addresses', 'address list after preferences');
 
@@ -236,24 +255,23 @@ for (const viewport of VIEWPORTS) {
             });
             await expect(row).toContainText(LABEL);
             await row.click();
-            await expectScreenLayout(page, 'View address', 'address detail before Use');
-            const use = page.getByRole('button', { name: 'Use', exact: true });
-            await expect(use).toHaveAttribute('title', 'Make this the active address');
+            await expectScreenLayout(page, 'View Address', 'address detail before Use');
+            const use = page.getByRole('button', { name: /^Set active/ });
+            await expect(use).toBeVisible();
             await use.click();
             await expect(use).toBeHidden();
-            // Use returns to Home by design; let Home finish mounting before
-            // the palette opens, or the palette is torn down mid-fill.
-            await expect(page.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
+            // Use pops the detail entry, so the address list comes back.
+            await expect(page.getByRole('heading', { level: 1, name: 'Addresses', exact: true })).toBeVisible();
             await settle(page);
 
-            await gotoPalette(page, 'Addresses');
-            await page.getByRole('button', {
+            // The list row carries the Active badge; the detail only hides Set active.
+            const activeRow = page.getByRole('button', {
                 name: `View address ${generatedAddress}`,
-            }).click();
-            await expect(page.getByRole('main').getByText('Active', { exact: true }))
-                .toBeVisible();
-            await expect(page.getByRole('button', { name: 'Use', exact: true })).toHaveCount(0);
-            await expectScreenLayout(page, 'View address', 'active address detail');
+            });
+            await expect(activeRow).toContainText('Active');
+            await activeRow.click();
+            await expect(page.getByRole('button', { name: /^Set active/ })).toHaveCount(0);
+            await expectScreenLayout(page, 'View Address', 'active address detail');
         });
     });
 }

@@ -51,9 +51,9 @@ export const ReachabilityNoticeReportContext = createContext(
 );
 
 /**
- * The shell's reachability notice while the services are degraded or
- * offline on a screen that holds network data, whether or not it is drawn
- * at the moment, with `hiddenCount`, the number of screens hiding it because
+ * The shell's reachability notice while the device is offline on a screen
+ * that holds network data, whether or not it is drawn at the moment, with
+ * `hiddenCount`, the number of screens hiding it because
  * they state the outage themselves; null otherwise. A route reads it to keep its page at one
  * message: an empty state for data that could not be checked steps aside,
  * and a form folds the sentence into its own notice.
@@ -61,20 +61,6 @@ export const ReachabilityNoticeReportContext = createContext(
 export const ShellReachabilityNoticeContext = createContext(
     /** @type {ShellReachabilityNotice | null} */ (null),
 );
-
-// Screens that hold no balances and no balance-derived figures. The shell's
-// reachability notice names balances only where a balance is on screen; on
-// these it says the screen's information in general may be out of date.
-const VIEWS_WITHOUT_BALANCES = new Set([
-    'receive', 'receive-picker', 'contacts', 'obligations', 'settings',
-    'scan', 'menu', 'lists', 'shared-lists', 'list-detail', 'messaging',
-    'dispensers-list', 'contracts-list', 'markets', 'connected-sites',
-    'alerts', 'addresses', 'address-preferences', 'advanced',
-    'wallet-details', 'wallet-picker', 'account-picker', 'access-lists',
-    'add-wallet', 'add-account', 'wallet-rename', 'account-rename',
-    'sign-message', 'verify-signature', 'view-private-key', 'migrate-bip39',
-    'pair-signer', 'dispenser-explorer', 'market-activity',
-]);
 
 // Screens whose content is held on this device (the address book, connected
 // sites, alerts, agent accounts, the scanner, signature checks, Settings). Nothing on
@@ -95,18 +81,6 @@ const VIEWS_WITH_LOCAL_DATA_ONLY = new Set([
 export function routeHoldsNetworkData(routeKey) {
     if (!routeKey) return true;
     return !VIEWS_WITH_LOCAL_DATA_ONLY.has(String(routeKey).split(':')[0]);
-}
-
-/**
- * Whether the route may show a balance. The route key is the shell's
- * `<view>:<navigation key>`; a missing key is treated as a balance screen.
- *
- * @param {string | null | undefined} routeKey
- * @returns {boolean}
- */
-export function routeMayShowBalances(routeKey) {
-    if (!routeKey) return true;
-    return !VIEWS_WITHOUT_BALANCES.has(String(routeKey).split(':')[0]);
 }
 
 /**

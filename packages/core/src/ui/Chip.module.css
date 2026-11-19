@@ -24,6 +24,10 @@
 /* Toggle typography and radius match a small button while Chip continues to
    own its border, spacing, height, and alignment. */
 .toggle {
+    /* Chip.jsx adds Button's btn class to a toggle; the shared button base
+       supplies the hover and press variables the toggle's fills feed. */
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: var(--xc-control-border-hover);
     appearance: none;
     border-radius: var(--xc-control-radius);
     font-size: var(--xc-control-font-sm);
@@ -33,6 +37,12 @@
     color: var(--xc-text);
     cursor: pointer;
     transition: background var(--xc-transition), border-color var(--xc-transition), transform var(--xc-transition);
+    --xc-icon-size: inherit;
+    flex-shrink: 0;
+    gap: 0;
+    padding: 0 var(--xc-space-3);
+    line-height: 1;
+    white-space: nowrap;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -52,9 +62,16 @@
 }
 
 .pressed {
-    background: var(--xc-control-selected);
-    border-color: var(--xc-control-selected);
-    color: var(--xc-control-selected-text);
+    --xc-button-hover-bg: var(--xc-toggle-selected-bg);
+    --xc-button-hover-border: var(--xc-toggle-selected-bg);
+    background: var(--xc-toggle-selected-bg);
+    border-color: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
+}
+
+/* Pressed is the selected fill, not the button's pressed ring. */
+.toggle[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
 }
 
 .toggle:focus-visible {
@@ -62,10 +79,4 @@
     outline-offset: 2px;
 }
 
-.toggle:disabled {
-    cursor: not-allowed;
-    background: var(--xc-control-disabled-bg);
-    border-color: var(--xc-control-disabled-border);
-    color: var(--xc-control-disabled-text);
-    opacity: var(--xc-disabled-opacity);
-}
+/* A disabled chip keeps its colours: a button never looks disabled (G130). */

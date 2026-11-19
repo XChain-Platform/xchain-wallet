@@ -78,9 +78,9 @@ describe('Send fiat currency', () => {
 
         expect(await screen.findByRole('button', { name: /switch input to eur/i })).toBeInTheDocument();
         expect(screen.getByText('≈ €0.00 EUR')).toBeInTheDocument();
-        // The fee preview lands after the amount preview once the fee
-        // estimate resolves, so wait for both rather than the first match.
-        await waitFor(() => expect(screen.getAllByText(/≈ €[0-9,.]+ EUR/)).toHaveLength(2));
+        // The network fee field draws its own fiat in the fee format
+        // (~€0.42) once the fee estimate resolves.
+        await waitFor(() => expect(screen.getByText(/^~€[0-9,.]+$/)).toBeInTheDocument());
         expect(document.body.textContent).not.toContain('$');
     });
 

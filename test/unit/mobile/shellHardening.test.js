@@ -52,6 +52,7 @@ afterEach(() => {
 
 function capableEnv(overrides = {}) {
     return {
+        isSecureContext: true,
         crypto: {
             subtle: { importKey() {}, encrypt() {}, decrypt() {}, deriveBits() {} },
             getRandomValues: () => {},
@@ -84,8 +85,7 @@ describe('WebView floor: hard tier', () => {
 
     it('refuses when a crypto primitive is missing', () => {
         for (const [name, env] of [
-            ['crypto.subtle', capableEnv({ crypto: { getRandomValues: () => {} } })],
-            ['crypto.getRandomValues', capableEnv({ crypto: { subtle: { importKey() {}, encrypt() {} } } })],
+            ['crypto.getRandomValues', capableEnv({ crypto: {} })],
             ['indexedDB', capableEnv({ indexedDB: undefined })],
             ['BigInt', capableEnv({ BigInt: undefined })],
         ]) {
@@ -95,15 +95,23 @@ describe('WebView floor: hard tier', () => {
         }
     });
 
-    it('refuses a subtle object whose methods are not there', () => {
-        // The shape some embedded engines ship: truthy `subtle`, no methods.
-        // A truthiness check passes it and the wallet dies at the first
-        // key derivation instead of at the door.
+    it('allows an otherwise capable engine without SubtleCrypto', () => {
+        // Some embedded engines ship no `subtle` at all. Key handling does not
+        // depend on it, so its absence alone must not strand a working wallet;
+        // only a missing random source stops the boot.
         const report = checkWebViewFloor(capableEnv({
-            crypto: { subtle: {}, getRandomValues: () => {} },
+            crypto: { getRandomValues: () => {} },
         }));
+        expect(report.usable).toBe(true);
+        expect(report.missing).toEqual([]);
+    });
+
+    it('refuses an insecure origin even when every crypto primitive is present', () => {
+        // A page outside a secure context cannot be trusted with secrets,
+        // however capable the engine looks, so the floor reports it by name.
+        const report = checkWebViewFloor(capableEnv({ isSecureContext: false }));
         expect(report.usable).toBe(false);
-        expect(report.missing).toContain('crypto.subtle');
+        expect(report.missing).toContain('secure context');
     });
 
     it('names what is missing and what to do, in the failure text', () => {
@@ -159,14 +167,14 @@ describe('update feed validation', () => {
         expect(parseUpdateFeed({ version: '0.334.0' })).toBe('0.334.0');
         // Extra keys are ignored, not rejected: rejecting them would let
         // whoever writes the feed break every old client on purpose.
-        expect(parseUpdateFeed({ version: '1.0.0', '//': 'a comment' })).toBe('1.0.0');
+        expect(parseUpdateFeed({ version: '9.8.7', '//': 'a comment' })).toBe('9.8.7');
     });
 
     it('refuses everything that is not a plain version', () => {
         for (const bad of [
             null, undefined, 'string', [], 42,
-            {}, { version: 1 }, { version: '1.0' }, { version: '1.0.0-rc.1' },
-            { version: '1.0.0+build' }, { version: '01.0.0' }, { version: ' 1.0.0 ' },
+            {}, { version: 1 }, { version: '1.0' }, { version: '9.8.7-rc.1' },
+            { version: '9.8.7+build' }, { version: '09.8.7' }, { version: ' 9.8.7 ' },
         ]) {
             expect(() => parseUpdateFeed(bad), JSON.stringify(bad)).toThrow(UpdateFeedError);
         }
@@ -184,7 +192,7 @@ describe('update feed validation', () => {
     it('compares versions numerically, not lexically', () => {
         expect(isNewerVersion('0.334.0', '0.333.1')).toBe(true);
         expect(isNewerVersion('0.9.0', '0.10.0')).toBe(false);   // lexical says otherwise
-        expect(isNewerVersion('1.0.0', '0.999.99')).toBe(true);
+        expect(isNewerVersion('9.8.7', '0.999.99')).toBe(true);
         expect(isNewerVersion('0.333.1', '0.333.1')).toBe(false);
         expect(isNewerVersion('0.333.0', '0.333.1')).toBe(false);
     });
@@ -202,6 +210,7 @@ describe('checkForDirectUpdate', () => {
         expect(fetchImpl).toHaveBeenCalledWith(UPDATE_FEED_URL, expect.objectContaining({
             credentials: 'omit',
             redirect: 'error',
+            referrerPolicy: 'no-referrer',
         }));
     });
 

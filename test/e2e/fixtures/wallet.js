@@ -28,6 +28,9 @@
 
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
+import { WALLET_DATA_STALE_KEY } from '../../../packages/core/src/shared/utils/walletDataFreshness.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
 import { stubHubRegistry } from './hubStub.js';
@@ -40,6 +43,81 @@ import { guardOutbound, stubOutboundHosts } from './outboundGuard.js';
 // See test/e2e/timeout-budget.js.
 const KDF_STEP_MS = kdfStepTimeout();
 
+/**
+ * The pairing page's role buttons, by wallet mode. Create and import no
+ * longer offer a Wallet mode field (operator ruling 2026-11-15); the only
+ * way a wallet gets the `watcher` or `signer` mode is the two-phone pairing
+ * in Settings, Advanced, "Use another phone as a signer".
+ */
+// PairPartnerWallet's role rows: an ActionListItem's name is its title then
+// its description, so each is matched on the leading title.
+const PAIR_ROLE_BUTTON = { watcher: /^Sign on another phone\b/, signer: /^Make this phone the signer\b/ };
+
+/** The name a mode wallet gets when the caller names none. */
+const DEFAULT_MODE_WALLET_NAME = { watcher: 'Signs on Another Phone', signer: 'Signer Phone' };
+
+/**
+ * The name of the Normal wallet `createWallet` makes first when a spec asks
+ * for a mode wallet, so the pairing page has an open vault to add to. It
+ * shares no words with any name a spec passes, so the switch to the mode
+ * wallet cannot pick it by mistake.
+ */
+const PAIRING_HOST_WALLET_NAME = 'Pairing Host';
+
+/**
+ * Opens the two-phone pairing page from Settings, Advanced, "Use another
+ * phone as a signer", inside an unlocked session, picks the role for
+ * `walletMode`, and fills the phrase step. The caller presses Continue.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ words: string[] | string, name: string, password: string, walletMode: 'watcher' | 'signer' }} opts
+ */
+export async function fillPairAnotherPhone(page, { words, name, password, walletMode }) {
+    const role = PAIR_ROLE_BUTTON[walletMode];
+    if (!role) throw new Error(`fillPairAnotherPhone: no pairing role for wallet mode "${walletMode}"`);
+    await openSettings(page);
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: /^Advanced\b/ }).first().click();
+    await main.getByRole('button', { name: /^Use another phone as a signer\b/ }).click();
+    // The page's heading is PairPartnerWallet's PAGE_TITLE, shorter than the row.
+    await expect(page.getByRole('heading', { level: 1, name: 'Phone Signer', exact: true }),
+        'Settings, Advanced has no "Use another phone as a signer" page')
+        .toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: role }).first().click();
+    await page.getByLabel('Wallet name', { exact: true }).fill(name);
+    await page.getByRole('textbox', { name: /^Shared recovery phrase/ })
+        .fill(Array.isArray(words) ? words.join(' ') : words);
+    // The vault is open, so this is its own password, not a new one.
+    await page.getByLabel('Wallet password', { exact: true }).fill(password);
+}
+
+/**
+ * Adds `words` as a new wallet in `walletMode` through the two-phone pairing
+ * page (Settings, Advanced, "Use another phone as a signer") inside the
+ * unlocked session, then switches to it. `words` must not already be in this
+ * app: the app refuses a phrase it holds ("This recovery phrase is already in
+ * this app as ...", DuplicateWalletError), whatever the mode.
+ *
+ * The mode is fixed when the page adds the wallet (`addImportedWallet` with
+ * the picked role), before the code exchange, so this leaves once the page
+ * shows this wallet's pairing code; the header Back hands back through the
+ * shell's completion callback. No partner phone is needed for that.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} words
+ * @param {{ name: string, password: string, walletMode: 'watcher' | 'signer' }} opts
+ */
+async function addModeWalletByPairing(page, words, { name, password, walletMode }) {
+    await fillPairAnotherPhone(page, { words, name, password, walletMode });
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    // The wallet exists in its mode once this phone's pairing code is built.
+    await expect(page.getByRole('button', { name: 'Copy Pairing Code' }),
+        `the pairing page did not add "${name}" in ${walletMode} mode`)
+        .toBeVisible({ timeout: KDF_STEP_MS });
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+    await switchToWallet(page, name);
+}
+
 /** Home's message when it is offline with no balances read yet (home.offline.empty). */
 const OFFLINE_HOME_EMPTY = 'You are offline. Connect to load balances and use network actions.';
 
@@ -48,6 +126,53 @@ export const LICENSE_ACCEPTED_VERSION_KEY = 'xc:licenseAcceptedVersion';
 
 export const DEFAULT_PASSWORD = 'e2epassword1234';
 
+/**
+ * Readies a fresh page the way every spec's device starts: the outbound guard,
+ * the host, price and hub stubs, and (unless the spec drives it) the license
+ * gate seeded as accepted.
+ *
+ * @returns {Promise<{ attempts: string[] }>} the guard, read after the spec
+ */
+async function prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }) {
+    // Registered first so it runs last: only a request no stub answered reaches it.
+    const outbound = await guardOutbound(page, {
+        stubbedHosts: outboundStubHosts,
+        liveHosts: outboundLiveHosts,
+    });
+    // Regtest starts on the production network before each spec switches it.
+    // Answer only the probes needed to render Home and refuse every other call.
+    await stubOutboundHosts(page.context(), outboundStubHosts);
+    // No spec reaches the live price service; see priceStub.js.
+    await stubPriceFeed(page.context());
+    // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
+    await stubHubRegistry(page.context());
+    // A live-chain suite funds and mines between page loads, and each reload
+    // there stands for the user's explicit refresh: every load marks the saved
+    // wallet reads stale, as the palette Refresh does, so the next read is live.
+    if (freshReadsOnLoad) {
+        await page.addInitScript((staleKey) => {
+            try {
+                window.localStorage.setItem(staleKey, String(Date.now()));
+            } catch { /* storage unavailable: nothing saved to go stale */ }
+        }, WALLET_DATA_STALE_KEY);
+    }
+    if (acceptLicense) {
+        await page.addInitScript(
+            ([atKey, versionKey, version]) => {
+                try {
+                    window.localStorage.setItem(atKey, new Date().toISOString());
+                    window.localStorage.setItem(versionKey, version);
+                } catch {
+                    // Storage unavailable: the gate renders and the spec
+                    // fails loudly rather than silently testing the gate.
+                }
+            },
+            [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
+        );
+    }
+    return outbound;
+}
+
 export const test = base.extend({
     // Set `test.use({ acceptLicense: false })` in a spec that wants to
     // drive the license gate itself.
@@ -55,36 +180,28 @@ export const test = base.extend({
     outboundStubHosts: [[], { option: true }],
     // Hosts a suite drives for real (the testnet config sets the services).
     outboundLiveHosts: [[], { option: true }],
+    // Live-chain configs set it; see prepareDevicePage.
+    freshReadsOnLoad: [false, { option: true }],
 
-    page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
-        // Registered first so it runs last: only a request no stub answered reaches it.
-        const outbound = await guardOutbound(page, {
-            stubbedHosts: outboundStubHosts,
-            liveHosts: outboundLiveHosts,
-        });
-        // Regtest starts on the production network before each spec switches it.
-        // Answer only the probes needed to render Home and refuse every other call.
-        await stubOutboundHosts(page.context(), outboundStubHosts);
-        // No spec reaches the live price service; see priceStub.js.
-        await stubPriceFeed(page.context());
-        // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
-        await stubHubRegistry(page.context());
-        if (acceptLicense) {
-            await page.addInitScript(
-                ([atKey, versionKey, version]) => {
-                    try {
-                        window.localStorage.setItem(atKey, new Date().toISOString());
-                        window.localStorage.setItem(versionKey, version);
-                    } catch {
-                        // Storage unavailable: the gate renders and the spec
-                        // fails loudly rather than silently testing the gate.
-                    }
-                },
-                [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
-            );
-        }
+    page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }, use) => {
+        const outbound = await prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad });
         await use(page);
         expect(outbound.attempts, 'a spec tried to reach a non-local host').toEqual([]);
+    },
+
+    // A second phone: its own browser context, so its own vault, readied like
+    // `page`. A spec that needs one recovery phrase in two modes at once uses
+    // it, because one app refuses a phrase it already holds, and a watcher or
+    // signer of a phrase is by design another phone anyway. Built only for a
+    // spec that asks for it. `browser.newContext()` inside a test takes the
+    // config's context options (baseURL, viewport, user agent), like `page`.
+    otherPhone: async ({ browser, acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }, use) => {
+        const context = await browser.newContext();
+        const phone = await context.newPage();
+        const outbound = await prepareDevicePage(phone, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad });
+        await use(phone);
+        expect(outbound.attempts, 'a spec tried to reach a non-local host from the second phone').toEqual([]);
+        await context.close();
     },
 });
 
@@ -119,7 +236,7 @@ export function nav(page) {
 /**
  * The unlocked shell's signal that onboarding finished, in ANY shell.
  *
- * Anchored on Home's `<section aria-label="Active address balance">` (core's
+ * Anchored on Home's balance hero `<section>` (labelled by the wallet name; core's
  * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
  * navigation, because the three shells do not agree on navigation at all:
  * web/desktop render the rail or the bottom bar, and the MV3 popup renders
@@ -127,11 +244,16 @@ export function nav(page) {
  * (`packages/extension/src/popup/App.jsx:600-603` says so explicitly), so no
  * nav landmark exists there to wait on.
  *
- * The nav rail's Lock button is not usable for this either: below 640px it
- * lives inside the More sheet, which is closed by default.
+ * The nav rail's Lock button is not usable for this either: below 640px the
+ * rail is absent and Lock lives inside the closed wallet menu.
  */
 export function unlockedShell(page) {
-    return page.getByRole('region', { name: 'Active address balance' }).first();
+    // The hero's visible mode caption is Wallet value or Wallet balance, while
+    // its accessible name is the active wallet's name. The balance-visibility
+    // toggle is the stable card control under either caption.
+    return page.getByRole('region').filter({
+        has: page.getByRole('button', { name: /^(?:Show|Hide) balance$/ }),
+    }).first();
 }
 
 /**
@@ -156,7 +278,7 @@ export function unlockedAnyScreen(page) {
  * Opens Settings, by whichever route this shell offers.
  *
  * The MV3 popup has no navigation surface. Its entry point is the gear
- * in Home's balance hero, which is what a real user has; the command palette
+ * in Home's balance hero, which is what a real user has; the wallet menu
  * also lists every Settings section and is kept here as the fallback so this
  * still works if the gear ever moves. Web and desktop use the nav. Same screen
  * either way, so the walk after this is shared.
@@ -164,6 +286,10 @@ export function unlockedAnyScreen(page) {
 export async function openSettings(page) {
     if (await nav(page).count() > 0) {
         await gotoSection(page, 'Settings');
+        // Choosing Settings while a Settings sub-page is open (the wallet
+        // picker after an add-wallet flow) leaves that sub-page on screen.
+        const back = page.getByRole('button', { name: 'Back to settings', exact: true });
+        if (await back.isVisible().catch(() => false)) await back.click();
         return;
     }
 
@@ -173,7 +299,7 @@ export async function openSettings(page) {
     } else {
         await openPaletteCommand(page, 'Settings');
     }
-    await expect(page.getByRole('button', { name: /^Developer mode/ }))
+    await expect(page.getByRole('button', { name: /^Network and Fees\b/ }))
         .toBeVisible({ timeout: 15_000 });
 }
 
@@ -181,13 +307,13 @@ function escapeRegExp(text) {
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** The command palette dialog, open or not. */
+/** The wallet menu dialog, open or not. */
 export function commandPalette(page) {
-    return page.getByRole('dialog', { name: 'Command palette' });
+    return page.getByRole('dialog', { name: 'Wallet menu' });
 }
 
 /**
- * Opens the command palette and types `query` into its own search field.
+ * Opens the wallet menu and types `query` into its own search field.
  *
  * The search field is found INSIDE the dialog by its name. A page-wide
  * `getByRole('combobox').first()` resolves to whatever select sits earlier in
@@ -218,20 +344,22 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
             });
             await page.keyboard.press('ControlOrMeta+k');
         }
-        await expect(search, 'the command palette did not open').toBeEditable({ timeout: 3_000 });
+        await expect(search, 'the wallet menu is not open').toBeEditable({ timeout: 3_000 });
         await search.fill(query, { timeout: 3_000 });
         await expect(search).toHaveValue(query, { timeout: 2_000 });
-    }, `the command palette never opened with "${query}" typed into its search field`)
+    }, `the wallet menu search does not accept "${query}"`)
         .toPass({ timeout: timeoutMs });
     return dialog;
 }
 
 /**
- * Runs one command palette entry by its title, and waits for the palette to
+ * Runs one wallet menu entry by its title, and waits for the palette to
  * close behind it.
  *
  * The option is matched as an anchored word prefix of its accessible name,
- * because a row's name carries its subtitle after the title.
+ * because a row's name carries its subtitle after the title. The match
+ * ignores case: palette rows are title case ("Issue Token") while the
+ * action entries and the specs say "Issue token".
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} title  the command's visible title, typed as the search
@@ -239,46 +367,86 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
  */
 export async function openPaletteCommand(page, title, { option, timeoutMs = 30_000 } = {}) {
     const dialog = await openPaletteSearch(page, title, { timeoutMs });
-    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
+    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`, 'i') }).first();
     await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
     await row.click();
-    await expect(dialog, `the command palette stayed open after choosing "${title}"`)
+    await expect(dialog, `the wallet menu is visible after choosing "${title}"`)
         .toBeHidden({ timeout: 15_000 });
 }
 
 /**
  * The active wallet's identity in the App header.
  *
- * The header names the active wallet in a `WalletIdentity` span (not a
- * button), and the wallet picker closes itself after a pick, so this is the
- * one place a switch can be confirmed.
+ * STALE: the App header no longer names the active wallet, so this matches
+ * nothing on the current UI. Confirm a switch with `expectActiveWallet`, which
+ * reads the wallet picker. Kept only for add-wallet-activation.spec.js until
+ * that spec moves off it.
  */
 export function activeWalletIdentity(page) {
-    return page.getByRole('region', { name: 'App header' }).getByTestId('wallet-identity');
+    return page.getByRole('region', { name: 'App header' }).locator('span[title]');
 }
 
-/** Asserts the App header names `name` as the active wallet. */
+/**
+ * Asserts `name` is the active wallet, on the wallet picker, and leaves the
+ * picker open. The App header no longer names the active wallet, so the
+ * picker's row for it, marked `aria-current` (WalletPicker.jsx), is the one
+ * place every shell shows which wallet is active, signer mode included.
+ */
 export async function expectActiveWallet(page, name, message, { timeoutMs = 30_000 } = {}) {
-    await expect(activeWalletIdentity(page).filter({ hasText: name }),
+    await openWalletPicker(page);
+    await expect(page.getByRole('main').locator('button[aria-current="true"]').filter({ hasText: name }),
         message || `the app did not switch to ${name}`)
         .toBeVisible({ timeout: timeoutMs });
 }
 
+/** Opens the wallet picker through the Settings page. */
+export async function openWalletPicker(page) {
+    await openSettings(page);
+    const main = page.getByRole('main');
+    const back = page.getByRole('button', { name: 'Back to settings' });
+    if (await back.isVisible().catch(() => false)) await back.click();
+    // Settings groups its rows: the Wallets group page lists My Wallets,
+    // My Accounts and My Addresses.
+    await main.getByRole('button', { name: /^Wallets\b/ }).click();
+    await main.getByRole('button', { name: /^My Wallets\b/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: /^(My )?Wallets$/ })).toBeVisible();
+}
+
 /**
- * Switches to the wallet called `name` through the palette's Switch wallet
- * screen, and confirms it in the App header.
+ * Switches to the wallet called `name` through Settings, and confirms it on
+ * the wallet picker.
  *
  * The row is told apart from its own "Wallet details for <name>" button,
- * which carries the same name.
+ * which carries the same name. A picker row opens that wallet's page
+ * (WalletPicker.jsx since 2026-11-12), whose "Set as active wallet" action
+ * switches and then hides; the row is absent when the wallet is already
+ * active. A shell whose picker still switches on the row shows no such page.
  */
 export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
-    await openPaletteCommand(page, 'Switch wallet');
-    const row = page.getByRole('main')
+    await openWalletPicker(page);
+    const main = page.getByRole('main');
+    const row = main
         .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${escapeRegExp(name)}`) })
         .first();
     await expect(row, `the wallet picker lists no wallet named ${name}`).toBeVisible({ timeout: timeoutMs });
     await row.click();
+    // Every wallet page lists Edit wallet; Set as active wallet only when inactive.
+    const setActive = main.getByRole('button', { name: /^Set as active wallet\b/ });
+    const editWallet = main.getByRole('button', { name: /^Edit wallet\b/ });
+    const onDetails = await setActive.or(editWallet).first()
+        .waitFor({ state: 'visible', timeout: 15_000 })
+        .then(() => true, () => false);
+    if (onDetails && await setActive.isVisible()) {
+        await setActive.click();
+        await expect(setActive, `Set as active wallet did not take for ${name}`)
+            .toBeHidden({ timeout: timeoutMs });
+    }
     await expectActiveWallet(page, name, undefined, { timeoutMs });
+    // Leave the way a finished switch does, on Home, not two levels down in
+    // Settings: a caller's next Settings walk (switchToRegtest) starts from
+    // the Settings list, which one Back from the picker does not reach.
+    await gotoSection(page, 'Home');
+    await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: timeoutMs });
 }
 
 /**
@@ -290,31 +458,58 @@ export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
  *
  * @returns {Promise<string[]>} the new wallet's recovery phrase
  */
-export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
+export async function addWallet(page, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'full',
+} = {}) {
     if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
-    await openPaletteCommand(page, 'Switch wallet');
-    await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
+    await openWalletPicker(page);
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
     // navigate:false: the add flow starts at the onboarding welcome inside the
     // unlocked shell, and a goto('/') would drop the session.
-    const words = await createWallet(page, { password, name, ads, navigate: false });
+    const words = await createWallet(page, { password, name, ads, navigate: false, walletMode });
     await switchToWallet(page, name);
     return words;
 }
 
 /**
- * A nav destination by name, tolerating the badge that rides in its
- * accessible name.
+ * Adds a second wallet from an existing recovery phrase in the given mode,
+ * then switches to it. Create and import no longer offer a mode, so a
+ * `watcher` or `signer` wallet comes from the two-phone pairing page in
+ * Settings, Advanced, and a `full` one from Import wallet.
  *
- * A nav item with unread items reads "Messaging 5 unread", not
- * "Messaging": the count pill carries `aria-label="5 unread"` and the
- * accessible name is the concatenation. An exact match therefore finds
- * the item right up until the wallet has something to tell the user
- * about, which is precisely when a test is most likely to be looking at
- * it. (This bit the width walk: the same click passed on an empty
- * wallet and hung on a populated one.)
+ * The phrase must not already be in this app: it refuses a phrase it holds
+ * ("This recovery phrase is already in this app as ..."), in any mode. A spec
+ * that needs one wallet's addresses in a second mode adds the phrase on the
+ * `otherPhone` fixture, a second device with its own vault, which is where a
+ * watcher or signer of that phrase lives in real use.
  *
- * Exact first so a name that IS another's prefix cannot be hijacked, then
- * an anchored prefix so the badge suffix is tolerated. Anchored, not
+ * @param {string[]} words the recovery phrase to add
+ */
+export async function addWalletFromPhrase(page, words, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'watcher',
+} = {}) {
+    if (!name) throw new Error('addWalletFromPhrase needs a name, so the switch to it can be confirmed');
+    if (walletMode !== 'full') {
+        await addModeWalletByPairing(page, words, { name, password, walletMode });
+        return;
+    }
+    await openWalletPicker(page);
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Import wallet' }).click();
+    await page.getByRole('textbox', { name: /^Recovery phrase/ }).fill(words.join(' '));
+    await page.getByLabel('Wallet name', { exact: true }).fill(name);
+    await page.getByLabel('Password', { exact: true }).fill(password);
+    await page.getByLabel(/^Confirm( password)?$/).fill(password);
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await acknowledgeImportNotice(page, ads);
+    await expect(createdWalletShell(page, false)).toBeVisible({ timeout: KDF_STEP_MS });
+    await switchToWallet(page, name);
+}
+
+/**
+ * A nav destination by name. Exact first so a name that IS another's prefix
+ * cannot be hijacked, then an anchored prefix for descriptive suffixes.
+ * Anchored, not
  * substring: `getByRole(..., { name })` without `exact` matches anywhere
  * in the name, which would let "Send" also select "Resend".
  */
@@ -326,10 +521,8 @@ function navDestination(scope, name) {
     };
 }
 
-// A destination can sit in the DOM of a collapsed nav without being shown
-// (the phone bar keeps its More sheet rows mounted off screen); only one that
-// is visible inside the viewport is a click target, otherwise the caller
-// falls through to More.
+// A destination can sit in the DOM during a responsive transition without
+// being shown. Only a row inside the viewport is a click target.
 async function onScreen(locator) {
     if (!(await locator.isVisible())) return false;
     const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
@@ -340,10 +533,9 @@ async function onScreen(locator) {
         && box.x < viewport.width && box.y < viewport.height;
 }
 
-// The landscape icon rail and the open More sheet both scroll inside a short
-// viewport (or under enlarged text spacing), so a row can be scrolled out of
-// view; bring it back before the on-screen check. The closed phone bar's
-// off-screen sheet rows are neither, so they still fall through to More.
+// The landscape icon rail can scroll inside a short viewport or under
+// enlarged text spacing, so a row can be outside the viewport. Bring it back
+// before the on-screen check.
 // A resize can unmount the row between the count and these calls, so each
 // is bounded and a vanished row simply counts as not on screen.
 async function revealInScroller(locator) {
@@ -352,9 +544,7 @@ async function revealInScroller(locator) {
         const scrolls = await locator.first().evaluate((el) => {
             const navEl = el.closest('nav');
             if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
-            const sheet = el.closest('[role="dialog"]');
-            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
-                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+            return false;
         }, undefined, { timeout: 2_000 });
         if (scrolls && await locator.first().isVisible()) {
             await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
@@ -379,55 +569,76 @@ async function clickDestination(scope, name) {
     return false;
 }
 
+function walletMenuRowId(name) {
+    const groups = visibleWalletMenu({
+        hasDexSurface: true,
+        hasVmAddress: true,
+        hasBtcAddress: true,
+    });
+    const rows = groups.flatMap((group) => group.rows);
+    return rows.find((row) => row.label === name)?.id;
+}
+
+async function openWalletMenuDestination(page, name) {
+    const id = walletMenuRowId(name);
+    if (!id) {
+        await openPaletteCommand(page, name);
+        return;
+    }
+    const dialog = commandPalette(page);
+    if (!(await dialog.isVisible())) {
+        // The header menu button is what a user presses, and it works on every
+        // device. The shortcut is only the fallback: an emulated phone reports
+        // a non-Mac platform, so the Cmd key the harness sends is not its
+        // modifier.
+        const pancake = page.getByRole('button', { name: 'Open menu' }).first();
+        if (await pancake.isVisible()) {
+            await pancake.click();
+        } else {
+            await page.evaluate(() => {
+                if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+            });
+            await page.keyboard.press('ControlOrMeta+k');
+        }
+    }
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    const row = dialog.locator(`[data-wallet-menu-row="${id}"]`);
+    await expect(row, `the wallet menu has no ${name} row`).toBeVisible({ timeout: 15_000 });
+    await row.click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
+
 /**
  * Clicks a section (Send / History / DEX / ...) in whichever nav is showing.
  *
- * The bottom bar surfaces only four primary tabs (Home, History, Send,
- * Scan); everything else lives behind "More". Try the visible nav first and
- * fall back to the sheet, so one call works at every width.
+ * The bottom bar surfaces Home, Send, Receive, History and Settings. Other
+ * destinations open through the searchable wallet menu, so one call works at
+ * every width.
  */
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        // Landscape phones can show the rail and the bottom bar together, so
-        // try every nav on screen before opening the More sheet. Right after
-        // a resize the shell can still be swapping the bottom bar for the
-        // rail, so a More button that vanishes means "look again", not
-        // "wait for it forever".
+        // Landscape phones can briefly show the rail and the bottom bar
+        // together, so try every navigation surface on screen.
         const navs = [
             page.getByRole('navigation', { name: 'Primary navigation' }),
             page.getByRole('navigation', { name: 'Bottom navigation' }),
         ];
-        const more = page.getByRole('button', { name: 'More', exact: true });
         for (let attempt = 0; attempt < 3; attempt += 1) {
             for (const candidate of navs) {
                 if (await candidate.count() === 0) continue;
                 if (await clickDestination(candidate.first(), name)) return;
             }
-            if (await more.count() === 0) {
-                await page.waitForTimeout(500);
-                continue;
-            }
-            try {
-                await more.first().click({ timeout: 10_000 });
-            } catch {
-                await page.waitForTimeout(500);
-                continue;
-            }
-            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-            if (await clickDestination(sheet, name)) return;
-            break;
+            await page.waitForTimeout(500);
         }
-        throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
+        await openWalletMenuDestination(page, name);
+        return;
     }
 
-    // No nav landmark at all: the MV3 popup. It navigates from Home's quick
-    // actions (Send / Receive / Exchange / More) instead of a nav surface.
-    // Destinations that are NOT quick actions are not reachable this way; see
-    // before writing an extension spec that needs one.
+    // A shell without navigation still exposes quick actions and the wallet
+    // menu.
     if (await clickDestination(page.getByRole('main'), name)) return;
-    throw new Error(`no quick action named "${name}" on this screen`);
+    await openWalletMenuDestination(page, name);
 }
 
 /** A button inside the main content region, e.g. a form's submit. */
@@ -438,33 +649,46 @@ export function mainButton(page, name) {
 /**
  * Clicks a named Manage Token action after its owner check has settled.
  *
- * Issuer actions are absent while ManageToken resolves the token owner. Once
- * that read completes, an action can render either among the first three page
- * buttons or in the More menu. If More appears first, the second wait still
- * accepts a direct button that arrives when the owner read completes.
+ * The actions are action list rows (G101) in collapsible groups, only Supply
+ * open on arrival. A row's accessible name is its title plus its description
+ * line, so the row is found by its exact title text. A closed group's header
+ * lists its action titles, so the group holding the label is opened first.
+ * An owner row stays aria-disabled until the owner read completes.
  */
 export async function clickManageTokenAction(main, label, { timeout = 30_000 } = {}) {
-    const button = main.getByRole('button', { name: label, exact: true });
-    const more = main.getByRole('button', { name: 'More', exact: true });
-    await expect(button.or(more).first(), `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout });
-
-    if (await button.first().isVisible().catch(() => false)) {
-        await button.first().click();
-        return;
+    const page = main.page();
+    const row = main.locator('[data-action-id]').filter({ has: page.getByText(label, { exact: true }) });
+    if (!(await row.first().isVisible().catch(() => false))) {
+        const group = main.locator('button[aria-expanded="false"]').filter({ hasText: label });
+        if (await group.first().isVisible().catch(() => false)) await group.first().click();
     }
+    await expect(row.first(), `Manage Token has no "${label}" action`).toBeVisible({ timeout });
+    await expect(row.first(), `Manage Token's "${label}" action stays locked after its owner check`)
+        .not.toHaveAttribute('aria-disabled', 'true', { timeout });
+    await row.first().click();
+}
 
-    await more.click();
-    const item = main.getByRole('menuitem', { name: label, exact: true });
-    await expect(item.or(button).first(), `Manage Token has no "${label}" action after its owner check`)
-        .toBeVisible({ timeout });
-
-    if (await button.first().isVisible().catch(() => false)) {
-        await more.click();
-        await button.first().click();
-        return;
+/**
+ * Waits for a token opened from My Tokens to show its management view and
+ * puts it on the Actions tab, where the owner groups (Supply, Distribute,
+ * Token page, Ownership, Rules and automation) list the issuer actions.
+ *
+ * The view is the region "<TICK> token management" beside the token list;
+ * there is no "Manage Token" heading any more.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} [message]
+ * @returns {Promise<import('@playwright/test').Locator>} the management region
+ */
+export async function expectManageTokenView(page, message = 'the token did not open its management view') {
+    const view = page.getByRole('region', { name: / token management$/ }).first();
+    await expect(view, message).toBeVisible({ timeout: 30_000 });
+    const actionsTab = view.getByRole('tab', { name: 'Actions', exact: true });
+    if (await actionsTab.isVisible().catch(() => false)
+        && (await actionsTab.getAttribute('aria-selected')) !== 'true') {
+        await actionsTab.click();
     }
-    await item.click();
+    return view;
 }
 
 /**
@@ -479,49 +703,156 @@ export async function expectMyTokensRow(main, row, message, { timeout = 60_000 }
     const loadFailed = main.getByRole('alert').filter({ hasText: 'Could not load your owned tokens' });
     await expect(async () => {
         if (await loadFailed.isVisible().catch(() => false)) {
-            await loadFailed.getByRole('button', { name: 'Try again', exact: true }).click();
+            await loadFailed.getByRole('button', { name: 'Try Again', exact: true }).click();
         }
         await expect(row, message).toBeVisible({ timeout: 2_000 });
     }, message).toPass({ timeout, intervals: [3_000, 5_000, 10_000] });
 }
 
 /**
- * Submits the token wizard's Details step and advances through Review when the
- * details are accepted. A refused submission stays on Details with an alert,
- * so callers that exercise a refusal can assert that verdict without waiting
- * for a review-stage button that will never be rendered.
+ * Picks a "Start from" preset on the one Issue Token form (Meme token, Utility
+ * token, Collectible, Limited edition or Subtoken). The picker is a button
+ * named after its placeholder, opening a list of options.
  *
- * @param {import('@playwright/test').Page} page
- * @param {{ onReview?: (main: import('@playwright/test').Locator) => Promise<void> }} [options]
- * @returns {Promise<boolean>} true when Review advanced toward confirmation,
- * false when the Details step displayed a refusal
+ * @param {import('@playwright/test').Locator} main
+ * @param {RegExp} name  the option's accessible name, such as /^Subtoken/
  */
-export async function submitTokenWizard(page, { onReview } = {}) {
-    const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-
-    const continueButton = main.getByRole('button', {
-        name: 'Continue to confirmation',
-        exact: true,
-    });
-    const refusal = main.getByRole('alert');
-    await expect(continueButton.or(refusal).first(),
-        'the token wizard neither opened Review nor explained why Details were refused')
-        .toBeVisible({ timeout: 90_000 });
-
-    if (!(await continueButton.isVisible().catch(() => false))) return false;
-    if (onReview) await onReview(main);
-    await continueButton.click();
-    return true;
+export async function pickIssuePreset(main, name) {
+    await main.getByRole('button', { name: /^Select template/ }).click();
+    await main.page().getByRole('option', { name }).click();
 }
 
 /**
- * The nav rail's "Lock" button. Only the phone layout's header carries a
- * "Lock wallet" button (never beside the rail), but a substring match on
- * "Lock" would still hit it, so anchor on the exact accessible name.
+ * Chooses the Subtoken template's Parent token the way a user does: tap the
+ * token selector, then the parent's row on the picker of tokens this wallet
+ * owns. A pick also moves Network and From to the parent's owner, so a spec
+ * that signs from another address chooses it after this.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {string} parent  the owned parent's ticker
+ */
+export async function pickIssueParent(main, parent) {
+    const escaped = String(parent).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const field = main.getByRole('button', { name: /^Parent token:/ });
+    await expect(field).toBeVisible({ timeout: 30_000 });
+    await field.click();
+    // Ownership comes from the explorer, so a just-issued parent can take a
+    // moment to list.
+    const row = main.page().getByRole('button', { name: new RegExp(`^Select ${escaped} on `) });
+    // The picker reads the owned tokens once on open and does not retry a
+    // rate-limited read itself, so its own Try Again is pressed while that
+    // failed-read state shows.
+    const retry = main.page().getByRole('main').getByRole('button', { name: /^Try again$/i });
+    await expect(async () => {
+        if (await retry.first().isVisible().catch(() => false)) await retry.first().click();
+        await expect(row).toBeVisible({ timeout: 5_000 });
+    }, `the Parent token picker does not list ${parent} as owned by this wallet`)
+        .toPass({ timeout: 90_000, intervals: [2_000, 5_000, 10_000] });
+    await row.click();
+    await expect(main.page().getByRole('button', { name: new RegExp(`^Parent token: ${escaped} on `) }))
+        .toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Opens a collapsed section of any Form Standard form by its title (From,
+ * Fees, Initial mint, Public minting, Locks, Callback, ...) and waits
+ * for it to report open. Sections that are already open are left alone.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {string} title
+ */
+export async function openFormSection(main, title) {
+    const header = main.getByRole('button', { name: new RegExp(`^${title}\\b`) }).first();
+    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** The Issue Token specs' name for {@link openFormSection}. */
+export const openIssueSection = openFormSection;
+
+/**
+ * Opens a form's source section, the one that holds Network and the From
+ * address. Most forms title it "From"; the signing forms title it "Signing
+ * with".
+ *
+ * @param {import('@playwright/test').Locator} main
+ */
+export async function openFromSection(main) {
+    await openFormSection(main, '(?:From|Signing with)');
+}
+
+/**
+ * The From address field's label. A form names it "From address" (the Form
+ * Standard default) or plain "From"; anchoring the pattern keeps it off the
+ * section header and off labels such as "From (token owner)".
+ */
+export const FROM_ADDRESS_LABEL = /^From(?: address)?$/;
+
+/**
+ * Opens a Form Standard form's From section and returns the From address
+ * field inside it, without waiting for a value.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} main  the open form
+ * @returns {import('@playwright/test').Locator}
+ */
+export async function openFromAddress(main) {
+    await openFromSection(main);
+    return main.getByLabel(FROM_ADDRESS_LABEL);
+}
+
+/**
+ * Waits for a chain picker and, when it is not showing because a Form
+ * Standard form keeps it inside the closed From section, opens that section.
+ * Screens that carry the picker outside such a section (a modal, a settings
+ * panel) show it at once and are left alone.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
+ * @param {import('@playwright/test').Locator} trigger  the picker's trigger button
+ * @param {string} field  the picker's visible label, for the failure message
+ */
+export async function revealChainPicker(scope, trigger, field) {
+    const sourceHeader = scope.getByRole('button', { name: /^(?:From|Signing with)\b/ }).first();
+    await expect(trigger.or(sourceHeader).first(), `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+    if (!(await trigger.isVisible())) await openFromSection(scope);
+    await expect(trigger, `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Submits the Issue Token form with its Issue Token button. A wallet that can
+ * sign goes straight to the shared confirmation screen; a refused submission
+ * stays on the form with an alert, so callers that exercise a refusal can
+ * assert that verdict without waiting for a confirmation that never opens.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<boolean>} true when the confirmation screen opened, false
+ * when the form displayed a refusal
+ */
+export async function submitTokenWizard(page) {
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
+
+    const confirm = page.getByTestId('confirm-approve');
+    const refusal = main.getByRole('alert');
+    await expect(confirm.or(refusal).first(),
+        'the Issue Token form neither opened confirmation nor explained why it was refused')
+        .toBeVisible({ timeout: 90_000 });
+
+    return confirm.isVisible().catch(() => false);
+}
+
+/**
+ * The "Lock wallet" controls: the sidebar foot's row where the sidebar shows
+ * (LeftNav), Home's balance card icon button (TotalBalanceHero), and the
+ * Wallet menu's banner button, inside a dialog that is closed until opened
+ * (its old `data-wallet-menu-row="lock"` row is gone). The app header no
+ * longer carries one, so a narrow screen off Home shows none until the menu
+ * opens; `lockWallet` handles that. The whole-name anchor excludes longer
+ * labels such as Home's "Lock Wallet" action row title.
  */
 export function lockButton(page) {
-    return page.getByRole('button', { name: 'Lock', exact: true });
+    return page.getByRole('button', { name: /^Lock wallet$/ });
 }
 
 /**
@@ -539,7 +870,8 @@ export async function revealRecoveryPhrase(page) {
     await expect(list).toHaveCount(0);
     await reveal.click();
     await expect(list).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toBeVisible();
+    await expect(reveal).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toHaveCount(0);
     return list;
 }
 
@@ -596,7 +928,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * Pass `waitForBalances: false` when an offline venue needs to switch networks
  * before Home can load the active address balances.
  *
- * Pass `bip39Passphrase` to take the "Use a BIP39 passphrase (advanced)"
+ * Pass `bip39Passphrase` to take the "Use an extra passphrase"
  * branch. That produces an ORDINARY wallet: the passphrase typed here is
  * sealed onto the record under the wallet's own master key, and every later
  * unlock pools a signer from the password alone. It is no longer a way to reach
@@ -609,19 +941,48 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * `tests/wallet/passphrase-stored.regtest.spec.js`, which drives it, and the
  * generator beside the envelope, which builds it.
  *
- * @returns {Promise<string[]>} the generated recovery phrase
+ * Pass `walletMode: 'watcher' | 'signer'` for a mode wallet: a Normal
+ * "Pairing Host" wallet is created first, then a fresh phrase is paired in
+ * that mode and made active. The returned phrase is the mode wallet's.
+ *
+ * @returns {Promise<string[]>} the active wallet's recovery phrase
  */
 export async function createWallet(page, options = {}) {
     const {
         password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
-        bip39Passphrase = null, waitForBalances = true,
+        bip39Passphrase = null, waitForBalances = true, walletMode = 'full',
     } = options;
+
+    // Create no longer offers a Wallet mode (operator ruling 2026-11-15): every
+    // created wallet is Normal, and only the two-phone pairing sets `watcher`
+    // or `signer`. So a mode wallet is made the way a user makes one: create a
+    // Normal wallet so the vault is open, then pair a NEW phrase in that mode
+    // through Settings, Advanced, "Use another phone as a signer", and switch
+    // to it. The phrase cannot be the Normal wallet's own: the app refuses a
+    // phrase it already holds (DuplicateWalletError, since 2026-10-23). It is
+    // fresh per call, not a fixed test vector, so regtest specs that fund the
+    // mode wallet never share addresses, UTXOs or input reservations across
+    // runs and workers.
+    if (walletMode !== 'full') {
+        if (bip39Passphrase !== null) {
+            throw new Error('createWallet: the two-phone pairing page has no extra passphrase, so a mode wallet cannot take one');
+        }
+        await createWallet(page, {
+            ...options, name: PAIRING_HOST_WALLET_NAME, walletMode: 'full',
+        });
+        const words = generateBip39Mnemonic().split(' ');
+        await addModeWalletByPairing(page, words, {
+            name: name || DEFAULT_MODE_WALLET_NAME[walletMode], password, walletMode,
+        });
+        return words;
+    }
 
     if (navigate) await page.goto('/');
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Create new wallet' }).click();
 
-    if (name) await page.getByLabel('Wallet name').fill(name);
+    // Exact: every create wallet field's 'About ...' help tip (U57) carries its label too.
+    if (name) await page.getByLabel('Wallet name', { exact: true }).fill(name);
     await page.getByLabel('Password', { exact: true }).fill(password);
     // The shells label this field differently: the web app says "Confirm
     // password", the extension popup shortens it to "Confirm" for its narrow
@@ -630,8 +991,9 @@ export async function createWallet(page, options = {}) {
     // below reveals directly underneath it.
     await page.getByLabel(/^Confirm( password)?$/).fill(password);
     if (bip39Passphrase !== null) {
-        await page.getByLabel(/^Use a BIP39 passphrase/).check();
-        await page.getByLabel('BIP39 passphrase', { exact: true }).fill(bip39Passphrase);
+        await page.getByRole('button', { name: /^Extra Passphrase/ }).click();
+        await page.getByLabel(/^Use an extra passphrase/).check();
+        await page.getByLabel('Extra passphrase', { exact: true }).fill(bip39Passphrase);
         await page.getByLabel('Confirm passphrase', { exact: true }).fill(bip39Passphrase);
     }
     // WAIT FOR `Next` TO BE ENABLED, AND RE-TYPE ONCE IF IT IS NOT. The button
@@ -656,7 +1018,10 @@ export async function createWallet(page, options = {}) {
     const words = await readRecoveryPhrase(page);
     // Wording differs per shell again: the web app says "I have written
     // down...", the extension popup says "I've saved my recovery phrase."
-    await page.getByLabel(/written down|saved my recovery phrase/i).check();
+    // Scoped to the checkbox role: the row's 'About ...' help tip (U57) carries
+    // the same label and its help text says "written down", so getByLabel would
+    // match both and fail strict mode.
+    await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
     await completeRecoveryPhraseChallenge(page, words);
@@ -720,12 +1085,12 @@ export async function dismissIntroCarousel(page) {
 }
 
 /**
- * Acknowledges the Automatic Donation System notice shown at the end of
+ * Acknowledges the Automatic Donations notice shown at the end of
  * onboarding, then (by default) turns donations off in Settings.
  *
  * The notice informs; it does not ask (spec §36.1). It has one Continue
  * button and no decline, so `ads: 'off'` takes the walk a user would: Settings
- * -> Automatic Donation System -> the switch. `ads: 'on'` only continues.
+ * -> Automatic Donations -> the switch. `ads: 'on'` only continues.
  *
  * Tolerant by design, like dismissIntroCarousel: the notice lives in
  * the shared CreateWallet route the web shell uses, and the extension popup
@@ -750,7 +1115,7 @@ export async function dismissIntroCarousel(page) {
  * to the derivation.
  */
 export async function acknowledgeDonationNotice(page, ads = 'off', { waitForBalances = true } = {}) {
-    const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    const notice = page.getByRole('heading', { name: 'Automatic Donations', exact: true });
     const outcome = await Promise.race([
         notice.waitFor({ state: 'visible', timeout: KDF_STEP_MS }).then(() => 'notice'),
         createdWalletShell(page, waitForBalances)
@@ -782,22 +1147,50 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
 }
 
 /**
- * Turns the Automatic Donation System off the only way the wallet offers:
- * Settings -> Automatic Donation System. Ends back on Home.
+ * Opens Settings -> Network and Fees -> Automatic Donations. The screen walk
+ * (2b842b099) folded the donations row into the Network and Fees group, so it
+ * is no longer a row on the Settings list.
+ */
+export async function openAutomaticDonations(page) {
+    await openSettings(page);
+    await page.getByRole('button', { name: /^Network and Fees/ }).click();
+    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+}
+
+/**
+ * Backs out of a Settings page to the Settings list. Back pops one level, so a
+ * page inside a group takes two steps.
+ */
+export async function backToSettingsList(page) {
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true });
+    const list = page.getByRole('button', { name: /^Network and Fees/ });
+    for (let step = 0; step < 4; step++) {
+        await expect(back.or(list).first()).toBeVisible();
+        if (await list.isVisible()) return;
+        await back.click();
+    }
+    await expect(list).toBeVisible();
+}
+
+/**
+ * Turns automatic donations off the only way the wallet offers: Settings ->
+ * Network and Fees -> Automatic Donations -> Per transaction -> None (ruling
+ * 2026-11-14: one wallet-wide setting, no switch). Ends back on Home.
  */
 export async function turnOffDonations(page, { waitForBalances = true } = {}) {
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
-    await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
-    await expect(toggle).toBeVisible();
-    if (await toggle.isChecked()) {
-        // Click, not check(): the input is controlled by PERSISTED settings,
-        // so `checked` flips only once the vault write resolves.
-        await toggle.click();
-        await expect(toggle).not.toBeChecked();
+    await openAutomaticDonations(page);
+    const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
+    await expect(perTransaction).toBeVisible();
+    if (!/None/.test(await perTransaction.textContent())) {
+        await perTransaction.click();
+        await page.getByRole('option', { name: 'None', exact: true }).click();
+        // The trigger shows PERSISTED settings, so it reads None only once the
+        // vault write resolves.
+        await expect(perTransaction).toHaveText(/None/);
     }
-    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await expect(page.getByTestId('ads-hero')).toContainText('Automatic Donations off');
+    await backToSettingsList(page);
     if (await nav(page).count() > 0) await gotoSection(page, 'Home');
     else await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible();
@@ -810,7 +1203,18 @@ export function unlockButton(page) {
 
 /** Locks an unlocked wallet and waits for the locked screen. */
 export async function lockWallet(page) {
-    await lockButton(page).click();
+    // A Lock already on screen (sidebar foot, Home's card), otherwise the
+    // Wallet menu banner's.
+    let shown = null;
+    for (const button of await lockButton(page).all()) {
+        if (await button.isVisible().catch(() => false)) { shown = button; break; }
+    }
+    if (shown) {
+        await shown.click();
+    } else {
+        const menu = await openPaletteSearch(page, '');
+        await menu.getByRole('button', { name: /^Lock wallet$/ }).click();
+    }
     await expect(unlockButton(page)).toBeVisible();
 }
 
@@ -818,8 +1222,10 @@ export async function lockWallet(page) {
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
     await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
-    // Argon2id again: unlocking derives the master key. Same budget.
-    await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });
+    // Argon2id again: unlocking derives the master key. Same budget. The
+    // unlock resumes the last view, which need not be Home, so this waits for
+    // any unlocked screen rather than for Home's Lock button.
+    await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: KDF_STEP_MS });
 }
 
 /**

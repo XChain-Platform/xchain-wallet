@@ -15,8 +15,10 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'renameWallet.title': 'Rename wallet',
-    'renameWallet.name': 'Wallet name',
+    'renameWallet.title': 'Edit wallet',
+    'renameWallet.formTitle': 'Edit Wallet',
+    'renameWallet.name':'Wallet name',
+    'renameWallet.nameHelp': 'The name this wallet shows in the wallet picker and on the lock screen, kept on this device only.',
 };
 
 addEnglish(messages);

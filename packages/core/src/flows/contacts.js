@@ -19,7 +19,7 @@
 // on the extension's local storage for the popup, browser-backed
 // IndexedDB wrapper for the web shell, etc.).
 
-import { cleanContactName, createContact, validateContact } from '../schemas/contact.js';
+import { cleanContactName, createContact, isContactLook, validateContact } from '../schemas/contact.js';
 
 const contactMutationTails = new WeakMap();
 
@@ -38,7 +38,17 @@ export async function listContacts({ vault }) {
     // schema-checked, but older or externally restored storage can still hold
     // malformed data. Keep valid contacts available and leave repair of the
     // damaged rows to an explicit recovery path.
-    return rows.filter((row) => validateContact(row).ok).map(withCleanName);
+    return rows.map(withoutBadLook).filter((row) => validateContact(row).ok).map(withCleanName);
+}
+
+// A damaged tile look (a stored or restored row whose `look` fails the
+// schema) only costs the contact its look: it reads with the default tile
+// instead of dropping out of the address book. The stored row is left as
+// it is until the user saves the contact.
+function withoutBadLook(row) {
+    if (!row || typeof row !== 'object' || row.look === undefined || isContactLook(row.look)) return row;
+    const { look: _bad, ...rest } = row;
+    return rest;
 }
 
 // A record saved before names were cleaned can still carry invisible or

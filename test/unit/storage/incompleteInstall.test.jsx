@@ -121,10 +121,12 @@ describe('<VaultUnavailable kind="incomplete">', () => {
 
     it('says the data is incomplete and leads with Reset this wallet, not a retry', () => {
         mount({});
-        expect(screen.getByRole('heading', { name: t('vaultUnavailable.incomplete.title') })).toBeInTheDocument();
-        expect(screen.getByText(t('vaultUnavailable.incomplete.body'))).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: t('vaultUnavailable.incomplete.reset') })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: t('vaultUnavailable.title') })).toBeInTheDocument();
+        expect(screen.getByText((text) => text.includes(t('vaultUnavailable.incomplete.body')))).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Reset this wallet/ })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: t('common.tryAgain') })).not.toBeInTheDocument();
+        // No menu button is shown because no vault is open.
+        expect(screen.queryByRole('button', { name: /open menu/i })).not.toBeInTheDocument();
     });
 
     it('runs the shell reset behind the WIPE gate, then reloads the session', async () => {
@@ -132,9 +134,15 @@ describe('<VaultUnavailable kind="incomplete">', () => {
         const onRetry = vi.fn(async () => {});
         mount({ wipe, onRetry });
 
-        fireEvent.click(screen.getByRole('button', { name: t('vaultUnavailable.incomplete.reset') }));
+        fireEvent.click(screen.getByRole('button', { name: /^Reset this wallet/ }));
         const confirm = screen.getByRole('button', { name: t('vaultUnavailable.incomplete.reset') });
-        expect(confirm).toBeDisabled();
+        expect(confirm).toBeEnabled();
+        fireEvent.click(confirm);
+        expect(screen.getAllByRole('alert').some((alert) => (
+            alert.textContent.includes('Type WIPE exactly to continue.')
+        ))).toBe(true);
+        expect(wipe).not.toHaveBeenCalled();
+        expect(onRetry).not.toHaveBeenCalled();
         fireEvent.change(screen.getByLabelText(t('vaultUnavailable.wipeConfirm')), { target: { value: 'WIPE' } });
         fireEvent.click(confirm);
 
@@ -146,7 +154,7 @@ describe('<VaultUnavailable kind="incomplete">', () => {
     it('says so when the reset fails, and leaves the gate open to try again', async () => {
         const wipe = vi.fn(async () => { throw new Error('meta.json: EACCES'); });
         mount({ wipe, onRetry: vi.fn() });
-        fireEvent.click(screen.getByRole('button', { name: t('vaultUnavailable.incomplete.reset') }));
+        fireEvent.click(screen.getByRole('button', { name: /^Reset this wallet/ }));
         fireEvent.change(screen.getByLabelText(t('vaultUnavailable.wipeConfirm')), { target: { value: 'WIPE' } });
         fireEvent.click(screen.getByRole('button', { name: t('vaultUnavailable.incomplete.reset') }));
         expect(await screen.findByText(t('vaultUnavailable.incomplete.failed'))).toBeInTheDocument();

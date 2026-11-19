@@ -32,9 +32,29 @@
 // extension UI", used by the content-script relay and by every
 // background listener/port so the boundary is enforced identically.
 
-// Every public bridge handler name starts with this namespace. Anything
-// outside it is privileged and must never be invoked by a web origin.
-const PUBLIC_BRIDGE_PREFIX = 'bridge.';
+// The exact set of message types a web page may send. A `bridge.*` name is
+// not public by prefix alone: a handler registered under that namespace later
+// stays unreachable from a web sender until it is listed here on purpose.
+// The content-script relay keeps its own copy because it cannot import this
+// module; a unit test pins that copy and the registered `bridge.*` handlers to
+// this list.
+export const PUBLIC_BRIDGE_TYPES = Object.freeze([
+    'bridge.connect',
+    'bridge.disconnect',
+    'bridge.getAccounts',
+    'bridge.getAddresses',
+    'bridge.getBalances',
+    'bridge.getSupportedChains',
+    'bridge.getActiveChains',
+    'bridge.signMessage',
+    'bridge.signAction',
+    'bridge.signPsbt',
+    'bridge.coSign',
+    'bridge.signIn',
+    'bridge.parallel',
+]);
+
+const PUBLIC_BRIDGE_TYPE_SET = new Set(PUBLIC_BRIDGE_TYPES);
 
 /**
  * True when `type` is a public, web-reachable bridge message type.
@@ -43,7 +63,7 @@ const PUBLIC_BRIDGE_PREFIX = 'bridge.';
  * @returns {boolean}
  */
 export function isPublicBridgeType(type) {
-    return typeof type === 'string' && type.startsWith(PUBLIC_BRIDGE_PREFIX);
+    return typeof type === 'string' && PUBLIC_BRIDGE_TYPE_SET.has(type);
 }
 
 /**

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, gotoSection, mainButton, test, unlockedShell } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
 
 const PASSWORD = 'async-boundaries-123';
 const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -87,6 +87,7 @@ async function installRaceProbe(page) {
         const response = await route.fetch();
         const source = await response.text();
         const original = `    const handleSwitchWallet = (id, name) => {
+        if (id && id !== activeWalletId) nav.retain((view) => WALLET_SWITCH_KEEPS.has(view));
         setActiveAccountId(null);
         setActiveWalletId(id);
         if (id) writeActiveWallet(id, name || walletList.find((wallet) => wallet.id === id)?.name);
@@ -133,17 +134,8 @@ async function releaseHold(page) {
     });
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(palette).toBeVisible();
-    await palette.getByRole('combobox').fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(palette).toBeHidden();
-}
-
 async function addSecondWallet(page) {
-    await gotoPalette(page, 'Switch wallet');
+    await openWalletPicker(page);
     await page.getByRole('button', { name: 'Add wallet' }).click();
     await createWallet(page, {
         password: PASSWORD,
@@ -165,7 +157,9 @@ test('a double-tap on Send review starts one signing request', async ({ page }) 
     await mainButton(page, 'Send').click();
 
     const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled();
+    await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+    // A tap inside the review's 700 ms settle is dropped, so wait it out.
+    await page.waitForTimeout(900);
     await holdNext(page, 'action.send');
     await approve.evaluate((button) => {
         button.click();
@@ -173,7 +167,8 @@ test('a double-tap on Send review starts one signing request', async ({ page }) 
     });
 
     await waitForHold(page, 'action.send');
-    await expect(approve).toBeDisabled();
+    // Approve never looks disabled; a request in flight shows aria-busy.
+    await expect(approve).toHaveAttribute('aria-busy', 'true');
     expect(await page.evaluate(() => window.__xchainRaceProbe.calls['action.send'])).toBe(1);
     await releaseHold(page);
     await expect(page.getByRole('alert').first()).toBeVisible();
@@ -191,7 +186,7 @@ test('switching wallets while balances load never paints the previous wallet bal
     ));
     expect(firstWalletId).toBeTruthy();
     await page.evaluate((walletId) => window.__xchainE2ESwitchWallet(walletId), firstWalletId);
-    await expect(page.getByRole('region', { name: 'App header' })).toContainText('First Wallet');
+    await expect(page.getByRole('region', { name: 'First Wallet' })).toBeVisible();
     await expect(firstBtc).toContainText(FIRST_WALLET_BALANCE);
 
     const secondWalletId = await page.evaluate(() => (
@@ -200,15 +195,20 @@ test('switching wallets while balances load never paints the previous wallet bal
     expect(secondWalletId).toBeTruthy();
 
     await page.evaluate(({ walletId, oldBalance }) => {
+        // A saved read under five minutes old answers a switch with no request.
+        // Mark saved reads stale, as a broadcast does, so the switch reads and
+        // the race this test holds open exists.
+        localStorage.setItem('xc:balanceCache:staleAt', String(Date.now()));
         const probe = window.__xchainRaceProbe;
         probe.holdNext = 'balances.wallet';
         probe.holdWalletId = walletId;
         probe.balanceLeak = false;
         probe.balanceObserver = new MutationObserver(() => {
-            const identity = document.querySelector(
-                '[aria-label="App header"] [data-testid="wallet-identity"]',
-            );
-            if (identity?.textContent?.includes('Second Wallet')
+            // The Home hero is named by the active wallet's label.
+            const identity = [...document.querySelectorAll('section[aria-labelledby]')]
+                .map((hero) => document.getElementById(hero.getAttribute('aria-labelledby')))
+                .find((label) => label?.textContent?.includes('Second Wallet'));
+            if (identity
                 && document.body.textContent?.includes(oldBalance)) {
                 probe.balanceLeak = true;
             }
@@ -218,7 +218,7 @@ test('switching wallets while balances load never paints the previous wallet bal
     }, { walletId: secondWalletId, oldBalance: FIRST_WALLET_BALANCE });
 
     await waitForHold(page, 'balances.wallet');
-    await expect(page.getByRole('region', { name: 'App header' })).toContainText('Second Wallet');
+    await expect(page.getByRole('region', { name: 'Second Wallet' })).toBeVisible();
     await expect(page.getByText(FIRST_WALLET_BALANCE, { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => window.__xchainRaceProbe.balanceLeak)).toBe(false);
 
@@ -237,7 +237,9 @@ test('leaving Receive during generation does not paint its late address after re
     const initialAddress = await address.inputValue();
 
     await holdAfterNext(page, 'receive.getAddress');
-    await page.getByRole('button', { name: 'Generate new address' }).click();
+    await page.getByRole('button', { name: /^Generate new address/ }).click();
+    // The button opens the Add Addresses form; its submit starts the generation.
+    await page.getByRole('button', { name: 'Add Address', exact: true }).click();
     await waitForHold(page, 'after:receive.getAddress');
     const generatedAddress = await page.evaluate(
         () => window.__xchainRaceProbe.results['receive.getAddress'],

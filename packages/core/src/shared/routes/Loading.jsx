@@ -8,9 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { BootHeader } from '../components/BootHeader.jsx';
+import bootLogo from '../../branding/images/xchain-boot-logo-228.png?inline';
 import styles from './Loading.module.css';
 
 /**
@@ -29,20 +32,40 @@ export function Loading({ error, onRetry }) {
     }
 
     return (
-        <Screen variant={variant}>
+        <Screen
+            variant={variant}
+            header={error ? <BootHeader title={t('loading.failure.title')} /> : undefined}
+        >
             <div className={centerClass}>
                 {error ? (
-                    <div className={styles.errorPanel}>
-                        <h1 className={styles.title}>{t('loading.error.title')}</h1>
-                        <StatusMessage variant="error">{t('loading.error.body')}</StatusMessage>
-                        <p className={styles.nextStep}>{t('loading.error.recovery')}</p>
-                        <Button type="button" variant="primary" block onClick={handleRetry}>
-                            {t('common.tryAgain')}
-                        </Button>
-                    </div>
+                    <FormPage
+                        label={t('loading.failure.title')}
+                        onSubmit={(event) => event.preventDefault()}
+                    >
+                        <div className={styles.errorPanel}>
+                            {/* One message for the state: the next step rides in the
+                                same notice, never as a loose paragraph under it. */}
+                            <StatusMessage variant="error">
+                                {t('loading.error.body')}
+                            </StatusMessage>
+                            <ActionList label={t('vaultUnavailable.actions.label')}>
+                                <ActionListItem
+                                    icon={<Icon.RefreshIcon />}
+                                    onClick={handleRetry}
+                                    title={t('common.tryAgain')}
+                                />
+                            </ActionList>
+                        </div>
+                    </FormPage>
                 ) : (
-                    <div aria-live="polite" className={styles.dots}>
-                        <span /> <span /> <span />
+                    // The loading screen is only the fading logo and one
+                    // progress bar: no app bar and no page header (operator
+                    // 2026-11-15). The bar's accessible name is the only text.
+                    <div className={styles.boot} role="status" aria-label={t('loading.opening')}>
+                        <img className={styles.bootLogo} src={bootLogo} alt="" width="152" height="94" />
+                        <div className={styles.bootBar} role="progressbar" aria-label={t('loading.opening')}>
+                            <span className={styles.bootBarFill} />
+                        </div>
                     </div>
                 )}
             </div>

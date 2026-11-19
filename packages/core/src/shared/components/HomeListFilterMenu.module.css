@@ -1,0 +1,104 @@
+.wrap {
+    /* The touch control height in every shell, matching the framed
+       tab row beside it (Tabs.module.css) and the app bar. */
+    --xc-control-h-md: 44px;
+    /* The G112 field-icon insets resolve on :root from the root height, so
+       the panel's fields (search, sort) re-derive them from this one. */
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.trigger {
+    position: relative;
+    min-width: var(--xc-control-h-md);
+    width: var(--xc-control-h-md);
+    padding-inline: 0;
+    border-radius: var(--xc-control-radius);
+}
+
+/* A filter in effect tints the whole button (accent edge, icon and wash)
+   rather than a corner dot, which at phone size read as a stray mini x
+   beside the button. Tripled to outrank Button's secondary colours and the
+   page header's trailing-button rule (a class, an element and an attribute). */
+.triggerActive.triggerActive.triggerActive {
+    --xc-button-hover-bg: color-mix(in srgb, var(--xc-accent-primary) 20%, var(--xc-surface));
+    --xc-button-hover-border: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, var(--xc-surface));
+    color: var(--xc-accent-text);
+}
+
+.panel {
+    position: absolute;
+    z-index: var(--xc-z-dropdown);
+    top: calc(100% + var(--xc-space-2));
+    inset-inline-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    width: min(22rem, calc(100vw - 2 * var(--xc-space-4)));
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-popover);
+}
+
+@media (forced-colors: active) {
+    .triggerActive.triggerActive.triggerActive {
+        border-color: Highlight;
+    }
+}
+
+/* A dropdown opened inside the filter panel sits in the panel's own flow, so
+   the panel grows to show the whole list. NetworkFilter marks its popover
+   with data-listbox-popover, since Safari 16 has no :has(). */
+.panel :is([role='listbox'], [data-listbox-popover]) {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    margin-top: var(--xc-space-1);
+    box-shadow: none;
+}
+
+.panel [role='listbox'] [role='listbox'],
+.panel [data-listbox-popover] > [role='listbox'] {
+    margin-top: 0;
+}
+
+/* Phone and popup widths: the panel is centred across the screen, just
+   under its trigger (useFilterPanelTop sets the top), instead of hanging
+   off the trigger, where it ran past one edge or the other. */
+@media (max-width: 600px) {
+    .panel {
+        position: fixed;
+        top: var(--xc-filter-panel-top, calc(var(--xc-space-6) * 4));
+        inset-inline: 0;
+        margin-inline: auto;
+        width: calc(100vw - 2 * var(--xc-space-4));
+        max-width: 22rem;
+        max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-filter-panel-top, 0px) - var(--xc-space-4) - env(safe-area-inset-bottom, 0px));
+        overflow: auto;
+        box-sizing: border-box;
+    }
+}
+
+/* A plain blue bubble on the filter button's corner while a search
+   or a network narrows the list, ringed in the surface colour like the
+   bell's unread count, so a short list explains itself. */
+.filterBadge {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: calc(-1 * var(--xc-space-1));
+    inset-inline-end: calc(-1 * var(--xc-space-1));
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border: 2px solid var(--xc-surface);
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+    pointer-events: none;
+}

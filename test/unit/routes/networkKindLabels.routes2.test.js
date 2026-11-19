@@ -12,13 +12,14 @@ const routes = [
     'ContactsList',
     'ContractDetail',
     'ContractFundsForm',
-    'ContractStakeForm',
     'ContractsList',
     'ControllerBindForm',
     'CreateOrderForm',
     'CreatePollForm',
     'CrossChainOrderForm',
     'CrossChainSwapForm',
+    // The one Staking form, which absorbed the contract stake form.
+    'StakingForm',
 ];
 
 function routeSource(route) {
@@ -40,7 +41,7 @@ describe.each(routes)('%s network label rendering', (route) => {
         const routeOwnedRender = source
             .split('\n')
             // Validation messages may name the chain; they are not rendered labels.
-            .filter((line) => !line.includes('chainLabel=') && !line.includes('aria-label=') && !line.includes('setFormError('))
+            .filter((line) => !line.includes('chainLabel=') && !line.includes('aria-label=') && !line.includes('setFormError(') && !line.includes('Receive address on '))
             .join('\n');
 
         expect(source).not.toMatch(/['"`]([^'"`]*(?:regtest|testnet|not mainnet)[^'"`]*)['"`]/i);

@@ -12,11 +12,9 @@
 // (§40.13).
 //
 // Asserts:
-//   1. Onboarding surfaces three entries: Create / Import / "Coming
-//      from FreeWallet"; the third routes via onImportFromFreeWallet.
-//   2. ImportWallet accepts a `variant="freewallet"` prop that
-//      rebrands the title/copy, pre-sets the wallet name to
-//      "FreeWallet", and tightens the word-count validator to 12.
+//   1. Onboarding has one Import entry and no separate FreeWallet button.
+//   2. ImportWallet offers a Wallet type IconSelect. The legacy
+//      `variant="freewallet"` route preselects FreeWallet / PartyWallet there.
 //   3. MigrateToBip39.jsx exists, exports a single component, runs
 //      through setup, phrase backup, verification, persistence, and
 //      sweep review, reuses IssueTokenForm CSS, and adds the wallet.
@@ -25,8 +23,7 @@
 //      onMigrateToBip39 is supplied; Home and the web menu build from it.
 //   5. All three shells: App.jsx imports MigrateToBip39, tracks the
 //      'migrate-bip39' sub-route + 'import-freewallet' onboarding
-//      step, wires onImportFromFreeWallet on Onboarding, wires
-//      onMigrateToBip39 on Home.
+//      step and wires onMigrateToBip39 on Home.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -42,11 +39,11 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-// --- 1. Onboarding 3rd entry ----------------------------------------
+// --- 1. One onboarding import entry ---------------------------------
 
-const onboarding = readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8');
-assert.ok(/onImportFromFreeWallet/.test(onboarding), 'Onboarding declares onImportFromFreeWallet prop');
-assert.ok(/From FreeWallet/.test(onboarding), 'Onboarding renders "From FreeWallet" label');
+const onboarding = withEnglishCopy(readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8'));
+assert.ok(!/onImportFromFreeWallet/.test(onboarding), 'Onboarding has no separate FreeWallet callback');
+assert.ok(!/freeWalletButton/.test(onboarding), 'Onboarding has no separate FreeWallet button');
 
 // --- 2. ImportWallet freewallet variant ------------------------------
 
@@ -56,22 +53,25 @@ assert.ok(
     'ImportWallet accepts a variant prop defaulting to "default"',
 );
 assert.ok(
-    /isFreeWallet\s*=\s*importVariant\s*===\s*['"]freewallet['"]/.test(importWallet),
-    'ImportWallet derives isFreeWallet from variant prop',
+    /importVariant\s*===\s*['"]freewallet['"]\s*\?\s*['"]freewallet['"]\s*:\s*['"]bip39['"]/.test(importWallet),
+    'ImportWallet maps the old route to the FreeWallet wallet type',
 );
-assert.ok(/Import from FreeWallet/.test(importWallet), 'ImportWallet renders FreeWallet branded title');
-assert.ok(/12-word FreeWallet recovery phrase/.test(importWallet), 'ImportWallet renders FreeWallet branded subtitle');
+assert.ok(/<IconSelect[\s\S]*label="Wallet type"/.test(importWallet), 'ImportWallet renders the Wallet type IconSelect');
+for (const type of ["'bip39'", "'freewallet'"]) {
+    assert.ok(importWallet.includes(`value: ${type}`), `ImportWallet offers ${type} wallet type`);
+}
+assert.ok(!importWallet.includes("value: 'counterwallet'"), 'ImportWallet has no duplicate Counterwallet wallet type');
 assert.ok(
-    /acceptedWordCounts\s*=\s*isFreeWallet\s*\?\s*\[12\]/.test(importWallet),
-    'ImportWallet tightens word-count validator to 12 in FreeWallet mode',
+    /acceptedWordCounts\s*=\s*isLegacyType\s*\?\s*\[12\]/.test(importWallet),
+    'ImportWallet tightens legacy wallet types to 12 words',
 );
 assert.ok(
-    /isFreeWallet\s*\?\s*['"]FreeWallet['"]/.test(importWallet),
-    'ImportWallet defaults wallet name to "FreeWallet" in FreeWallet mode',
+    /defaultWalletName\s*=\s*['"]Imported Wallet['"]/.test(importWallet),
+    'ImportWallet keeps the standard imported wallet name for every type',
 );
 
 // The variant is the same route as a plain import, so it ends where every
-// import ends: on the Automatic Donation System notice, whose Continue is the
+// import ends: on the Automatic Donations notice, whose Continue is the
 // only thing that calls onImported (ads-onboarding-notice.smoke.js pins the
 // rest).
 assert.ok(
@@ -92,9 +92,11 @@ assert.equal(
     'MigrateToBip39.jsx only exports the component',
 );
 assert.ok(/IssueTokenForm\.module\.css/.test(migrate), 'MigrateToBip39 reuses IssueTokenForm CSS');
-for (const stage of ['explain', 'create', 'backup', 'verify', 'submitting', 'done']) {
+// Upgrade lands on its first real step: there is no intro (explain) stage.
+for (const stage of ['create', 'backup', 'verify', 'submitting', 'done']) {
     assert.ok(migrate.includes(`'${stage}'`), `MigrateToBip39 tracks stage "${stage}"`);
 }
+assert.ok(!migrate.includes("'explain'"), 'MigrateToBip39 has no intro stage in front of its first step');
 // This wizard runs on a device that ALREADY holds the legacy wallet, so the
 // fresh-install `wallet.create` handler refuses it outright ("a wallet
 // already exists"). It must persist through the add path instead.
@@ -127,8 +129,10 @@ assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip3
 // --- 4. Home legacy alert -------------------------------------------
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/onMigrateToBip39/.test(home), 'Home.jsx accepts onMigrateToBip39 prop');
-// The legacy alert is defined once in core and built by Home and the web menu.
+// Home takes no migration prop; the legacy alert reaches the user through the
+// menu's Alerts panel each shell builds, and through Wallet details.
+assert.ok(!/onMigrateToBip39/.test(home), 'Home.jsx takes no onMigrateToBip39 prop');
+// The legacy alert is defined once in core and built by each shell's menu.
 const walletAlerts = readFileSync(join(core, 'src', 'shared', 'walletAlerts.js'), 'utf8');
 assert.ok(
     /activeWallet\?\.format\s*===\s*['"]counterwallet-legacy['"]/.test(walletAlerts),
@@ -136,11 +140,17 @@ assert.ok(
 );
 assert.ok(/legacy-format/.test(walletAlerts), 'walletAlerts.js registers the legacy-format alert entry');
 assert.ok(/onMigrateToBip39/.test(walletAlerts), 'walletAlerts.js arms the legacy alert with onMigrateToBip39');
-assert.ok(/buildWalletAlerts\(/.test(home), 'Home.jsx builds its alerts from walletAlerts.js');
-assert.ok(
-    /buildWalletAlerts\(/.test(readFileSync(join(web, 'src', 'App.jsx'), 'utf8')),
-    'web App.jsx builds the menu Alerts panel from walletAlerts.js',
-);
+for (const [shell, appPath] of [
+    ['popup', join(ext, 'src', 'popup', 'App.jsx')],
+    ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
+]) {
+    const shellSrc = readFileSync(appPath, 'utf8');
+    assert.ok(
+        /buildWalletAlerts\(\{[^}]*\},\s*\{[\s\S]*?onMigrateToBip39: \(\) => setUnlockedView\('migrate-bip39'\)/.test(shellSrc),
+        `${shell} App.jsx builds the menu Alerts panel from walletAlerts.js and arms the legacy alert`,
+    );
+}
 
 // --- 5. Three-shell App.jsx wiring ----------------------------------
 
@@ -164,12 +174,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx renders ImportWallet with variant="freewallet"`,
     );
     assert.ok(
-        /onImportFromFreeWallet=\{\s*\(\)\s*=>\s*setOnboardingStep\(['"]import-freewallet['"]\)\s*\}/.test(app),
-        `${shell} App.jsx wires Onboarding.onImportFromFreeWallet`,
-    );
-    assert.ok(
-        /onMigrateToBip39=\{/.test(app),
-        `${shell} App.jsx threads onMigrateToBip39 to Home`,
+        /<WalletDetails[\s\S]*?onMigrateToBip39=\{/.test(app),
+        `${shell} App.jsx threads onMigrateToBip39 to Wallet details`,
     );
     assert.ok(
         /unlockedView\s*===\s*['"]migrate-bip39['"]/.test(app),
@@ -178,5 +184,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 verified-backup wizard + shared legacy alert + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
+    'OK: freewallet migration smoke (one onboarding import entry + ImportWallet wallet type + legacy deep route + MigrateToBip39 verified-backup wizard + shared legacy alert + unlocked sub-route)',
 );

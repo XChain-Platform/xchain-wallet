@@ -36,13 +36,15 @@ import { flows } from '@xchain-wallet/core';
 import { CapacitorGuardBackend } from './CapacitorStorageBackend.js';
 import { usingNativeVault } from './backends.js';
 
-const SLOTS = /** @type {const} */ (['lockout', 'duress', 'panic']);
+const SLOTS = /** @type {const} */ (['lockout', 'duress', 'panic', 'erase']);
 
 /** The localStorage keys this store supersedes, in slot order. */
 const LEGACY_KEYS = {
     lockout: flows.LOCKOUT_STORAGE_KEY,
     duress: flows.DURESS_STORAGE_KEY,
     panic: flows.PANIC_STORAGE_KEY,
+    // Forgot Password's 48-hour erase hold (flows/eraseSchedule.js).
+    erase: flows.ERASE_SCHEDULE_STORAGE_KEY,
 };
 
 /** @type {Record<string, unknown> | null} */
@@ -110,7 +112,7 @@ function dropLegacyRecords(slots) {
  * panic mode can report a freeze that is not saved; the shared chain carries
  * on past the refusal so the next write is not stuck behind it.
  *
- * @param {'lockout'|'duress'|'panic'} slot
+ * @param {'lockout'|'duress'|'panic'|'erase'} slot
  */
 function viewFor(slot) {
     const mutate = (value) => {
@@ -125,6 +127,16 @@ function viewFor(slot) {
     };
     return {
         load: async () => (cache ? cache[slot] ?? null : null),
+        // The slot as the native store holds it now, not this boot's cache:
+        // `mutate` updates the cache before its save lands, so only a read of
+        // the store itself shows a clear that never landed, or a write from
+        // another context. A due erase reads this before it runs.
+        reload: async () => {
+            if (!backend) return null;
+            await writeChain;
+            const fresh = await backend.load();
+            return (fresh && typeof fresh === 'object') ? fresh[slot] ?? null : null;
+        },
         save: (value) => mutate(value),
         clear: () => mutate(undefined),
     };
@@ -156,7 +168,11 @@ export async function installNativeGuardPersistence() {
         // The slot is unreadable. Fall back to leaving the flows on
         // localStorage rather than switching them to a store that cannot
         // answer: an inert duress passphrase is worse than an evictable one.
+        // The erase hold is the exception: the record that decides it (and
+        // any cancel of it) is in the slot this boot cannot read, so a
+        // localStorage copy must not trigger an erase. None runs this boot.
         backend = null;
+        flows.markEraseGuardUnavailable();
         return false;
     }
 
@@ -176,6 +192,7 @@ export async function installNativeGuardPersistence() {
     await flows.configureLockoutPersistence(viewFor('lockout'));
     await flows.configureDuressPersistence(viewFor('duress'));
     await flows.configurePanicModePersistence(viewFor('panic'));
+    await flows.configureEraseSchedulePersistence(viewFor('erase'));
     return true;
 }
 

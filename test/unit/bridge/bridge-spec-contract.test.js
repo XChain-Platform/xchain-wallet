@@ -56,6 +56,12 @@ function interfaceBody(name) {
     return SPEC_SOURCE.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
 }
 
+function interfaceFieldNames(name) {
+    return [...interfaceBody(name).matchAll(/^ {4}(\w+)\??:/gm)]
+        .map((match) => match[1])
+        .sort();
+}
+
 const DESCRIPTORS = {
     [CHAIN]: { id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' },
     'bitcoin-mainnet': { id: 'bitcoin-mainnet', coin: 'bitcoin', networkKind: 'mainnet' },
@@ -267,6 +273,7 @@ describe('Connect reads the option names ConnectOpts publishes', () => {
         });
         expect(resp.result.version).toBe('0.1.0');
         expect(resp.result.supportedVersions).toEqual(['0.1.0']);
+        expect(Object.keys(resp.result).sort()).toEqual(interfaceFieldNames('ConnectSuccess'));
     });
 });
 

@@ -10,7 +10,6 @@ import {
     render,
     screen,
 } from '@testing-library/react';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { DemoExitConfirm } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
@@ -109,7 +108,7 @@ describe('DemoExitConfirm keyboard contract', () => {
         );
         const opener = await openDialog();
         const cancel = screen.getByRole('button', { name: 'Cancel' });
-        const confirm = screen.getByRole('button', { name: 'Exit demo & wipe' });
+        const confirm = screen.getByRole('button', { name: 'Exit Demo & Wipe' });
 
         expect(cancel).toHaveFocus();
         confirm.focus();
@@ -153,47 +152,6 @@ describe('NoticeModal keyboard contract', () => {
 
         activateFromKeyboard(screen.getByRole('button', { name: 'OK' }));
 
-        expect(onClose).toHaveBeenCalledOnce();
-    });
-});
-
-describe('AlertsOverlay keyboard contract', () => {
-    const alerts = [{
-        id: 'upgrade',
-        severity: 'warning',
-        title: 'Upgrade recovery phrase',
-        message: 'Upgrade before continuing.',
-        action: { label: 'Upgrade', onSelect: vi.fn() },
-    }];
-
-    it('focuses Close, wraps Tab, and restores the opener after Escape', async () => {
-        render(
-            <DialogHost renderDialog={(close) => (
-                <AlertsOverlay alerts={alerts} onClose={close} />
-            )} />,
-        );
-        const opener = await openDialog();
-        const close = screen.getByRole('button', { name: 'Close alerts' });
-        const primary = screen.getByRole('button', { name: 'Upgrade' });
-
-        expect(opener).toHaveAttribute('inert');
-        expect(close).toHaveFocus();
-        primary.focus();
-        fireEvent.keyDown(primary, { key: 'Tab' });
-        expect(close).toHaveFocus();
-        fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
-        expect(primary).toHaveFocus();
-        await escapeDialog(opener);
-    });
-
-    it('runs the primary alert action once for one Enter activation', () => {
-        const onSelect = vi.fn();
-        const onClose = vi.fn();
-        render(<AlertsOverlay alerts={[{ ...alerts[0], action: { label: 'Upgrade', onSelect } }]} onClose={onClose} />);
-
-        activateFromKeyboard(screen.getByRole('button', { name: 'Upgrade' }));
-
-        expect(onSelect).toHaveBeenCalledOnce();
         expect(onClose).toHaveBeenCalledOnce();
     });
 });
@@ -243,45 +201,26 @@ describe('GatedFileViewer keyboard contract', () => {
     });
 });
 
-describe('BottomTabBar modal sheet keyboard contract', () => {
-    it('focuses the first choice, wraps Tab, and returns focus to More on Escape', async () => {
-        render(
-            <>
-                <button type="button">Outside sheet</button>
-                <BottomTabBar
-                    currentView="home"
-                    onSelect={() => {}}
-                    onLock={() => {}}
-                />
-            </>,
-        );
-        const more = screen.getByRole('button', { name: 'More' });
-        more.focus();
-        fireEvent.click(more);
-        await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
-        const first = screen.getByRole('button', { name: 'Close more navigation' });
-        const last = screen.getByRole('button', { name: 'Lock wallet' });
+describe('BottomTabBar keyboard contract', () => {
+    it('moves roving focus without opening a modal', () => {
+        render(<BottomTabBar currentView="home" onSelect={() => {}} />);
+        const home = screen.getByRole('button', { name: 'Home' });
+        const send = screen.getByRole('button', { name: 'Send' });
+        home.focus();
 
-        expect(screen.getByRole('button', { name: 'Outside sheet' })).toHaveAttribute('inert');
-        expect(first).toHaveFocus();
-        last.focus();
-        fireEvent.keyDown(last, { key: 'Tab' });
-        expect(first).toHaveFocus();
-        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
-        expect(last).toHaveFocus();
-        fireEvent.keyDown(window, { key: 'Escape' });
-        await act(async () => {});
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
+        fireEvent.keyDown(home, { key: 'ArrowRight' });
+
+        expect(send).toHaveFocus();
+        expect(screen.queryByRole('dialog')).toBeNull();
     });
 
     it('runs one navigation action for one Enter activation', () => {
         const onSelect = vi.fn();
         render(<BottomTabBar currentView="home" onSelect={onSelect} />);
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
         activateFromKeyboard(screen.getByRole('button', { name: 'Receive' }));
 
         expect(onSelect).toHaveBeenCalledOnce();
+        expect(onSelect).toHaveBeenCalledWith('receive');
     });
 });

@@ -3,6 +3,8 @@
     --xc-control-font-size: var(--xc-control-font-md, 14px);
     --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
     --xc-control-icon-size: var(--xc-control-icon-md, 20px);
+    /* G112: an in-field icon button sits in a square slot (tokens.css). */
+    --xc-control-action-inset: var(--xc-field-action-inset-md);
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -13,6 +15,7 @@
     --xc-control-font-size: var(--xc-control-font-sm, 13px);
     --xc-control-padding-x: var(--xc-control-pad-x-sm, 8px);
     --xc-control-icon-size: var(--xc-control-icon-sm, 16px);
+    --xc-control-action-inset: var(--xc-field-action-inset-sm);
 }
 
 .md {
@@ -20,6 +23,7 @@
     --xc-control-font-size: var(--xc-control-font-md, 14px);
     --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
     --xc-control-icon-size: var(--xc-control-icon-md, 20px);
+    --xc-control-action-inset: var(--xc-field-action-inset-md);
 }
 
 .lg {
@@ -27,6 +31,7 @@
     --xc-control-font-size: var(--xc-control-font-lg, 16px);
     --xc-control-padding-x: var(--xc-control-pad-x-lg, 16px);
     --xc-control-icon-size: var(--xc-control-icon-lg, 24px);
+    --xc-control-action-inset: var(--xc-field-action-inset-lg);
 }
 
 .label {
@@ -34,6 +39,46 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 500;
+}
+
+/* The row keeps optional state, help and counters aligned with the label. */
+.labelRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-block-end: var(--xc-label-gap);
+}
+
+.labelRow > .label {
+    margin-block-end: 0;
+    min-width: 0;
+}
+
+.labelHelp {
+    flex: none;
+    /* The row gap (space-2) also separates the pill and counter, so the tip
+       trims it down to the shared label-to-help gap. */
+    margin-inline-start: calc(var(--xc-label-help-gap) - var(--xc-space-2));
+}
+
+.labelRow > .counter {
+    flex: none;
+    margin-inline-start: auto;
+}
+
+.optionalPill {
+    flex: none;
+    padding-inline: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-badge-radius);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
 }
 
 .input {
@@ -100,25 +145,40 @@
     position: relative;
 }
 
-/* A revealable password field keeps its show and hide button inside the
-   border, so the text stops short of the button instead of running under it. */
-.controlHitArea > .revealableInput {
-    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
+/* In-field actions share one trailing container, and the control reserves
+   enough inline space to keep its value clear of every action: the slot
+   inset, the buttons, and one icon gap before the text. */
+.controlHitArea > .inputWithFieldAction {
+    padding-inline-end: calc(var(--xc-control-action-inset) + var(--xc-tap-min) + var(--xc-field-icon-gap));
 }
 
-.revealToggle {
-    --xc-icon-size: var(--xc-icon-md);
+.controlHitArea > .inputWithTwoFieldActions {
+    padding-inline-end: calc(var(--xc-control-action-inset) + var(--xc-tap-min) * 2 + var(--xc-space-1) + var(--xc-field-icon-gap));
+}
+
+/* G112: the action box sits as far from the end edge as from the top and
+   bottom, so the icon centred in it does too, matching the Network field's
+   caret above it. */
+.controlActions {
     position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    /* This half-grid inset keeps the toggle centered inside the input border. */
-    inset-inline-end: 2px;
-    top: 50%;
+    z-index: calc(var(--xc-z-base) + 2);
+    inset-inline-end: var(--xc-control-action-inset);
+    inset-block-start: 50%;
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
-    min-height: var(--xc-control-h-sm);
+    gap: var(--xc-space-1);
+}
+
+.revealToggle {
+    --xc-icon-size: var(--xc-icon-md);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--xc-tap-min);
+    min-block-size: var(--xc-tap-min);
     padding: 0;
     color: var(--xc-text-muted);
     background: transparent;
@@ -134,6 +194,19 @@
 .revealToggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
     outline-offset: 0;
+}
+
+/* Show and hide is a bare icon like every in-field action (FieldIconButton):
+   a transparent 44px target on touch, no visible box. */
+@media (pointer: coarse), (hover: none) {
+    .revealToggle::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inline-size: max(100%, var(--xc-control-hit-min, 24px));
+        block-size: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 /* A disabled field draws the shared disabled colours, like a disabled Button. */
@@ -214,8 +287,32 @@
     min-width: 0;
 }
 
+/* G112: a textarea's icon action sits in the same square slot as an Input's,
+   pinned to the first line: as far from the top as from the end, so a
+   one-line memo centres it exactly like a single-line field. */
+.textareaFieldAction {
+    inset-block-start: var(--xc-control-action-inset);
+    inset-inline-end: var(--xc-control-action-inset);
+    transform: none;
+}
+
+/* The text keeps clear of the trailing icon action. */
+.textareaControl > .inputWithFieldAction {
+    padding-inline-end: calc(var(--xc-control-action-inset) + var(--xc-tap-min) + var(--xc-field-icon-gap));
+}
+
 .textareaWithActions {
     padding-block-end: calc(var(--xc-control-h-sm) + var(--xc-space-1) * 2);
+}
+
+/* An auto-growing textarea (the memo) is one line at an Input's height when
+   empty: the block padding centres one text line in the control height,
+   less the 1px border on each side (a quarter of --xc-space-1). Its script
+   grows it to a few lines, then it scrolls. */
+.textareaAutoGrow {
+    min-height: var(--xc-control-height);
+    padding-block: calc((var(--xc-control-height) - var(--xc-control-font-size) * var(--xc-control-line, 1.25)) / 2 - var(--xc-space-1) / 4);
+    overflow-y: hidden;
 }
 
 .textareaActions {
@@ -234,16 +331,20 @@
     white-space: nowrap;
 }
 
-.invalid {
+/* A field with a problem: a red border only, no fill (the form error
+   standard). A field the form's error notice names gets aria-invalid even
+   when it shows no line of its own, and is outlined the same way. */
+.invalid,
+.input[aria-invalid='true'] {
     border-color: var(--xc-danger);
 }
-.invalid:focus {
+.invalid:focus,
+.input[aria-invalid='true']:focus {
     box-shadow: 0 0 0 3px var(--xc-danger-bg);
 }
 
 .hint {
     margin-block-start: var(--xc-help-gap);
-    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -254,7 +355,7 @@
     align-items: flex-start;
     gap: var(--xc-space-1);
     max-width: var(--xc-prose-max-width);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     line-height: 1.4;
     color: var(--xc-danger-fg);
     overflow-wrap: anywhere;
@@ -277,10 +378,14 @@
 }
 
 .counter {
-    margin-block-start: var(--xc-help-gap);
-    align-self: flex-end;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    white-space: nowrap;
+}
+
+.field > .counter {
+    margin-block-start: var(--xc-help-gap);
+    align-self: flex-end;
 }
 
 .capsLock {

@@ -8,7 +8,11 @@
 // fee stop at Review: a rate above the chain ceiling never reaches compose
 // (where it would price the carrier at that rate), and a rate the form cannot
 // price never composes at the encoder's default while the field shows the
-// typed rate. The refusal shows once, under the fee field.
+// typed rate. The refusal shows once, under the fee field. The custom fee is
+// typed into the one editor, the Network fee line (G113), as the fee the
+// named rate prices to; a rate with more than 8 decimals can no longer be
+// typed there (the fee converts to a rate of 8 places), so that refusal is
+// pinned on customFeeReviewStop itself.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -22,7 +26,7 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
             type="button"
             onClick={() => onSelect({
                 chainId: 'bitcoin-mainnet',
-                tick: title.includes('give') ? pickerSelection.give : pickerSelection.get,
+                tick: /give/i.test(title) ? pickerSelection.give : pickerSelection.get,
             })}
         >
             Choose {title}
@@ -36,8 +40,11 @@ import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx'
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
+// The stake-form route: the one Staking form on validator staking.
+import { NetworkStakeRoute as StakeForm } from '../../helpers/stakingFormRoutes.jsx';
+import { typeCustomRate as typeCustomFeeForRate } from '../../helpers/customNetworkFee.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { customFeeReviewStop } from '../../../packages/core/src/flows/feeEstimate.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -125,7 +132,7 @@ const FORMS = [
             await screen.findByText(/available to mint/);
             fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '10' } });
         },
-        review: () => screen.getByRole('button', { name: /^(Mint|Preview)$/ }),
+        review: () => screen.getByRole('button', { name: 'Mint' }),
     },
     {
         name: 'Issue',
@@ -134,13 +141,13 @@ const FORMS = [
         messaging: { getTokenInfo: vi.fn().mockResolvedValue(null) },
         async fill(messaging) {
             fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'OWNED' } });
-            fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
+            fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
             // Review holds a submit until the ticker availability lookup settles.
             await waitFor(() => expect(messaging.getTokenInfo)
                 .toHaveBeenCalledWith(expect.objectContaining({ tick: 'OWNED' })), { timeout: 2000 });
             await drain();
         },
-        review: () => screen.getByRole('button', { name: 'Issue token' }),
+        review: () => screen.getByRole('button', { name: 'Issue Token' }),
     },
     {
         name: 'Dispenser',
@@ -151,7 +158,7 @@ const FORMS = [
             fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
         },
-        review: () => screen.getByRole('button', { name: 'Create' }),
+        review: () => screen.getByRole('button', { name: 'Create Dispenser' }),
     },
     {
         name: 'Swap',
@@ -159,11 +166,11 @@ const FORMS = [
         async fill() {
             await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
             fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-            fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
             fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
             fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
         },
-        review: () => screen.getByRole('button', { name: 'Review' }),
+        review: () => screen.getByRole('button', { name: 'Create Swap' }),
     },
     {
         name: 'Stake',
@@ -172,13 +179,19 @@ const FORMS = [
             fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
             fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: 'a'.repeat(64) } });
         },
-        review: () => screen.getByRole('button', { name: /^(Stake|Preview)$/ }),
+        review: () => screen.getByRole('button', { name: /^(Stake|Review stake)$/ }),
     },
 ];
 
 async function typeCustomRate(value) {
-    fireEvent.change(await screen.findByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-    fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value } });
+    // The fee selector sits in the collapsed Network fee row; open it in place.
+    const toggle = await waitFor(() => {
+        const found = document.querySelector('[data-form-section="fee"] [data-form-section-toggle]');
+        expect(found).toBeTruthy();
+        return found;
+    });
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+    await typeCustomFeeForRate(value);
 }
 
 function feedbackText() {
@@ -186,12 +199,21 @@ function feedbackText() {
         .map((node) => node.textContent).join(' | ');
 }
 
+describe('customFeeReviewStop decimals', () => {
+    it('stops a custom rate with more than 8 decimals that reaches a form', () => {
+        expect(customFeeReviewStop({
+            feePick: { mode: 'custom', customRate: '5.123456789' },
+            tiers: { unit: 'sat/vB', minimumRate: 1, maximumRate: 1000 },
+            estimate: { rateValue: 5.123456789 },
+        })).toEqual({ formError: null });
+    });
+});
+
 describe.each(FORMS)('$name custom network fee at Review', (form) => {
     it.each([
         ['above the chain ceiling', '50000', /no higher than 1,000/gi],
-        ['empty', '', /enter a custom fee rate/gi],
-        ['with more than 8 decimals', '5.123456789', /at most 8 decimal places/gi],
-    ])('refuses a custom rate %s before compose and names it once', async (_label, rate, message) => {
+        ['empty', '', /enter a custom network fee/gi],
+    ])('refuses a custom fee %s before compose and names it once', async (_label, rate, message) => {
         const { messaging, composeForConfirm } = messagingWith(form.messaging);
         mount(form.element, messaging);
         await form.fill(messaging);

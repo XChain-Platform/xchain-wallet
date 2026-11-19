@@ -48,12 +48,10 @@ async function expectTab(user, element) {
     expect(document.activeElement).toBe(element);
 }
 
-async function tabToStakeMore(user) {
-    for (const name of ['Back to staking', 'Claim', 'Unstake', 'Delegate', 'More']) {
-        // The truncated staking address after Back reveals its full value on focus.
-        if (name === 'Claim') await expectTab(user, screen.getByLabelText(ADDRESS));
-        await expectTab(user, screen.getByRole('button', { name }));
-    }
+// Tab forward until `element` has focus, failing after `limit` stops.
+async function tabTo(user, element, limit = 15) {
+    for (let i = 0; i < limit && document.activeElement !== element; i += 1) await user.tab();
+    expect(document.activeElement).toBe(element);
 }
 
 beforeEach(() => {
@@ -88,14 +86,9 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
-        await expectTab(user, screen.getByRole('button', { name: 'Refresh payments' }));
-        await user.keyboard('{Enter}');
-        expect(obligationState.refresh).toHaveBeenCalledOnce();
-
-        // The truncated payee and paying addresses are tab stops that reveal the full value.
-        await expectTab(user, screen.getByLabelText('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'));
-        await expectTab(user, screen.getByLabelText(ADDRESS));
-        await expectTab(user, screen.getByRole('button', { name: 'Pay now' }));
+        // The filter icon sits in the header, then the whole row is one tab stop.
+        await expectTab(user, screen.getByRole('button', { name: 'Filter payments due' }));
+        await expectTab(user, screen.getByRole('button', { name: /^Buying tokens, Pay 0\.5 / }));
         await user.keyboard('{Enter}');
         expect(onPay).toHaveBeenCalledWith({
             chainId: CHAIN_ID,
@@ -130,14 +123,28 @@ describe('N through S route keyboard flows', () => {
         await user.type('Savings');
         expect(name).toHaveValue('Savings');
 
-        // Back leads the page, then the field, then Save closes the form.
+        // One flat form: Back leads the page, then the field's help tip, the
+        // field, the look controls (colour, shape, image), and Save Changes
+        // closes the form. No section headers sit in between.
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Account name' }));
         await user.tab({ shift: true });
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to previous screen' }));
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
+        await expectTab(user, screen.getByRole('button', { name: 'About Account name' }));
         await expectTab(user, name);
-        await expectTab(user, screen.getByRole('button', { name: 'Save' }));
+        // The look controls come next, all inside the one flat form.
+        const flatForm = document.querySelector('[data-flat-look-form]');
+        const save = screen.getByRole('button', { name: 'Save Changes' });
+        for (let step = 0; step < 20 && document.activeElement !== save; step += 1) {
+            await user.tab();
+            if (document.activeElement !== save) {
+                expect(flatForm.contains(document.activeElement)).toBe(true);
+            }
+        }
+        expect(document.activeElement).toBe(save);
         await user.keyboard('{Enter}');
         await waitFor(() => expect(onRenamed).toHaveBeenCalledWith({
             id: 'account-1',
@@ -159,12 +166,13 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
+        await expectTab(user, screen.getByRole('button', { name: 'About Or paste it here' }));
         const paste = screen.getByLabelText('Or paste it here');
         await expectTab(user, paste);
         await user.type(ADDRESS);
         expect(paste).toHaveValue(ADDRESS);
 
-        await expectTab(user, screen.getByRole('button', { name: 'Use pasted text' }));
+        await expectTab(user, screen.getByRole('button', { name: 'Use Pasted Text' }));
         await user.keyboard('{Enter}');
         expect(onClassified).toHaveBeenCalledWith({
             kind: 'send',
@@ -173,7 +181,7 @@ describe('N through S route keyboard flows', () => {
         });
     });
 
-    it('operates every Stake detail action and returns focus when Escape closes More', async () => {
+    it('operates every Stake detail action row in order from the keyboard', async () => {
         const user = userEvent.setup();
         const actions = {
             onBack: vi.fn(),
@@ -181,7 +189,6 @@ describe('N through S route keyboard flows', () => {
             onUnstake: vi.fn(),
             onDelegate: vi.fn(),
             onRevokeDelegation: vi.fn(),
-            onOpenOperatorDashboard: vi.fn(),
         };
         const messaging = {
             getStakesForAddress: vi.fn().mockResolvedValue([
@@ -207,48 +214,38 @@ describe('N through S route keyboard flows', () => {
             messaging,
         );
 
-        await screen.findByRole('button', { name: 'Claim' });
-        const orderedActions = [
-            ['Back to staking', actions.onBack],
-            ['Claim', actions.onClaimRewards],
+        await screen.findByRole('button', { name: /^Claim\b/ });
+        await expectTab(user, screen.getByRole('button', { name: 'Back to staking' }));
+        await user.keyboard('{Enter}');
+        expect(actions.onBack).toHaveBeenCalledOnce();
+
+        // The Actions tab is the selected one, and its action rows follow it
+        // in the approved order. Add stake has no handler here, so it is a
+        // disabled row: still a tab stop that says why, and Enter does nothing.
+        const actionsTab = screen.getByRole('tab', { name: 'Actions' });
+        expect(actionsTab).toHaveAttribute('aria-selected', 'true');
+        await tabTo(user, actionsTab);
+        const addStake = screen.getByRole('button', { name: /^Add stake\b/ });
+        await expectTab(user, addStake);
+        expect(addStake).toHaveAttribute('aria-disabled', 'true');
+        await user.keyboard('{Enter}');
+        for (const [name, callback] of [
             ['Unstake', actions.onUnstake],
+            ['Claim', actions.onClaimRewards],
             ['Delegate', actions.onDelegate],
-        ];
-        for (const [name, callback] of orderedActions) {
-            // The truncated staking address after Back is a tab stop that reveals the full value.
-            if (name === 'Claim') await expectTab(user, screen.getByLabelText(ADDRESS));
-            await expectTab(user, screen.getByRole('button', { name }));
+            ['Revoke', actions.onRevokeDelegation],
+        ]) {
+            await expectTab(user, screen.getByRole('button', { name: new RegExp(`^${name}\\b`) }));
             await user.keyboard('{Enter}');
             expect(callback).toHaveBeenCalledOnce();
         }
 
-        const more = screen.getByRole('button', { name: 'More' });
-        await expectTab(user, more);
-        await user.keyboard('{Enter}');
-        expect(more).toHaveAttribute('aria-expanded', 'true');
-
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator view' }));
-        await user.keyboard('{Escape}');
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(document.activeElement).toBe(more);
-
-        await user.keyboard('{Enter}');
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
-        await user.keyboard('{Enter}');
-        expect(actions.onRevokeDelegation).toHaveBeenCalledOnce();
-
-        await tabToStakeMore(user);
-        await user.keyboard('{Enter}');
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Revoke delegation' }));
-        await expectTab(user, screen.getByRole('menuitem', { name: 'Operator view' }));
-        await user.keyboard('{Enter}');
-        expect(actions.onOpenOperatorDashboard).toHaveBeenCalledOnce();
-
-        await tabToStakeMore(user);
-        for (const tabName of ['Rewards', 'Delegation', 'Details']) {
-            await expectTab(user, screen.getByRole('tab', { name: tabName }));
-            await user.keyboard('{Enter}');
+        // The view tabs are the shared Tabs: one roving tab stop on the
+        // selected tab, and the arrow keys move and select.
+        actionsTab.focus();
+        for (const tabName of ['Rewards', 'Details']) {
+            await user.keyboard('{ArrowRight}');
+            expect(document.activeElement).toBe(screen.getByRole('tab', { name: tabName }));
             expect(screen.getByRole('tab', { name: tabName })).toHaveAttribute('aria-selected', 'true');
         }
     });

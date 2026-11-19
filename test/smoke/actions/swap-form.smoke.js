@@ -194,12 +194,13 @@ for (const [shell, appPath] of [
     assert.ok(/onSwap:/.test(app), `${shell} App.jsx wires onSwap`);
 }
 
-// --- 6. "Sell name" from ManageToken → ORDER-based SellOwnershipForm ----
+// --- 6. "Sell Ownership" from ManageToken → ORDER-based SellOwnershipForm ----
 
 // ManageToken exposes the Sell-name entry.
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
-assert.ok(/onSellOwnership/.test(manageSrc), 'ManageToken accepts onSellOwnership');
-assert.ok(/id:\s*['"]sell-ownership['"]/.test(manageSrc), 'ManageToken renders the Sell-name action');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
+assert.ok(/onSellOwnership/.test(manageSrc), 'the issuer groups accept onSellOwnership');
+assert.ok(/id:\s*['"]sell-name['"][^\n]*\.\.\.ownerAction\(options\.onSellOwnership\)/.test(manageSrc), 'ManageToken renders the owner-gated Sell-name action');
 
 // SellOwnershipForm builds an ownership ORDER (GIVE_OWNERSHIP=1) and submits
 // via orderAction; supports native-coin (GET_TICK omitted) + token prices.
@@ -221,12 +222,12 @@ for (const [shell, appPath] of [
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
-    assert.ok(/onSellOwnership=\{/.test(app), `${shell} App.jsx wires ManageToken onSellOwnership`);
+    assert.ok(/onSellOwnership: \(ctx\) => \{/.test(app), `${shell} App.jsx wires the asset page's onSellOwnership`);
     assert.ok(/setSellNameRef\(/.test(app), `${shell} App.jsx sets sellNameRef for the sell flow`);
     assert.ok(/unlockedView === 'sell-name'/.test(app), `${shell} App.jsx renders the sell-name view`);
     assert.ok(/<SellOwnershipForm/.test(app), `${shell} App.jsx renders SellOwnershipForm`);
 }
 
 console.log(
-    'OK: swap-form smoke (§41.5 SWAP: swapAction core flow + input guards + ownership trading; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry; ManageToken "Sell name" → ORDER-based SellOwnershipForm (native coin + token) across 3 shells)',
+    'OK: swap-form smoke (§41.5 SWAP: swapAction core flow + input guards + ownership trading; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry; ManageToken "Sell Ownership" → ORDER-based SellOwnershipForm (native coin + token) across 3 shells)',
 );

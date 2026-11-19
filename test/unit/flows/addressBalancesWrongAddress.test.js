@@ -33,6 +33,10 @@ const body = (address, confirmed) => ({
 });
 const tokens = { total: 0, data: [] };
 
+const tokenRow = (tick, scope = {}) => ({
+    tick, amount: '1', decimals: 0, ...scope,
+});
+
 function perAddressRegistry(addrBody) {
     return { get: () => ({ getBalances: async () => tokens, getAddress: async () => addrBody }) };
 }
@@ -87,5 +91,80 @@ describe('a coin balance answered for another address is not credited', () => {
             expect(shape.native.quantity).toBe('150000');
             expect(shape.unavailable).toBeUndefined();
         }
+    });
+});
+
+describe('token balance scope declarations', () => {
+    it('filters rows that declare another address, coin, or network', async () => {
+        const scopedTokens = {
+            total: 4,
+            data: [
+                tokenRow('MATCH', { address: SOURCE.toUpperCase(), coin: 'RBTC', network: CHAIN_ID }),
+                tokenRow('OTHER_ADDRESS', { address: LTC }),
+                tokenRow('OTHER_COIN', { coin: 'litecoin' }),
+                tokenRow('OTHER_NETWORK', { network: 'mainnet' }),
+            ],
+        };
+        const sdkRegistry = {
+            get: () => ({
+                getBalances: async () => scopedTokens,
+                getAddress: async () => body(SOURCE, '0.00150000'),
+            }),
+        };
+
+        const shape = await addressBalances({
+            sdkRegistry, chainRegistry, chainId: CHAIN_ID, address: SOURCE,
+        });
+
+        expect(shape.tokens.map((row) => row.tick)).toEqual(['MATCH']);
+        expect(shape.unavailable).toContain('tokens');
+    });
+
+    it('applies the same filtering to batch results and keeps undeclared legacy rows', async () => {
+        const scopedTokens = {
+            total: 2,
+            data: [
+                tokenRow('LEGACY'),
+                tokenRow('FOREIGN', { coin: 'dogecoin' }),
+            ],
+        };
+        const sdk = {
+            getBalancesBatch: async () => ({
+                [SOURCE]: {
+                    balances: scopedTokens,
+                    address: body(SOURCE, '0.00150000'),
+                    error: null,
+                },
+            }),
+        };
+
+        const res = await walletBalances({
+            vault, walletId: 'w1', chainRegistry, sdkRegistry: { get: () => sdk },
+        });
+        const entry = res[CHAIN_ID].find((row) => row.address === SOURCE);
+
+        expect(entry.balances.tokens.map((row) => row.tick)).toEqual(['LEGACY']);
+        expect(entry.balances.unavailable).toContain('tokens');
+    });
+
+    it('rejects a token response that echoes another address', async () => {
+        const wrongAddressTokens = {
+            address: LTC,
+            total: 1,
+            data: [tokenRow('FOREIGN')],
+        };
+        const sdkRegistry = {
+            get: () => ({
+                getBalances: async () => wrongAddressTokens,
+                getAddress: async () => body(SOURCE, '0.00150000'),
+            }),
+        };
+
+        const shape = await addressBalances({
+            sdkRegistry, chainRegistry, chainId: CHAIN_ID, address: SOURCE,
+        });
+
+        expect(shape.tokens).toEqual([]);
+        expect(shape.unavailable).toContain('tokens');
     });
 });

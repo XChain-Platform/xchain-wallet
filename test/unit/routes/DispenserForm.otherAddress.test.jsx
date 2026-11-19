@@ -17,7 +17,7 @@
 //
 //   - reject a malformed or wrong-chain address the way Send does,
 //   - show the pre-flight verdict inline for each rule, and refuse when none holds,
-//   - keep Create off while the verdict loads and on a refusal,
+//   - keep Create active while validation reports loading or refusal,
 //   - compose GET_ADDRESS = the outside address with SOURCE = the wallet's address,
 //   - say on the confirm screen where payments go and who gets the escrow back.
 
@@ -152,6 +152,11 @@ async function mountWithOutsideAddress(chainState, address) {
         ));
         await drainMicrotasks();
     });
+    // The dispenser address lives in the closed Dispenser Terms section.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+        await drainMicrotasks();
+    });
     await domAct(async () => {
         fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
         await drainMicrotasks();
@@ -176,7 +181,7 @@ async function settle() {
 }
 
 const verdictOf = (utils) => utils.queryByTestId('outside-address-verdict');
-const createButton = (utils) => utils.getByRole('button', { name: 'Create' });
+const createButton = (utils) => utils.getByRole('button', { name: 'Create Dispenser' });
 
 describe('DispenserForm "Another address": format', () => {
     it('refuses a mistyped address with the Send wording and reads nothing', async () => {
@@ -211,6 +216,10 @@ describe('DispenserForm "Another address": format', () => {
         // The address shortener never runs on the placeholder sentence.
         expect(utils.container.textContent).not.toMatch(/New di…/);
         await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /^Dispenser Terms/ }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
             await drainMicrotasks();
         });
@@ -220,10 +229,12 @@ describe('DispenserForm "Another address": format', () => {
 });
 
 describe('DispenserForm "Another address": pre-flight verdict', () => {
-    it('keeps Create off while the verdict loads', async () => {
-        const { utils } = await mountWithOutsideAddress(STATE.fresh, OUTSIDE);
+    it('keeps Create active while the verdict loads and composes nothing on a press', async () => {
+        const { utils, calls } = await mountWithOutsideAddress(STATE.fresh, OUTSIDE);
         expect(utils.container.textContent).toContain('Checking whether this address accepts your dispenser');
-        expect(createButton(utils).disabled).toBe(true);
+        expect(createButton(utils).disabled).toBe(false);
+        await domAct(async () => { fireEvent.click(createButton(utils)); await drainMicrotasks(); });
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
     it.each([
@@ -250,7 +261,7 @@ describe('DispenserForm "Another address": pre-flight verdict', () => {
         const verdict = verdictOf(utils);
         expect(verdict?.getAttribute('data-verdict')).toBe('refused');
         expect(verdict?.textContent).toBe('This address only lets its owner open dispensers.');
-        expect(createButton(utils).disabled).toBe(true);
+        expect(createButton(utils).disabled).toBe(false);
         await domAct(async () => { fireEvent.click(createButton(utils)); await drainMicrotasks(); });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });

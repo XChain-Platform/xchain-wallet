@@ -77,7 +77,7 @@ describe('the palette and the families', () => {
         expect(soundById('kazoo')).toBeNull();
         expect(soundById(null)).toBeNull();
         expect(soundById({ id: 'chime' })).toBeNull();
-        expect(soundById('chime')).toEqual({ id: 'chime', label: 'Chime', file: 'chime.mp3' });
+        expect(soundById('chime')).toEqual({ id: 'chime', label: 'Chime', file: 'chime.mp3', icon: 'MusicIcon' });
     });
 });
 

@@ -194,7 +194,7 @@ export async function createMarketAction(opts) {
     if (!opts?.params?.label) throw new Error('createMarketAction: params.label is required');
     if (!opts?.params?.tick) throw new Error('createMarketAction: params.tick is required');
     const l = ` "${String(opts.params.label).slice(0, 40)}"`;
-    return submitBet(opts, 'createMarketParams', opts.params, `Open ${opts.params.tick} betting market${l}`);
+    return submitBet(opts, 'createMarketParams', opts.params, `Open ${opts.params.tick} prediction market${l}`);
 }
 
 /**
@@ -208,7 +208,7 @@ export async function placeBetAction(opts) {
     if (opts?.params?.feedActionIndex === undefined || opts?.params?.feedActionIndex === null) {
         throw new Error('placeBetAction: params.feedActionIndex is required');
     }
-    return submitBet(opts, 'placeBetParams', opts.params, `Bet on market ${opts.params.feedActionIndex}`);
+    return submitBet(opts, 'placeBetParams', opts.params, `Buy position in market ${opts.params.feedActionIndex}`);
 }
 
 /**

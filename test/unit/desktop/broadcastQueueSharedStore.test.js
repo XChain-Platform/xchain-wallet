@@ -27,11 +27,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createRuntime, ensureHost, tearDownHost, wipeRuntimeStores, handleIpcMessage } from '../../../packages/desktop/main/runtime.js';
-import { FileBroadcastQueueStorage, broadcastQueuePathFor } from '../../../packages/desktop/main/broadcastQueueStorage.js';
+import {
+    FileBroadcastQueuePrunedLedger,
+    FileBroadcastQueueStorage,
+    broadcastQueuePathFor,
+    broadcastQueuePrunedPathFor,
+} from '../../../packages/desktop/main/broadcastQueueStorage.js';
 import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
 import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const W = 'wallet-1';
+const W2 = 'wallet-2';
 const CHAIN = 'bitcoin-testnet';
 const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 
@@ -46,7 +52,7 @@ function memoryBackend(initial = null) {
 }
 
 /** A runtime whose session key is cached, so ensureHost opens a real vault. */
-function unlockableRuntime({ queueStorage, storageBackend = memoryBackend(), broadcastTx } = {}) {
+function unlockableRuntime({ queueStorage, prunedLedger, storageBackend = memoryBackend(), broadcastTx } = {}) {
     const tracker = trackerFor(SIGNED.prevouts, networks.testnet);
     const sdk = {
         encoder: { broadcastTx: broadcastTx ?? (async () => ({ txid: 'test-txid' })), getUTXOs: tracker.getUTXOs },
@@ -57,6 +63,7 @@ function unlockableRuntime({ queueStorage, storageBackend = memoryBackend(), bro
         sessionBackend: memoryBackend(new Uint8Array(32).fill(7)),
         metaBackend: memoryBackend(),
         ...(queueStorage ? { broadcastQueueStorage: queueStorage } : {}),
+        ...(prunedLedger ? { broadcastQueuePrunedLedger: prunedLedger } : {}),
         chainRegistry: new ChainRegistry(),
         sdkRegistry: {
             get: () => sdk,
@@ -68,7 +75,9 @@ function unlockableRuntime({ queueStorage, storageBackend = memoryBackend(), bro
 }
 
 const call = (runtime, type, request) => handleIpcMessage(runtime, { type, request });
-const listedHexes = async (runtime) => (await call(runtime, 'broadcast.queue.list', { walletId: W })).result.map((e) => e.signedTxHex);
+const listedHexes = async (runtime, walletId = W) => (
+    await call(runtime, 'broadcast.queue.list', { walletId })
+).result.map((e) => e.signedTxHex);
 
 describe('desktop runtime shares one broadcast-queue store across hosts', () => {
     it('keeps a queued entry across a lock and unlock', async () => {
@@ -97,19 +106,95 @@ describe('desktop runtime shares one broadcast-queue store across hosts', () => 
     });
 
     it('seals the store on wipe and hands the next unlock a fresh one', async () => {
-        const runtime = unlockableRuntime();
+        const prunedLedger = {
+            list: vi.fn(async () => []),
+            add: vi.fn(async () => {}),
+            remove: vi.fn(async () => {}),
+            clear: vi.fn(async () => {}),
+        };
+        const runtime = unlockableRuntime({ prunedLedger });
         await ensureHost(runtime);
         await call(runtime, 'broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex });
         const sealed = runtime.broadcastQueueStore;
 
-        await wipeRuntimeStores(runtime);
+        const wiped = await wipeRuntimeStores(runtime);
         expect(sealed.sealed).toBe(true);
         expect(runtime.broadcastQueueStore).not.toBe(sealed);
         expect(runtime.broadcastQueueStore.sealed).toBe(false);
+        expect(prunedLedger.clear).toHaveBeenCalledOnce();
+        expect(wiped.cleared).toContain('broadcastQueuePruned');
 
         await runtime.sessionBackend.save(new Uint8Array(32).fill(7));
         expect(await ensureHost(runtime)).not.toBe(null);
         expect(await listedHexes(runtime)).toEqual([]);
+    });
+});
+
+describe('desktop file-backed pruned-wallet ledger', () => {
+    it('round-trips removals and clears the durable set', async () => {
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-pruned-ledger-'));
+        const ledger = new FileBroadcastQueuePrunedLedger(broadcastQueuePrunedPathFor(dir));
+        expect(await ledger.list()).toEqual([]);
+
+        const ids = ['wallet/with/slashes', '..', 'wallet with spaces', 'wallet-日本語'];
+        for (const id of ids) await ledger.add(id);
+        expect((await ledger.list()).sort()).toEqual([...ids].sort());
+
+        await ledger.remove(['..', 'missing']);
+        expect((await ledger.list()).sort()).toEqual(ids.filter((id) => id !== '..').sort());
+        await ledger.clear();
+        expect(await ledger.list()).toEqual([]);
+    });
+
+    it('fails closed when the ledger path cannot be read', async () => {
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-pruned-blocked-'));
+        const blocked = join(dir, 'not-a-directory');
+        await fs.writeFile(blocked, 'blocked', 'utf8');
+        const logger = { warn: vi.fn() };
+        const ledger = new FileBroadcastQueuePrunedLedger(join(blocked, 'ledger.json'), logger);
+
+        expect(await ledger.list()).toBeNull();
+        expect(logger.warn).toHaveBeenCalledOnce();
+        expect(logger.warn.mock.calls[0][0]).toMatch(/refusing to load the queue/);
+    });
+});
+
+describe('desktop runtime persists wallet pruning across relaunches', () => {
+    it('keeps a pruned wallet removed after a queue save refusal and relaunch', async () => {
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-pruned-relaunch-'));
+        const queuePath = broadcastQueuePathFor(dir);
+        const ledgerPath = broadcastQueuePrunedPathFor(dir);
+        const queueStorage = new FileBroadcastQueueStorage(queuePath);
+        const first = unlockableRuntime({
+            queueStorage,
+            prunedLedger: new FileBroadcastQueuePrunedLedger(ledgerPath),
+        });
+        await ensureHost(first);
+        for (const walletId of [W, W2]) {
+            await call(first, 'broadcast.queue.enqueue', {
+                walletId, chainId: CHAIN, signedTxHex: SIGNED.txHex,
+            });
+        }
+
+        queueStorage.save = vi.fn(async () => { throw new Error('refused queue save'); });
+        first.broadcastQueueStore.prunedWallets.add(W);
+        first.broadcastQueueStore.queues.delete(W);
+        await first.broadcastQueueStore.prunedWallets.tail;
+        const snapshot = Object.fromEntries(first.broadcastQueueStore.queues);
+        await expect(first.broadcastQueueStore.storage.save(snapshot)).rejects.toThrow(/refused/);
+        tearDownHost(first);
+
+        const relaunchedStorage = new FileBroadcastQueueStorage(queuePath);
+        const relaunchedLedger = new FileBroadcastQueuePrunedLedger(ledgerPath);
+        const relaunched = unlockableRuntime({
+            queueStorage: relaunchedStorage,
+            prunedLedger: relaunchedLedger,
+        });
+        await ensureHost(relaunched);
+        expect(await listedHexes(relaunched, W)).toEqual([]);
+        expect(await listedHexes(relaunched, W2)).toEqual([SIGNED.txHex]);
+        expect((await relaunchedStorage.load())[W]).toBeUndefined();
+        expect(await relaunchedLedger.list()).toEqual([]);
     });
 });
 

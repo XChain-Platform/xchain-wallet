@@ -59,23 +59,29 @@
 // used. Being wrong by 576 sats in the direction of leaving money behind is a
 // defect; guessing low would make Max unsendable, which is worse.
 //
-// WHAT THIS STILL DOES NOT COVER, stated because the bound is worth knowing.
-// The probe forces the encoder to select every utxo (its break condition can
-// never be met against an output that costs the whole balance), so it prices an
-// n-input sweep. The real send selects greedily and stops as soon as the inputs
-// cover the outputs plus the fee, which is the same n inputs UNLESS one of them
-// is worth less than it costs to spend - about 68 bytes times the rate, so on
-// Bitcoin only above roughly 8 sat/vB for a dust-floor utxo. In that corner the
-// encoder leaves the uneconomical outpoint unspent and emits change, and a
-// remainder survives the sweep. That is the encoder's coin selection declining
-// to burn a user's money on a losing input, not the estimate being wrong, and
-// no amount computed here can change it.
+// UNECONOMICAL INPUTS. The probe and the real send must use the same explicit
+// input set. Otherwise a high fee rate can make a small UTXO cost more to spend
+// than it contributes: the probe prices it, but the encoder's greedy real send
+// stops before selecting it. Filtering those inputs before the probe both
+// maximizes the payment and gives the form the exact set it must later compose.
 
 import { composeForConfirm } from './composeForConfirm.js';
+import { utxoListOf } from './txInclusionProbe.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
 /** Encoder's machine-readable reason for "the outputs cost more than the inputs hold". */
 const INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS';
+
+// The encoder's coin selector budgets these virtual bytes for one input. Legacy
+// P2PKH uses its conservative 180-byte selection weight; witness types use
+// their transaction vbytes. All UTXOs at this source share its script type.
+const INPUT_VBYTES = Object.freeze({
+    p2pkh: 180,
+    p2sh: 91,
+    'p2sh-p2wpkh': 91,
+    p2wpkh: 68,
+    p2tr: 58,
+});
 
 /**
  * Satoshi count as an exact BigInt, whichever way the encoder serialized it.
@@ -109,6 +115,35 @@ function coinDecimalFromSats(sats) {
     const whole = sats / 100000000n;
     const frac = (sats % 100000000n).toString().padStart(8, '0');
     return `${whole}.${frac}`;
+}
+
+/**
+ * Cost, at the selected rate, of adding one more source input. A missing or
+ * invalid explicit rate cannot safely classify an input, so the caller keeps
+ * the whole set and lets the encoder quote it as before.
+ *
+ * @param {any} sdk
+ * @param {any} descriptor
+ * @param {string} source
+ * @param {unknown} feePerKb
+ * @returns {bigint | null}
+ */
+function inputSpendCost(sdk, descriptor, source, feePerKb) {
+    if (!Number.isSafeInteger(feePerKb) || feePerKb <= 0) return null;
+    let type = null;
+    try {
+        const checked = sdk?.wallet?.validateAddress?.(source);
+        if (checked?.valid && typeof checked.type === 'string') type = checked.type.toLowerCase();
+    } catch {
+        // Fall back to the descriptor below. Address validation is optional.
+    }
+    if (!type && typeof descriptor?.defaultAddressType === 'string') {
+        type = descriptor.defaultAddressType.toLowerCase();
+    }
+    if (!type && descriptor?.coin === 'dogecoin') type = 'p2pkh';
+    const bytes = INPUT_VBYTES[type] || null;
+    if (!bytes) return null;
+    return (BigInt(feePerKb) * BigInt(bytes) + 999n) / 1000n;
 }
 
 /**
@@ -146,6 +181,8 @@ export function insufficientFundsQuote(err) {
  * @property {string} feeSats     the network fee the resulting send will pay
  * @property {string} inputSats   satoshis the encoder selected (its own utxo view, not the balance API's)
  * @property {string} otherOutputSats  value of outputs the pipeline adds besides the payment (ADS, protocol fee)
+ * @property {any[]} utxos        exact economical input set the real send must use
+ * @property {string} leftBehindSats  uneconomical input value intentionally left at the address
  * @property {'encoder-quote'} source
  * @property {boolean} [coinsHeld]  every coin at the address is held by another send from this wallet
  */
@@ -193,21 +230,41 @@ export async function quoteMaxSendable({
     // smallest value guaranteed to do that, and it comes from the same tracker
     // the compose selects from.
     let utxoTotal;
+    let leftBehind = 0n;
+    let rows;
     try {
         const hasSelection = Array.isArray(encoderOpts?.utxos);
         const res = hasSelection ? encoderOpts.utxos : await sdk.encoder.getUTXOs(source.trim());
-        const rows = Array.isArray(res) ? res : (Array.isArray(res?.utxos) ? res.utxos : null);
+        rows = utxoListOf(res);
         if (!rows || rows.length === 0) return null;
+        const spendCost = inputSpendCost(sdk, descriptor, source.trim(), encoderOpts?.feePerKb);
         utxoTotal = 0n;
+        const economical = [];
         for (const row of rows) {
             const value = exactSats(row?.value);
             if (value == null || value < 0n) return null;
+            if (spendCost != null && value <= spendCost) {
+                leftBehind += value;
+                continue;
+            }
+            economical.push(row);
             utxoTotal += value;
         }
+        rows = economical;
     } catch {
         return null;
     }
-    if (utxoTotal <= 0n) return null;
+    if (utxoTotal <= 0n || rows.length === 0) {
+        return leftBehind > 0n ? {
+            maxSats: '0',
+            feeSats: '0',
+            inputSats: '0',
+            otherOutputSats: '0',
+            utxos: [],
+            leftBehindSats: leftBehind.toString(),
+            source: 'encoder-quote',
+        } : null;
+    }
 
     const probeSats = utxoTotal;
     const actionData = {
@@ -223,8 +280,11 @@ export async function quoteMaxSendable({
     let built = null;
     try {
         built = await composeForConfirm({
-            sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts,
-            source: source.trim(), signal,
+            sdkRegistry, chainRegistry, vault, chainId, actionData,
+            encoderOpts: { ...encoderOpts, utxos: rows },
+            // A probe is never shown or signed, so it plans the donation the
+            // send would carry without claiming the queue from a real review.
+            source: source.trim(), signal, claimAds: false,
         });
     } catch (err) {
         quote = insufficientFundsQuote(err);
@@ -257,6 +317,8 @@ export async function quoteMaxSendable({
         feeSats: quote.fee.toString(),
         inputSats: quote.available.toString(),
         otherOutputSats: otherOutputs.toString(),
+        utxos: rows,
+        leftBehindSats: leftBehind.toString(),
         source: 'encoder-quote',
     };
 }

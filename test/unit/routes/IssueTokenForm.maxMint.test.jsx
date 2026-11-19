@@ -66,16 +66,16 @@ async function fill({ supply, maxMint }) {
     fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'MINTABLE' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: supply } });
     if (maxMint !== undefined) {
-        fireEvent.change(screen.getByLabelText('Max mint per transaction (optional)'), {
+        fireEvent.change(screen.getByLabelText('Max per transaction'), {
             target: { value: maxMint },
         });
     }
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -110,7 +110,7 @@ describe('IssueTokenForm max mint per transaction', () => {
         await fill({ supply: '5000', maxMint: '0' });
         await submit();
 
-        await screen.findByText(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Max mint per transaction must be a positive number, or left blank for no limit.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -128,23 +128,22 @@ describe('IssueTokenForm max mint per transaction', () => {
     it('rejects one divisible unit above the protocol supply maximum', async () => {
         mountForm();
         await fill({ supply: '1000000000000000000000.00000001' });
-        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
         await submit();
 
-        expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Max supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('rejects a 10 KB description before composition', async () => {
         mountForm();
         await fill({ supply: '10' });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Token description'), {
             target: { value: '<script>markup</script>'.repeat(400) },
         });
         await submit();
 
-        expect(await screen.findByRole('alert'))
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
             .toHaveTextContent('Description cannot be longer than 249 characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });

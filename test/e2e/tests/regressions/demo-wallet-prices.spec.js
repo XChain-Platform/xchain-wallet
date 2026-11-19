@@ -40,7 +40,8 @@ test('demo Home prices its hero and coin rows and renders its chart', async ({ p
                 await expect(rows.nth(index)).toContainText(FIAT_VALUE);
             }
 
-            await expect(page.getByRole('img', { name: /^Portfolio performance chart\./ }))
+            // The chart sits behind the hero and is named for what it plots.
+            await expect(page.getByRole('img', { name: /^Wallet value over [^.]+\./ }))
                 .toBeVisible();
         });
     }
@@ -56,7 +57,12 @@ test('ordinary regtest Home does not assign fiat value to test coins', async ({ 
             await page.setViewportSize(viewport);
 
             await expect(unlockedShell(page)).toContainText('Test coins have no value');
-            await expect(page.getByRole('main')).not.toContainText(FIAT_VALUE);
+            // The hero states no money value at all.
+            await expect(page.getByRole('region', { name: 'Unpriced regtest wallet' })).not.toContainText(FIAT_VALUE);
+            // Operator ruling 2026-11-17: a regtest token row shows "$0.00"; no row may
+            // carry any other fiat figure, since test coins have no price.
+            const figures = (await page.getByRole('main').innerText()).match(/\p{Sc}\s?[\d,.]+/gu) ?? [];
+            expect(figures.filter((figure) => figure !== '$0.00'), 'a regtest row put a price on test coins').toEqual([]);
             await expect(page.getByRole('region', { name: 'Portfolio performance' }))
                 .toHaveCount(0);
         });

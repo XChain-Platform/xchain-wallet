@@ -13,6 +13,8 @@ import { selectNamedToken } from '../../fixtures/crossChain.js';
 import {
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_ID,
@@ -23,7 +25,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -37,13 +41,11 @@ const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     const main = page.getByRole('main');
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -55,11 +57,9 @@ async function approveAndReadTxid(page, what) {
 async function issueGiveToken(page, source) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(GIVE_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(String(GIVE_SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: GIVE_TICK, supply: GIVE_SUPPLY });
 
     const txid = await approveAndReadTxid(page, `the ISSUE of ${GIVE_TICK}`);
     const action = await waitForValidAction(txid);
@@ -102,9 +102,7 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('fill the dedicated same-chain Swap form and approve it', async () => {
             await openPaletteCommand(page, 'Swap');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Give and get network:/ }))
-                .toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Give and get network');
+            await selectVenueChain(main, 'Network');
             await selectNamedToken(page, 'Give token', {
                 chainId: REGTEST_CHAIN_ID,
                 chainLabel: REGTEST_CHAIN_LABEL,
@@ -123,11 +121,16 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             });
             await main.getByRole('textbox', { name: /^Give amount/ }).fill(String(GIVE_AMOUNT));
             await main.getByRole('textbox', { name: /^Get amount/ }).fill(String(GET_AMOUNT));
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            // The submit is "Create Swap". A bare "Swap" is now the open Swap
+            // section's header (its summary shows only while closed), and
+            // clicking it folds the form away instead of submitting it.
+            await main.getByRole('button', { name: 'Create Swap', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
-            await expect(page.getByTestId('action-intent'))
-                .toContainText(`give ${GIVE_AMOUNT} ${GIVE_TICK} for ${GET_AMOUNT} XCHAIN`);
+            // The review reads a swap as the order it is, from the side it buys
+            // (confirmStandard.sentence.buy: "Buy {get} for {give}").
+            await expect(page.getByTestId('confirm-sentence'))
+                .toContainText(`Buy ${GET_AMOUNT} XCHAIN for ${GIVE_AMOUNT} ${GIVE_TICK}`);
             swapTxid = await approveAndReadTxid(page, 'the same-chain SWAP');
             await expect(main).toContainText('Swap sent');
         });

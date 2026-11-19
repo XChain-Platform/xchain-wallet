@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { checkPointers, expectedPointers, manifestScope, parseLaneFeeds }
     from '../../../tools/release/pointer-gate.mjs';
+import { verifyChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lanesText = readFileSync(join(here, '..', '..', '..', 'tools', 'release', 'shipped-lanes.txt'), 'utf8');
@@ -128,5 +129,28 @@ assert.deepEqual(checkPointers({
     pointers: [], manifestText: ungated('# dev-mock-gate: SKIPPED', '# coverage: partial', '# lanes: android'),
     tag: 'v0.333.1', channel: 'stable', lanesText,
 }), [], 'a store-only partial with no pointer is not judged on the updater gate');
+
+// The gate and the client must agree on a pointer url: the client compares the
+// whole string with the bare name it downloaded, so a path never matches.
+for (const [label, url] of [['a bare name', FILE], ['a ./ name', `./${FILE}`], ['a path', `desktop/${FILE}`]]) {
+    const text = `version: 0.333.1\nfiles:\n  - url: ${url}\n    sha512: ${sha512Of(BODY, 'base64')}\npath: ${url}\n`;
+    const gate = checkPointers({
+        pointers: [{ name: 'stable-linux.yml', text }, { name: 'stable-linux-arm64.yml', text }],
+        manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512,
+    });
+    const client = verifyChannelPointer({
+        pointerText: text,
+        expectedVersion: '0.333.1',
+        artifactName: FILE,
+        artifactSha512: sha512Of(BODY, 'hex'),
+        entries: new Map([[FILE, HASH]]),
+    });
+    assert.equal(gate.length === 0, client.ok === true,
+        `the gate passes ${label} exactly when the client does:\n${gate.join('\n')}\n${client.reason ?? ''}`);
+}
+assert.match(checkPointers({
+    pointers: [{ name: 'stable-linux.yml', text: yml('0.333.1').replaceAll(`url: ${FILE}`, `url: desktop/${FILE}`) }],
+    manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512,
+}).join('\n'), /a path; the desktop client matches the bare file name/, 'a path-bearing pointer url is refused by name');
 
 console.log('pointer-gate.smoke.js: ok');

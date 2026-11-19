@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Smoke for PC-15 (COINPAY obligations center): the ObligationsView
-// queue route exists with countdown/at-risk/expired states and a
-// prefilled Pay-now handoff; the nav badge is wired in LeftNav +
+// list of payments due exists with a live time ring per row, the bought
+// side read in bulk and a prefilled pay handoff; the nav badge is wired in LeftNav +
 // BottomTabBar and fed by ONE CoinpayObligationsProvider scan in the web and
 // desktop shells; CoinpayForm gained the expired funds-safety block.
 
@@ -18,7 +18,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, SIDEBAR_SECONDARY_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -29,18 +29,38 @@ const view = read('packages', 'core', 'src', 'shared', 'routes', 'ObligationsVie
 assert.match(view, /useCoinpayObligations\(/, 'view scans via the shared hook');
 assert.match(view, /classifyObligation\(o\.expiration, nowSec\)/, 'rows classified against a live clock');
 assert.match(view, /setInterval\(\(\) => setNowSec/, '1s ticker drives the countdowns');
-assert.match(view, /state !== 'expired'/, 'payable rows split from expired');
-assert.match(view, /Expired, awaiting settlement/, 'expired section labeled');
-assert.match(view, /Do not pay/, 'expired copy warns against paying');
+// The Payments due glance (operator 2026-11-13, simplified layout 1): one
+// list card of the payments whose window is open, each row a time ring, what
+// it buys, what it pays and a chevron; a tap opens the payment's detail.
+// Expired rows are never listed, so nothing on the page can pay one.
+assert.match(view, /\.filter\(\(o\) => o\.state !== 'expired'\)/, 'expired payments fall off the list');
+assert.doesNotMatch(view, /Do not pay|chipExpired/, 'no expired row or chip is drawn');
 assert.match(view, /onPay\(\{\s*chainId: row\.chainId,\s*address: row\.address,\s*orderMatchActionIndex: row\.orderMatchActionIndex,\s*\}\)/,
-    'Pay now hands the CoinpayForm resume-ref shape');
+    'the row tap hands the CoinpayForm resume-ref shape');
 assert.match(view, /baseUnitsToCoinText\(obligationBaseUnits\(row\.coinAmount\)\)/,
     'amounts render BigInt-safe at coin scale, through the parser that accepts the DECIMAL shape the\n     explorer actually serves - reading it as base units labelled a 0.5 LTC debt "0.5 base units" (D-137)');
 assert.match(view, /base units/, 'falls back to labeled base units when unconvertible');
-assert.match(view, /coinpayExpiryText\(row\.expiration\)/, 'absolute deadline shown alongside countdown');
+assert.match(view, /<FillRing[\s\S]*?mark="clock"/, 'each row shows the time ring');
+assert.match(view, /shortTimeLeft\(row\.secondsLeft\)/, 'the ring caption is the live time left');
+assert.match(view, /<PairIcons /, 'rows lead with the pair icons');
+assert.match(view, /<ListFilterMenu[\s\S]{0,300}label="Filter payments due"/, 'header carries the filter');
 
-// Expired rows never offer Pay now.
-assert.match(view, /\{row\.state !== 'expired' \? \(\s*<Button/, 'Pay now gated off expired state');
+// What each payment buys comes from ONE call for the whole list, keyed on
+// the payments' identities, never one read per row.
+assert.match(view, /messaging\.getCoinpayMatchSides\(\{ obligations: latest\.current \}\)/, 'one bulk read answers every row');
+assert.doesNotMatch(view, /getActionByIndex/, 'the list never reads a match per row');
+const sidesFlow = read('packages', 'core', 'src', 'flows', 'coinpayMatchSides.js');
+assert.match(sidesFlow, /sdk\.getOrderMatches\(g\.address, 'address'\)/, 'matches read per payer address');
+assert.match(sidesFlow, /sdk\.getOrders\(g\.address, 'address'\)/, 'orders read per payer address');
+const hostSrc = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
+assert.match(hostSrc, /host\.register\('coinpays\.matchSides'/, 'host answers the bulk read');
+for (const p of [
+    ['packages', 'web', 'src', 'messaging.js'],
+    ['packages', 'desktop', 'renderer', 'messaging.js'],
+    ['packages', 'extension', 'src', 'popup', 'messaging.js'],
+]) {
+    assert.match(read(...p), /export function getCoinpayMatchSides\(req\)[\s\S]{0,120}'coinpays\.matchSides'/, `${p[1]}: messaging wires the bulk read`);
+}
 
 // ---- Shared hook ------------------------------------------------------
 const hook = read('packages', 'core', 'src', 'shared', 'hooks', 'useCoinpayObligations.js');
@@ -59,21 +79,25 @@ assert.match(status, /secondsLeft <= 0\) return \{ state: 'expired'/, 'T=0 is ex
 // ---- Nav wiring --------------------------------------------------------
 const leftNav = read('packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx');
 assert.deepEqual(ROUTE_NAV_GROUPS.obligations, ['obligations', 'coinpay'],
-    'LeftNav view group covers the queue and payment drilldown');
-assert.match(leftNav, /id: 'obligations', label: 'Payments due', Icon: Icon\.ClockIcon/, 'LeftNav item');
-// Secondary rows must render badge pills (the obligations item lives there).
-const secondaryBlock = leftNav.slice(leftNav.indexOf('{secondary.map'));
-assert.match(secondaryBlock, /badges\[item\.id\] > 0/, 'secondary nav rows render badges');
-
-const tabBar = read('packages', 'core', 'src', 'shared', 'components', 'BottomTabBar.jsx');
-assert.match(tabBar, /id: 'obligations', label: 'Payments due', Icon: Icon\.ClockIcon, group: \['obligations'\]/,
-    'BottomTabBar sheet row (badge + More-dot ride the existing sheet logic)');
+    'the route section covers the queue and payment drilldown');
+assert.ok(!SIDEBAR_SECONDARY_DESTINATIONS.includes('obligations'),
+    'Payments due stays in the complete wallet menu');
+const walletMenuSrc = read('packages', 'core', 'src', 'shared', 'walletMenu.js');
+assert.match(walletMenuSrc, /id: 'obligations', labelKey: 'walletMenu\.row\.paymentsDue', icon: 'ClockIcon'/,
+    'wallet menu catalogue row carries the Payments due label and ClockIcon');
+// The menu, sidebar and tab bar carry no unread counts, so no badge reaches the nav.
+assert.doesNotMatch(leftNav, /badges/, 'LeftNav takes no badges');
 
 const icons = read('packages', 'core', 'src', 'ui', 'icons', 'index.jsx');
 assert.match(icons, /export function ClockIcon/, 'ClockIcon exists');
 
 const paletteSrc = read('packages', 'core', 'src', 'shared', 'commandPalette', 'commandRegistry.js');
-assert.match(paletteSrc, /id: 'nav-obligations'[\s\S]*?run: go\('obligations'\)/, 'command palette entry');
+assert.match(
+    paletteSrc,
+    /for \(const group of visibleWalletMenu\(ctx\)\)[\s\S]*?id: CATALOGUE_COMMAND_IDS\[row\.id\] \|\| `nav-\$\{row\.id\}`[\s\S]*?run: row\.id === 'scan'[\s\S]*?: go\(row\.id\)/,
+    'catalogue rows become command palette entries with the normal navigation fallback',
+);
+assert.match(paletteSrc, /obligations: \{ subtitleKey: 'palette\.navObligations\.subtitle'/, 'command palette obligations meta');
 
 // ---- Shell wiring (web + desktop) --------------------------------------
 for (const [label, ...p] of [
@@ -85,12 +109,13 @@ for (const [label, ...p] of [
     // unlocked tree and the nav reads the count from the shared hook, so a
     // second bare hook call here would be the duplicate scan coming back.
     assert.match(app, /<CoinpayObligationsProvider walletId=\{activeWalletId\} accountId=\{activeAccountId\}>/, `${label}: obligations provider wraps the unlocked tree`);
-    assert.match(app, /useSharedCoinpayObligations\(\)/, `${label}: nav badge reads the shared scan`);
-    assert.match(app, /badges=\{\{ \.\.\.badges, obligations: payableCount \}\}/, `${label}: badge fed to nav`);
+    assert.doesNotMatch(app, /badges=/, `${label}: no badge is fed to nav`);
     assert.doesNotMatch(app, /useCoinpayObligations\(activeWalletId/, `${label}: no second scan beside the provider`);
     assert.match(app, /unlockedView === 'obligations' && activeWalletId/, `${label}: obligations view routed`);
-    assert.match(app, /setResumeCoinpay\(\{ \.\.\.ref, from: 'obligations' \}\)/, `${label}: Pay now prefills CoinpayForm`);
-    assert.match(app, /from === 'obligations'\s*\?\s*'obligations'/, `${label}: CoinpayForm backs out to the queue`);
+    assert.match(app, /onPay=\{\(ref\) => \{\s*setResumeCoinpay\(ref\);\s*setUnlockedView\('coinpay'\);/, `${label}: Pay now prefills CoinpayForm`);
+    // Back pops the shell's history, so CoinpayForm returns to the queue
+    // when Pay now opened it there.
+    assert.match(app, /setResumeCoinpay\(null\);\s*goBack\(\);/, `${label}: CoinpayForm backs out to the page it came from`);
     assert.match(app, /'coinpay' \| 'obligations' \|/, `${label}: view union includes obligations`);
 }
 
@@ -104,6 +129,7 @@ const submitIdx = form.indexOf('async function handleSubmit');
 assert.ok(reviewIdx > 0 && submitIdx > 0, 'both handlers present');
 assert.match(form.slice(reviewIdx, submitIdx), /EXPIRED_ERROR/, 'review gate checks expiry');
 assert.match(form.slice(submitIdx), /EXPIRED_ERROR/, 'sign gate re-checks expiry');
-assert.match(form, /EXPIRED, do not pay/, 'picker marks expired rows');
+// The picker's state pill now reads in sentence case (no capitals for emphasis).
+assert.match(form, /pillUrgent\}`\}>Expired, do not pay</, 'picker marks expired rows');
 
 console.log('obligations-center smoke: all assertions passed');

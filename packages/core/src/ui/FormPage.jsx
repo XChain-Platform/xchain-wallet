@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Children, cloneElement, forwardRef, Fragment, isValidElement, useContext, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ShellReachabilityNoticeContext } from '../shared/components/noticesRoute.js';
 import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
 import { ReachabilityLine } from '../shared/components/ReachabilityLine.jsx';
@@ -16,33 +17,92 @@ import { FormNotices } from './formNoticeSlot.js';
 import { EmptyStateAsLineContext } from './Screen.jsx';
 import { NoticeLines } from './FormNotice.jsx';
 import { StatusMessage, StatusMessageGroup } from './StatusMessage.jsx';
+import { FormErrorSummary } from './FormErrorSummary.jsx';
+import { FormErrorsContext } from './formErrors.js';
+import { PageNoticeHostContext } from './PageNotice.jsx';
 import { submitOnlyFromLastField } from './formEnter.js';
+import { Button } from './Button.jsx';
 import styles from './FormPage.module.css';
 
-/**
- * Disable every submit button in an action row. Used by the demo guard so a
- * demo wallet can browse the form but never reach a compose.
- */
-function disableSubmits(node) {
+/** Give the main submit action the success treatment while preserving explicit alternatives. */
+function successSubmits(node) {
     return Children.map(node, (child) => {
         if (!isValidElement(child)) return child;
-        if (child.props?.type === 'submit') return cloneElement(child, { disabled: true });
-        if (child.props?.children != null && typeof child.type === 'symbol') {
-            return cloneElement(child, undefined, disableSubmits(child.props.children));
+        if (child.type === Button) {
+            if (child.props?.type === 'submit'
+                && (child.props.variant == null || child.props.variant === 'primary')) {
+                return cloneElement(child, { variant: 'success' });
+            }
+            return child;
+        }
+        if (child.props?.children != null) {
+            return cloneElement(child, undefined, successSubmits(child.props.children));
         }
         return child;
     });
 }
 
+/** True when the action row holds a submit Button anywhere inside it. */
+function hasSubmitButton(node) {
+    let found = false;
+    const visit = (current) => Children.forEach(current, (child) => {
+        if (found || !isValidElement(child)) return;
+        if (child.type === Button) {
+            if (child.props?.type === 'submit') found = true;
+            return;
+        }
+        if (child.props?.children != null) visit(child.props.children);
+    });
+    visit(node);
+    return found;
+}
+
 /**
- * The props of a StatusMessage element as one line of a StatusMessageGroup,
- * or null for any other node (an error summary), which keeps its own place.
+ * A result or step screen has no submit: its forward action (Done, Next,
+ * Continue) is an onClick button. The action row puts the primary action
+ * last, so the last primary Button gets the success treatment, the same as a
+ * submit does on a form (U63). Secondary, ghost and danger buttons stay as
+ * they are.
+ */
+function successLastPrimary(node) {
+    let last = null;
+    let hasSuccess = false;
+    const find = (current) => Children.forEach(current, (child) => {
+        if (!isValidElement(child)) return;
+        if (child.type === Button) {
+            if (child.props.variant === 'success') hasSuccess = true;
+            if (child.props.variant == null || child.props.variant === 'primary') last = child;
+            return;
+        }
+        if (child.props?.children != null) find(child.props.children);
+    });
+    find(node);
+    // A row that already names its green action (Create new wallet on the
+    // welcome screen) keeps its other buttons' own colours (U63, U69).
+    if (!last || hasSuccess) return node;
+    const visit = (current) => Children.map(current, (child) => {
+        if (!isValidElement(child)) return child;
+        if (child === last) return cloneElement(child, { variant: 'success' });
+        if (child.type === Button) return child;
+        if (child.props?.children != null) {
+            return cloneElement(child, undefined, visit(child.props.children));
+        }
+        return child;
+    });
+    return visit(node);
+}
+
+/**
+ * The props of a Notice (StatusMessage) element as one line of a
+ * StatusMessageGroup, or null for any other node (an error summary), which
+ * keeps its own place.
  */
 function noticeEntry(node, key) {
     if (!isValidElement(node) || node.type !== StatusMessage) return null;
-    const { children, variant, lead, recovery, details, role, testId, id } = node.props;
-    if (children === null || children === undefined || children === '') return null;
-    return { key, id, children, variant, lead, recovery, details, role, testId };
+    const { children, tone, variant, title, lead, action, recovery, details, role, testId, id, onDismiss } = node.props;
+    const noBody = children === null || children === undefined || children === '';
+    if (noBody && !title) return null;
+    return { key, id, children, variant: tone || variant, title, lead, recovery: action || recovery, details, role, testId, onDismiss };
 }
 
 /**
@@ -56,15 +116,16 @@ function noticeEntry(node, key) {
  * Screen owns the page gutter and top spacing. The wide card centres within
  * that content box without adding its own top margin.
  *
- * Notices (`status`, the demo-wallet note and any FormNotice raised from the
+ * Notices (`status`, a refused demo submit and any FormNotice raised from the
  * body) lead the page content, as one box with a line per notice: a page
  * carries one message per state. When the shell says balances may be out of
  * date and the form has a notice of its own, the shell's sentence and its
- * Try again join that box as its first line instead of a second box above. A plain form draws them just above itself, so
- * on a wide screen they sit above the card at the full content width instead
- * of a box inside it, and on a narrow screen, where the form is bare, they
- * lead the fields exactly as before. A form that owns its title puts them
- * under that title instead.
+ * Try again join that box as its first line instead of a second box above. A
+ * plain form draws them as its first item, so on a wide screen the one card
+ * wraps the notice and the fields, the notice at its top, and on a narrow
+ * screen, where the form is bare, they lead the fields 8px under the page
+ * header. Either way the next element sits 8px below the notice. A form that
+ * owns its title puts them under that title instead.
  *
  * Pass `sectioned` when the children are FormSections. The sections share
  * the form's wide card and are divided from one another at every width.
@@ -77,7 +138,7 @@ function noticeEntry(node, key) {
  * @param {object} props
  * @param {(e: import('react').FormEvent<HTMLFormElement>) => void} [props.onSubmit]
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
- * @param {import('react').ReactNode | import('react').ReactNode[]} [props.status]    a StatusMessage or error summary, or a list of them (empty entries dropped), the first item of the page content: above the form (its card, when wide) at the full content width on a plain form, below the form's own logo or title when it draws one
+ * @param {import('react').ReactNode | import('react').ReactNode[]} [props.status]    a StatusMessage or error summary, or a list of them (empty entries dropped), the first item of the form (inside its card, when wide), below the form's own logo or title when it draws one
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
  * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
  * @param {import('react').ReactNode} [props.description] supporting copy below `title`
@@ -87,14 +148,19 @@ function noticeEntry(node, key) {
  * @param {'h1' | 'h2'} [props.headingAs]               title heading level; defaults to h1
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef]
  * @param {boolean} [props.stackedActions]              stack equal-width actions instead of sharing a row
+ * @param {boolean} [props.choiceActions]               keep a submit-less list of equal choices in its explicit variants instead of promoting the last primary action to success
  * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
  * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
  * @param {boolean} [props.fullWidth]                   wide screens use the whole content width with no card, for reading pages such as the license terms
- * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode }} [props.demoGuard] from useDemoGuard: in a demo wallet the note replaces `status`, submit buttons are disabled and submission is ignored
+ * @param {boolean} [props.cardless]                    wide screens keep the form column but draw no card, so a form built from its own section cards (Issue token) never puts a card inside a card
+ * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode, refuse?: () => void }} [props.demoGuard] from useDemoGuard: in a demo wallet submit buttons stay enabled, but submission is swallowed and calls `refuse`, whose note (null until then) replaces `status`
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
  * @param {boolean} [props.submitFromAnyField]          keep native Enter submission for a migrated form that previously allowed it
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
+ * @param {import('./formErrors.js').FormErrors} [props.errors]  the form error standard: the map from useFormErrors; its notice leads the status and the kit fields read their own entries
+ * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string, disabled?: boolean, icon?: import('react').ReactNode }} [props.errorAction]
+ *   the error notice's one action (a one-click fix such as Use max), shown while the notice is
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
@@ -103,6 +169,8 @@ export const FormPage = forwardRef(function FormPage(
         onSubmit,
         actions,
         status,
+        errors: formErrors,
+        errorAction,
         intro,
         title,
         description,
@@ -112,9 +180,11 @@ export const FormPage = forwardRef(function FormPage(
         headingAs: Heading = 'h1',
         titleRef,
         stackedActions = false,
+        choiceActions = false,
         sectioned = false,
         fill = false,
         fullWidth = false,
+        cardless = false,
         label,
         demoGuard,
         noValidate = true,
@@ -132,12 +202,15 @@ export const FormPage = forwardRef(function FormPage(
         sectioned ? styles.sectioned : null,
         fill ? styles.fill : null,
         fullWidth ? styles.fullWidth : null,
-        fullWidth ? styles.cardlessSections : null,
+        cardless ? styles.cardlessForm : null,
+        fullWidth || cardless ? styles.cardlessSections : null,
         className,
     ].filter(Boolean).join(' ');
     const demoBlocked = !!demoGuard?.blocked;
+    // A demo wallet never composes: the press is swallowed and answered with
+    // the guard's refusal, the only place a demo wallet is ever named.
     const guardedSubmit = demoBlocked
-        ? (event) => { event?.preventDefault?.(); }
+        ? (event) => { event?.preventDefault?.(); demoGuard.refuse?.(); }
         : onSubmit;
     const semanticProps = Root === 'form'
         ? { onSubmit: guardedSubmit, noValidate, 'aria-label': label }
@@ -165,6 +238,9 @@ export const FormPage = forwardRef(function FormPage(
         styles.actions,
         stackedActions ? styles.stackedActions : null,
     ].filter(Boolean).join(' ');
+    const actionsWithSuccess = (row) => (hasSubmitButton(row)
+        ? successSubmits(row)
+        : choiceActions ? row : successLastPrimary(row));
     // A form that draws its own logo or title is the page header; any other form
     // sits under the screen's PageHeader and its notice leads the content.
     const ownsHeading = title != null || visual != null;
@@ -172,11 +248,11 @@ export const FormPage = forwardRef(function FormPage(
     // state's notice in one place and an all-empty list shows nothing.
     const statusContent = Array.isArray(status) ? Children.toArray(status.filter(Boolean)) : status;
     const hasStatus = Array.isArray(statusContent) ? statusContent.length > 0 : !!statusContent;
-    // Every notice the form shows, in order: its own status (or the demo
-    // note), then the ones raised from inside the body. StatusMessages merge
-    // into one box; any other node (an error summary) keeps its own place.
-    // A page that leads with the demo note itself passes the guard without it:
-    // the form is still blocked and still hides its own notices, but draws none.
+    // Every notice the form shows, in order: its own status (or, in a demo
+    // wallet, only the refusal of a pressed submit), then the ones raised from
+    // inside the body. StatusMessages merge into one box; any other node (an
+    // error summary) keeps its own place. A page that places the refusal
+    // itself (the Form Standard status slot) passes the guard without its note.
     const ownNodes = demoBlocked
         ? (demoGuard.note ? [demoGuard.note] : [])
         : (hasStatus ? (Array.isArray(statusContent) ? statusContent : [statusContent]) : []);
@@ -194,15 +270,21 @@ export const FormPage = forwardRef(function FormPage(
         else if (node) otherNodes.push(isValidElement(node) && node.key == null && ownNodes.length > 1 ? cloneElement(node, { key }) : node);
     };
     ownNodes.forEach((node, index) => collect(node, `status-${node?.key ?? index}`));
+    // The form error standard: the form's own error map leads the notices as
+    // the one danger notice listing every open problem.
+    if (formErrors?.hasErrors && formErrors.attempt > 0 && !demoBlocked) {
+        otherNodes.unshift(<FormErrorSummary key="form-errors" form={formErrors} action={errorAction} />);
+    }
     if (!demoBlocked) {
         for (const [id, entry] of controlNoticeList) {
             entries.push({
                 key: id,
                 variant: entry.variant,
                 role: entry.role,
-                lead: entry.lines ? undefined : entry.lead,
+                title: entry.title || entry.lead,
                 testId: entry.testId,
-                children: entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text,
+                onDismiss: entry.onDismiss,
+                children: entry.lines ? <NoticeLines lines={entry.lines} /> : entry.text,
             });
         }
     }
@@ -212,6 +294,7 @@ export const FormPage = forwardRef(function FormPage(
     // itself; its sentence is then not repeated here. The count includes
     // this form's own hide, so that one is taken off.
     const shellNotice = useContext(ShellReachabilityNoticeContext);
+    const noticeHost = useContext(PageNoticeHostContext);
     const carriedRef = useRef(false);
     const hiddenElsewhere = (shellNotice?.hiddenCount ?? 0) - (carriedRef.current ? 1 : 0) > 0;
     const carriesShellNotice = Root === 'form' && Boolean(shellNotice) && !hiddenElsewhere && entries.length > 0;
@@ -245,13 +328,14 @@ export const FormPage = forwardRef(function FormPage(
             </div>
         )
         : null;
-    // On a wide screen the form is a card, and a notice drawn inside it would be a
-    // box in a box. A plain form therefore draws its notices just above itself, at
-    // the full content width, as the first item of the page content. A form that
-    // owns its title, fills the screen or is a nested fragment keeps them inside.
-    // The wrapper is there whether or not a notice shows, so a notice coming or
-    // going never remounts the form and the field being typed in keeps its focus.
-    const noticeAboveCard = !ownsHeading && !fill && Root === 'form';
+    // A notice is the first item of the form, so from 600px the one form card
+    // wraps the notice and the fields together, the notice at its top (operator
+    // 2026-11-16); below 600px the form is bare and the notice leads the fields.
+    // The status slot sits 8px above the next element (FormPage.module.css).
+    // Inside a page that hosts its notices (a Settings section card), a plain
+    // form's notice goes to that host instead, outside the card around the form.
+    const plainForm = !ownsHeading && !fill && Root === 'form';
+    const portalStatus = Boolean(noticeHost) && plainForm;
     const form = (
         <Root
             ref={ref}
@@ -263,7 +347,7 @@ export const FormPage = forwardRef(function FormPage(
             {/* A notice is the first item of the page content, at the top where it
                 is seen, never below the fields or beside the submit button. A form
                 that owns its title (onboarding) puts it under that title instead. */}
-            {!ownsHeading && !noticeAboveCard ? statusNode : null}
+            {!ownsHeading && !portalStatus ? statusNode : null}
             {intro ? <p className={styles.intro}>{intro}</p> : null}
             {progress != null || topAction != null ? (
                 <div className={styles.topRow}>
@@ -289,18 +373,30 @@ export const FormPage = forwardRef(function FormPage(
             {children != null ? (
                 <FormNotices.Provider value={noticeApi}>
                     <EmptyStateAsLineContext.Provider value={Root === 'form'}>
-                        <div className={styles.body} data-form-stack="">{children}</div>
+                        <div className={styles.body} data-form-stack="">
+                            {formErrors ? (
+                                <FormErrorsContext.Provider value={formErrors}>{children}</FormErrorsContext.Provider>
+                            ) : children}
+                        </div>
                     </EmptyStateAsLineContext.Provider>
                 </FormNotices.Provider>
             ) : null}
-            {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
+            {actions ? (
+                <div className={actionClassName}>
+                    {actionsWithSuccess(actions)}
+                </div>
+            ) : null}
             {demoBlocked ? demoGuard.dialog : null}
         </Root>
     );
-    if (!noticeAboveCard) return form;
+    if (!plainForm) return form;
+    // A plain form keeps its page column wrapper (hosts such as the Locked
+    // screen centre that one child), and one tree shape whether or not a notice
+    // shows, so a notice coming or going never remounts the form and the field
+    // being typed in keeps its focus.
     return (
         <div className={styles.page}>
-            {statusNode}
+            {portalStatus && statusNode ? createPortal(statusNode, noticeHost) : null}
             {form}
         </div>
     );

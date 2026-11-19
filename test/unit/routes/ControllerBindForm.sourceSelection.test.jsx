@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
+import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 
 const walletMode = vi.hoisted(() => ({ value: 'full' }));
 
@@ -53,6 +54,7 @@ function messagingFor(addressesByChain, options = {}) {
         getControllerActionClasses: vi.fn().mockResolvedValue({ actionClasses: ['transfer'] }),
         getSignerStatus: options.getSignerStatus || vi.fn().mockResolvedValue({ status: 'available' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        getOwnedTokens: vi.fn().mockResolvedValue([]),
         buildControllerBindParams: vi.fn().mockResolvedValue({ action: 'ADDRESS', params: {} }),
     };
     return new Proxy(target, {
@@ -89,15 +91,15 @@ describe('ControllerBindForm source selection', () => {
 
         expect(await screen.findByText(NO_SOURCE)).toBeTruthy();
         const network = screen.getByRole('button', { name: 'Network: Bitcoin' });
-        expect(screen.getByRole('button', { name: 'Bind' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
 
         fireEvent.click(network);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
 
         expect(await screen.findByRole('button', { name: 'Network: Litecoin' })).toBeTruthy();
         expect(await screen.findByDisplayValue(hdAddress.address)).toBeTruthy();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Bind' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeEnabled();
     });
 
     it('skips a default chain that has no eligible address', async () => {
@@ -106,6 +108,8 @@ describe('ControllerBindForm source selection', () => {
             [LITECOIN]: [hdAddress],
         });
 
+        // Network lives in the closed From section; open it first.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: 'Network: Litecoin' })).toBeTruthy();
         expect(await screen.findByDisplayValue(hdAddress.address)).toBeTruthy();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
@@ -124,7 +128,7 @@ describe('ControllerBindForm source selection', () => {
 
         const guard = await screen.findByLabelText('Guard contract');
         expect(await screen.findByText(/Device not detected/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Bind' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -139,10 +143,76 @@ describe('ControllerBindForm source selection', () => {
         const messaging = mount({ [LITECOIN]: [watchAddress] });
 
         const guard = await screen.findByLabelText('Guard contract');
-        expect(screen.getByText('This watch-only account cannot sign.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Bind' })).toBeDisabled();
+        expect(screen.getByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
+    });
+});
+
+
+// The load error, the loading line and the broadcast panel lay out through
+// ListPage like every other route state, so none of them sits bare in the
+// Screen content box.
+describe('ControllerBindForm page template', () => {
+    function listPageSelector() {
+        const probe = render(<ListPage><p>x</p></ListPage>);
+        const name = probe.container.firstChild.className.split(' ')[0];
+        probe.unmount();
+        return '.' + CSS.escape(name);
+    }
+
+    function expectInsideListPage(element) {
+        expect(element.closest(listPageSelector()), 'inside ListPage').not.toBeNull();
+    }
+
+    it('lays out the load error inside ListPage', async () => {
+        const messaging = messagingFor({});
+        messaging.getAddressesByChain.mockRejectedValue(new Error('Address store unavailable'));
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        const alert = await screen.findByText(/Address store unavailable|Failed to load/);
+        expectInsideListPage(alert);
+    });
+
+    it('lays out the loading line inside ListPage', () => {
+        const messaging = messagingFor({});
+        messaging.getAddressesByChain.mockReturnValue(new Promise(() => {}));
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        expectInsideListPage(screen.getByText('Loading addresses…'));
+    });
+
+    it('lays out the broadcast panel and its Done action inside ListPage', async () => {
+        walletMode.value = 'watcher';
+        const txid = 'ab'.repeat(32);
+        // A checksum-valid Litecoin address, so the review step accepts the source.
+        const source = { ...hdAddress, address: 'ltc1qqurswpc8qurswpc8qurswpc8qurswpc8p4r4uu' };
+        const messaging = messagingFor({ [LITECOIN]: [source] });
+        messaging.buildActionPsbtRequest = vi.fn().mockResolvedValue({ txid });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '42' } });
+        const bind = screen.getByRole('button', { name: 'Bind Address' });
+        await waitFor(() => expect(bind).toBeEnabled());
+        fireEvent.click(bind);
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        const sign = await screen.findByRole('button', { name: 'Approve' });
+        fireEvent.click(sign);
+        const txidCell = await screen.findByText(txid);
+        expect(messaging.buildControllerBindParams).toHaveBeenCalled();
+        expectInsideListPage(txidCell);
+        expectInsideListPage(screen.getByText(/Bind broadcast/));
+        expectInsideListPage(screen.getByRole('button', { name: 'Done' }));
     });
 });

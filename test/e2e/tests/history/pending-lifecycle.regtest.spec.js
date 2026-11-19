@@ -118,7 +118,6 @@ import {
     PINNED_SDK,
     readOwnAddress,
     SDK_HAS_UNCONFIRMED,
-    searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -134,7 +133,10 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for the mint and the send. */
@@ -235,9 +237,9 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         await test.step(`send ${SEND_AMOUNT} ${TICK} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true }))
+            await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
@@ -279,7 +281,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             // Exactly one row for this transaction, before anything confirms.
             // The baseline half of CLAIM 4: a count that starts at 1 and ends at
             // 1 is the only way to distinguish an upgrade from a duplicate.
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'searching the send\'s own txid did not narrow History '
                 + 'to exactly one pending row').toHaveCount(1, { timeout: 30_000 });
             await expect(pendingRowFor(page, sendTxid),
@@ -345,37 +347,34 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await expect(banner, 'the pending detail page is titled with an action index it cannot have')
                 .not.toContainText('Send #');
 
+            // Operator ruling 2026-11-13: the four-step status bar alone says
+            // where a pending action is, with no second pending notice.
+            const bar = page.getByRole('list', { name: 'Transaction Status' });
+            await expect(bar, 'the detail page has no status bar').toBeVisible({ timeout: 30_000 });
+            await expect(bar.locator('li[aria-current="step"]'),
+                'the status bar does not mark the step the pending entry is on')
+                .toHaveCount(1);
+            await expect(bar.locator('li[data-step="processed"]'),
+                'a pending entry reads as processed')
+                .toHaveAttribute('data-state', 'todo');
             await expect(page.getByText('Pending, not yet validated by the service.'),
-                'the pending detail branch did not render its pre-validation line, which is the one '
-                + 'thing the user has to be told about an entry the indexer has not judged yet')
-                .toBeVisible({ timeout: 30_000 });
-
-            await expect(page.getByRole('region', { name: 'Pending transaction' }),
-                'the pending panel is missing from the detail view').toBeVisible();
+                'the retired pending notice is back on the detail page')
+                .toHaveCount(0);
         });
 
-        await test.step('CLAIM 3B: a shell without replaceTx WITHHOLDS Speed up and Cancel', async () => {
-            // This drives the shared DetailCard through the real web shell.
+        await test.step('CLAIM 3B: a shell without replaceTx WITHHOLDS Speed Up and Cancel Transaction', async () => {
             // The pending send is eligible for replacement, but the shell has
             // no callable replacement transport, so neither dead control may
-            // be offered.
-            const options = page.getByRole('group', { name: 'Transaction actions' });
-            await expect(options, 'the pending entry has no action options from which to verify the shell gate')
-                .toBeVisible({ timeout: 30_000 });
-
-            await options.getByRole('button', { name: 'More' }).click();
-            const menu = options.getByRole('menu');
-            await expect(menu.getByRole('menuitem', { name: 'Speed up transaction' }),
+            // be offered: neither Speed up nor Cancel transaction is a row of
+            // the Actions view's action list (G101), the view the page opens on.
+            const actions = page.getByRole('list', { name: 'Actions for this transaction' });
+            await expect(actions, 'the Actions view did not open first').toBeVisible();
+            await expect(actions.getByRole('button', { name: /^Speed up/ }),
                 'Speed up is offered even though the web shell cannot replace a transaction')
                 .toHaveCount(0);
-            await expect(menu.getByRole('menuitem', { name: 'Cancel transaction' }),
+            await expect(actions.getByRole('button', { name: /^Cancel transaction/ }),
                 'Cancel is offered even though the web shell cannot replace a transaction')
                 .toHaveCount(0);
-
-            // Closed again on purpose: an open menu carries a click-outside
-            // handler that would eat CLAIM 4's first interaction.
-            await options.getByRole('button', { name: 'More' }).click();
-            await expect(menu, 'the More menu stayed open').toHaveCount(0);
 
             expect(await blocksMined(), 'a block was mined while the miner was supposed to be '
                 + 'parked, so the shell gate above was not measured against an unconfirmed transaction')
@@ -397,7 +396,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
 
             // Back to the LIST: the filter bar does not exist on the detail
             // page, and History re-mounts with its default window when we return.
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
 
             // The pending key is GONE, not merely outnumbered. This is the
             // assertion a duplicated row would fail: an "the confirmed row is
@@ -413,7 +412,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
                 .toBeVisible({ timeout: 60_000 });
             await expect(confirmed.getByRole('button').first(),
                 'the row shows a different block than the explorer recorded')
-                .toContainText(`Block ${Number(chainRow.block_index).toLocaleString('en-US')}`);
+                .toContainText(`Block ${String(Number(chainRow.block_index))}`);
 
             // And the count that makes the whole transition meaningful: ONE row
             // for this transaction before the block, ONE after it.
@@ -497,7 +496,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         await test.step(`send ${SEND_AMOUNT} ${TICK} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);

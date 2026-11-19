@@ -1,26 +1,6 @@
-.listPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-/* A list fills the content area on wide screens, the same as every other
-   list (operator ruling 2026-10-12); only forms keep a narrow column. */
-.listFull {
-    display: grid;
-    /* 260px preserves useful entry width before the grid adds a column. */
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--xc-space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
 .listItem {
     display: flex;
+    align-items: stretch;
 }
 
 .entry {
@@ -28,7 +8,7 @@
     min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
@@ -41,32 +21,49 @@
     transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-/* Card.module.css keeps the entry's 1px card border above the menu-item and
-   nested-card resets; these rules colour it on hover, selection and press so
-   the near-white hover fill has a visible edge. */
-@media (hover: hover) and (pointer: fine) {
-    :root [data-xc-menu-list] li > .entry:hover:not([aria-disabled="true"]) {
-        border-color: var(--xc-control-border);
-    }
+/* Each entry also carries Button's btn class. Its single-class rules tie the
+   rule above, so the doubled class (a composing rule must stay a single class)
+   outranks them in any sheet order and keeps the row's own box, type and
+   position. */
+.entry.entry {
+    position: static;
+    min-height: var(--xc-tap-min);
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    text-align: start;
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: revert;
+    font-weight: revert;
+    line-height: revert;
+    transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-:root [data-xc-menu-list] li > .entry:is(:active, [aria-current='page'], [aria-pressed='true']):not([aria-disabled="true"]) {
-    border-color: var(--xc-control-selected);
-}
-
-.entryIcon {
+/* The standard list chevron (ui/ListRow.module.css .chevron): the page
+   header Back's icon box, clipped to its middle third, muted, centred
+   on the entry's height. */
+.chevron {
+    --xc-icon-size: var(--xc-space-8);
     flex: 0 0 auto;
+    align-self: center;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-    color: var(--xc-accent-text);
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+    color: var(--xc-text-muted);
 }
 
-.entryIcon > svg {
-    width: var(--xc-icon-xl);
-    height: var(--xc-icon-xl);
+.chevron > svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }
 
 .entryText {
@@ -80,19 +77,24 @@
 
 @media (hover: hover) and (pointer: fine) {
     .entry:hover:not([aria-disabled="true"]) {
-        background: var(--xc-control-bg-hover);
-        border-color: var(--xc-control-border-hover);
+        background: var(--xc-row-hover-bg);
     }
 }
 
 .entry:active:not([aria-disabled="true"]) {
-    background: var(--xc-control-bg-hover);
-    border-color: var(--xc-control-selected);
+    background: var(--xc-row-hover-bg);
 }
 
-.entry:is([aria-current='page'], [aria-pressed='true']) {
-    background: var(--xc-control-bg-hover);
-    border-color: var(--xc-control-selected);
+/* Button's press rule weighs three classes; four keep the row from dimming
+   or nudging when pressed. */
+.entry.entry:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.entry[aria-current='page'] {
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 .entry[aria-disabled="true"] {
@@ -117,14 +119,6 @@
 .entryDescription {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    line-height: 1.3;
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.entryReason {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-warning, #d99000);
     line-height: 1.3;
     min-width: 0;
     overflow-wrap: anywhere;

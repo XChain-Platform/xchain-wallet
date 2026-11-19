@@ -20,6 +20,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -41,7 +42,10 @@ const ADDRESSES = {
 const WALLET_BALANCE = '635000';
 const CONTRACT_HELD = '5000';
 
-function mountForm(mode, extra = {}, props = {}) {
+// `walletMode` among `extra` is the mode of wallet `w`, published the way the
+// shell does from the wallet list; every other entry is a messaging method.
+function mountForm(mode, { walletMode = 'full', ...extra } = {}, props = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -77,11 +81,10 @@ function mountForm(mode, extra = {}, props = {}) {
     return messaging;
 }
 
-// Pick MEMEVALID through whichever picker the mode opens: withdraw lists the
-// contract's custody rows as buttons, deposit reuses the wallet TokenPicker
-// (whose rows are labelled "Open <TICK> details").
+// Pick MEMEVALID through the standard TokenPicker both modes open: withdraw
+// hands it the contract's custody rows, deposit the wallet's tokens.
 async function pickToken(messaging) {
-    const openPicker = await screen.findByRole('button', { name: /Token/i });
+    const openPicker = await screen.findByRole('button', { name: /^Token:/ });
     fireEvent.click(openPicker);
     // The wallet picker also renders a favorite toggle per row, whose label
     // names the token too; pick the row itself.
@@ -98,10 +101,52 @@ async function pickToken(messaging) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
 describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
+    it('opens the standard token picker on only the contract-held tokens, with the held amounts', async () => {
+        mountForm('withdraw', {
+            getContractBalance: vi.fn().mockResolvedValue({
+                data: [
+                    { tick: 'MEMEVALID', quantity: CONTRACT_HELD },
+                    { tick: 'PEPE', quantity: '12.5' },
+                ],
+            }),
+        });
+        const field = await screen.findByRole('button', { name: /^Token:/ });
+        // The title is fixed; the contract shows as the first field instead.
+        expect(screen.getByRole('heading', { name: 'Withdraw from Contract' })).toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Contract' })).toHaveTextContent('#1632');
+        fireEvent.click(field);
+
+        // The picker's own title, never the form's "Withdraw from Contract" page.
+        expect(await screen.findByRole('heading', { name: 'Select Token' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /^Withdraw/ })).toBeNull();
+        const option = (tick) => (name) => name.startsWith(`Select ${tick} on Bitcoin,`);
+        const meme = await screen.findByRole('button', { name: option('MEMEVALID') });
+        expect(meme).toHaveAccessibleName(/5,000 MEMEVALID/);
+        expect(meme).not.toHaveAccessibleName(/635,000/);
+        expect(screen.getByRole('button', { name: option('PEPE') })).toHaveAccessibleName(/12\.5 PEPE/);
+        // Only what the contract holds: not the wallet's BTC.
+        expect(screen.getAllByRole('button', { name: (name) => name.startsWith('Select ') })).toHaveLength(2);
+
+        fireEvent.click(screen.getByRole('button', { name: option('PEPE') }));
+        expect(await screen.findByRole('button', { name: /^Token: PEPE/ })).toBeInTheDocument();
+    });
+
+    it('says the contract holds no tokens when its custody is empty, with nothing to reset', async () => {
+        mountForm('withdraw', { getContractBalance: vi.fn().mockResolvedValue({ data: [] }) });
+        fireEvent.click(await screen.findByRole('button', { name: /^Token:/ }));
+
+        expect(await screen.findByRole('heading', { name: 'Select Token' })).toBeInTheDocument();
+        expect(await screen.findByText('No contract tokens')).toBeInTheDocument();
+        expect(screen.getByText('Tokens held by this contract appear here.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reset Filters' })).toBeNull();
+        expect(screen.queryAllByRole('button', { name: (name) => name.startsWith('Select ') })).toHaveLength(0);
+    });
+
     it('reads the contract balance for the target contract, not just the wallet', async () => {
         const messaging = mountForm('withdraw');
         await waitFor(() => expect(messaging.getContractBalance).toHaveBeenCalledTimes(1));
@@ -121,8 +166,8 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
     it('blocks a withdrawal larger than the contract holds, before any signing', async () => {
         const messaging = mountForm('withdraw');
         await pickToken(messaging);
-        fireEvent.change(await screen.findByLabelText(/Quantity/i), { target: { value: '6000' } });
-        fireEvent.click(screen.getByRole('button', { name: /^(Withdraw|Preview)$/ }));
+        fireEvent.change(await screen.findByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '6000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('The contract only holds 5,000 MEMEVALID.');
     });
@@ -134,10 +179,10 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
             }),
         });
         await pickToken(messaging);
-        fireEvent.change(await screen.findByLabelText(/Quantity/i), {
+        fireEvent.change(await screen.findByLabelText(/Quantity/i, { selector: 'input' }), {
             target: { value: '9007199254740993' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /^(Withdraw|Preview)$/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('The contract only holds 9,007,199,254,740,992 MEMEVALID.');
@@ -146,8 +191,8 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
     it('allows a withdrawal the contract can cover', async () => {
         const messaging = mountForm('withdraw');
         await pickToken(messaging);
-        fireEvent.change(await screen.findByLabelText(/Quantity/i), { target: { value: '5000' } });
-        fireEvent.click(screen.getByRole('button', { name: /^(Withdraw|Preview)$/ }));
+        fireEvent.change(await screen.findByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '5000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
         await waitFor(() => {
             const alert = screen.queryByRole('alert');
             expect(alert === null || !/only holds/.test(alert.textContent)).toBe(true);
@@ -167,8 +212,8 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
         const messaging = mountForm('deposit');
         await pickToken(messaging);
         expect(await screen.findByText(/635,000 MEMEVALID available/)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '635001' } });
-        fireEvent.click(screen.getByRole('button', { name: /^(Deposit|Preview)$/ }));
+        fireEvent.change(screen.getByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '635001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Deposit' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Only 635,000 MEMEVALID is available to deposit.');
@@ -191,7 +236,7 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
         const messaging = mountForm('deposit', { getTokenInfo });
         await pickToken(messaging);
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
-        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '1.234' } });
+        fireEvent.change(screen.getByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '1.234' } });
 
         expect(await screen.findByText('Amount can have at most 2 decimal places.'))
             .toBeInTheDocument();
@@ -205,21 +250,24 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
             .toHaveTextContent('Contract ID must be a positive whole number.');
     });
 
-    it('labels the withdrawal recipient and keeps values when Back returns to the form', async () => {
+    it('uses the shared confirmation and keeps values when Reject returns to the form', async () => {
         const messaging = mountForm('withdraw', {
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
         });
         await pickToken(messaging);
-        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '12.5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText(/Quantity/i, { selector: 'input' }), { target: { value: '12.5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review withdraw' })).toBeInTheDocument();
-        expect(screen.getByText('Recipient')).toBeInTheDocument();
-        expect(screen.getByText('12.5')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByText('Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/Withdraw 12.5 MEMEVALID/i);
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(screen.queryByTestId('confirm-total-main')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
-        expect(await screen.findByLabelText(/Quantity/i)).toHaveValue('12.5');
+        expect(await screen.findByLabelText(/Quantity/i, { selector: 'input' })).toHaveValue('12.50000000');
         expect(screen.getByRole('button', { name: /^Token: MEMEVALID/ })).toBeInTheDocument();
     });
 });

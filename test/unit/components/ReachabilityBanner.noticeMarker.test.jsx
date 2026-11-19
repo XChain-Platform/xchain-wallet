@@ -22,7 +22,7 @@ afterEach(() => { cleanup(); useReachability.mockReset(); });
 describe('ReachabilityBanner notice marker', () => {
     it('marks the outermost box as a notice and keeps one status element inside it', () => {
         useReachability.mockReturnValue({
-            loading: false, overall: 'degraded', perChain: [], refresh: () => {}, lastChecked: null,
+            loading: false, overall: 'offline', perChain: [], refresh: () => {}, lastChecked: null,
         });
         const { container } = render(<ReachabilityBanner />);
         const box = container.firstElementChild;

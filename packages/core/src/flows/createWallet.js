@@ -32,6 +32,7 @@ import { persistHdWallet } from './_persistHdWallet.js';
  * @property {string} [bip39Passphrase]                        §15.6 25th word
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams] override per-device calibration
  * @property {Uint8Array} [masterKey]                         key already derived from `password` under `kdfParams` (required with it); copied, never zeroed here, the caller zeroes its own
+ * @property {'full' | 'watcher' | 'signer'} [walletMode]    §20: chosen once here; default `full`
  */
 
 /**
@@ -58,6 +59,7 @@ export async function createWallet({
     kdfParams,
     masterKey,
     activeNetwork,
+    walletMode,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('createWallet: password is required');
@@ -99,6 +101,7 @@ export async function createWallet({
         sdkRegistry,
         activeChainIds,
         activeNetwork: effectiveActiveNetwork,
+        walletMode,
     });
 
     return { mnemonic, ...persisted };

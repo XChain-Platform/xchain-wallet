@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ManageToken } from '../../../packages/core/src/shared/routes/ManageToken.jsx';
@@ -48,17 +48,21 @@ async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}
             }),
         ),
     );
-    await screen.findByText(MARKER);
+    // The standard hero names the token; its description is a Details row.
+    await screen.findByRole('region', { name: 'SHAREDLIST' });
     return messaging;
 }
 
+// The issuer's groups are headed lists, always open (an info page has no
+// collapsible sections), so this only waits for the named group to draw.
+async function openGroup(title) {
+    await screen.findByRole('region', { name: title });
+}
+
 async function sharedBlockListRow() {
-    // The More menu renders once the owner lookup settles, after the marker text.
-    const moreButton = await screen.findByRole('button', { name: 'More' });
-    expect(moreButton).toHaveAttribute('aria-busy', 'false');
-    fireEvent.click(moreButton);
-    const row = screen.getByRole('menuitem', { name: 'Use a shared block list' });
-    expect(row).toHaveAttribute('aria-busy', 'false');
+    await openGroup('Rules and automation');
+    const row = await screen.findByRole('button', { name: /^Shared block list\b/ });
+    expect(row.getAttribute('data-action-id')).toBe('shared-block-list');
     return row;
 }
 
@@ -69,14 +73,11 @@ describe('ManageToken shared block list action', () => {
             tokenInfo: { locks: { description: true } },
             onUpdateDescription,
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
-
-        const description = screen.getByRole('menuitem', { name: 'Description' });
-        expect(description).toBeDisabled();
-        expect(description).toHaveAttribute(
-            'title',
-            'The description is permanently locked and cannot be updated.',
-        );
+        await openGroup('Token page');
+        const description = await screen.findByRole('button', { name: /^Description\b/ });
+        expect(description).toHaveAttribute('aria-disabled', 'true');
+        // The lock reason replaces the row's description line.
+        expect(description.textContent).toContain("The description is permanently locked and can't be updated.");
         fireEvent.click(description);
         expect(onUpdateDescription).not.toHaveBeenCalled();
     });
@@ -99,21 +100,20 @@ describe('ManageToken shared block list action', () => {
         expect(onAccessLists).toHaveBeenCalledTimes(1);
     });
 
-    it('is absent when neither handler is passed', async () => {
+    it('is disabled when neither handler is passed', async () => {
         await renderManage();
-        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
-
-        expect(screen.queryByRole('menuitem', { name: 'Use a shared block list' })).toBeNull();
+        await openGroup('Rules and automation');
+        expect(await screen.findByRole('button', { name: /^Shared block list\b/ })).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('is absent for a non-owner', async () => {
-        await renderManage({ isOwner: false, onUseSharedBlockList: vi.fn() });
-        await waitFor(() => {
-            expect(screen.getByText(/hold the token's issuer address/i)).toBeInTheDocument();
-        });
-        const moreButton = screen.queryByRole('button', { name: 'More' });
-        if (moreButton) fireEvent.click(moreButton);
-
-        expect(screen.queryByText('Use a shared block list')).toBeNull();
+    it('stays enabled for a non-owner and opens its form', async () => {
+        const onUseSharedBlockList = vi.fn();
+        await renderManage({ isOwner: false, onUseSharedBlockList });
+        await openGroup('Rules and automation');
+        const row = await screen.findByRole('button', { name: /^Shared block list\b/ });
+        expect(row).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(row);
+        expect(onUseSharedBlockList).toHaveBeenCalledWith({ issuer: ISSUER });
+        expect(screen.queryByText(/hold the token's issuer address/i)).toBeNull();
     });
 });

@@ -35,7 +35,6 @@ for (const [name, text] of [
     ['create password', createWallet],
     ['import password', importWallet],
     ['migration password', migrateWallet],
-    ['paired-wallet password', pairWallet],
 ]) {
     assert.match(
         text,
@@ -49,6 +48,15 @@ for (const [name, text] of [
     );
 }
 
+// The two-phone pairing opens from Settings with the vault already open, so
+// its field is the vault's existing password, with no confirmation.
+assert.match(
+    pairWallet,
+    /value=\{password\}[\s\S]{0,300}?autoComplete="current-password"/,
+    'paired-wallet password uses current-password',
+);
+assert.doesNotMatch(pairWallet, /value=\{confirm\}/, 'paired-wallet password has no confirmation field');
+
 assert.match(
     locked,
     /name="username"[\s\S]{0,120}?value="xchain-wallet"[\s\S]{0,120}?autoComplete="username"[\s\S]{0,120}?hidden/,
@@ -56,7 +64,7 @@ assert.match(
 );
 assert.match(
     locked,
-    /name="password"[\s\S]{0,300}?autoComplete="current-password"/,
+    /name="password"[\s\S]{0,420}?autoComplete="current-password"/,
     'unlock uses current-password',
 );
 

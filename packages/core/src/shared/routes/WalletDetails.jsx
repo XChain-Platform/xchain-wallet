@@ -8,8 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useState } from 'react';
 import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
+// The standard list card, which the identity card draws on.
+import listStyles from './CoSignerAccountList.module.css';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
@@ -20,11 +27,16 @@ import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/addressDiscovery.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/walletDetails.js';
+import '../../i18n/locales/en/walletPicker.js';
 import { walletOriginLabel } from '../utils/walletOriginLabel.js';
+import { walletModeLabel } from '../components/WalletModeField.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 import { pendingMigrationSweeps } from '../../flows/migrationSweeps.js';
+import { isHardwareWallet } from '../../flows/hardwareWallet.js';
+import { HardwareWalletDetails } from '../components/HardwareWalletDetails.jsx';
 
 // Re-exported for the callers and tests that reached for it here before
 // the demo-exit primitives were pulled into one module.
@@ -45,8 +57,17 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {(wallet: any) => void} [props.onRename]   navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
+ * @param {(wallet: any) => void} [props.onExportBackup]  opens the Export Backup page for this wallet
+ * @param {(wallet: any) => void} [props.onRemoveWallet]  opens the Remove Wallet page for this wallet
+ *
+ * A hardware wallet gets its own page instead (hw-4 layout 1): no phrase,
+ * backup, export or address check, and Unlink in place of Remove.
+ * @param {(walletId: string) => void} [props.onUnlinked]  a hardware wallet that was not active was unlinked; the host leaves the page
+ * @param {(wallet: any, signer: any) => void} [props.onReconnect]  a hardware wallet's Reconnect row
+ * @param {(wallet: any) => void} [props.onOpenAccounts]  a hardware wallet's Accounts row: the shared My Accounts page for that wallet (G131)
  */
-export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited }) {
+export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited, activeWalletId, onMakeActive, onOpenSettings, onShowRecoveryPhrase, onExportBackup, onRemoveWallet, onUnlinked, onReconnect, onOpenAccounts }) {
+    const [madeActive, setMadeActive] = useState(false);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -78,7 +99,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             await messaging.discoverAddresses({ walletId });
             setDiscoveryRun((n) => n + 1);
         } catch (err) {
-            setDiscoveryError(err?.message || String(err));
+            setDiscoveryError(userFacingMessage(err, 'Could not check for used addresses. Try again.'));
         } finally {
             setDiscoveryStarting(false);
         }
@@ -109,7 +130,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             setExitConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
-            setExitError(err?.message || 'Could not exit demo mode.');
+            setExitError(userFacingMessage(err, 'Could not exit demo mode.'));
         } finally {
             setExitBusy(false);
         }
@@ -141,7 +162,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     setWalletLoad({
                         walletId,
                         wallet: null,
-                        error: err?.message || 'Failed to load wallet.',
+                        error: userFacingMessage(err, 'Failed to load wallet.'),
                     });
                 }
             });
@@ -184,6 +205,24 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         );
     }
 
+    if (isHardwareWallet(wallet)) {
+        return (
+            <HardwareWalletDetails
+                wallet={wallet}
+                accountCount={accountCount}
+                onBack={onBack}
+                onRename={onRename}
+                activeWalletId={madeActive ? wallet.id : activeWalletId}
+                onMakeActive={typeof onMakeActive === 'function'
+                    ? (w) => { onMakeActive(w); setMadeActive(true); }
+                    : undefined}
+                onUnlinked={onUnlinked}
+                onReconnect={onReconnect}
+                onOpenAccounts={onOpenAccounts}
+            />
+        );
+    }
+
     const formatLabel = wallet.format === 'counterwallet-legacy' ? 'FreeWallet (Counterwallet legacy)' : 'BIP39';
     const originLabel = walletOriginLabel(wallet.origin);
     const created = wallet.createdAt ? new Date(wallet.createdAt) : null;
@@ -196,105 +235,104 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         && wallet.format !== 'wif-only'
         && typeof messaging.discoverAddresses === 'function';
 
+    const isActive = madeActive || wallet.id === activeWalletId;
+    const walletModeText = walletModeLabel(wallet.walletMode);
+    const typeShort = wallet.format === 'counterwallet-legacy' ? 'Legacy' : wallet.format === 'wif-only' ? 'Imported key' : 'BIP39';
+    const accountsText = accountCount === null ? '…' : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`;
+    // One ActionList row (G101): icon square, title, the line saying what it
+    // does, and the chevron; a destructive row takes the danger tone.
+    const actionRow = (key, label, IconC, onClick, extra = {}) => (
+        <ActionListItem
+            key={key}
+            icon={<IconC />}
+            title={label}
+            description={extra.description}
+            onClick={onClick}
+            disabled={exitBusy || extra.disabled}
+            tone={extra.danger ? 'danger' : 'default'}
+        />
+    );
+    const toSettings = () => (typeof onOpenSettings === 'function' ? onOpenSettings() : undefined);
+
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
+            {/* 8px between every block on this page. */}
+            <ListPage style={{ '--xc-section-gap': 'var(--xc-space-2)', gap: 'var(--xc-space-2)' }}>
                 {discoveryError ? <StatusMessage variant="error">{discoveryError}</StatusMessage> : null}
                 {discoveryRun > 0 ? <AddressDiscoveryNotice key={discoveryRun} /> : null}
-                <dl className={pickerStyles.detailList}>
-                    <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
-                    <Row label={t('walletDetails.type')} value={formatLabel} />
-                    <Row label={t('walletDetails.origin')} value={originLabel} />
-                    <Row
-                        label={t('walletDetails.passphrase')}
-                        value={!wallet.passphraseEnabled
-                            ? 'Disabled'
-                            : wallet.passphraseStored
-                                ? 'Stored'
-                                : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
-                    />
-                    <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
-                    <Row label={t('walletDetails.created')} value={createdLabel} />
-                    {isDemo ? (
+                {/* The identity card is three lines: name; type and
+                    accounts; Active or Not active. */}
+                {/* 8px inside the card (G80); the Active bubble is the one
+                    My Wallets draws (G07). */}
+                <div className={listStyles.list} data-identity-card="" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', textAlign: 'start', gap: 'var(--xc-space-2)', alignItems: 'center', padding: 'var(--xc-space-2)' }}>
+                    <span aria-hidden="true" style={{ '--xc-avatar-shape': tileRadius(readWalletTile(wallet.id).shape), display: 'inline-flex' }}><IdentityAvatar name={wallet.name || 'Wallet'} text={walletTileText(wallet.name)} seed={wallet.id} context="list" variant="asset" tone={readWalletTile(wallet.id).colour} src={readWalletTile(wallet.id).image || null} /></span>
+                    <div className={pickerStyles.identityText}>
+                        <strong className={pickerStyles.identityName}>{wallet.name || t('walletPicker.unnamed')}</strong>
+                        <span className={pickerStyles.identityMeta}>
+                            <span>{typeShort} · {accountsText}</span>
+                            {isActive ? (
+                                <span className={pickerStyles.activeBadge}>{t('settings.developer.active')}</span>
+                            ) : null}
+                        </span>
+                    </div>
+                </div>
+                <ActionsDetailsToggle
+                    actions={(
+                        <>
+                            {/* One list card; the destructive row comes last, in red (G101). */}
+                            <ActionList label={t('walletDetails.actionsList')}>
+                                {!isActive && typeof onMakeActive === 'function'
+                                    ? actionRow('active', 'Set as active wallet', Icon.CheckIcon, () => { onMakeActive(wallet); setMadeActive(true); }, { description: t('walletDetails.action.setActive') })
+                                    : null}
+                                {onRename ? actionRow('rename', t('renameWallet.title'), Icon.PencilIcon, () => onRename(wallet), { description: t('walletDetails.action.rename') }) : null}
+                                {wallet.format !== 'wif-only' ? actionRow('phrase', 'Show recovery phrase', Icon.KeyIcon, () => (typeof onShowRecoveryPhrase === 'function' ? onShowRecoveryPhrase(wallet) : toSettings()), { description: t('walletDetails.action.recoveryPhrase') }) : null}
+                                {actionRow('backup', t('walletDetails.exportBackupAction'), Icon.DownloadIcon || Icon.CopyIcon, () => (typeof onExportBackup === 'function' ? onExportBackup(wallet) : toSettings()), { description: t('walletDetails.action.exportBackup') })}
+                                {canCheckAddresses ? actionRow('discover', t('addressDiscovery.action'), Icon.SearchIcon, handleCheckAddresses, { disabled: discoveryStarting, description: t('walletDetails.action.checkAddresses') }) : null}
+                                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39
+                                    ? actionRow('migrate', pendingMigrationSweeps(wallet.id) ? t('walletDetails.continueMigration') : t('walletDetails.upgradeRecovery'), Icon.MigrateIcon, onMigrateToBip39, { description: t('walletDetails.action.upgradeRecovery') })
+                                    : null}
+                                {isDemo
+                                    ? actionRow('exit-demo', t('walletDetails.exitDemo'), Icon.TrashIcon, () => { setExitError(null); setExitConfirmOpen(true); }, { danger: true, description: t('walletDetails.action.exitDemo') })
+                                    : actionRow('remove', 'Remove wallet', Icon.TrashIcon, () => (typeof onRemoveWallet === 'function' ? onRemoveWallet(wallet) : toSettings()), { danger: true, description: t('walletDetails.action.remove') })}
+                            </ActionList>
+                            {exitError && !exitConfirmOpen ? <StatusMessage variant="error">{exitError}</StatusMessage> : null}
+                            {exitConfirmOpen ? (
+                                <DemoExitConfirm
+                                    busy={exitBusy}
+                                    error={exitError}
+                                    onConfirm={handleExitDemo}
+                                    onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                                />
+                            ) : null}
+                        </>
+                    )}
+                    details={(
+                    <dl className={pickerStyles.detailList}>
+                        <Row label={t('walletDetails.name')} value={wallet.name || t('walletPicker.unnamed')} />
+                        <Row label={t('walletDetails.type')} value={formatLabel} />
+                        {/* The wallet's own mode (§20), read-only; chosen at create, import or pair. */}
+                        <Row label={t('walletDetails.walletMode')} value={walletModeText} />
+                        <Row label={t('walletDetails.origin')} value={originLabel} />
                         <Row
-                            label={t('history.filters.statusHeader')}
-                            value={
-                                <span>
-                                    {t('walletDetails.demoWallet')}
-                                    {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
-                                </span>
-                            }
+                            label={t('walletDetails.passphrase')}
+                            value={!wallet.passphraseEnabled
+                                ? 'Disabled'
+                                : wallet.passphraseStored
+                                    ? 'Stored'
+                                    : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                         />
-                    ) : null}
-                    <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
-                </dl>
-                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="primary"
-                            block
-                            onClick={onMigrateToBip39}
-                            disabled={exitBusy}
-                            icon={<Icon.MigrateIcon />}
-                        >
-                            {pendingMigrationSweeps(wallet.id)
-                                ? t('walletDetails.continueMigration')
-                                : t('walletDetails.upgradeRecovery')}
-                        </Button>
-                    </div>
-                ) : null}
-                {onRename ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="primary"
-                            block
-                            onClick={() => onRename(wallet)}
-                            disabled={exitBusy}
-                            icon={<Icon.PencilIcon />}
-                        >
-                            {t('renameWallet.title')}
-                        </Button>
-                    </div>
-                ) : null}
-                {canCheckAddresses ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            block
-                            onClick={handleCheckAddresses}
-                            disabled={exitBusy || discoveryStarting}
-                            icon={<Icon.SearchIcon />}
-                        >
-                            {t('addressDiscovery.action')}
-                        </Button>
-                    </div>
-                ) : null}
-                {isDemo ? (
-                    <div>
-                        <Button
-                            type="button"
-                            variant="danger"
-                            block
-                            onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
-                        >
-                            {t('walletDetails.exitDemo')}
-                        </Button>
-                        {exitError && !exitConfirmOpen ? (
-                            <StatusMessage variant="error">{exitError}</StatusMessage>
-                        ) : null}
-                        {exitConfirmOpen ? (
-                            <DemoExitConfirm
-                                busy={exitBusy}
-                                error={exitError}
-                                onConfirm={handleExitDemo}
-                                onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                        <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
+                        <Row label={t('walletDetails.created')} value={createdLabel} />
+                        {isDemo ? (
+                            <Row
+                                label={t('history.filters.statusHeader')}
+                                value={<span>{t('walletDetails.demoWallet')}{formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}</span>}
                             />
                         ) : null}
-                    </div>
-                ) : null}
+                        <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
+                    </dl>
+                    )}
+                />
             </ListPage>
         </Screen>
     );
@@ -323,4 +361,12 @@ function Row({ label, value }) {
             <dd className={pickerStyles.detailValue}>{value}</dd>
         </div>
     );
+}
+
+// The wallet tile's name, spelled so the tile always shows two
+// initials (a one-word name gives its first two letters).
+function tileName(name) {
+    const clean = String(name || 'Wallet').trim() || 'Wallet';
+    const words = clean.split(/\s+/);
+    return words.length > 1 ? clean : `${clean[0]} ${clean[1] || ''}`.trim();
 }

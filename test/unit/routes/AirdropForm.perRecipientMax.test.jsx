@@ -25,6 +25,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -130,7 +131,7 @@ const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable amount is not.
 const maxButtonOrNull = () => screen.queryByRole('button', { name: /max available/i });
-const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/ });
+const submitButton = () => screen.getByRole('button', { name: /^Review recipients$/i });
 
 // The route loads its addresses asynchronously, so every case waits for
 // the compose form itself before touching a field.
@@ -157,7 +158,8 @@ const maxReady = async () => {
 
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
-// the rendered text as a whole.
+// the rendered text as a whole. Review titles are Title Case
+// ("Review Address List").
 const expectText = async (re) => {
     await flushTimers();
     expect(document.body.textContent).toMatch(re);
@@ -182,7 +184,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         // 4,999 XCHAIN across two addresses = 2,499.5 each. The old, wrong
         // number was the balance itself, once per recipient.
         // The field renders grouped, so the assertion reads as the user sees it.
-        expect(amountField().value).toBe('2,499.5');
+        expect(amountField().value).toBe('2,499.50000000');
         expect(amountField().value).not.toBe('4,999');
     });
 
@@ -213,6 +215,18 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         expect(amountField().value).toBe('3');
     });
 
+    it('shows the per-recipient amount in the selected token format', async () => {
+        mountAirdrop({ divisibility: 8 });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.blur(amountField());
+        expect(amountField()).toHaveValue('1');
+
+        fireEvent.change(amountField(), { target: { value: '1.5' } });
+        fireEvent.blur(amountField());
+        expect(amountField()).toHaveValue('1.50000000');
+    });
+
     it('discloses the balance left by per-recipient rounding', async () => {
         mountAirdrop({ balance: '10', divisibility: 0 });
         await pasteRecipients([...RECIPIENTS, 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3']);
@@ -236,13 +250,13 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         mountAirdrop({ holderCount: 4 });
         await flushTimers();
         const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
-        fireEvent.change(mode, { target: { value: 'holders' } });
+        selectOption(mode, 'holders');
         const ticks = screen.getByRole('textbox', { name: 'Tokens (one per line)' });
         fireEvent.change(ticks, { target: { value: 'S19MINT' } });
         await maxReady();
         fireEvent.click(maxButton());
         // Four current holders of S19MINT, 4,999 to spread across them.
-        expect(amountField().value).toBe('1,249.75');
+        expect(amountField().value).toBe('1,249.75000000');
     });
 
     it('blocks a hand-typed over-payout at the form, before the LIST is composed', async () => {
@@ -251,7 +265,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'This pays ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -267,19 +281,20 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         fireEvent.change(amountField(), { target: { value } });
         fireEvent.click(submitButton());
 
-        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(message);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('keeps excess token precision out of review', async () => {
         const messaging = mountAirdrop({ divisibility: 2 });
         await pasteRecipients();
-        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.001' } });
+        expect(submitButton()).toBeEnabled();
         fireEvent.click(submitButton());
 
-        expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-recipient amount can have at most 2 decimal places for XCHAIN.',
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
+            'Amount can have at most 2 decimal places.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -287,22 +302,26 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('keeps a fractional indivisible-token payout out of both review steps', async () => {
         const messaging = mountAirdrop({ balance: '10', divisibility: 0 });
         await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.5' } });
+        expect(submitButton()).toBeEnabled();
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-recipient amount must be a whole number because XCHAIN is indivisible.',
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
+            'Amount can have at most 0 decimal places.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
 
-    it('lets a payable amount through to the recipient review', async () => {
+    it('lets a payable amount through to the shared recipient-list confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '2499.5' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-buttons')).toHaveTextContent('RejectApprove');
     });
 
     it('Back from recipient review keeps the amount and recipients', async () => {
@@ -310,28 +329,29 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10.00' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        expect(await amountField()).toHaveValue('10.00');
+        expect(await amountField()).toHaveValue('10');
         expect(screen.getByRole('textbox', { name: 'Recipients' }))
             .toHaveValue(RECIPIENTS.join('\n'));
     });
 
-    it('shows distribution and both transaction fees before the first confirm', async () => {
+    it('shows distribution and the known leg fee in the shared confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10' } });
         fireEvent.click(submitButton());
 
         await flushTimers();
-        expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(screen.getByText('Total distribution')).toBeTruthy();
         expect(document.body.textContent).toMatch(/~20 XCHAIN/);
-        expect(screen.getByText('Estimated network fees (2 transactions)')).toBeTruthy();
-        expect(screen.getByText('Airdrop protocol fee')).toBeTruthy();
-        expect(screen.getByText(/final recipient count when the airdrop executes/)).toBeTruthy();
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/BTC/);
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Protocol fee');
+        expect(document.body.textContent).not.toMatch(/Estimate unavailable/);
     });
 
     it('shows encoder failures as plain copy without developer wording', async () => {
@@ -344,7 +364,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10' } });
         fireEvent.click(submitButton());
-        fireEvent.click(screen.getByRole('button', { name: /Sign address list/ }));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();
 
         const alert = screen.getByRole('alert');
@@ -374,7 +394,8 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
     });
 });
 
@@ -410,7 +431,7 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await expectText(/4,999 XCHAIN available · up to 2,499\.5 each/);
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'Paying every listed address takes ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -421,7 +442,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain('As the lists stand now, this airdrop pays 0.');
     });
 
@@ -430,7 +452,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain(
             'excludes 1 of these addresses, and the network pays it nothing. As the lists stand now, '
                 + 'this airdrop pays 1. The lists can change before the airdrop confirms, so Max and the '
@@ -452,7 +475,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/total ~2 XCHAIN/);
         fireEvent.click(submitButton());
-        await expectText(/Review address list/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain(
             'It combines other lists, which this wallet cannot count. This token has an allow or block list, '
                 + 'so the network may pay fewer addresses than shown here.',
@@ -470,14 +494,34 @@ describe('AirdropForm counts only the recipients the token pays', () => {
 });
 
 describe('AirdropForm CSV upload control', () => {
-    it('opens the hidden file input from an outlined button', async () => {
+    it('opens the hidden file input from the standard file field', async () => {
         mountAirdrop();
         await flushTimers();
         const input = screen.getByLabelText('Upload CSV of addresses');
         expect(input.style.display).toBe('none');
         const click = vi.spyOn(input, 'click');
-        fireEvent.click(screen.getByRole('button', { name: 'Upload a CSV or text file' }));
-        expect(click).toHaveBeenCalledTimes(1);
+        // The field's Upload icon and the field itself both open the dialog.
+        fireEvent.click(screen.getByRole('button', { name: 'Choose a file' }));
+        fireEvent.click(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/));
+        expect(click).toHaveBeenCalledTimes(2);
+        expect(screen.queryByRole('button', { name: 'Upload a CSV or text file' })).toBeNull();
+    });
+
+    it('shows the loaded file in the field and its X clears the loaded addresses', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const list = new File(['bc1qexample1\nbc1qexample2'], 'recipients.csv', { type: 'text/csv' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [list] } });
+        });
+        await flushTimers();
+        expect(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/)).toHaveValue('recipients.csv');
+        expect(screen.getByLabelText('Recipients').value).toContain('bc1qexample1');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+        expect(screen.getByLabelText(/^Recipients file \(CSV or TXT\)/)).toHaveValue('');
+        expect(screen.getByLabelText('Recipients').value).toBe('');
     });
 
     it('refuses a picked file over the size cap instead of loading it', async () => {

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     WALLET_UNLOCK,
     approve,
@@ -53,12 +54,13 @@ async function importClaimant(page, claimant) {
     await expect(chain).toBeVisible({ timeout: 30_000 });
     if (!((await chain.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await chain.click();
-        await page.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: /^Select\sBitcoin\b/ }).first().click();
     }
 
-    await page.getByLabel('Address type').selectOption(type);
+    await pickOption(page.getByLabel('Address type'), type);
     await page.getByLabel('WIF private key').fill(claimant.wif);
-    await page.getByLabel('Label (optional)').fill('Testnet validator claimant');
+    await page.getByLabel('Label', { exact: true }).fill('Testnet validator claimant');
     const password = page.getByLabel('Wallet password', { exact: true });
     if (await password.count()) await password.fill(WALLET_UNLOCK);
     await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
@@ -68,8 +70,8 @@ async function importClaimant(page, claimant) {
     await expect(notice).toBeVisible({ timeout: 120_000 });
     expect(await notice.innerText()).toContain(claimant.address);
     await page.getByRole('button', { name: `View address ${claimant.address}` }).click();
-    const use = page.getByRole('button', { name: 'Use', exact: true });
-    await expect(use).toHaveAttribute('title', 'Make this the active address');
+    const use = page.getByRole('button', { name: 'Set active', exact: true });
+    await expect(use).toBeVisible();
     await use.click();
     await expect(use).toBeHidden({ timeout: 120_000 });
 }
@@ -111,8 +113,8 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             const row = page.getByRole('button', { name: /^Open (Validator stake), / }).first();
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
-            const claim = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claim = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claim).toBeEnabled({ timeout: 120_000 });
             await claim.click();
 
@@ -123,7 +125,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             // COLLECT|0 paid 130).
             await expect(main.getByText(/XCHAIN available$/)).toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(amount);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
             const claimTxid = await readDoneTxid(page);

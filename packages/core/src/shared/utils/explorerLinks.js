@@ -53,3 +53,15 @@ export function explorerPageUrl({
     if (!coin || !base) return null;
     return safeHttpUrl(`${base}/${coin}/${segment}/${encodeURIComponent(identifier)}`);
 }
+
+/**
+ * The explorer's page for one chain as a whole, for a native coin,
+ * which has no token page of its own.
+ */
+export function explorerChainUrl({ chainId, settings = null, chainRegistry = defaultRegistry() }) {
+    const descriptor = chainRegistry?.get?.(chainId);
+    const coin = explorerCoinCode(descriptor);
+    const base = explorerBaseUrl(chainId, settings, chainRegistry);
+    if (!coin || !base) return null;
+    return safeHttpUrl(`${base}/${coin}`);
+}

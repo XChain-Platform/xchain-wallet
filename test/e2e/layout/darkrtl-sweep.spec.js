@@ -118,13 +118,84 @@ function pseudo(name) {
 
 async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
-    const dev = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    const dev = page.getByRole('switch', { name: 'Developer mode', exact: true });
     if (!(await dev.isChecked())) { await dev.click(); await expect(dev).toBeChecked(); }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
-    await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
+    // Back once: the switch lives on the Advanced group page.
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    // Language is a row on the Appearance group page.
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
+    // Language is a list of choices; a pick saves and returns.
+    await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 }
+
+/**
+ * Runs in the page: the chart range toggle against the chart panel its tabs
+ * control. Returns the panel and toggle centres and each range button's box.
+ */
+function measureRanges(list) {
+    const tabs = [...list.querySelectorAll('[role="tab"]')];
+    const panel = document.getElementById(tabs[0]?.getAttribute('aria-controls') || '');
+    const centre = (r) => r.left + r.width / 2;
+    const own = list.getBoundingClientRect();
+    const boxes = tabs.map((tab) => tab.getBoundingClientRect());
+    const left = Math.min(...boxes.map((b) => b.left));
+    const right = Math.max(...boxes.map((b) => b.right));
+    return {
+        panel: panel ? centre(panel.getBoundingClientRect()) : null,
+        list: centre(own),
+        listWidth: own.width,
+        buttons: (left + right) / 2,
+        span: right - left,
+        outlines: tabs.map((tab) => parseFloat(getComputedStyle(tab).borderTopWidth) || 0),
+        heights: boxes.map((b) => Number(b.height.toFixed(2))),
+        tops: boxes.map((b) => Math.round(b.top)),
+    };
+}
+
+async function expectCompactCentredRanges(page, where, root = page.getByRole('main')) {
+    const list = root.getByRole('tablist', { name: /Chart range/ }).first();
+    await expect(list, `${where}: the chart range toggle shows`).toBeVisible({ timeout: 30_000 });
+    const m = await list.evaluate(measureRanges);
+    expect(m.panel, `${where}: the range tabs control a chart panel`).not.toBeNull();
+    expect(Math.abs(m.list - m.panel), `${where}: the range row is centred under the chart`).toBeLessThanOrEqual(1);
+    expect(Math.abs(m.buttons - m.panel), `${where}: the range buttons are centred under the chart`).toBeLessThanOrEqual(1);
+    expect(new Set(m.tops).size, `${where}: the range buttons sit on one line`).toBe(1);
+    expect(Math.abs(m.listWidth - m.span), `${where}: the range row hugs its options`).toBeLessThanOrEqual(1);
+    for (const w of m.outlines) expect(w, `${where}: a range option draws no outline`).toBe(0);
+    for (const h of m.heights) expect(h, `${where}: a range button is compact`).toBeLessThanOrEqual(28);
+}
+
+// The price chart's range control is a minimal small toggle centred along the
+// bottom of the chart, on Home and on token detail, in both directions.
+test('chart range toggle is centred and compact', async ({ page }, testInfo) => {
+    const { mode } = testInfo.project.metadata;
+    test.skip(mode !== 'dark' && mode !== 'rtl');
+    test.setTimeout(10 * 60 * 1000);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    const home = mode === 'rtl' ? pseudo('Home') : /^Home$/;
+    if (mode === 'rtl') {
+        await enablePseudoRtl(page);
+        await nav(page).getByRole('button', { name: home }).first().click();
+    }
+    await expectCompactCentredRanges(page, `${mode} home`);
+
+    const balances = page.getByRole('main').getByRole('list', { name: /Balances/ }).first();
+    await balances.getByRole('listitem').first().getByRole('button').first().click();
+    const wideHome = page.locator('[data-home-layout="wide"]');
+    let detailRoot = page.getByRole('main');
+    if (await wideHome.isVisible().catch(() => false)) {
+        await expect(balances, `${mode}: wide Home keeps Balances beside token detail`).toBeVisible();
+        detailRoot = wideHome.locator('[data-home-detail]');
+    } else {
+        await expect(balances, `${mode}: narrow Home opens token detail`).toBeHidden();
+    }
+    await expectCompactCentredRanges(page, `${mode} token detail`, detailRoot);
+});
 
 test('dark sweep', async ({ page }, testInfo) => {
     test.skip(testInfo.project.metadata.mode !== 'dark');
@@ -142,6 +213,11 @@ test('dark sweep', async ({ page }, testInfo) => {
 test('rtl sweep', async ({ page }, testInfo) => {
     test.skip(testInfo.project.metadata.mode !== 'rtl');
     test.setTimeout(60 * 60 * 1000);
+    await page.route('https://downloads.xchain.io/wallet/releases.json', (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ latest: '0.0.0', channels: {} }),
+    }));
     const outDir = join(OUT_ROOT, testInfo.project.name);
     const sweep = createSweep(page, {
         venue: testInfo.project.name,
@@ -154,47 +230,44 @@ test('rtl sweep', async ({ page }, testInfo) => {
     await enablePseudoRtl(page);
     await sweep.measure('rtl: settings root');
 
-    const names = ['Home', 'History', 'Send', 'Receive', 'Scan', 'DEX', 'Dispensers', 'Contracts',
-        'Messaging', 'Contacts', 'Lists', 'Payments due', 'Settings'];
-    const goto = async (name) => {
+    const routes = [
+        ['Home', 'home'], ['History', 'history'], ['Send', 'send'], ['Receive', 'receive'],
+        ['Scan', 'scan'], ['My tokens', 'my-tokens'], ['Addresses', 'addresses'], ['DEX', 'markets'],
+        ['Marketplace', 'market-activity'], ['Dispensers', 'dispensers-list'],
+        ['Payments due', 'obligations'],
+        ['Contracts', 'contracts-list'], ['Staking', 'staking-dashboard'],
+        ['Multisig', 'multisig-create'], ['Lists', 'lists'], ['All actions', 'actions'],
+        ['Messaging', 'messaging'], ['Contacts', 'contacts'], ['Alerts', 'alerts'],
+        ['Settings', 'settings'],
+    ];
+    const goto = async (name, id) => {
         const item = nav(page).getByRole('button', { name: pseudo(name) }).first();
         if (await item.isVisible().catch(() => false)) { await item.click(); return; }
-        await nav(page).getByRole('button', { name: pseudo('More') }).first().click();
-        const sheet = page.getByRole('dialog', { name: pseudo('More') });
-        await sheet.getByRole('button', { name: pseudo(name) }).first().click();
+        await page.getByRole('button', { name: pseudo('Open menu') }).first().click();
+        const menu = page.getByRole('dialog', { name: pseudo('Wallet menu') });
+        await menu.locator(`[data-wallet-menu-row="${id}"]`).click();
     };
-    for (const name of names) {
+    for (const [name, id] of routes) {
         try {
-            await goto(name);
+            await goto(name, id);
             await sweep.measure(`rtl route: ${name}`);
         } catch (err) { skip(`rtl route: ${name}`, err); }
     }
-    // Marketplace and the rest of the palette.
+    // The catalogue itself is a layout surface.
     try {
         await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: pseudo('Command palette') });
-        await palette.waitFor({ state: 'visible', timeout: 10_000 });
-        await sweep.measure('rtl palette: open');
-        const titles = await palette.getByRole('option').evaluateAll((els) => els
-            .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
+        const menu = page.getByRole('dialog', { name: pseudo('Wallet menu') });
+        await menu.waitFor({ state: 'visible', timeout: 10_000 });
+        await sweep.measure('rtl menu: open');
         await page.keyboard.press('Escape');
-        for (const title of [...new Set(titles.filter((t) => t && !/^\d/.test(t)))].slice(0, 140)) {
-            try {
-                await page.keyboard.press('ControlOrMeta+k');
-                await palette.waitFor({ state: 'visible', timeout: 5_000 });
-                await palette.getByRole('combobox').fill(title);
-                await palette.getByRole('option').filter({ hasText: title }).first().click({ timeout: 5_000 });
-                await sweep.measure(`rtl palette: ${title}`);
-            } catch (err) { skip(`rtl palette: ${title}`, err); await page.keyboard.press('Escape').catch(() => {}); }
-        }
-    } catch (err) { skip('rtl palette', err); }
+    } catch (err) { skip('rtl menu', err); }
     // Settings sections by row index.
     try {
-        await goto('Settings');
+        await goto('Settings', 'settings');
         const count = await page.getByRole('main').locator('button:visible').count();
         for (let i = 0; i < Math.min(count, 30); i += 1) {
             try {
-                await goto('Settings');
+                await goto('Settings', 'settings');
                 const back = page.locator('button:has(svg[data-xc-directional]):visible').first();
                 if (await back.isVisible().catch(() => false) && await page.getByRole('searchbox').count() === 0) await back.click();
                 const row = page.getByRole('main').locator('button:visible').nth(i);
@@ -205,8 +278,8 @@ test('rtl sweep', async ({ page }, testInfo) => {
             } catch (err) { skip(`rtl settings row ${i}`, err); }
         }
     } catch (err) { skip('rtl settings', err); }
-    // Header popovers.
-    for (const re of [/Settings/, /Scan and addresses/, /XChain platform sites/, /Open menu/]) {
+    // Header wallet menu.
+    for (const re of [/Open menu/]) {
         try {
             const b = page.getByRole('button', { name: re }).first();
             if (!(await b.isVisible().catch(() => false))) continue;

@@ -35,14 +35,13 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     resolveApproval: (...args) => shim.resolveApproval(...args),
 }));
 
-const { ConnectApproval } = await import(
+const { ConnectApproval, connectCoinFamilies } = await import(
     '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
 );
 
 const template = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-regtest');
 const bundled = BUNDLED_DESCRIPTORS[0];
-const notRequested = BUNDLED_DESCRIPTORS.find((d) => d.id !== bundled.id);
-const label = (d) => `Allow ${d.displayName} ${d.networkKind}`;
+const label = (d) => `Allow ${d.displayName}`;
 const custom = (id, displayName) => ({ ...template, id, displayName });
 
 function mount(requestedChains) {
@@ -59,10 +58,24 @@ afterEach(() => {
     cleanup();
     shim.getSettings = async () => ({});
     shim.resolveApproval = async () => ({ approved: true });
+    vi.restoreAllMocks();
 });
 
 describe('ConnectApproval network checklist', () => {
-    it('shows the host ending before the full origin and safely labels the dApp name', () => {
+    it('groups every network of an added coin into one future family', () => {
+        const future = [
+            { ...bundled, id: 'future-testnet', coin: 'future', displayName: 'Future', networkKind: 'testnet' },
+            { ...bundled, id: 'future-mainnet', coin: 'future', displayName: 'Future', networkKind: 'mainnet' },
+        ];
+
+        const family = connectCoinFamilies([...BUNDLED_DESCRIPTORS, ...future])
+            .find((entry) => entry.coin === 'future');
+        expect(family.name).toBe('Future');
+        expect(family.chainIds).toEqual(['future-testnet', 'future-mainnet']);
+        expect(family.descriptor.id).toBe('future-mainnet');
+    });
+
+    it('shows the large site identity with a safe name and full origin', () => {
         const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
         const { container } = render(
             <ConnectApproval
@@ -76,25 +89,16 @@ describe('ConnectApproval network checklist', () => {
             />,
         );
 
-        const text = container.textContent;
-        expect(text.indexOf('security.attacker.test')).toBeLessThan(text.indexOf(longOrigin));
-        expect(screen.getByTestId('request-origin-host-ending').textContent)
-            .toBe('security.attacker.test');
-        expect(screen.getByTestId('request-origin-registrable-domain').textContent)
-            .toBe('attacker.test');
+        expect(screen.getByRole('region', { name: 'Requesting site' })).toBeVisible();
+        expect(screen.getByTestId('site-icon')).toBeVisible();
         expect(screen.getByTestId('request-origin-full').textContent).toBe(longOrigin);
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
-        expect(screen.getByText('Site-provided name')).toBeTruthy();
-        expect(screen.getByText('Requesting site')).toBeTruthy();
-        expect(screen.queryByText('Verified site')).toBeNull();
-        expect(screen.getByText(/Only connect if you recognize and trust this site/))
-            .toHaveTextContent(
-                'Only connect if you recognize and trust this site. It can view the accounts and networks you select.',
-            );
+        expect(container.querySelector('[data-xc-avatar-context="hero"]')).toBeTruthy();
+        expect(screen.queryByText(/This site wants to see accounts and networks/)).toBeNull();
     });
 
-    it('neutralizes control characters in the trusted origin display', () => {
+    it('blocks an origin containing hidden control characters', () => {
         render(
             <ConnectApproval
                 id="identity-origin"
@@ -106,13 +110,13 @@ describe('ConnectApproval network checklist', () => {
             />,
         );
 
-        expect(screen.getByTestId('request-origin-full').textContent)
-            .toBe('https://safe.test␦.example');
-        expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This connection request is missing or invalid.',
+        );
     });
 
-    it('renders dApp origin titles containing markup as text in the approval', () => {
-        const origin = '<img src=x onerror="globalThis.originExecuted = true">';
+    it('renders a dApp name containing markup as text in the approval', () => {
+        const origin = 'https://markup.test';
         const appName = '<script>globalThis.appNameExecuted = true</script>';
         const { container } = render(
             <ConnectApproval
@@ -122,7 +126,7 @@ describe('ConnectApproval network checklist', () => {
             />,
         );
 
-        expect(screen.getByTestId('request-origin-full')).toHaveTextContent(origin);
+        expect(screen.getByTestId('request-origin-full')).toHaveTextContent('https://markup.test');
         expect(screen.getByText(appName)).toBeInTheDocument();
         expect(container.querySelector('script')).toBeNull();
         expect(container.querySelector('img[src="x"]')).toBeNull();
@@ -130,29 +134,80 @@ describe('ConnectApproval network checklist', () => {
         expect(globalThis.appNameExecuted).toBeUndefined();
     });
 
-    it('lists the granted capabilities and only offers networks the site requested', () => {
+    it('puts the two permission lines under Accounts and shows one row per coin family', () => {
         mount([bundled.id]);
 
-        const permissions = screen.getByRole('region', { name: 'Requested permissions' });
+        const permissions = document.querySelector('[data-connect-permissions]');
         expect(permissions.textContent).toContain('addresses and balances');
-        expect(permissions.textContent).toContain('only the networks you select');
-        expect(permissions.textContent).toContain('before signing any message or transaction');
-        expect(permissions.textContent).toContain('only if you choose');
-        expect(permissions.textContent).toContain('Revoke it anytime in Connected sites');
+        expect(permissions.textContent).toContain('Ask you each time it wants a signature');
+        expect([...permissions.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+            'See the addresses and balances of the accounts you share',
+            'Ask you each time it wants a signature',
+        ]);
+        expect(screen.getByText('Accounts it can see').closest('[data-picker-field]').nextElementSibling)
+            .toBe(permissions);
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
+        const familyRows = screen.getAllByRole('switch');
+        expect(familyRows).toHaveLength(new Set(defaultRegistry().supportedChains().map((d) => d.coin)).size);
+        expect(familyRows.map((row) => row.getAttribute('aria-label'))).toEqual([
+            'Allow Bitcoin',
+            'Allow Litecoin',
+            'Allow Dogecoin',
+        ]);
         expect(screen.getByLabelText(label(bundled))).toBeTruthy();
-        expect(screen.queryByLabelText(label(notRequested))).toBeNull();
         expect(screen.queryByRole('checkbox', { name: /message signatures/i })).toBeNull();
     });
 
-    it('offers the exact network requested by the worked example', () => {
+    it('preselects the family requested by the worked example', () => {
         mount(EXAMPLE_CONNECT_OPTS.requestedChains);
 
         const exampleChain = BUNDLED_DESCRIPTORS.find(
             (descriptor) => descriptor.id === EXAMPLE_CONNECT_OPTS.requestedChains[0],
         );
         expect(exampleChain).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
         expect(screen.getByLabelText(label(exampleChain)).checked).toBe(true);
-        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
+    });
+
+    it('preselects requested families and counts them once in the field', () => {
+        const bitcoinTestnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-testnet');
+        const litecoinRegtest = BUNDLED_DESCRIPTORS.find((d) => d.id === 'litecoin-regtest');
+        const { container } = mount([bitcoinTestnet.id, litecoinRegtest.id]);
+
+        expect(container.querySelectorAll('[data-picker-field="connect-networks"] [data-picker-icon]'))
+            .toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
+        expect(screen.getByLabelText('Allow Bitcoin')).toBeChecked();
+        expect(screen.getByLabelText('Allow Litecoin')).toBeChecked();
+        expect(screen.getByLabelText('Allow Dogecoin')).not.toBeChecked();
+    });
+
+    it('submits every network id in a family when its coin is turned on', async () => {
+        const submitted = [];
+        shim.resolveApproval = async (_id, decision) => { submitted.push(decision); };
+        vi.spyOn(window, 'close').mockImplementation(() => {});
+        mount([]);
+
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
+        fireEvent.click(screen.getByLabelText('Allow Bitcoin'));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
+
+        expect(submitted).toHaveLength(1);
+        expect(submitted[0].chains).toEqual(defaultRegistry().byCoin('bitcoin').map((d) => d.id));
+    });
+
+    it('has standard help on both editable picker fields', () => {
+        mount([bundled.id]);
+
+        const networksHelp = screen.getByRole('button', { name: 'About Networks it can see' });
+        const accountsHelp = screen.getByRole('button', { name: 'About Accounts it can see' });
+        expect(document.getElementById(networksHelp.getAttribute('aria-describedby'))).toHaveTextContent(
+            'The coins this site can see. Turning a coin on shares its addresses on every network for that coin.',
+        );
+        expect(document.getElementById(accountsHelp.getAttribute('aria-describedby'))).toHaveTextContent(
+            'The accounts whose addresses and balances this site can see. It can never sign or spend without asking you.',
+        );
     });
 
     it('rejects in one click while both decisions are enabled', () => {
@@ -179,9 +234,9 @@ describe('ConnectApproval network checklist', () => {
 
         mount([added.id]);
 
-        const box = await screen.findByLabelText(label(added));
-        expect(box.checked).toBe(true);
-        expect(screen.getByRole('button', { name: 'Approve' }).disabled).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
+        const box = await screen.findByLabelText('Allow Bitcoin');
+        await vi.waitFor(() => expect(box).toBeChecked());
         expect(defaultRegistry().has(added.id)).toBe(true);
     });
 
@@ -190,6 +245,7 @@ describe('ConnectApproval network checklist', () => {
 
         mount([bundled.id]);
 
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
         const box = await screen.findByLabelText(label(bundled));
         expect(box.checked).toBe(true);
     });
@@ -203,6 +259,7 @@ describe('ConnectApproval network checklist', () => {
 
         mount([bundled.id, added.id]);
 
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
         const bundledBox = await screen.findByLabelText(label(bundled));
         expect(bundledBox.checked).toBe(true);
         fireEvent.click(bundledBox);
@@ -210,8 +267,7 @@ describe('ConnectApproval network checklist', () => {
 
         await act(async () => { release(); await Promise.resolve(); });
 
-        expect((await screen.findByLabelText(label(added))).checked).toBe(true);
-        expect(screen.getByLabelText(label(bundled)).checked).toBe(false);
+        expect(screen.getByLabelText('Allow Bitcoin')).not.toBeChecked();
     });
 });
 
@@ -247,11 +303,12 @@ describe('ConnectApproval account checklist', () => {
         shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
         mountWithAccounts(ACCOUNTS);
 
-        expect(screen.getByText('Account 1')).toBeVisible();
+        fireEvent.click(screen.getByRole('button', { name: /^Accounts it can see/ }));
         expect(screen.getByLabelText('Share Account 1').checked).toBe(true);
         expect(screen.getByLabelText('Share Account 2').checked).toBe(false);
 
         fireEvent.click(screen.getByLabelText('Share Account 2'));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
 
         expect(submitted).toHaveLength(1);
@@ -259,10 +316,20 @@ describe('ConnectApproval account checklist', () => {
         expect(submitted[0].canSignMessage).toBe(false);
     });
 
-    it('disables Connect while no account is ticked', () => {
+    it('keeps Approve enabled and reports a missing account without sending', async () => {
         mountWithAccounts(ACCOUNTS);
+        fireEvent.click(screen.getByRole('button', { name: /^Accounts it can see/ }));
         fireEvent.click(screen.getByLabelText('Share Account 1'));
-        expect(screen.getByRole('button', { name: 'Approve' }).disabled).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        expect(approve).not.toBeDisabled();
+        fireEvent.click(approve);
+        expect(await screen.findByTestId('connect-error-summary')).toHaveTextContent(
+            'Fix 1 thing to continue',
+        );
+        expect(screen.getAllByRole('alert').some((alert) => (
+            alert.textContent === 'Pick at least one account to share.'
+        ))).toBe(true);
     });
 
     it('says the primary account is shared when no options arrive', async () => {
@@ -270,7 +337,7 @@ describe('ConnectApproval account checklist', () => {
         shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
         mountWithAccounts(undefined);
 
-        expect(screen.getByText(/primary account/)).toBeTruthy();
+        expect(screen.getByText(/primary account/i)).toBeTruthy();
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
         expect(submitted[0].accounts).toEqual([]);
     });

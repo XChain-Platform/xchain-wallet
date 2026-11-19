@@ -30,9 +30,15 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
 const DIST = join(repo, 'packages', 'extension', 'dist');
 const OUT_ROOT = join(repo, 'tmp', 'click-crawl');
-const SHARDS = Number(process.env.CRAWL_SHARDS || 4);
 const ONLY = process.env.CRAWL_ONLY ? new RegExp(process.env.CRAWL_ONLY, 'i') : null;
 const RUN = process.env.CRAWL_RUN || 'run';
+// The layout measure step reads each screen once; pressing every control on
+// the hundred or so popup screens outlasts its time cap.
+const MEASURE_ONLY = process.env.CRAWL_MEASURE_ONLY === '1';
+// Each shard discovers the screens on its own and the lists can differ, so
+// a split pass can measure a screen twice and miss another. A measure pass
+// is short enough to run as one shard that covers every screen once.
+const SHARDS = MEASURE_ONLY ? 1 : Number(process.env.CRAWL_SHARDS || 4);
 
 // The popup is the size Chrome opens it at; the side panel is a typical
 // docked width at a laptop's height.
@@ -90,9 +96,11 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                 }
                 await page.goto(`${origin}/${SURFACES[SURFACE].page}`);
                 const accept = page.getByRole('button', { name: 'Accept and continue' });
-                const past = page.getByRole('button', { name: 'Try in demo mode' })
+                const past = page.getByRole('button', { name: 'Try Demo' })
                     .or(page.getByRole('button', { name: 'Skip' }))
-                    .or(page.getByRole('region', { name: 'Active address balance' }));
+                    .or(page.getByRole('region').filter({
+                        has: page.getByText(/^(?:Wallet value|Wallet balance)$/),
+                    }));
                 await accept.or(past).first().waitFor({ state: 'visible', timeout: 60_000 });
                 if (await accept.isVisible()) {
                     await page.getByRole('region', { name: 'License terms' }).or(page.getByLabel('License terms')).first()
@@ -122,6 +130,7 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                 origin,
                 start,
                 onScreen: recordScreen,
+                measureOnly: MEASURE_ONLY,
             });
             await crawl.enterDemo();
             let screens = await crawl.discover();

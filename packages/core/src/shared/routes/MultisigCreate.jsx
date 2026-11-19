@@ -9,15 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FieldNote, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, FieldNote, FormPage, Icon, IconSelect, InfoTip, Input, ListPage, NetworkField, Notice, PageHeader, Screen, SectionHeader, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+import { FormSection, SummaryAddress, joinSummaryParts, useFormSections } from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { isCompressedPublicKey, validateCosignerXpub } from '../utils/multisigXpub.js';
 import { MAX_MULTISIG_COSIGNERS } from '../../schemas/multisigConfig.js';
-import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
-import styles from './IssueTokenForm.module.css';
-import cardStyles from '../../ui/Card.module.css';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import sharedStyles from './IssueTokenForm.module.css';
+import styles from './MultisigCreate.module.css';
+// Review and done facts as label-left value-right rows, never stacked uppercase labels.
+import facts from './FactRows.module.css';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -31,23 +35,30 @@ const FORM_KEY = 'form';
 const SCHEMES = [
     {
         value: 'p2sh-multisig',
-        label: 'Classic multi-signature',
-        description: 'The original multi-signature format. Works with virtually every wallet, hardware signer and block explorer, but costs the most in transaction fees.',
+        label: 'Classic',
     },
     {
         value: 'p2wsh-multisig',
-        label: 'SegWit multi-signature (lower fees)',
-        description: 'Signs exactly like Classic but costs less in transaction fees. Supported by most current wallets and hardware signers.',
+        label: 'SegWit',
     },
     {
         value: 'taproot-musig2',
-        label: 'Taproot multi-signature (most private)',
-        description: 'The most private option: on the blockchain it looks like an ordinary single-signature wallet, and it is usually the cheapest to spend from. Every device that signs must support this newer scheme (Ledger Bitcoin app 2.4.0 or later; Trezor Model T on current firmware).',
+        label: 'Taproot',
     },
 ];
 
+const TYPE_HELP = 'Classic works with every Bitcoin wallet. SegWit has lower fees and is the common choice. Taproot is the most private and every cosigner must sign.';
+
 let _idCounter = 0;
 const newRowId = () => `cosigner-${++_idCounter}`;
+
+export function clampThreshold({ chosen, cosignerCount, scheme }) {
+    const count = Math.max(0, Math.floor(Number(cosignerCount) || 0));
+    if (scheme === 'taproot-musig2') return count;
+    const value = Number(chosen);
+    if (!Number.isFinite(value)) return count > 0 ? 1 : 0;
+    return Math.min(Math.max(Math.floor(value), 1), count);
+}
 
 export function parseCosignerSharePayload(value, networkKind) {
     let payload;
@@ -69,7 +80,7 @@ export function parseCosignerSharePayload(value, networkKind) {
         throw new Error('Shared cosigner setup contains an invalid master fingerprint.');
     }
     if (!/^m(?:\/\d+'?)*$/.test(payload.derivationPath || '')) {
-        throw new Error('Shared cosigner setup contains an invalid derivation path.');
+        throw new Error('Shared cosigner setup contains an invalid account path.');
     }
     if (typeof payload.xpub !== 'string' || payload.xpub.length === 0) {
         throw new Error('Shared cosigner setup does not contain an extended public key.');
@@ -122,7 +133,7 @@ export function parseCosignerSharePayload(value, networkKind) {
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function MultisigCreate({ walletId, onBack }) {
+export function MultisigCreate({ walletId, onBack, onShare }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -149,6 +160,27 @@ export function MultisigCreate({ walletId, onBack }) {
         { id: newRowId(), origin: 'local', name: 'My signer', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
         { id: newRowId(), origin: 'external-xpub', name: 'Cosigner B', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
     ]));
+    const formErrors = useFormErrors();
+    // One collapsible section per cosigner, held here so the open state
+    // survives the address picker and the review step. Every cosigner starts
+    // open: a new one is empty.
+    const cosignerSections = useFormSections(
+        Object.fromEntries(rows.map((row) => [`cosigner-${row.id}`, true])),
+    );
+    // Counts the Create attempts the form refused, so every refused attempt
+    // reopens the cosigners that still have a problem.
+    const [refusedAttempts, setRefusedAttempts] = useState(0);
+    const [localPickerRowId, setLocalPickerRowId] = useState(/** @type {string | null} */ (null));
+
+    // Keep the selected threshold while the group grows, but never leave it
+    // above the number of cosigners or below Taproot's all-signers rule.
+    useEffect(() => {
+        setThreshold((current) => String(clampThreshold({
+            chosen: current,
+            cosignerCount: rows.length,
+            scheme,
+        })));
+    }, [rows.length, scheme]);
 
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),
@@ -184,6 +216,7 @@ export function MultisigCreate({ walletId, onBack }) {
     const updateRow = (rowId, patch, touchFields = Object.keys(patch)) => {
         setEdited(true);
         for (const field of touchFields) touch(`${rowId}:${field}`);
+        for (const field of Object.keys(patch)) formErrors.clear(`${rowId}:${field}`);
         setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, ...patch } : r)));
     };
 
@@ -194,8 +227,10 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const addRow = () => {
         setEdited(true);
+        const id = newRowId();
+        cosignerSections.setOpen(`cosigner-${id}`, true);
         setRows((rs) => [...rs, {
-            id: newRowId(),
+            id,
             origin: 'external-xpub',
             name: `Cosigner ${String.fromCharCode(65 + rs.length)}`,
             pubkey: '',
@@ -205,6 +240,16 @@ export function MultisigCreate({ walletId, onBack }) {
             localSignerId: null,
             addressId: null,
         }]);
+    };
+
+    const pickThreshold = (value) => {
+        setEdited(true);
+        touch('threshold');
+        setThreshold(String(clampThreshold({
+            chosen: Number(value),
+            cosignerCount: rows.length,
+            scheme,
+        })));
     };
 
     const handleLocalAddressPick = (rowId, address) => {
@@ -254,15 +299,15 @@ export function MultisigCreate({ walletId, onBack }) {
         const thresholdProblem = (message) => { add('threshold', message); return problems; };
         if (!rawThreshold) return thresholdProblem('Threshold is required.');
         if (!/^-?\d+(?:\.\d+)?$/.test(rawThreshold)) return thresholdProblem('Threshold must be a whole number.');
-        const t = Number(rawThreshold);
-        if (!Number.isInteger(t)) return thresholdProblem('Threshold must be a whole number.');
-        if (t <= 0) return thresholdProblem('Threshold must be at least 1.');
-        if (t > rows.length) return thresholdProblem('Threshold must be ≤ cosigner count.');
+        const required = Number(rawThreshold);
+        if (!Number.isInteger(required)) return thresholdProblem('Threshold must be a whole number.');
+        if (required <= 0) return thresholdProblem('Threshold must be at least 1.');
+        if (required > rows.length) return thresholdProblem('Threshold must be ≤ cosigner count.');
         // MuSig2 is n-of-n: a T<N Taproot-MuSig2 address can never be signed by
         // fewer than N cosigners, so the funds would be permanently locked.
         // Steer the user to P2WSH for a genuine T-of-N policy.
-        if (scheme === 'taproot-musig2' && t !== rows.length) {
-            return form(`Taproot multi-signature requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit multi-signature instead.`);
+        if (scheme === 'taproot-musig2' && required !== rows.length) {
+            return form(`Taproot requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${required} of ${rows.length} sign, pick SegWit instead.`);
         }
         // Only one cosigner can be this wallet's own key: local signing
         // signs for exactly one, so a second could never add its signature.
@@ -283,7 +328,7 @@ export function MultisigCreate({ walletId, onBack }) {
             const at = (field) => `${r.id}:${field}`;
             if (!r.name.trim()) add(at('name'), `${tag}: name is required.`);
             if (!isCompressedPublicKey(r.pubkey)) {
-                add(at('pubkey'), `${tag}: public key must be a 33-byte compressed key in hex.`);
+                add(at('pubkey'), `${tag}: public key must be 66 characters starting with 02 or 03.`);
                 continue;
             }
             const normalizedPubkey = r.pubkey.toLowerCase();
@@ -308,14 +353,14 @@ export function MultisigCreate({ walletId, onBack }) {
                     continue;
                 }
             }
-            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 hex chars (4 bytes).`);
+            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 characters, using 0 to 9 and a to f.`);
             if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) {
-                add(at('derivationPath'), `${tag}: enter a valid derivation path starting with m.`);
+                add(at('derivationPath'), `${tag}: enter a valid account path starting with m.`);
                 continue;
             }
             if (r.origin === 'external-xpub') {
                 if (!r.xpub) {
-                    add(at('xpub'), `${tag}: xpub is required for external-xpub origin.`);
+                    add(at('xpub'), `${tag}: enter the account public key from the other wallet.`);
                     continue;
                 }
                 const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -339,10 +384,36 @@ export function MultisigCreate({ walletId, onBack }) {
         (p) => (p.key === FORM_KEY ? edited : touched.has(p.key)),
     );
     const shownError = shownProblem ? shownProblem.message : null;
+    // A cosigner with a problem opens itself when a Create attempt is refused;
+    // a finished one stays as the user left it, open or folded.
+    const rowsWithProblems = new Set(composeProblems
+        .filter((p) => p.key !== FORM_KEY)
+        .map((p) => String(p.key).split(':')[0]));
+
+    const thresholdOptions = Array.from({ length: rows.length }, (_, i) => ({
+        value: String(i + 1),
+        label: `${i + 1} of ${rows.length}`,
+        icon: <Icon.CheckIcon />,
+        disabled: scheme === 'taproot-musig2' && i + 1 !== rows.length,
+    }));
 
     function handleReview(event) {
         event?.preventDefault();
-        if (composeError || !chainId) return;
+        if (composeError || !chainId) {
+            if (composeError) {
+                setEdited(true);
+                for (const problem of composeProblems) touch(problem.key);
+                setRefusedAttempts((count) => count + 1);
+            }
+            const problems = Object.fromEntries(composeProblems.map(({ key, message }) => [
+                key === FORM_KEY ? 'form' : key,
+                message,
+            ]));
+            if (!chainId) problems['multisig-network'] = 'Pick a Bitcoin network.';
+            formErrors.validate(problems);
+            return;
+        }
+        formErrors.reset();
         setSubmitError(null);
         setStage('review');
     }
@@ -381,9 +452,21 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' || stage === 'submitting' ? () => setStage('compose') : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review multisig' : 'Create multisig'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Multisig' : 'Create Multisig'}
+            trailing={stage === 'compose' && onShare ? (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.ShareIcon />}
+                    onClick={onShare}
+                    aria-label="Share Wallet as Cosigner"
+                    title="Share Wallet as Cosigner"
+                />
+            ) : null}
         />
     );
     // The review always opens at its top instead of inheriting how far the
@@ -407,34 +490,34 @@ export function MultisigCreate({ walletId, onBack }) {
     }
 
     if (!addressesByChain || !chainId) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(<ListPage><p className={sharedStyles.hint}>Loading wallet…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const config = result?.config;
         return wrap(
             <ListPage>
-                <p className={styles.successTitle}>Multisig configured</p>
-                <p className={styles.hint}>
-                    Wallet "{result?.wallet?.name || walletId}" now has a{' '}
-                    {config?.threshold}-of-{config?.cosigners?.length}{' '}
-                    {schemeLabel(config?.scheme)} multisig configuration.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Scheme</dt>
-                    <dd className={styles.detailsValue}>{config?.scheme || 'N/A'}</dd>
-                    <dt className={styles.detailsLabel}>Threshold</dt>
-                    <dd className={styles.detailsValue}>
+                <p className={sharedStyles.successTitle}>Multisig configured</p>
+                {/* Facts as label-left value-right rows; the notes in the one warning card. */}
+                <dl className={facts.list}>
+                    <dt className={facts.label}>Wallet</dt>
+                    <dd className={facts.value}>{result?.wallet?.name || walletId}</dd>
+                    <dt className={facts.label}>Type</dt>
+                    <dd className={facts.value}>{schemeLabel(config?.scheme) || 'N/A'}</dd>
+                    <dt className={facts.label}>Signatures required</dt>
+                    <dd className={facts.value}>
                         {config?.threshold} of {config?.cosigners?.length}
                     </dd>
                 </dl>
-                <p className={styles.hint}>
-                    The shared address now appears on the Receive screen. Spending
-                    from it opens a signing session where each cosigner approves in
-                    turn, in the app or by scanning the transaction QR code.
-                </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                <WarningCard data-multisig-done-note="">
+                    <WarningLine>
+                        The shared address now appears on the Receive screen. Spending
+                        from it opens a signing session where each cosigner approves in
+                        turn, in the app or by scanning the transaction QR code.
+                    </WarningLine>
+                </WarningCard>
+                <div className={sharedStyles.actions}>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -442,6 +525,23 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const descriptor = chainRegistry.get(chainId);
     const localAddresses = (addressesByChain[chainId] || []);
+
+    if (localPickerRowId) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Use One of This Wallet's Addresses"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    handleLocalAddressPick(localPickerRowId, address);
+                    setLocalPickerRowId(null);
+                }}
+                onBack={() => setLocalPickerRowId(null)}
+            />
+        );
+    }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
@@ -452,38 +552,40 @@ export function MultisigCreate({ walletId, onBack }) {
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <div className={styles.actions}>
+                    <div className={sharedStyles.actions}>
                         {/* Prevent the reconciled button from submitting the compose form. */}
                         <Button
                             type="button"
                             variant="secondary"
                             disabled={stage === 'submitting'}
+                            icon={<Icon.PencilIcon />}
                             onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Edit
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.CheckIcon />}
                             loading={stage === 'submitting'}
                         >
-                            Confirm multisig
+                            Confirm Multisig
                         </Button>
                     </div>
                 )}
             >
-                <p className={styles.summary}>
+                <Notice tone="danger" role="note" data-multisig-review-note="">
                     Verify the network, approval threshold, and every cosigner key.
                     These values determine the shared address and cannot be corrected
                     after funds are sent to it.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Network</dt>
-                    <dd className={styles.detailsValue}>
+                </Notice>
+                <dl className={facts.list}>
+                    <dt className={facts.label}>Network</dt>
+                    <dd className={facts.value}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                     </dd>
-                    <dt className={styles.detailsLabel}>Configuration</dt>
-                    <dd className={styles.detailsValue}>
+                    <dt className={facts.label}>Configuration</dt>
+                    <dd className={facts.value}>
                         {Number(threshold)}-of-{rows.length} {schemeLabel(scheme)}
                     </dd>
                 </dl>
@@ -498,10 +600,10 @@ export function MultisigCreate({ walletId, onBack }) {
         <FormPage
             label="Create multisig"
             onSubmit={handleReview}
-            sectioned
-            status={shownError || submitError ? (
+            errors={formErrors}
+            status={(!formErrors.hasErrors && shownError) || submitError ? (
                 <>
-                    {shownError ? (
+                    {!formErrors.hasErrors && shownError ? (
                         <StatusMessage variant="error">{shownError}</StatusMessage>
                     ) : null}
                     {submitError ? (
@@ -509,144 +611,156 @@ export function MultisigCreate({ walletId, onBack }) {
                     ) : null}
                 </>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={composeError || stage === 'submitting'}
-                    loading={stage === 'submitting'}
-                >
-                    Review
-                </Button>
-            )}
         >
-            <FormSection title="Cosigners">
-                <details>
-                    <summary>How multisig setup works</summary>
-                    <p className={styles.hint}>
-                        Multisig is available only on Bitcoin networks. Add at least 2 cosigners.
-                        The current wallet contributes the local cosigner; add external cosigners
-                        by pasting an xpub or pairing hardware. To join another multisig, open
-                        Share this wallet as a cosigner and send them the values.
-                    </p>
-                </details>
-                <ChainPicker
-                    label="Network"
-                    value={chainId}
-                    onChange={(value) => { setEdited(true); setChainId(value); }}
-                    chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
-                    chainRegistry={chainRegistry}
-                    hideNetworkKind
-                />
-                {rows.map((row, i) => (
-                    <CosignerRow
-                        key={row.id}
-                        index={i}
-                        row={row}
-                        addresses={localAddresses}
-                        networkKind={descriptor?.networkKind}
-                        onChange={(patch, touchFields) => updateRow(row.id, patch, touchFields)}
-                        onRemove={() => removeRow(row.id)}
-                        canRemove={rows.length > 2}
-                        onLocalAddressPick={(addr) => handleLocalAddressPick(row.id, addr)}
-                        onTouch={(field) => touch(`${row.id}:${field}`)}
-                    />
-                ))}
-                <div style={{ marginTop: 'var(--xc-space-2)' }}>
+            <NetworkField
+                id="multisig-network"
+                label="Network"
+                help="The Bitcoin network for this multisig wallet. Every cosigner key must belong to this network."
+                value={chainId}
+                onChange={(value) => {
+                    setEdited(true);
+                    setChainId(value);
+                }}
+                chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
+                chainRegistry={chainRegistry}
+            />
+
+            <div className={styles.typeField}>
+                <div className={styles.fieldLabelRow}>
+                    <label htmlFor="multisig-type">Type</label>
+                    <InfoTip aria="About multisig types" label={TYPE_HELP} />
+                </div>
+                <Select
+                    id="multisig-type"
+                    value={scheme}
+                    onChange={(event) => {
+                        setEdited(true);
+                        setScheme(event.target.value);
+                    }}
+                >
+                    {SCHEMES.map((option) => (
+                        <Select.Option key={option.value} value={option.value} icon={<Icon.MultisigIcon />}>{option.label}</Select.Option>
+                    ))}
+                </Select>
+            </div>
+
+            {/* "N of M" for every N from 1 to the signer count. Taproot is
+                all-signers only, so the other options show but cannot be picked. */}
+            <IconSelect
+                id="threshold"
+                label="Signatures required"
+                help="Choose how many cosigners must approve each payment. Taproot requires every cosigner to approve."
+                value={threshold}
+                onChange={pickThreshold}
+                options={thresholdOptions}
+            />
+
+            <section className={styles.cosignersSection} aria-labelledby="multisig-cosigners-heading">
+                <SectionHeader as="h2" id="multisig-cosigners-heading" title="Cosigners" />
+                {/* Each cosigner is its own collapsible section, never a card inside a card. */}
+                <div className={styles.cosignerList} data-testid="cosigners-list">
+                    {rows.map((row, i) => (
+                        <CosignerRow
+                            key={row.id}
+                            index={i}
+                            row={row}
+                            addresses={localAddresses}
+                            networkKind={descriptor?.networkKind}
+                            onChange={(patch, touchFields) => updateRow(row.id, patch, touchFields)}
+                            onRemove={() => removeRow(row.id)}
+                            canRemove={rows.length > 2}
+                            onOpenLocalAddressPicker={() => setLocalPickerRowId(row.id)}
+                            onTouch={(field) => touch(`${row.id}:${field}`)}
+                            open={cosignerSections.isOpen(`cosigner-${row.id}`)}
+                            onOpenChange={(open) => cosignerSections.setOpen(`cosigner-${row.id}`, open)}
+                            revealKey={rowsWithProblems.has(row.id) ? refusedAttempts : 0}
+                        />
+                    ))}
+                </div>
+                <div className={styles.mainActions}>
                     <Button
                         type="button"
-                        variant="secondary"
+                        variant="ghost"
+                        block
+                        icon={<Icon.PlusIcon />}
                         onClick={addRow}
                         disabled={rows.length >= MAX_MULTISIG_COSIGNERS[scheme]}
                     >
-                        + Add cosigner
+                        Add Cosigner
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="success"
+                        block
+                        icon={<Icon.MultisigIcon />}
+                        loading={stage === 'submitting'}
+                    >
+                        Create Multisig
                     </Button>
                 </div>
-                <MultisigCosignerShare
-                    key={chainId}
-                    walletId={walletId}
-                    addresses={localAddresses}
-                    networkKind={descriptor?.networkKind}
-                />
-            </FormSection>
-
-            <FormSection title="Scheme">
-                <RadioGroup
-                    legend={<span className="sr-only">Scheme</span>}
-                    name="scheme"
-                    value={scheme}
-                    onChange={(value) => { setEdited(true); setScheme(value); }}
-                    options={SCHEMES.map((option) => ({
-                        ...option,
-                        label: <strong>{option.label}</strong>,
-                    }))}
-                />
-            </FormSection>
-
-            <FormSection title="Configuration">
-                <Input
-                    label={`Threshold (1..${rows.length})`}
-                    value={threshold}
-                    onChange={(e) => { setEdited(true); touch('threshold'); setThreshold(e.target.value); }}
-                    onBlur={() => touch('threshold')}
-                    inputMode="numeric"
-                />
-
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Network</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Configuration</dt>
-                    <dd className={styles.detailsValue}>
-                        {threshold || '?'}-of-{rows.length} {schemeLabel(scheme)}
-                    </dd>
-                </dl>
-            </FormSection>
+            </section>
         </FormPage>,
     );
 }
 
 function ReviewCosigner({ index, row }) {
     return (
-        <fieldset className={cardStyles.card} style={fieldsetStyle}>
-            <legend style={legendStyle}>Cosigner {index + 1}: {row.name}</legend>
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Origin</dt>
-                <dd className={styles.detailsValue}>{originLabel(row.origin)}</dd>
-                <dt className={styles.detailsLabel}>Public key</dt>
-                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.pubkey.toLowerCase()}</code></dd>
+        <fieldset className={sharedStyles.flatFieldset}>
+            <legend className={styles.reviewLegend}>Cosigner {index + 1}: {row.name}</legend>
+            <dl className={facts.list}>
+                <dt className={facts.label}>Origin</dt>
+                <dd className={facts.value}>{originLabel(row.origin)}</dd>
+                <dt className={facts.label}>Public key</dt>
+                <dd className={facts.value}><code className={styles.reviewKey}>{row.pubkey.toLowerCase()}</code></dd>
                 {row.origin === 'external-xpub' ? (
                     <>
-                        <dt className={styles.detailsLabel}>xpub</dt>
-                        <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.xpub}</code></dd>
+                        <dt className={facts.label}>Account public key</dt>
+                        <dd className={facts.value}><code className={styles.reviewKey}>{row.xpub}</code></dd>
                     </>
                 ) : null}
-                <dt className={styles.detailsLabel}>Master fingerprint</dt>
-                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.fingerprint.toLowerCase()}</code></dd>
-                <dt className={styles.detailsLabel}>Derivation path</dt>
-                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.derivationPath}</code></dd>
+                <dt className={facts.label}>Master fingerprint</dt>
+                <dd className={facts.value}><code className={styles.reviewKey}>{row.fingerprint.toLowerCase()}</code></dd>
+                <dt className={facts.label}>Account path</dt>
+                <dd className={facts.value}><code className={styles.reviewKey}>{row.derivationPath}</code></dd>
             </dl>
         </fieldset>
     );
 }
 
-function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick, onTouch }) {
+function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onOpenLocalAddressPicker, onTouch, open, onOpenChange, revealKey }) {
+    const summaryValue = cosignerSummaryValue(row, addresses);
+    const KindIcon = row.origin === 'external-hardware' ? Icon.UsbIcon : row.origin === 'local' ? Icon.KeyIcon : Icon.UserIcon;
+    // Closed, the header reads "You, tb1q...7c1c": the kind, then the key or
+    // address, fitted by the standard's summary address.
+    const summary = joinSummaryParts([
+        cosignerKind(row.origin),
+        summaryValue ? <SummaryAddress address={summaryValue} /> : 'Address or key needed',
+    ]);
     return (
-        <fieldset className={cardStyles.card} style={{ ...fieldsetStyle, marginBottom: 'var(--xc-space-2)' }}>
-            <legend style={legendStyle}>Cosigner {index + 1}</legend>
+        <FormSection
+            id={`cosigner-${row.id}`}
+            title={row.name || `Cosigner ${index + 1}`}
+            icon={KindIcon}
+            summary={summary}
+            open={open}
+            onOpenChange={onOpenChange}
+            revealKey={revealKey}
+        >
+            <div className={styles.cosignerEditor}>
 
             <Input
+                id={`${row.id}:name`}
                 label="Name"
+                help="This label is visible only to you and helps you tell cosigners apart."
                 onBlur={() => onTouch('name')}
                 value={row.name}
                 onChange={(e) => onChange({ name: e.target.value })}
-                placeholder="My signer / Bob's Trezor / cold-storage xpub"
+                placeholder="My signer / Bob's Trezor / cold-storage key"
             />
 
             <Select
                 label="Origin"
-                hint={ORIGIN_HINTS[row.origin]}
+                help={ORIGIN_HINTS[row.origin]}
                 value={row.origin}
                 onChange={(e) => onChange({
                     origin: e.target.value,
@@ -660,33 +774,32 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
                 }, [])}
             >
-                <option value="local">Local signer</option>
-                <option value="external-xpub">External xpub</option>
-                <option value="external-hardware">External hardware</option>
+                <Select.Option value="local" icon={<Icon.KeyIcon />}>Local signer</Select.Option>
+                <Select.Option value="external-xpub" icon={<Icon.WalletIcon />}>Another wallet</Select.Option>
+                <Select.Option value="external-hardware" icon={<Icon.UsbIcon />}>External hardware</Select.Option>
             </Select>
 
             {row.origin === 'local' ? (
-                <Select
+                <AddressField
+                    id={`${row.id}:addressId`}
                     label="Use one of this wallet's addresses"
-                    value={row.addressId || ''}
-                    onChange={(e) => {
-                        const a = addresses.find((x) => x.id === e.target.value);
-                        onLocalAddressPick(a || null);
-                    }}
-                >
-                    <option value="">Select address</option>
-                    {addresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                            {a.address} {a.label ? `· ${a.label}` : ''}
-                        </option>
-                    ))}
-                </Select>
+                    help="Choose the address whose key this wallet adds as a cosigner."
+                    icon="addresses"
+                    value={addresses.find((address) => address.id === row.addressId)?.address || ''}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={onOpenLocalAddressPicker}
+                    iconLabel="Choose one of this wallet's addresses"
+                    placeholder="Select address"
+                />
             ) : null}
 
             {row.origin === 'external-xpub' ? (
                 <>
                     <Textarea
-                        label="Shared cosigner setup (optional)"
+                        label="Shared cosigner setup"
+                        help="Paste the setup another wallet shared to fill the fields below."
+                        optional
                         value={row.sharePayload || ''}
                         onChange={(e) => onChange({ sharePayload: e.target.value, shareError: null })}
                         rows={3}
@@ -705,12 +818,14 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                             }
                         }}
                     >
-                        Import shared setup
+                        Import Shared Setup
                     </Button>
                     {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
-                        label="xpub"
-                onBlur={() => onTouch('xpub')}
+                        id={`${row.id}:xpub`}
+                        label="Account public key"
+                        help="Enter the xpub from the other wallet."
+                        onBlur={() => onTouch('xpub')}
                         value={row.xpub}
                         onChange={(e) => onChange({ xpub: e.target.value.trim() })}
                         placeholder="xpub6CUGRUonZSQ4..."
@@ -719,7 +834,9 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             ) : null}
 
             <Input
-                label="Public key (hex, 33-byte compressed)"
+                id={`${row.id}:pubkey`}
+                label="Public key"
+                help="Enter the cosigner's compressed public key."
                 onBlur={() => onTouch('pubkey')}
                 value={row.pubkey}
                 onChange={(e) => onChange({ pubkey: e.target.value.trim() })}
@@ -727,30 +844,34 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             />
 
             <Input
-                label="Master fingerprint (4 bytes hex)"
+                id={`${row.id}:fingerprint`}
+                label="Master fingerprint"
+                help="Enter the 8-character fingerprint of the cosigner's wallet, used by signers to find their key."
                 onBlur={() => onTouch('fingerprint')}
                 value={row.fingerprint}
                 onChange={(e) => onChange({ fingerprint: e.target.value.trim() })}
                 placeholder="73c5da0a"
             />
             {row.fingerprintNote ? (
-                <p className={styles.hint} style={{ textAlign: 'left' }}>{row.fingerprintNote}</p>
+                <p className={`${sharedStyles.hint} ${styles.fingerprintNote}`}>{row.fingerprintNote}</p>
             ) : null}
 
             <Input
-                label="Derivation path"
+                id={`${row.id}:derivationPath`}
+                label="Account path"
+                help={"Enter the account path for the cosigner's key."}
                 onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}
                 placeholder="m/48'/0'/0'/2'/0/0"
             />
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button type="button" variant="ghost" onClick={onRemove} disabled={!canRemove}>
-                    Remove
-                </Button>
+            {/* Remove is red with the trash icon and spans the form column. */}
+            <Button type="button" variant="danger" block icon={<Icon.TrashIcon />} onClick={onRemove} disabled={!canRemove}>
+                Remove
+            </Button>
             </div>
-        </fieldset>
+        </FormSection>
     );
 }
 
@@ -773,32 +894,30 @@ function schemeLabel(value) {
     return found ? found.label : value;
 }
 
-// The option labels stay short enough to show whole in a narrow select; what each
-// origin means sits under the field instead.
+function cosignerSummaryValue(row, addresses) {
+    if (row.origin === 'local') {
+        const address = addresses.find((candidate) => candidate.id === row.addressId);
+        return address?.address || row.pubkey;
+    }
+    return row.xpub || row.pubkey;
+}
+
+function cosignerKind(origin) {
+    if (origin === 'local') return 'You';
+    if (origin === 'external-hardware') return 'Hardware';
+    return 'Someone else';
+}
+
+// The option labels stay short enough to show whole in a narrow select; the help
+// tip explains each origin without crowding the field.
 const ORIGIN_HINTS = {
-    local: 'A software account or paired hardware signer in this wallet.',
-    'external-xpub': 'Paste the xpub from another wallet.',
+    local: 'A software account in this wallet, or a hardware wallet paired to it.',
+    'external-xpub': 'Paste the account public key from another wallet.',
     'external-hardware': 'Sign through file transfer.',
 };
 
 function originLabel(origin) {
     if (origin === 'local') return 'Local signer';
-    if (origin === 'external-xpub') return 'External xpub';
+    if (origin === 'external-xpub') return 'Another wallet';
     return 'External hardware';
 }
-
-const fieldsetStyle = {
-    margin: '0 0 var(--xc-space-3) 0',
-};
-
-const legendStyle = {
-    fontWeight: 600,
-    padding: '0 var(--xc-space-2)',
-};
-
-const keyValueStyle = {
-    display: 'block',
-    fontFamily: 'var(--xc-font-mono)',
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-};

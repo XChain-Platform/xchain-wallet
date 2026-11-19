@@ -45,10 +45,6 @@
     line-height: 1;
 }
 
-.active {
-    box-shadow: var(--xc-shadow-identity-ring);
-}
-
 .name {
     min-width: 0;
     overflow: hidden;
@@ -56,6 +52,21 @@
     white-space: nowrap;
     font-size: var(--xc-text-sm);
     font-weight: 700;
+}
+
+/* A filled avatar's letters are white or black, whichever reads better on its
+   tone in the current theme: white while the tone's luminance (xyz-d65 y) is
+   under 0.1791, where both inks read 4.58:1, and black from there up. Either
+   pick clears 4.5:1 on any opaque tone, the theme tokens that brighten in dark
+   and the generated ticker and tile colours alike. A browser without relative
+   colour keeps --xc-on-accent. */
+@supports (color: color(from red xyz-d65 x y z)) {
+    :global([data-xc-avatar]) {
+        --xc-avatar-ink: color(from var(--xc-avatar-tone) xyz-d65
+            calc(0.9505 * clamp(0, (0.1791 - y) * 1000000, 1))
+            clamp(0, (0.1791 - y) * 1000000, 1)
+            calc(1.089 * clamp(0, (0.1791 - y) * 1000000, 1)));
+    }
 }
 
 @media (forced-colors: active) {
@@ -69,9 +80,4 @@
         color: CanvasText;
     }
 
-    .active {
-        outline: 2px solid Highlight;
-        outline-offset: var(--xc-space-1);
-        box-shadow: none;
-    }
 }

@@ -8,15 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Settings subpages share the index's row rhythm: one row gap token between
-// stacked rows and one bordered row component for every row.
+// Settings pages share one group surface, divider rows, and compact actions.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { ROW_LAYOUT, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_LAYOUT,
+    SettingsActionRow,
+    SettingsFieldRow,
+    ToggleRow,
+} from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
 import cardStyles from '../../../packages/core/src/ui/Card.module.css';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
@@ -39,6 +44,20 @@ afterEach(() => {
 });
 
 describe('Settings subpage row gap', () => {
+    it('draws one shared card surface and flattens its divider rows', () => {
+        const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
+        const surface = css.match(/\.settingsSurface\s*\{([^}]*)\}/)[1];
+        expect(surface).toMatch(/composes:\s*card from/);
+        expect(surface).toMatch(/--xc-settings-row-border:\s*0/);
+        expect(surface).toMatch(/--xc-settings-row-divider:\s*var\(--xc-border\)/);
+
+        const route = readFileSync(join(SETTINGS_DIR, 'routes/Settings.jsx'), 'utf8');
+        // A form page adds the form frame class beside it (G126).
+        expect(route).toMatch(/className=\{[^}]*settingsStyles\.settingsSurface/);
+        // No group keeps its own cards inside the Settings card (U16).
+        expect(route).not.toMatch(/preserveNestedCards/);
+    });
+
     it('gives FormSection-based subpages the Settings row gap', () => {
         const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
         const page = css.match(/\.page\s*\{([^}]*)\}/)[1];
@@ -56,9 +75,18 @@ describe('Settings subpage row gap', () => {
     it('separates keyboard shortcut rows by the Settings row gap', async () => {
         const { container } = mount(<KeyboardSection />);
         await waitFor(() => expect(container.querySelectorAll('section').length).toBeGreaterThan(1));
+        // A group's title sits the section header gap above its content, and
+        // the shortcut rows under it keep the Settings row gap.
         for (const section of container.querySelectorAll('section')) {
-            expect(section.style.gap).toBe('var(--xc-settings-row-gap)');
+            expect(section.style.gap).toBe('var(--xc-section-header-gap)');
             expect(section.style.flexDirection).toBe('column');
+        }
+        const rowColumns = [...container.querySelectorAll('section > [data-xc-section-header] + div')]
+            .filter((column) => column.querySelector('kbd'));
+        expect(rowColumns.length).toBeGreaterThan(0);
+        for (const column of rowColumns) {
+            expect(column.style.gap).toBe('var(--xc-settings-row-gap)');
+            expect(column.style.flexDirection).toBe('column');
         }
     });
 });
@@ -71,16 +99,19 @@ describe('Settings action rows', () => {
             </SettingsActionRow>,
         );
         const row = container.firstElementChild;
-        // The row is the shared card; its inline style carries only layout.
+        // The row is the shared padded card, including the divider treatment.
         expect(row).toHaveClass(cardStyles.card);
         expect(row.style.display).toBe(ROW_LAYOUT.display);
-        expect(row.style.border).toBe('');
+        expect(row.style.padding).toBe(ROW.padding);
+        expect(row.style.border).toBe(ROW.border);
+        expect(row.style.boxShadow).toBe(ROW.boxShadow);
         expect(getByRole('heading', { name: 'Back up recovery phrase' })).toBeTruthy();
         // The label never names the button, so its accessible name stays its own text.
         expect(getByRole('button', { name: 'Show…' })).toBeTruthy();
         const slot = getByRole('button').parentElement;
         expect(slot.style.marginInlineStart).toBe('auto');
         expect(slot.style.justifyContent).toBe('flex-end');
+        expect(slot.style.flex).toBe('0 0 auto');
     });
 
     it('builds Backup and This wallet rows from the shared action row', () => {
@@ -103,9 +134,49 @@ describe('Settings action rows', () => {
             expect(css, name).not.toMatch(/dangerPanel/);
         }
     });
+
+    it('keeps the Safety row actions at their compact size', () => {
+        for (const file of ['PanicModeRow.jsx', 'DuressPassphraseRow.jsx']) {
+            const src = readFileSync(join(SETTINGS_DIR, 'components/settings', file), 'utf8');
+            expect(src, file).toMatch(/size="sm"[^>]*style=\{COMPACT_CONTROL\}/);
+        }
+    });
 });
 
 describe('Settings field rows', () => {
+    it('shows contextual help beside field and toggle labels only when requested', () => {
+        const onToggle = vi.fn();
+        const { getByRole, getByText, queryByRole } = render(
+            <>
+                <SettingsFieldRow label="Theme" help="Choose how the wallet is colored.">
+                    <select><option>System</option></select>
+                </SettingsFieldRow>
+                <ToggleRow
+                    label="Protect previews"
+                    help="Require confirmation before opening previews."
+                    checked={false}
+                    onChange={onToggle}
+                />
+                <SettingsFieldRow label="Format">
+                    <select><option>Full</option></select>
+                </SettingsFieldRow>
+                <ToggleRow label="Offline mode" checked={false} onChange={() => {}} />
+            </>,
+        );
+
+        const fieldHelp = getByRole('button', { name: 'About Theme' });
+        const toggleHelp = getByRole('button', { name: 'About Protect previews' });
+        expect(getByRole('combobox', { name: 'Theme' })).toBeTruthy();
+        expect(getByRole('switch', { name: 'Protect previews' })).toBeTruthy();
+        expect(queryByRole('button', { name: 'About Format' })).toBeNull();
+        expect(queryByRole('button', { name: 'About Offline mode' })).toBeNull();
+
+        fireEvent.click(toggleHelp);
+        expect(onToggle).not.toHaveBeenCalled();
+        fireEvent.focus(fieldHelp);
+        expect(getByText('Choose how the wallet is colored.', { selector: '[role="tooltip"]' })).toBeVisible();
+    });
+
     it('keeps a field row control in an end slot that fills the line on a phone', () => {
         const { getByLabelText } = render(
             <SettingsFieldRow label="Format" hint="How numbers show.">
@@ -157,9 +228,9 @@ describe('Settings field rows', () => {
 describe('About rows', () => {
     it('keeps a wrapped About value at the row end', () => {
         const src = readFileSync(join(SETTINGS_DIR, 'components/settings/AboutSection.jsx'), 'utf8');
-        const rowEnd = src.match(/const ROW_END = \{([^}]*)\}/)[1];
-        expect(rowEnd).toMatch(/marginInlineStart: 'auto'/);
-        expect(rowEnd).toMatch(/justifyContent: 'flex-end'/);
-        expect(src).toMatch(/<div style=\{ROW_END\}>\{children\}<\/div>/);
+        const css = readFileSync(join(SETTINGS_DIR, 'components/settings/AboutSection.module.css'), 'utf8');
+        // A fact is a list row whose value sits in its trailing slot, end-aligned.
+        expect(src).toMatch(/<ListRow title=\{label\} trailing=\{<span className=\{styles\.value\}>/);
+        expect(css.match(/\.value \{([^}]*)\}/)[1]).toMatch(/text-align: end/);
     });
 });

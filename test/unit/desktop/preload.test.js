@@ -49,12 +49,12 @@ function loadPreload() {
 }
 
 const expectedSurface = {
-    xchainWalletBridge: ['saveBackupFile', 'sendMessage', 'wipeStorage'],
+    xchainWalletBridge: ['filePathOf', 'saveBackupFile', 'sendMessage', 'wipeStorage'],
     xchainWalletDeepLink: ['onUri', 'takePending'],
     xchainWalletRegistry: ['getRemoteDescriptors'],
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
     xchainWalletTrezorBridge: ['call', 'close'],
-    xchainWalletUpdater: ['getState', 'install', 'onEvent'],
+    xchainWalletUpdater: ['getChannel', 'getState', 'install', 'onEvent'],
     xchainWalletWindow: ['onHidden', 'onStateChange', 'openDetached', 'setScreenProtected'],
 };
 
@@ -88,6 +88,7 @@ describe('desktop preload API', () => {
         await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history', initialContext: { walletId: 'w1' } });
         await win.setScreenProtected(true);
+        await updater.getChannel();
         await updater.getState();
         await updater.install();
         await deepLink.takePending();
@@ -100,6 +101,7 @@ describe('desktop preload API', () => {
             ['xchain:save-backup', { fileName: 'w-backup.xchain-wallet', content: '{}' }],
             ['xchain:open-window', { initialView: 'history', initialContext: { walletId: 'w1' } }],
             ['xchain:screen-protection', true],
+            ['xchain:updater-channel'],
             ['xchain:updater-state'],
             ['xchain:updater-install', 'download'],
             ['xchain:deep-link-take'],
@@ -133,6 +135,7 @@ describe('desktop preload API', () => {
             () => win.setScreenProtected(),
             () => win.setScreenProtected(true, 2),
             () => updater.onEvent('listener'),
+            () => updater.getChannel('extra'),
             () => updater.getState('extra'),
             () => updater.install('extra'),
             () => deepLink.onUri({}),

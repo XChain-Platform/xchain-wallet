@@ -18,6 +18,10 @@
     font-weight: 600;
 }
 
+.legendHelp {
+    margin-inline-start: var(--xc-label-help-gap);
+}
+
 .options {
     display: flex;
     flex-direction: column;
@@ -76,6 +80,26 @@
     font-size: var(--xc-control-font);
     line-height: 1.35;
     overflow-wrap: anywhere;
+}
+
+/* An option's icon sits before its label, as every Form Standard choice
+   option carries one (an 8px gap and a 1em glyph). */
+.labelRow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    font-size: var(--xc-control-font);
+}
+
+.optionIcon {
+    display: inline-flex;
+    flex: none;
+}
+
+.optionIcon svg {
+    width: 1em;
+    height: 1em;
 }
 
 .description {

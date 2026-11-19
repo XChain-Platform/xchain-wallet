@@ -53,6 +53,7 @@
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
 import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
@@ -96,6 +97,7 @@ export class DeadlineWatcher {
         getSdkForChain,
         getSettings,
         notify,
+        recordAlert,
         coinForChain,
         loadSeen,
         saveSeen,
@@ -111,7 +113,7 @@ export class DeadlineWatcher {
         this._getActiveAddresses = getActiveAddresses;
         this._getSdkForChain = getSdkForChain;
         this._getSettings = getSettings;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert });
         this._coinForChain = typeof coinForChain === 'function' ? coinForChain : defaultCoinForChain;
         this._loadSeen = typeof loadSeen === 'function' ? loadSeen : null;
         this._saveSeen = typeof saveSeen === 'function' ? saveSeen : null;

@@ -13,6 +13,7 @@ import {
     test,
     createWallet,
 } from '../../fixtures/wallet.js';
+import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -123,22 +124,31 @@ async function expectScreen(page, viewport, heading, options = {}) {
     );
 }
 
-async function openCommand(page, name) {
+async function openCommand(page, name, optionName = new RegExp(`^${name}`)) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
-    await palette.getByRole('option', { name: new RegExp(`^${name}`) }).first().click();
+    await palette.getByRole('option', { name: optionName }).first().click();
 }
 
 async function fillExternalHardware(row, cosigner) {
     await row.getByLabel('Name', { exact: true }).fill(cosigner.name);
-    await row.getByLabel('Origin', { exact: true }).selectOption('external-hardware');
-    await row.getByLabel('Public key (hex, 33-byte compressed)', { exact: true })
+    await pickOption(row.getByLabel('Origin', { exact: true }), 'external-hardware');
+    await row.getByLabel('Public key', { exact: true })
         .fill(cosigner.pubkey);
-    await row.getByLabel('Master fingerprint (4 bytes hex)', { exact: true })
+    await row.getByLabel('Master fingerprint', { exact: true })
         .fill(cosigner.fingerprint);
-    await row.getByLabel('Derivation path', { exact: true }).fill(cosigner.derivationPath);
+    await row.getByLabel('Account path', { exact: true }).fill(cosigner.derivationPath);
+}
+
+async function pickFirstAddress(page) {
+    const row = page.getByRole('button', { name: /^View address / }).first();
+    await expect(row).toBeVisible();
+    const label = await row.getAttribute('aria-label');
+    expect(label).toMatch(/^View address /);
+    await row.click();
+    return label.replace(/^View address /, '');
 }
 
 async function createSigningSession(page) {
@@ -167,26 +177,30 @@ test.describe('multisig flow', () => {
         // Demo wallets hide create and multisig commands, so this walk
         // uses a real dev wallet.
         await createWallet(page);
-        await openCommand(page, 'Create multisig');
+        await openCommand(page, 'Multisig', /^Multisig(?! signing)/);
 
         const createForm = page.getByRole('form', { name: 'Create multisig' });
         await expect(createForm).toBeVisible();
 
-        const share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
-        await share.locator('summary').click();
-        await share.getByLabel('Address to share').selectOption({ index: 1 });
+        await expectDropdownValue(createForm.getByLabel('Type', { exact: true }), 'p2wsh-multisig');
+        // Sharing this wallet as a cosigner is its own page, opened from the title bar.
+        await page.getByRole('banner')
+            .getByRole('button', { name: 'Share Wallet as Cosigner', exact: true }).click();
+        const share = page.getByRole('form', { name: 'Share Wallet as Cosigner' });
+        await expect(share).toBeVisible();
+        await share.getByRole('button', { name: 'Choose address to share', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Address to share', exact: true })).toBeVisible();
+        const sharedAddress = await pickFirstAddress(page);
+        await expect(share.getByLabel('Address to share', { exact: true })).toHaveValue(sharedAddress);
+        await share.getByRole('button', { name: 'Share', exact: true }).click();
         // The share details are offered as a QR code and a copy action; the
         // page shows no textarea repeating their raw text.
         await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share details' })).toBeVisible();
-        await expect(share.getByRole('button', { name: /Copy cosigner share details/ })).toBeVisible();
+        await expect(share.getByRole('button', { name: /Copy Cosigner Share Details/ })).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
-            await test.step(`${viewport.name}: create and cosigner share`, async () => {
-                await expectScreen(page, viewport, 'Create multisig');
-                await expect(page.getByRole('heading', {
-                    name: 'Share this wallet as a cosigner',
-                    exact: true,
-                })).toBeVisible();
+            await test.step(`${viewport.name}: cosigner share`, async () => {
+                await expectScreen(page, viewport, 'Share Wallet as Cosigner');
                 await expectNoHorizontalOverflow(
                     page,
                     `cosigner share at ${viewport.width}x${viewport.height}`,
@@ -194,26 +208,39 @@ test.describe('multisig flow', () => {
             });
         }
 
-        const local = createForm.getByRole('group', { name: 'Cosigner 1', exact: true });
-        await local.getByLabel('Use one of this wallet\'s addresses', { exact: true })
-            .selectOption({ index: 1 });
-        await expect(local.getByLabel('Public key (hex, 33-byte compressed)', { exact: true }))
+        // Back steps exist on the phone layout only.
+        await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
+        await page.getByRole('banner').getByRole('button', { name: 'Back to previous screen' }).click();
+        await expect(createForm).toBeVisible();
+
+        // Each cosigner is a collapsible section, open while it is new.
+        const cosignerSection = (n) => createForm.locator('section[data-form-section^="cosigner-"]').nth(n - 1);
+        const local = cosignerSection(1);
+        await local.getByRole('button', {
+            name: 'Choose one of this wallet\'s addresses',
+            exact: true,
+        }).click();
+        const localAddress = await pickFirstAddress(page);
+        await expect(local.getByLabel('Use one of this wallet\'s addresses', { exact: true }))
+            .toHaveValue(localAddress);
+        await expect(local.getByLabel('Public key', { exact: true }))
             .toHaveValue(/^(02|03)[0-9a-f]{64}$/i);
-        await expect(local.getByLabel('Master fingerprint (4 bytes hex)', { exact: true }))
+        await expect(local.getByLabel('Master fingerprint', { exact: true }))
             .toHaveValue(/^[0-9a-f]{8}$/i);
 
-        const second = createForm.getByRole('group', { name: 'Cosigner 2', exact: true });
+        const second = cosignerSection(2);
         await fillExternalHardware(second, EXTERNAL_COSIGNERS[0]);
-        await createForm.getByRole('button', { name: '+ Add cosigner', exact: true }).click();
-        const third = createForm.getByRole('group', { name: 'Cosigner 3', exact: true });
+        await createForm.getByRole('button', { name: 'Add Cosigner', exact: true }).click();
+        const third = cosignerSection(3);
         await fillExternalHardware(third, EXTERNAL_COSIGNERS[1]);
-        await expect(createForm.getByLabel('Threshold (1..3)', { exact: true })).toHaveValue('2');
-        await expect(createForm.getByRole('button', { name: 'Review', exact: true })).toBeEnabled();
+        await expect(createForm.getByRole('button', { name: 'Signatures required: 2 of 3', exact: true }))
+            .toBeVisible();
+        await expect(createForm.getByRole('button', { name: 'Create Multisig', exact: true })).toBeEnabled();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: review`, async () => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
-                await createForm.getByRole('button', { name: 'Review', exact: true }).click();
+                await createForm.getByRole('button', { name: 'Create Multisig', exact: true }).click();
 
                 const review = page.getByRole('form', { name: 'Review multisig' });
                 await expect(review).toBeVisible();
@@ -221,9 +248,9 @@ test.describe('multisig flow', () => {
                     .evaluate((main) => main.scrollTop);
                 expect(reviewScrollTop, 'the review screen did not open at the top')
                     .toBeLessThanOrEqual(1);
-                await expect(review).toContainText('2-of-3 SegWit multi-signature (lower fees)');
+                await expect(review).toContainText('2-of-3 SegWit');
                 await expect(review.locator('fieldset')).toHaveCount(3);
-                await expectScreen(page, viewport, 'Review multisig', { requireRow: true });
+                await expectScreen(page, viewport, 'Review Multisig', { requireRow: true });
 
                 if (viewport !== VIEWPORTS.at(-1)) {
                     await review.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -233,31 +260,31 @@ test.describe('multisig flow', () => {
         }
 
         await page.getByRole('form', { name: 'Review multisig' })
-            .getByRole('button', { name: 'Confirm multisig', exact: true }).click();
+            .getByRole('button', { name: 'Confirm Multisig', exact: true }).click();
         await expect(page.getByText('Multisig configured', { exact: true })).toBeVisible();
 
         const session = await createSigningSession(page);
         expect(session.threshold).toBe(2);
         expect(session.cosignerPubkeys).toHaveLength(3);
 
-        await openCommand(page, 'Multisig signing');
+        await openCommand(page, 'Multisig sessions');
         const sessions = page.getByRole('list', { name: 'Multisig sessions' });
         await expect(sessions).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: signing session`, async () => {
-                await expectScreen(page, viewport, 'Multisig signing sessions');
+                await expectScreen(page, viewport, 'Multisig Sessions');
                 const sessionRow = sessions.getByRole('button').filter({ hasText: ACTION_SUMMARY });
                 await expect(sessionRow).toHaveCount(1);
                 await sessionRow.click();
 
-                await expectScreen(page, viewport, 'Multisig signing');
+                await expectScreen(page, viewport, 'Multisig Signing');
                 await expect(page.getByRole('main')).toContainText(ACTION_SUMMARY);
                 await expect(page.getByLabel('Multisig signing progress')).toHaveText(
                     'Signatures collected: 0 of 2',
                 );
                 await page.getByRole('main')
-                    .getByRole('button', { name: 'Back to sessions', exact: true }).click();
+                    .getByRole('button', { name: 'Back to Sessions', exact: true }).click();
                 await expect(sessions).toBeVisible();
             });
         }

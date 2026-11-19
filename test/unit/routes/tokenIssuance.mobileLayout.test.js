@@ -37,7 +37,6 @@ function mediaBlock(text, query) {
 }
 
 const routeStyles = [
-    'packages/core/src/shared/routes/TokenWizard.module.css',
     'packages/core/src/shared/routes/IssueTokenForm.module.css',
 ];
 
@@ -61,50 +60,28 @@ describe('token issuance mobile layout', () => {
     });
 
     it('uses shared fields, sections, and result actions for cross-chain authoring', () => {
-        const wizard = readSource(migratedRoutes[0]);
+        const issue = readSource('packages/core/src/shared/routes/IssueTokenForm.jsx');
         const swap = readSource(migratedRoutes[1]);
         const order = readSource(migratedRoutes[2]);
 
-        expect(wizard).toMatch(/<ListRow[\s\S]*?className={styles\.templateCard}[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/);
-        expect(wizard).toMatch(/<AddressField\s+label="Transfer ownership to \(optional\)"/);
-        expect(wizard).toMatch(/<FormSection\s+title="Locks \(permanent\)"/);
-        expect(wizard).toMatch(/<SectionHeader title="Token issued"/);
-        expect(wizard).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+        expect(issue).toMatch(/<AddressField[\s\S]*?label={t\('issue\.transferOwnership'\)}/);
+        expect(issue).toMatch(/<FormSection\s+id="locks"/);
+        expect(issue).toMatch(/<FormSection\s+id="callback"/);
+        expect(issue).toMatch(/<FormFrame\b/);
 
         for (const source of [swap, order]) {
-            expect(source).toMatch(/<AddressField\s+label="Receive at"/);
+            expect(source).toMatch(/<AddressField[\s\S]*?label="Receive at"/);
             expect(source).toMatch(/<SectionHeader title="Cross-chain (?:swap|order) broadcast"/);
-            expect(source).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+            expect(source).toMatch(/<CopyButton value={txid} label="Copy Transaction ID"/);
         }
-    });
-
-    it('renders template ListRows as bordered cards without an empty icon gutter', () => {
-        const wizard = readSource(migratedRoutes[0]);
-        const css = readCss(routeStyles[0]);
-        const listRowCss = readCss('packages/core/src/ui/ListRow.module.css');
-
-        expect(wizard).not.toMatch(/<ListRow[\s\S]*?leading=/);
-        expect(ruleBody(css, '.templateCard')).toMatch(/border:\s*1px solid var\(--xc-border-strong\)/);
-        expect(ruleBody(css, '.templateCard')).toMatch(/background:\s*var\(--xc-surface\)/);
-        expect(ruleBody(listRowCss, '.title')).toMatch(/color:\s*var\(--xc-text\)/);
-        expect(ruleBody(listRowCss, '.subtitle')).toMatch(/color:\s*var\(--xc-text-muted\)/);
-    });
-
-    it('keeps template cards one-up on phones and two-up on wide screens', () => {
-        const css = readCss(routeStyles[0]);
-        const wide = mediaBlock(css, '(min-width: 480px)');
-
-        expect(ruleBody(css, '.templateGrid')).toMatch(/grid-template-columns:\s*1fr/);
-        expect(ruleBody(wide, '.templateGrid')).toMatch(
-            /grid-template-columns:\s*repeat\(2, 1fr\)/,
-        );
     });
 
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
-        expect(ruleBody(css, '.detailsList')).toMatch(
-            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
-        );
+        // Label-left value-right rows at every width (the FactRows look): the
+        // label track and a wider value track whose text wraps at the end edge.
+        expect(ruleBody(css, '.detailsList'))
+            .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)\s+minmax\(0, 2fr\)/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/overflow-wrap:\s*anywhere/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/text-align:\s*end/);
@@ -113,11 +90,15 @@ describe('token issuance mobile layout', () => {
         expect(ruleBody(css, '.summary')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it.each(routeStyles)('%s stacks review labels and values at 360px', (path) => {
-        const narrow = mediaBlock(readCss(path), 'not all and (min-width: 400px)');
-        expect(ruleBody(narrow, '.detailsList')).toMatch(
-            /grid-template-columns:\s*minmax\(0, 1fr\)/,
-        );
+    it('draws the shared details labels as sentence-case rows, never uppercase stacked labels', () => {
+        const css = readCss(routeStyles[0]);
+        const label = ruleBody(css, '.detailsLabel');
+        expect(label).not.toMatch(/text-transform/);
+        expect(label).not.toMatch(/letter-spacing/);
+        expect(label).toMatch(/padding-block:\s*var\(--xc-space-2\)/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/padding:\s*var\(--xc-space-2\) 0/);
+        // No width switch: the rows are the same on a phone and a desktop.
+        expect(ruleBody(mediaBlock(css, '(min-width: 834px)'), '.detailsList')).toBe('');
     });
 
     it('lets long ticker and description values shrink within shared inputs', () => {
@@ -127,24 +108,12 @@ describe('token issuance mobile layout', () => {
         expect(ruleBody(css, '.input')).toMatch(/max-width:\s*100%/);
     });
 
-    it('wraps the wizard result actions instead of widening the viewport', () => {
-        const css = readCss(routeStyles[0]);
-        expect(ruleBody(css, '.actions')).toMatch(/flex-wrap:\s*wrap/);
-    });
-
     it('keeps the token item editor inside a 320px viewport', () => {
-        const css = readCss(routeStyles[1]);
+        const css = readCss(routeStyles[0]);
         expect(ruleBody(css, '.picker')).toMatch(/width:\s*100%/);
         expect(ruleBody(css, '.picker')).toMatch(/box-sizing:\s*border-box/);
         expect(ruleBody(css, '.tickItem')).toMatch(/flex-wrap:\s*wrap/);
         expect(ruleBody(css, '.tickItemName')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.tickItemName')).toMatch(/overflow-wrap:\s*anywhere/);
-    });
-});
-
-describe('token wizard template cards', () => {
-    it('starts every card at the top, whatever its neighbour in the row holds', () => {
-        const css = readCss('packages/core/src/shared/routes/TokenWizard.module.css');
-        expect(ruleBody(css, '.templateGrid .templateCard')).toMatch(/align-items:\s*flex-start/);
     });
 });

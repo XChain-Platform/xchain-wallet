@@ -27,13 +27,17 @@ const componentSizes = {
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
     SectionHeader: FIXED_SIZE,
+    Notice: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
+    StatusMessageGroup: FIXED_SIZE,
     Button: ALL_SIZES,
     Spinner: ALL_SIZES,
     Checkbox: FIXED_SIZE,
     ChoiceControl: FIXED_SIZE,
     Switch: FIXED_SIZE,
     Input: FIELD_SIZES,
+    FieldIconButton: FIXED_SIZE,
+    OptionalPill: FIXED_SIZE,
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
     RadioGroup: FIXED_SIZE,
@@ -50,6 +54,7 @@ const componentSizes = {
     QrScanner: FIXED_SIZE,
     ChainPicker: ALL_SIZES,
     NetworkField: FIELD_SIZES,
+    NetworkPicker: FIXED_SIZE,
     Skeleton: ALL_SIZES,
     InfoTip: FIXED_SIZE,
     Icon: ALL_SIZES,
@@ -128,8 +133,16 @@ function ComponentPreview({ name, size, state }) {
         return <UI.EmptyState title="No activity" body="New activity appears here." actionLabel="Refresh" onAction={noop} />;
     case 'SectionHeader':
         return <UI.SectionHeader title="Accounts" description="Three available" trailing={<UI.Button size="sm">Add</UI.Button>} />;
+    case 'Notice':
+        return (
+            <UI.Notice tone={state === 'error' ? 'danger' : 'info'} title={state === 'error' ? 'Check this value' : 'Wallet is ready'} onDismiss={disabled ? undefined : noop}>
+                {state === 'error' ? 'The amount is more than this address holds.' : 'Tokens you receive show here after one confirmation.'}
+            </UI.Notice>
+        );
     case 'StatusMessage':
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
+    case 'StatusMessageGroup':
+        return <UI.StatusMessageGroup entries={[{ key: 'preview', variant: statusVariant, children: state === 'error' ? error : 'Wallet is ready' }]} />;
     case 'Button':
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
     case 'Spinner':
@@ -141,22 +154,27 @@ function ComponentPreview({ name, size, state }) {
     case 'Switch':
         return <UI.Switch label="Price alerts" description="Notify when a target is reached." checked={state !== 'error'} onChange={noop} disabled={disabled} />;
     case 'Input':
-        return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} />;
+        return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan amount" disabled={disabled} />} />;
+    case 'FieldIconButton':
+        return <UI.Input aria-label="Address" fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan address" disabled={disabled} />} />;
+    case 'OptionalPill':
+        return <UI.OptionalPill />;
     case 'Select':
         return <UI.Select label="Network" size={nativeSize} defaultValue="btc" disabled={disabled} error={error}><option value="btc">Bitcoin</option></UI.Select>;
     case 'Textarea':
-        return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} />;
+        return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan message" disabled={disabled} />} />;
     case 'RadioGroup':
+        // No radio buttons (G119): RadioGroup's matrix shows the single-choice
+        // dropdown that replaces it, an icon per option.
         return (
-            <UI.RadioGroup
-                legend="Preference"
+            <UI.IconSelect
+                label="Preference"
                 value="first"
                 onChange={noop}
                 disabled={disabled}
-                error={error}
                 options={[
-                    { value: 'first', label: 'First choice' },
-                    { value: 'second', label: 'Second choice' },
+                    { value: 'first', label: 'First choice', icon: <UI.Icon.CheckIcon /> },
+                    { value: 'second', label: 'Second choice', icon: <UI.Icon.ListIcon /> },
                 ]}
             />
         );
@@ -186,6 +204,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.ChainPicker label="Network" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'NetworkField':
         return <UI.NetworkField value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
+    case 'NetworkPicker':
+        return <UI.NetworkField label="Open network picker" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} />;
     case 'Skeleton':
         return <UI.Skeleton shape="card" width={{ sm: 96, md: 128, lg: 160 }[size]} height={{ sm: 48, md: 64, lg: 80 }[size]} />;
     case 'InfoTip':

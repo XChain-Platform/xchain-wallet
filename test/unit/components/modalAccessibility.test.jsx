@@ -2,14 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
-import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
 
@@ -36,50 +33,21 @@ describe('open modal accessibility', () => {
         await expectNoSeriousAxeViolations(container);
     });
 
-    it('renders the alerts modal without serious axe violations', async () => {
+    it('renders the wallet menu without serious axe violations', async () => {
         const { container } = render(
-            <AlertsOverlay
-                alerts={[{
-                    id: 'upgrade',
-                    severity: 'critical',
-                    title: 'Recovery phrase update required',
-                    message: 'Upgrade the recovery phrase before continuing.',
-                    action: { label: 'Upgrade', onSelect: noop },
-                }]}
+            <CommandPalette
+                open
                 onClose={noop}
+                commands={[{ id: 'home', category: 'Navigate', title: 'Home', run: noop }]}
+                menu={{
+                    gates: { hasDexSurface: true, hasVmAddress: true, hasBtcAddress: true },
+                    currentView: 'home',
+                    onSelect: noop,
+                    onOpenSettings: noop,
+                    onLock: noop,
+                }}
             />,
         );
-
-        await expectNoSeriousAxeViolations(container);
-    });
-
-    it('renders the More bottom sheet without serious axe violations', async () => {
-        const { container } = render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={noop}
-                onLock={noop}
-                onOpenWalletPicker={noop}
-                onOpenSettings={noop}
-                hasVmAddress
-                hasDexSurface
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-
-        await expectNoSeriousAxeViolations(container);
-    });
-
-    it('renders the header settings dialog without serious axe violations', async () => {
-        const { container } = render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
-                activeAccount={{ id: 'account-1', index: 0, name: 'Savings' }}
-                onOpenWalletPicker={noop}
-                onOpenAccountPicker={noop}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
         await expectNoSeriousAxeViolations(container);
     });

@@ -187,13 +187,10 @@ async function clickAndLetItClose(locator) {
     }
 }
 
-// The popup header keeps Search in its action menu; the hero's own search
-// button folds into "Balance actions" at popup width, so the header menu is
-// the one visible route to the palette at every popup size.
+// The popup header opens the searchable wallet menu at every popup size.
 async function openAllActions(page) {
     await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('menu', { name: 'Header actions' }).getByRole('menuitem', { name: /^Search/ }).click();
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('All actions');
     await palette.getByRole('option', { name: /All actions/ }).first().click();
@@ -220,12 +217,12 @@ test.describe('passive co-signer, in a browser', () => {
 
         // The list screen offers provisioning; the button wording is the one the
         // route renders.
-        await page.getByRole('button', { name: /Create agent account|New agent account|Provision/ }).first().click();
+        await page.getByRole('button', { name: /Create Agent Account|New agent account|Provision/ }).first().click();
 
-        // "This wallet's key" is a select of this wallet's addresses on the
-        // chosen Bitcoin network; take the first real option.
-        const keySelect = page.getByLabel("This wallet's key");
-        await keySelect.selectOption({ index: 1 });
+        await page.getByRole('button', { name: "Choose this wallet's key" }).click();
+        const walletKey = page.getByRole('button', { name: /^View address / }).first();
+        await expect(walletKey).toBeVisible();
+        await walletKey.click();
 
         await page.getByLabel(/Agent public key/).fill(agentPk.toString('hex'));
         await page.getByLabel('Account name').fill('E2E agent');
@@ -234,8 +231,8 @@ test.describe('passive co-signer, in a browser', () => {
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
 
         // The form is two steps: review the exact values, then create.
-        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
-        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create Agent Account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create Agent Account', exact: true }).click();
 
         // The success screen shows the funded 2-of-2 address. AddressText
         // TRUNCATES for display but carries the full string in aria-label, so
@@ -341,14 +338,17 @@ test.describe('passive co-signer, in a browser', () => {
         // known to hold a Bitcoin address (the feature is BTC-only at launch).
         await openAllActions(page);
         await page.getByRole('button', { name: /Agent accounts/ }).first().click();
-        await page.getByRole('button', { name: /Create agent account|New agent account|Provision/ }).first().click();
-        await page.getByLabel("This wallet's key").selectOption({ index: 1 });
+        await page.getByRole('button', { name: /Create Agent Account|New agent account|Provision/ }).first().click();
+        await page.getByRole('button', { name: "Choose this wallet's key" }).click();
+        const walletKey = page.getByRole('button', { name: /^View address / }).first();
+        await expect(walletKey).toBeVisible();
+        await walletKey.click();
         await page.getByLabel(/Agent public key/).fill(agentPk.toString('hex'));
         await page.getByLabel('Account name').fill('E2E agent');
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();          // SEND only
         // The form is two steps: review the exact values, then create.
-        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
-        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create Agent Account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create Agent Account', exact: true }).click();
 
         await expect(page.getByText('Agent account created')).toBeVisible({ timeout: 60_000 });
         const aggregateAddress = await readAggregateAddress(page);

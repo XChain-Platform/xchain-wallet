@@ -73,6 +73,34 @@
 const transports = new Map();
 
 /**
+ * Error code a host route throws when a hardware wallet's device has no live
+ * transport here (never connected in the current session, or its window closed). The
+ * renderer reads it to offer reconnecting instead of a generic failure.
+ */
+export const HW_NOT_CONNECTED = 'HW_NOT_CONNECTED';
+
+/** No live transport for the hardware wallet a route needs. */
+export class HardwareNotConnectedError extends Error {
+    constructor(message = 'Hardware wallet is not connected. Connect your hardware wallet and try again.') {
+        super(message);
+        this.name = 'HardwareNotConnectedError';
+        this.code = HW_NOT_CONNECTED;
+    }
+}
+
+/**
+ * The live transport for a signerId, or a throw with `code: HW_NOT_CONNECTED`.
+ *
+ * @param {string} signerId
+ * @returns {import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport}
+ */
+export function requireTransport(signerId) {
+    const transport = transports.get(signerId);
+    if (!transport) throw new HardwareNotConnectedError();
+    return transport;
+}
+
+/**
  * Register a transport function for a signerId. Called by the port
  * listener when the renderer posts `signer.register`.
  *

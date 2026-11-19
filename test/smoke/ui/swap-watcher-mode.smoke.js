@@ -24,8 +24,12 @@ const formSrc = readFileSync(
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
-assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
+assert.match(formSrc, /const \{ walletMode, isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'SWAP'/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(
+    formSrc,
+    /<ResultScreen\s+state="unsigned"\s+result=\{result\}[\s\S]*?onBuildAnother=\{handleBuildAnother\}/,
+    'watcher mode exposes the unsigned PSBT through the shared result screen',
+);
 console.log('swap-watcher-mode smoke OK');

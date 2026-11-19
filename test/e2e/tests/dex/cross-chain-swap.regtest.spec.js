@@ -28,9 +28,9 @@
 //   - `switchToRegtest` derives an address on EACH chain of the network it
 //     switches to, so the wallet has a get-chain address from the start and the
 //     form's "Receive at" auto-fills from it (`getNewestAddress`).
-//   - The form is two ordinary `ChainPicker`s plus two `TokenField`s, all four
-//     of which the campaign's widget map already knows how to drive.
-//   - The route is reachable from the command palette.
+//   - The form is one `ChainPicker` (the give network, in the From section)
+//     plus two `TokenField`s; the get chain follows the Get token.
+//   - The route is reachable from the wallet menu.
 //
 // What was genuinely missing is TWO helpers, not the one the row predicted, and
 // they live in `fixtures/crossChain.js` with the reasoning: the venue-pinned
@@ -68,8 +68,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/cross-chain-swap.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
-import { selectNamedChain, selectNamedToken } from '../../fixtures/crossChain.js';
+import { createWallet, expect, openFromSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { selectNamedToken } from '../../fixtures/crossChain.js';
 import {
     explorerJson,
     fundAddress,
@@ -86,6 +86,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const TICK = 'XCHAIN';
@@ -213,18 +214,17 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('compose the offer: give on this chain, get on the counterparty chain', async () => {
             await openPaletteCommand(page, 'Cross-chain swap');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Give network:/ }),
+            await openFromSection(main);
+            await expect(main.getByRole('button', { name: /^Network:/ }),
                 'the palette did not land on the cross-chain swap form')
                 .toBeVisible({ timeout: 30_000 });
 
-            // The GIVE half follows the venue, so it takes the venue-pinned
-            // helper; the GET half is deliberately NOT the venue's chain and
-            // takes the named one. Using the venue helper on both is the silent
-            // failure this pair of helpers exists to make impossible - the form
-            // refuses a swap whose chains match, so it would fail on a
-            // validation message rather than on anything cross-chain.
-            await selectVenueChain(main, 'Give network');
-            await selectNamedChain(main, 'Get network', GET.chainLabel);
+            // The From section's Network is the GIVE chain and follows the
+            // venue, so it takes the venue-pinned helper. The form has no Get
+            // network field: the GET chain is decided by the Get token, which
+            // is picked below on its named chain (GET.chainId) and not on the
+            // venue's, so the form never sees two matching chains.
+            await selectVenueChain(main, 'Network');
 
             // CHAINS BEFORE TOKENS, and the order is load-bearing rather than
             // tidy: each token picker is opened with
@@ -241,15 +241,15 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
                 chainId: GET.chainId, chainLabel: GET.chainLabel, tick: TICK,
             });
 
-            await main.getByLabel('Give amount').fill(GIVE_AMOUNT);
-            await main.getByLabel('Get amount').fill(GET_AMOUNT);
+            await fieldByLabel(main, 'Give amount').fill(GIVE_AMOUNT);
+            await fieldByLabel(main, 'Get amount').fill(GET_AMOUNT);
         });
 
         let receiveAt;
 
         await test.step('the receiving address is on the GET chain, not this one', async () => {
             const main = page.getByRole('main');
-            const field = main.getByLabel('Receive at');
+            const field = fieldByLabel(main, 'Receive at');
             await expect(field, 'the form never auto-filled a receiving address on the get chain; '
                 + 'a wallet derives an address on every chain of the network it switches to, so an '
                 + 'empty field here means that derivation did not happen')
@@ -269,9 +269,9 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('review names both chains, then sign', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Offer swap', exact: true }).click();
 
-            await expect(main, 'the Review button did not reach the review stage')
+            await expect(main, 'the Offer swap button did not reach the review stage')
                 .toContainText(/Offer to give/, { timeout: 30_000 });
             await expect(main).toContainText(
                 new RegExp(`Offer to give ${GIVE_AMOUNT} ${TICK} in exchange for ${GET_AMOUNT} ${TICK}`));
@@ -283,18 +283,15 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('img', { name: GET.chainLabel, exact: true }).first())
                 .toBeVisible();
 
-            // CONDITIONAL, and not out of caution: `SignCredentials` renders
-            // no password field at all when the signer pool is already
-            // rehydrated, showing "Wallet unlocked. No password needed."
-            // instead, and the form's submit gate agrees (`!signerReady &&
-            // password.length === 0`). An unconditional fill would wait out the
-            // full budget on a screen that is ready to sign. Same shape the
-            // betting lane settled on.
-            const password = main.getByLabel('Password', { exact: true });
+            // Conditional: `SignCredentials` renders no password field when the
+            // signer pool is already rehydrated, and the submit gate agrees
+            // (`!signerReady && password.length === 0`), so an unconditional
+            // fill would wait out the full budget on a screen ready to sign.
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) {
                 await password.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign cross-chain swap' }).click();
+            await main.getByRole('button', { name: 'Sign Cross-Chain Swap' }).click();
         });
 
         let txid;

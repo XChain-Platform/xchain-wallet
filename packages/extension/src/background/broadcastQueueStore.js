@@ -17,6 +17,10 @@
 // store for its whole process and hands it to every host it builds.
 
 import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+import {
+    adoptStoredQueueEntries,
+    toStoredQueueSnapshot,
+} from './broadcast_queue_snapshot.js';
 
 /**
  * @typedef {import('./broadcastQueueStorage.js').BroadcastQueueStorage} BroadcastQueueStorage
@@ -44,7 +48,11 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  *   or after it while their save has not landed,
  *   which the rehydrate merge skips and its write-back drops from the blob;
  *   each add is also written to a durable ledger so a worker evicted before
- *   the read recovers still drops the wallet on the next boot
+ *   the read recovers still drops the wallet on the next boot. The default
+ *   uses chrome.storage or localStorage; shells without either pass a ledger
+ * @property {Set<string>} removedWallets  walletIds removed while this store is live, in memory only;
+ *   every host built over the store reads it, so a torn-down host's late
+ *   failure hook cannot queue a wallet a later host removed. Cleared by a seal
  * @property {number} bootedAt  wall-clock ms this store was built; the vault restore
  *   reads a 'broadcasting' PendingTx created after it as this process's own live call
  */
@@ -83,7 +91,8 @@ const WRITABLE_OWED_STATUSES = new Set(['queued', 'broadcasting']);
  * Fold a later owed write for one PendingTx into the earlier one, giving the
  * record whose replay equals replaying both in order. Patches stack, and a
  * discard carries earlier work so the flush applies it first. Reveal promotion
- * stays byte-free while later patches and discards remain attached to it. An
+ * stays byte-free while later patches and discards remain attached to it, and
+ * a later reveal record is dropped only when it carries neither. An
  * earlier discard or terminal patch closes the record, so it is returned
  * unchanged and the later write is dropped, as its replay would be.
  * Always builds a new record (the flush retires records by identity).
@@ -98,13 +107,15 @@ export function foldOwedSettlement(prior, next) {
     const priorStatus = prior.patch?.status;
     if (typeof priorStatus === 'string' && !WRITABLE_OWED_STATUSES.has(priorStatus)) return prior;
     if (prior.op === 'reveal') {
-        if (next.op === 'reveal') return prior;
+        // A later reveal is the same promotion, dropped unless it already
+        // carries the patch or discard folded onto it in memory.
+        if (next.op === 'reveal' && !next.patch && next.discard !== true) return prior;
         return {
             ...next,
             op: 'reveal',
             reveal: prior.reveal,
             patch: { ...(prior.patch ?? {}), ...(next.patch ?? {}) },
-            ...(next.op === 'discard' ? { discard: true } : {}),
+            ...(next.op === 'discard' || next.discard === true ? { discard: true } : {}),
         };
     }
     if (prior.op !== 'patch' || !prior.patch || typeof prior.patch !== 'object') return next;
@@ -371,15 +382,15 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
         loadPromise: null,
         inFlight: new Set(),
         prunedWallets,
+        removedWallets: new Set(),
         bootedAt: Date.now(),
     };
 }
 
-// Fold a fresh read into the live map and journal in place: the stored copy
-// wins for everything the key held, and only what never reached it is carried
-// over. Arrays and journal objects keep their identity, because routes splice
-// the arrays `getQueue` handed them and the journal flush retires by identity.
-// Returns whether anything was carried over, which the key now lacks.
+// Fold stored state into live collections without trusting stored sibling links.
+// Preserve live array and journal record identity for active routes and flushes.
+
+// Report whether anything was carried over that the stored key now lacks.
 function adoptStoredState(store, snapshot, settlements, known) {
     const pruned = store.prunedWallets;
     let carried = false;
@@ -389,12 +400,10 @@ function adoptStoredState(store, snapshot, settlements, known) {
             store.queues.delete(walletId);
             continue;
         }
-        const stored = Array.isArray(snapshot[walletId])
-            ? snapshot[walletId].filter((entry) => entry && typeof entry === 'object')
-            : [];
+        const live = store.queues.get(walletId);
+        const stored = adoptStoredQueueEntries(snapshot[walletId], live);
         const storedIds = new Set(stored.map((entry) => entry.id));
         const storedTxs = new Set(stored.map((entry) => entry.pendingTxId).filter(Boolean));
-        const live = store.queues.get(walletId);
         const kept = (live ?? []).filter((entry) => isMemoryOnlyEntry(known.queues, walletId, entry)
             && !storedIds.has(entry.id)
             && !(entry.pendingTxId && storedTxs.has(entry.pendingTxId)));
@@ -490,10 +499,7 @@ export async function refreshBroadcastQueueStore(store) {
         store.loaded = true;
 
         if (carried || pruned?.size > 0) {
-            const queues = {};
-            for (const [walletId, entries] of store.queues.entries()) {
-                if (entries.length > 0) queues[walletId] = [...entries];
-            }
+            const queues = toStoredQueueSnapshot(store.queues);
             try {
                 await store.storage.save(queues);
                 if (typeof store.storage.saveSettlements === 'function') {
@@ -530,6 +536,7 @@ export async function sealBroadcastQueueStore(store) {
     store.queues.clear();
     store.owed = [];
     store.prunedWallets?.clear();
+    store.removedWallets?.clear();
     // Not awaited: a read already held by the failing store must not stall the
     // wipe, and the ledger holds walletIds only.
     store.prunedWallets?.erase?.().catch(() => {});

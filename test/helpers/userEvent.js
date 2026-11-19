@@ -89,7 +89,12 @@ function moveFocus(backward = false) {
     const proceeds = fireEvent.keyDown(target, { key: 'Tab', shiftKey: backward });
     if (!proceeds) return;
     const elements = focusableElements();
-    const current = elements.indexOf(target);
+    // A keydown handler may move focus (a closing dropdown returns it to its
+    // trigger); the browser then tabs on from the newly focused element.
+    const from = document.activeElement && document.activeElement !== document.body
+        ? document.activeElement
+        : target;
+    const current = elements.indexOf(from);
     const next = backward
         ? (current <= 0 ? elements.at(-1) : elements[current - 1])
         : (current < 0 || current === elements.length - 1 ? elements[0] : elements[current + 1]);

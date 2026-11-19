@@ -6,13 +6,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import chainPickerStyles from '../../../packages/core/src/ui/ChainPicker.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import tabsStyles from '../../../packages/core/src/ui/Tabs.module.css';
+import toggleStyles from '../../../packages/core/src/ui/SegmentedControl.module.css';
 import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
-import networkFilterDropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
+import betFeedsStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -50,10 +54,14 @@ function expectMediumInput(input) {
     expect(input.parentElement?.parentElement).toHaveClass(inputStyles.md);
 }
 
+function expectSmallInput(input) {
+    expect(input.parentElement?.parentElement).toHaveClass(inputStyles.sm);
+}
+
 afterEach(() => cleanup());
 
 describe('route control row alignment', () => {
-    it('keeps contract search, filter chips, and publish action on the md size', async () => {
+    it('keeps contract search, chips and publish action compact', async () => {
         mount(
             <ContractsList
                 walletId="wallet-1"
@@ -69,10 +77,40 @@ describe('route control row alignment', () => {
             }),
         );
 
-        expectMediumInput(await screen.findByLabelText('Filter contracts'));
-        expect(screen.getByRole('tab', { name: 'All' })).toHaveClass(buttonStyles.md);
-        expect(screen.getByRole('tab', { name: 'Bitcoin' })).toHaveClass(buttonStyles.md);
+        // Search now sits in the title-bar filter panel at the md size; the views are icon tabs
+        // (All, My Contracts, Interactions) and Publish contract is the title bar plus.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter contracts' }));
+        expectMediumInput(await screen.findByLabelText('Search contracts'));
+        for (const name of ['All', 'My Contracts', 'Interactions']) {
+            expect(screen.getByRole('tab', { name })).toHaveClass(tabsStyles.tab);
+        }
         expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
+    });
+
+    it('keeps the prediction market network field and status tabs on one control contract', async () => {
+        mount(
+            <BetFeedsList
+                walletId="wallet-1"
+                onBack={() => {}}
+                onOpenMarket={() => {}}
+            />,
+            messaging({
+                betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+        );
+
+        // Network, Status and Sort are md fields in the title-bar filter panel; the views are
+        // icon tabs above the list.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter prediction markets' }));
+        // Network is the standard Network field (it opens the full-screen
+        // network list, operator ruling 2026-11-13), drawn at md.
+        const network = await screen.findByRole('button', { name: /^Network: / });
+        expect(network.closest(`.${chainPickerStyles.wrap}`)).toHaveClass(chainPickerStyles.md);
+        for (const label of ['Status', 'Sort']) {
+            expectMediumInput(await screen.findByLabelText(label));
+        }
+        // Tabs draw the shared view-toggle frame.
+        expect(screen.getByRole('tablist', { name: 'Prediction market views' })).toHaveClass(toggleStyles.segmented);
     });
 
     it('keeps staking search and network filter on the md size', async () => {
@@ -87,13 +125,15 @@ describe('route control row alignment', () => {
             }),
         );
 
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter staking' }));
         expectMediumInput(await screen.findByLabelText('Search staking positions'));
-        const networkFilter = screen.getByRole('button', { name: 'Filter by network' });
+        const networkFilter = screen.getByRole('button', { name: /^Filter by network/ });
         expect(networkFilter.parentElement).toHaveClass(networkFilterStyles.md);
-        expect(networkFilter.parentElement?.parentElement).toHaveClass(networkFilterDropdownStyles.md);
+        // The network picker is Home's, drawn inside the title-bar filter panel under the search box.
+        expect(networkFilter.closest('[role="dialog"]')).toBe(screen.getByRole('dialog', { name: 'Filter staking' }));
     });
 
-    it('keeps oracle action buttons and outcome chips on the md size', async () => {
+    it('draws the oracle actions as list rows and keeps the outcome chips on the md size', async () => {
         mount(
             <OracleConsole
                 walletId="wallet-1"
@@ -114,12 +154,15 @@ describe('route control row alignment', () => {
             }),
         );
 
-        const view = await screen.findByRole('button', { name: 'View market' });
-        const copy = screen.getByRole('button', { name: 'Copy to a new market' });
-        expect(view).toHaveClass(buttonStyles.md);
-        expect(copy).toHaveClass(buttonStyles.md);
+        // The market's actions are one action list (G101), full-width rows
+        // rather than sized buttons; the outcome chips keep the md size.
+        const list = await screen.findByRole('list', { name: 'Market #42 actions' });
+        const view = within(list).getByRole('button', { name: /^View market/ });
+        const copy = within(list).getByRole('button', { name: /^Copy to a new market/ });
+        expect(view).not.toHaveClass(buttonStyles.md);
+        expect(copy).not.toHaveClass(buttonStyles.md);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+        fireEvent.click(within(list).getByRole('button', { name: /^Resolve/ }));
         const outcomes = screen.getByRole('group', { name: 'Winning outcome' });
         for (const chip of within(outcomes).getAllByRole('button')) {
             expect(chip).toHaveClass(buttonStyles.md);

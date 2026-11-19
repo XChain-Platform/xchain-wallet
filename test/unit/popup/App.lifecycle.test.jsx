@@ -71,13 +71,13 @@ describe('popup App lifecycle', () => {
                 }, 'session');
             }
         });
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
 
         await act(async () => {
             firstSession.resolve({ ok: true, result: { state: 'locked' } });
             await firstSession.promise;
         });
-        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create New Wallet' })).toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Unlock wallet' })).not.toBeInTheDocument();
     });
 

@@ -13,7 +13,8 @@ test('a payment link opened while locked lands on a prefilled Send after unlock'
     await page.goto(`/?uri=${encodeURIComponent(`bitcoin:${ADDRESS}?amount=0.001`)}`);
     await unlockWallet(page);
     await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
-    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    // A fractional coin amount pads to its 8 decimals; a whole one stays whole (U61).
+    await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
 });
 
 const OTHER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -72,10 +73,13 @@ test('a link delivered after Approve waits and is dropped when the user leaves b
     await expect(page.getByRole('region', { name: 'App header', exact: true })).toBeVisible({ timeout: 90_000 });
 
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${ADDRESS}?amount=0.001`);
-    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+    // A tap inside the review's 700 ms settle is dropped, so wait it out.
+    await page.waitForTimeout(900);
     await page.getByTestId('confirm-approve').click();
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${OTHER}?amount=2`);
 
@@ -83,7 +87,7 @@ test('a link delivered after Approve waits and is dropped when the user leaves b
     // notice. The second link must not replace it.
     await expect(main.getByText('This development build cannot sign.', { exact: false })).toBeVisible();
     await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
-    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
 
     // Leaving by the navigation is not Back or Done on a result, so the waiting
     // link is dropped and the screen the user chose says so.
@@ -148,10 +152,13 @@ test('Done on a Send result opens the payment link that waited behind the approv
     await expect(page.getByRole('region', { name: 'App header', exact: true })).toBeVisible({ timeout: 90_000 });
 
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${ADDRESS}?amount=0.001`);
-    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+    // A tap inside the review's 700 ms settle is dropped, so wait it out.
+    await page.waitForTimeout(900);
     await page.getByTestId('confirm-approve').click();
     await expect(page.getByRole('heading', { name: 'Broadcast pending' })).toBeVisible();
 

@@ -40,9 +40,8 @@
 // "fix" is to print a fee on everything, which trades a silent
 // understatement for a confident lie on the many actions that charge nothing
 // (BROADCAST, MINT, DESTROY, SLEEP,... -). BROADCAST is priced at
-// exactly zero by this venue's own schedule, so it is driven in BOTH lanes and
-// must stay silent in both, and its coin cost on chain must be the miner fee
-// alone - a stray fee output would show up there even if no screen mentioned it.
+// exactly zero by this venue's own schedule, so its form must expose no fee
+// lane and its coin cost on chain must be the miner fee alone.
 //
 // PRE-FLIGHT: ISSUE is priced, so the venue needs a usable BTC/USD snapshot;
 // global setup's `seedPrices()` guarantees one or fails naming the
@@ -51,12 +50,15 @@
 // later (§3.2).
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -66,7 +68,10 @@ import {
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
+    openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -166,39 +171,33 @@ async function settledXchainBalance(address, before, timeoutMs = 60_000) {
  * screen's own line (§5.2.5 - the composed value, never a rate estimate).
  */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(/([\d.]+)\s*BTC/)?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 /**
- * The protocol-fee row inside the balance projection, in satoshis, or null
- * when the projection does not carry one.
- *
- * Read out of the deltas panel rather than off a dedicated testid because that
- * is where the fix put it: the row rides beside the coin balance row it was
- * folded into, so a fee that is claimed in words but missing from the
- * projection is exactly the failure this reads for.
+ * The protocol-fee fact in the Confirm Standard card, in satoshis, or null
+ * when the card does not carry one.
  */
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    // Tolerant on the separator: the label and the "<amount> <ticker>" value are
-    // sibling spans in a flex row, so whether innerText puts a newline, a space
-    // or nothing between them is a layout detail this assertion must not depend on.
-    const coin = text.match(/Protocol fee\s*([\d.]+)\s*BTC/)?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    const coin = text.match(/([\d.,]+)\s*BTC/)?.[1]?.replace(/,/g, '');
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
 }
 
 /** The native-fee opt-in, which on Bitcoin is a real control. */
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    const name = /^Pay protocol fee in BTC\b/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 
 async function setFeeLane(scope, nativeFee) {
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
         .toBeVisible({ timeout: 30_000 });
@@ -219,16 +218,16 @@ async function composeIssue(page, tick, { nativeFee }) {
     await openPaletteCommand(page, 'Home');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(SUPPLY);
     await setFeeLane(main, nativeFee);
 
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     // Full mode is SINGLE-ENCODE: this button composes and opens the
     // confirm screen directly, with no review stage in between.
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -237,7 +236,7 @@ async function composeIssue(page, tick, { nativeFee }) {
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -275,8 +274,8 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -307,7 +306,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             // The line exists for. Its absence IS the defect:
             // the screen priced the miner fee to eight decimals and said
             // nothing about the larger charge beside it.
-            const line = page.getByTestId('confirm-protocol-fee');
+            const line = page.getByTestId('confirm-fee-protocol');
             await expect(line,
                 'the confirm screen says nothing about the protocol fee in the XCHAIN lane, which is '
                 + 'exactly: the larger of the two costs, missing')
@@ -315,10 +314,15 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const said = await line.innerText();
             const shown = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
             expect(shown, `unparseable protocol-fee line: ${said}`).toBe(quotedXchain);
-            // Which balance it comes out of, and that it is contingent: a bare
-            // number cannot say either, and both are things the user needs.
-            expect(said).toMatch(/from your XCHAIN balance/i);
-            expect(said).toMatch(/only if the action is accepted/i);
+            // The confirm card gives each fee its own row (G127, revised
+            // 2026-11-16), so the row names its balance by its unit: XCHAIN,
+            // with no coin amount beside it. The contingency is told by what
+            // is absent: only a native-coin fee carries "not refunded if
+            // rejected", since its output is spent on broadcast either way.
+            expect(said, 'the XCHAIN-lane protocol-fee row also prices the fee in coin')
+                .not.toMatch(/\bBTC\b/);
+            expect(said, 'the XCHAIN-lane fee is labelled as spent even if the action is rejected')
+                .not.toMatch(/not refunded/i);
 
             // And it is NOT the miner-fee line wearing a different label: the
             // two costs are stated separately, in their own denominations.
@@ -369,13 +373,17 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const before = await feeQuote('ISSUE', `${TICK_NATIVE_LANE}|${SUPPLY}|0|0|0`);
             await composeIssue(page, TICK_NATIVE_LANE, { nativeFee: true });
 
-            // No XCHAIN line here, deliberately: the fee is already disclosed
-            // as a coin debit below, and a second line in XCHAIN would read as
-            // a second, separate charge.
-            await expect(page.getByTestId('confirm-protocol-fee'),
-                'the native lane shows an XCHAIN protocol-fee line as well as the coin debit, which '
-                + 'reads as being charged twice')
-                .toHaveCount(0);
+            // One protocol-fee row, in the coin: the native lane prices the
+            // fee as the output it is, and an XCHAIN figure beside it would
+            // read as a second, separate charge.
+            const nativeLine = page.getByTestId('confirm-fee-protocol');
+            await expect(nativeLine, 'the native lane states no protocol fee on the confirm screen')
+                .toHaveCount(1);
+            const nativeSaid = await nativeLine.innerText();
+            expect(nativeSaid, 'the native lane prices its protocol fee in XCHAIN as well as the coin, '
+                + 'which reads as being charged twice').not.toMatch(/XCHAIN/);
+            expect(nativeSaid, 'the native-lane fee does not say it stays paid if the action is rejected')
+                .toMatch(/not refunded if rejected/i);
 
             const minerSats = await screenNetworkFeeSats(page);
             const projectedFeeSats = await projectedProtocolFeeSats(page);
@@ -448,8 +456,8 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            const source = await main.getByLabel('From').inputValue();
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            const source = await readIssueSource(main);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
             await page.reload();
@@ -467,11 +475,13 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             // The dry run really is unavailable, so this test is measuring what
             // it thinks it is: without this the assertion below could pass on a
             // report that arrived after all.
-            await expect(page.getByTestId('preflight-panel'),
+            await expect(page.getByTestId('confirm-status'),
                 'the dry run answered after all, so this proves nothing')
-                .toContainText(/dry-run was unavailable/i);
+                .toHaveAttribute('data-state', 'notChecked');
+            await expect(page.getByTestId('confirm-status'))
+                .toContainText(/dry-run was unavailable|Not checked with the network/i);
 
-            const line = page.getByTestId('confirm-protocol-fee');
+            const line = page.getByTestId('confirm-fee-protocol');
             await expect(line,
                 'with the dry run unavailable the screen states no protocol fee at all, so the '
                 + 'disclosure is only as reliable as a 4-second budget on a shared venue')
@@ -496,10 +506,10 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Zero Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Broadcast');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
+            source = await (await openFromAddress(main)).inputValue();
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
@@ -518,22 +528,22 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             expect(Number(quote?.xchainFee)).toBe(0);
         });
 
-        const composeBroadcast = async (message, nativeFee) => {
-            await openPaletteCommand(page, 'Broadcast a message');
+        const composeBroadcast = async (message) => {
+            await openPaletteCommand(page, 'Broadcast');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Message').fill(message);
-            await setFeeLane(main, nativeFee);
-            const password = main.getByLabel('Password', { exact: true });
+            await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Message').fill(message);
+            await expect(feeToggle(main), 'BROADCAST exposes a protocol-fee switch').toHaveCount(0);
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
+            await main.getByRole('button', { name: 'Announce', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
         };
 
-        await test.step('the XCHAIN lane claims no charge on an unpriced action', async () => {
-            await composeBroadcast(`no fee here ${STAMP}`, false);
-            await expect(page.getByTestId('confirm-protocol-fee'),
+        await test.step('the form shows no fee switch or charge', async () => {
+            await composeBroadcast(`no fee here ${STAMP}`);
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'the screen states a protocol fee on an action this venue prices at zero, which is '
                 + 'the opposite failure and just as wrong')
                 .toHaveCount(0);
@@ -544,11 +554,11 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
 
-        await test.step('the native lane attaches nothing, on screen or on chain', async () => {
-            await composeBroadcast(`no fee here either ${STAMP}`, true);
-            await expect(page.getByTestId('confirm-protocol-fee')).toHaveCount(0);
+        await test.step('a second compose attaches nothing on screen or on chain', async () => {
+            await composeBroadcast(`no fee here either ${STAMP}`);
+            await expect(page.getByTestId('confirm-fee-protocol')).toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
-                'the native lane projects a coin protocol fee for an action that charges none')
+                'the confirmation projects a coin protocol fee for an action that charges none')
                 .toBeNull();
 
             const minerSats = await screenNetworkFeeSats(page);
@@ -571,13 +581,13 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
         await test.step('a plain payment has no protocol fee to state', async () => {
             await gotoSection(page, 'Send');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 60_000);
             // A bare native payment carries no XChain action at all,
             // so there is no fee to disclose and nothing to project.
-            await expect(page.getByTestId('confirm-protocol-fee'),
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'a plain coin payment claims a protocol fee')
                 .toHaveCount(0);
             expect(await projectedProtocolFeeSats(page)).toBeNull();

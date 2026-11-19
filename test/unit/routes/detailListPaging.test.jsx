@@ -77,7 +77,9 @@ describe('TokenDetail holder paging', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        // The secondary token surfaces are links in the Details tab now.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        fireEvent.click(screen.getByRole('button', { name: /Holders/ }));
         expect(await screen.findByText('Holders (25 of 49)')).toBeTruthy();
         const list = screen.getByRole('list', { name: 'Holder balances' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(25);
@@ -85,7 +87,7 @@ describe('TokenDetail holder paging', () => {
 
         const scroller = document.querySelector('main');
         scroller.scrollTop = 137;
-        fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More Holders' }));
 
         await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(49));
         expect(screen.getByText('Holders (49)')).toBeTruthy();
@@ -95,7 +97,7 @@ describe('TokenDetail holder paging', () => {
             opts: { page: 2, limit: 25 },
         });
         expect(scroller.scrollTop).toBe(137);
-        expect(screen.queryByRole('button', { name: 'Load more holders' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load More Holders' })).toBeNull();
     });
 });
 
@@ -124,21 +126,23 @@ describe('ListDetail member paging', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('Members as published (26)')).toBeTruthy();
+        // The members sit on the List tab, 25 to a page, the duplicate dropped.
+        fireEvent.click(await screen.findByRole('tab', { name: 'List' }));
+        await screen.findByRole('button', { name: 'Load More Members' });
         const list = document.querySelector('ul');
         expect(list.querySelectorAll('li')).toHaveLength(25);
         const scroller = document.querySelector('main');
         scroller.scrollTop = 83;
-        fireEvent.click(screen.getByRole('button', { name: 'Load more members' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More Members' }));
 
         expect(list.querySelectorAll('li')).toHaveLength(26);
         expect(scroller.scrollTop).toBe(83);
-        expect(screen.queryByRole('button', { name: 'Load more members' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load More Members' })).toBeNull();
     });
 });
 
 describe('DispenserExplorer result paging', () => {
-    it('merges pages by action index and keeps the result scroller anchored', async () => {
+    async function searchPagedDispensers() {
         const first = Array.from({ length: 25 }, (_, index) => ({
             action_index: String(index),
             give_tick: 'PAGED',
@@ -171,18 +175,34 @@ describe('DispenserExplorer result paging', () => {
         );
 
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PAGED' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        // The search box lives in the title bar's filter panel (G04).
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+        await waitFor(() => expect(screen.queryByText('Loading available networks…')).toBeNull());
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'PAGED' } });
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 
         const loadMore = await screen.findByRole('button', { name: /Load more results for/ });
+        return loadMore;
+    }
+
+    it('shows how many of the matching results are loaded', async () => {
+        await searchPagedDispensers();
         expect(screen.getByText('25 of 49')).toBeTruthy();
+    });
+
+    it('merges pages by action index and keeps the result scroller anchored', async () => {
+        const loadMore = await searchPagedDispensers();
         const section = loadMore.closest('section');
-        expect(within(section).getAllByText(/#\d+/)).toHaveLength(25);
+        // Each result is a row button named by its terms ("... PAGED for ...");
+        // rows print no seller address now, so the count alone proves the
+        // duplicate across pages was merged (49, not 50).
+        const cards = () => within(section).getAllByRole('button', { name: /PAGED for / });
+        expect(cards()).toHaveLength(25);
         const scroller = document.querySelector('main');
         scroller.scrollTop = 211;
         fireEvent.click(loadMore);
 
-        await waitFor(() => expect(within(section).getAllByText(/#\d+/)).toHaveLength(49));
+        await waitFor(() => expect(cards()).toHaveLength(49));
         expect(scroller.scrollTop).toBe(211);
         expect(within(section).queryByRole('button', { name: /Load more results for/ })).toBeNull();
     });
@@ -222,17 +242,20 @@ describe('MarketActivity long lists', () => {
             </MessagingProvider>,
         );
 
-        const section = await screen.findByRole('region', { name: 'Recent dispenses' });
-        expect(within(section).getByText('51')).toBeTruthy();
+        // Dispenser sales are the Trades tab now.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Trades' }));
+        const section = await screen.findByRole('region', { name: 'Recent trades' });
+        // The card is just its rows now, with no title or count line above them.
+        expect(within(section).queryByText(/\d+ recent/)).toBeNull();
         expect(within(section).getAllByRole('listitem')).toHaveLength(50);
         const list = within(section).getByRole('list');
         const scroller = document.querySelector('main');
         scroller.scrollTop = 319;
-        fireEvent.click(within(section).getByRole('button', { name: 'Load more recent dispenses' }));
+        fireEvent.click(within(section).getByRole('button', { name: 'Load More Recent Trades' }));
 
         expect(within(section).getAllByRole('listitem')).toHaveLength(51);
         expect(within(list).getAllByText('Sold 21 XCHAIN for 0.01 BTC')).toHaveLength(1);
         expect(scroller.scrollTop).toBe(319);
-        expect(within(section).queryByRole('button', { name: 'Load more recent dispenses' })).toBeNull();
+        expect(within(section).queryByRole('button', { name: 'Load More Recent Trades' })).toBeNull();
     });
 });

@@ -99,9 +99,12 @@ function mount(messaging) {
 }
 
 async function openReview() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
-    fireEvent.change(screen.getByLabelText(/Stake/), { target: { value: '30' } });
-    const review = screen.getByRole('button', { name: /Review bet/ });
+    // The market page opens on Details; the bet form is on the Bet tab.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
+    // Tapping Yes opens the Place Bet step, where the stake is.
+    fireEvent.click(await screen.findByRole('button', { name: /^Buy Yes,/ }));
+    fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '30' } });
+    const review = screen.getByRole('form', { name: 'Buy a position' }).querySelector('button[type="submit"]');
     await waitFor(() => expect(review).not.toBeDisabled());
     fireEvent.click(review);
     return waitFor(() => {
@@ -123,7 +126,7 @@ describe('BetFeedDetail reads the market again at Approve', () => {
 
         fireEvent.click(approve);
 
-        expect(await screen.findByText(/no longer takes bets/)).toBeInTheDocument();
+        expect(await screen.findByText(/no longer accepts purchases/)).toBeInTheDocument();
         expect(messaging.placeBetAction).not.toHaveBeenCalled();
         expect(messaging.placeBetActionHw).not.toHaveBeenCalled();
     });
@@ -135,7 +138,7 @@ describe('BetFeedDetail reads the market again at Approve', () => {
 
         fireEvent.click(approve);
 
-        expect(await screen.findByText(/no longer takes bets/)).toBeInTheDocument();
+        expect(await screen.findByText(/no longer accepts purchases/)).toBeInTheDocument();
         expect(messaging.placeBetAction).not.toHaveBeenCalled();
     });
 

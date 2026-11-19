@@ -69,7 +69,6 @@ import {
     mempoolRowFor,
     pendingRowFor,
     pickAssetByChainAndTick,
-    searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
     expectConfirmModal,
@@ -84,7 +83,10 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for the mint and the send. */
@@ -168,8 +170,8 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
         await test.step(`send ${SEND_AMOUNT} ${TICK} into a network that cannot report it`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await expect(page.getByRole('main').getByLabel('From', { exact: true })).toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await expect(await openFromAddress(page.getByRole('main'))).toHaveValue(own);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);
@@ -239,25 +241,27 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
 
             // Exactly one row for the transaction: a warning state that
             // duplicated the entry would also be "visible".
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'the not-seen transaction has more than one History row')
                 .toHaveCount(1, { timeout: 30_000 });
 
             // Drill in: the standalone page carries the same verdict.
             await pendingRowFor(page, sendTxid).getByRole('button').first().click();
-            const panel = page.getByRole('region', { name: 'Pending transaction' });
-            await expect(panel, 'the pending panel is missing from the detail view')
-                .toBeVisible({ timeout: 30_000 });
-            // Both readers of the state on this page say the same thing: the
-            // pending panel's headline, and the status timeline M2.2 demoted so
-            // it could no longer claim "in mempool" off zero evidence.
-            await expect(panel.getByText('Not seen by the network'),
-                'the detail page does not headline the not-seen state').toBeVisible();
-            await expect(page.getByLabel('Transaction status').getByText('Not seen by the network'),
-                'the status timeline disagrees with the pending panel about the not-seen state')
-                .toBeVisible();
-            await expect(page.getByText('Pending, not yet validated by the service.'),
-                'the not-seen detail lost its pre-validation line').toBeVisible();
+            // The one reader of the state on this page is the status bar's
+            // Confirmed step (operator rulings 2026-11-13: the bar alone
+            // carries the pending state, and Details has no second timeline).
+            const bar = page.getByRole('list', { name: 'Transaction Status' });
+            await expect(bar, 'the detail page has no status bar').toBeVisible({ timeout: 30_000 });
+            await expect(bar.locator('li[data-step="confirmed"]'),
+                'the status bar does not mark the not-seen state').toHaveAttribute('data-state', 'warn');
+            await expect(bar.locator('li[data-step="confirmed"]'),
+                'the status bar does not name the not-seen state').toContainText('Not Seen');
+            // Details repeats no status timeline (operator ruling 2026-11-13):
+            // the bar is the one reader of the state on this page.
+            await page.getByRole('tab', { name: 'Details' }).click();
+            await expect(fieldByLabel(page, 'Transaction status'),
+                'Details still draws a second status timeline')
+                .toHaveCount(0);
             await page.getByRole('button', { name: 'Back to history' }).click();
         });
 
@@ -274,7 +278,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             const chainRow = await chainHistoryRow(own, sendTxid);
             expect(Number(chainRow.block_index)).toBeGreaterThan(0);
 
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(pendingRowFor(page, sendTxid),
                 'the pending entry is STILL in the list after its transaction confirmed')
                 .toHaveCount(0, { timeout: 120_000 });

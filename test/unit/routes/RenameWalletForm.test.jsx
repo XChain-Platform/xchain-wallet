@@ -25,6 +25,8 @@ const { RenameWalletForm } = await import(
     '../../../packages/core/src/shared/routes/RenameWalletForm.jsx');
 const { RenameAccountForm } = await import(
     '../../../packages/core/src/shared/routes/RenameAccountForm.jsx');
+const { readWalletTile } = await import(
+    '../../../packages/core/src/shared/utils/walletTile.js');
 
 function mount(overrides = {}) {
     const props = {
@@ -60,6 +62,44 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+// The flat Edit look layout: no FormSection wrappers, the fields in one order.
+function flatOrderOf(container, nameLabel) {
+    expect(container.querySelector('[data-form-section-title]')).toBeNull();
+    expect(container.querySelector('[data-form-section-chevron]')).toBeNull();
+    const flat = container.querySelector('[data-flat-look-form]');
+    expect(flat).toBeTruthy();
+    const nodes = [
+        flat.querySelector('[data-avatar], [class*="avatar" i], svg, img, span[style*="avatar-shape"]'),
+        container.querySelector(`input[aria-label="${nameLabel}"], label[for]`),
+        flat.querySelector('#icon-colour-label'),
+        [...flat.querySelectorAll('button')].find((b) => /Icon shape/.test(b.getAttribute('aria-label') || b.textContent || '')),
+        [...flat.querySelectorAll('*')].find((n) => n.textContent === 'Icon image'),
+        [...container.querySelectorAll('button')].find((b) => /Save Changes/.test(b.textContent)),
+    ];
+    return nodes;
+}
+
+describe('RenameWalletForm flat layout', () => {
+    it('has no FormSection wrappers and lists the fields in order', async () => {
+        const { container } = mount();
+        const text = container.textContent;
+        const order = ['Wallet name', 'Icon colour', 'Icon shape', 'Icon image', 'Save Changes'].map((s) => text.indexOf(s));
+        expect(order.every((i) => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const nodes = flatOrderOf(container, 'Wallet name');
+        expect(nodes[0]).toBeTruthy();
+        expect(nodes[2]).toBeTruthy();
+        expect(nodes[5]).toBeTruthy();
+        // The look tile comes before the name field.
+        const flat = container.querySelector('[data-flat-look-form]');
+        const tile = flat.firstElementChild;
+        expect(tile.contains(screen.getByLabelText('Wallet name'))).toBe(false);
+        expect(tile.compareDocumentPosition(screen.getByLabelText('Wallet name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // The colour radios show without opening anything.
+        expect(screen.getByRole('radio', { name: 'Colour #1E90C7' })).toBeTruthy();
+    });
+});
+
 describe('RenameWalletForm name validation', () => {
     it('prefills the input with the initial name', () => {
         mount({ initialName: 'Savings' });
@@ -70,7 +110,7 @@ describe('RenameWalletForm name validation', () => {
     it('disables Save for an empty or whitespace-only name', () => {
         mount({ initialName: '' });
         const input = screen.getByLabelText('Wallet name');
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
 
         expect(save.disabled).toBe(true);
         fireEvent.change(input, { target: { value: '   ' } });
@@ -89,12 +129,12 @@ describe('RenameWalletForm name validation', () => {
 
     it('refuses another wallet name case-insensitively', async () => {
         mount();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
         fireEvent.change(screen.getByLabelText('Wallet name'), {
             target: { value: ' savings ' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         expect(screen.getByText('A wallet named "savings" already exists.')).toBeTruthy();
         expect(messaging.renameWallet).not.toHaveBeenCalled();
@@ -106,8 +146,8 @@ describe('RenameWalletForm name validation', () => {
         const input = screen.getByLabelText('Wallet name');
         fireEvent.change(input, { target: { value: `  ${'🚀'.repeat(64)}  ` } });
 
-        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false);
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -124,7 +164,7 @@ describe('RenameWalletForm name validation', () => {
 
         expect(input.value).toBe('🚀'.repeat(65));
         expect(screen.getByText('Wallet name must be 64 characters or fewer.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(true);
         expect(messaging.renameWallet).not.toHaveBeenCalled();
     });
 });
@@ -141,7 +181,7 @@ describe('RenameAccountForm name characters', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(messaging.renameAccount).toHaveBeenCalledWith({
             accountId: 'account-1',
@@ -165,7 +205,7 @@ describe('RenameAccountForm name characters', () => {
         });
 
         expect(screen.getByText('Account name must be 64 characters or fewer.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(true);
         expect(messaging.renameAccount).not.toHaveBeenCalled();
     });
 });
@@ -187,9 +227,9 @@ describe('RenameWalletForm submission', () => {
     it('updates the stored lock-screen name when the active wallet is renamed', async () => {
         localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-1', name: 'Primary wallet' }));
         mount({ initialName: 'Spending' });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
         expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-1', name: 'Spending' });
@@ -198,20 +238,43 @@ describe('RenameWalletForm submission', () => {
     it('leaves the stored lock-screen name alone when another wallet is renamed', async () => {
         localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-2', name: 'Savings' }));
         mount({ initialName: 'Spending' });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
         expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-2', name: 'Savings' });
     });
 
+    it('saves the tile look with the name, and the next open reads it back', async () => {
+        localStorage.removeItem('xc.walletTile.wallet-1');
+        try {
+            const { unmount } = mount({ initialName: 'Spending' });
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
+
+            fireEvent.click(screen.getByRole('radio', { name: 'Colour #1E90C7' }));
+            fireEvent.click(screen.getByRole('button', { name: /Icon shape: Circle/ }));
+            fireEvent.click(screen.getByRole('option', { name: /Rounded square/ }));
+            fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+            await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
+            expect(readWalletTile('wallet-1')).toEqual({ colour: '#1E90C7', image: null, shape: 'rounded' });
+
+            unmount();
+            mount({ initialName: 'Spending' });
+            expect(screen.getByRole('radio', { name: 'Colour #1E90C7' }).getAttribute('aria-checked')).toBe('true');
+            expect(screen.getByRole('button', { name: /Icon shape: Rounded square/ })).toBeTruthy();
+        } finally {
+            localStorage.removeItem('xc.walletTile.wallet-1');
+        }
+    });
+
 
     it('trims a valid name, renames the wallet, and reports completion', async () => {
         const { props } = mount({ initialName: '  Spending  ' });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         await waitFor(() => expect(props.onRenamed).toHaveBeenCalledWith({
             id: 'wallet-1',
@@ -228,9 +291,9 @@ describe('RenameWalletForm submission', () => {
     it('reports when the shell has no rename method', async () => {
         messaging = { listWallets: vi.fn().mockResolvedValue([]) };
         const { props } = mount();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
         expect(await screen.findByText(
             'messaging.renameWallet is not available in this shell.',
@@ -245,7 +308,7 @@ describe('RenameWalletForm submission', () => {
         }));
         const { props } = mount();
         const input = screen.getByLabelText('Wallet name');
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         await waitFor(() => expect(save.disabled).toBe(false));
 
@@ -270,7 +333,7 @@ describe('RenameWalletForm submission failures', () => {
             .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
             .mockRejectedValueOnce(new Error('Rename refused'));
         mount();
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         await waitFor(() => expect(save.disabled).toBe(false));
 
         fireEvent.click(save);
@@ -285,7 +348,7 @@ describe('RenameWalletForm submission failures', () => {
     ])('shows the failure and re-enables Save', async (failure, message) => {
         messaging.renameWallet.mockRejectedValue(failure);
         mount();
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Save Changes' });
         await waitFor(() => expect(save.disabled).toBe(false));
 
         fireEvent.click(save);
@@ -297,8 +360,8 @@ describe('RenameWalletForm submission failures', () => {
     it('clears a shown error when the user types', async () => {
         messaging.renameWallet.mockRejectedValue(new Error('Rename refused'));
         mount();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save Changes' }).disabled).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
         expect(await screen.findByText('Rename refused')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Wallet name'), {

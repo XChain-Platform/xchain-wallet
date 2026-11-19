@@ -108,12 +108,45 @@ function firstRowPerAddress() {
     };
 }
 
+// The holder rows of a reply: a row array, or an object carrying a data or
+// holders array. Anything else (an HTML error page that arrives as a
+// string, a truncated body, a bare object, null) says nothing about the
+// holder set, so it is refused rather than read as zero holders, which
+// would call supply undistributed and a CALLBACK payout zero.
 function rowsOf(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.holders)) return resp.holders;
-    return [];
+    if (resp && typeof resp === 'object') {
+        if (Array.isArray(resp.data)) return resp.data;
+        if (Array.isArray(resp.holders)) return resp.holders;
+    }
+    throw holdersUnreadable('the holder reply is not a holder list');
+}
+
+function holdersUnreadable(why) {
+    const err = new Error(`tokenHolderSummary: ${why}`);
+    err.code = 'HOLDERS_UNREADABLE';
+    return err;
+}
+
+// One holder row as { address, amount } with amount a plain decimal string.
+// A row the wallet cannot read (not an object, no address, an amount that is
+// not a non-negative decimal) leaves a holder of unknown balance, so the
+// reply is refused instead of dropping the row and calling the rest complete.
+// A JSON number amount is spelled out in plain digits, since String(1e-7)
+// reads as exponent text.
+function readRow(r) {
+    if (!r || typeof r !== 'object') throw holdersUnreadable('a holder row is not an object');
+    if (typeof r.address !== 'string' || r.address.length === 0) {
+        throw holdersUnreadable('a holder row has no address');
+    }
+    let amount = r.amount;
+    if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+        amount = amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+    }
+    if (typeof amount !== 'string' || parseDecimal(amount) == null) {
+        throw holdersUnreadable('a holder row has an unreadable amount');
+    }
+    return { address: r.address, amount: amount.trim() };
 }
 
 /**
@@ -156,18 +189,22 @@ export async function tokenHolderSummary({
     }
     const cap = Math.max(1, Math.min(1000, Number(limit) || 500));
     const resp = await sdk.getHolders(String(tick).toUpperCase(), { limit: cap });
-    const rows = rowsOf(resp)
-        .map((r) => ({
-            address: typeof r?.address === 'string' ? r.address : null,
-            amount: r?.amount != null ? String(r.amount) : '0',
-        }))
-        .filter((r) => r.address && Number(r.amount) > 0)
+    const listed = rowsOf(resp);
+    const listedRows = listed.length;
+    const rows = listed
+        .map(readRow)
+        .filter((r) => parseDecimal(r.amount).int > 0n)
         // One holder is one balance. A reply that lists an address twice (a
         // replica mid-page, a join that fans out) would count the holder twice,
         // double their CALLBACK payout, and call a sole owner's token
         // distributed; the first row stands for the address.
         .filter(firstRowPerAddress());
     const total = Number(resp?.total);
+    // A total below the distinct holders the page lists contradicts the page,
+    // so neither the count nor the rows can be trusted as the holder set.
+    if (Number.isFinite(total) && resp?.total != null && total < rows.length) {
+        throw holdersUnreadable('the holder total is below the holders listed');
+    }
     const ownerAddr = owner || null;
 
     let ownerHolds = false;
@@ -185,11 +222,16 @@ export async function tokenHolderSummary({
 
     const holderCount = Number.isFinite(total) && total > 0 ? total : rows.length;
     // Indexer isDistributed: more than one holder, OR one holder that is
-    // not the owner. Computed off the fetched rows (the distribution gate
-    // only matters pre-distribution, where the holder set is tiny).
+    // not the owner. A page with fewer rows than the reply's total leaves
+    // holders unlisted, so a total above 1 there is distributed supply even
+    // when the page shows only the owner. A full page that names one address
+    // twice is still one holder.
     const nonOwnerHolders = rows.filter((r) => !ownerAddr || r.address !== ownerAddr).length;
-    const isDistributed = rows.length > 1 || nonOwnerHolders > 0;
-    const partial = rows.length >= cap || (Number.isFinite(total) && total > rows.length);
+    const shortPage = Number.isFinite(total) && total > listedRows;
+    const isDistributed = rows.length > 1 || nonOwnerHolders > 0 || (shortPage && total > 1);
+    // Partial is judged on the rows the reply lists, so a full page that
+    // repeats an address is complete rather than short of its total.
+    const partial = listedRows >= cap || shortPage;
 
     return {
         holderCount,

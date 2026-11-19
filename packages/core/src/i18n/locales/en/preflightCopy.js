@@ -1,0 +1,78 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+// English headlines for the pre-flight checks the wallet could not confirm,
+// one per SDK check code (shared/utils/preflightFindingCopy.js maps the codes).
+
+import { addEnglish } from '../../store.js';
+
+const messages = {
+    // Said for a check code with no line of its own.
+    'preflightCopy.unverified.fallback': 'Other conditions the network checks when this transaction arrives',
+    // A read the explorer did not answer.
+    'preflightCopy.unverified.tokenLookup': "The token's details, which couldn't be read",
+    'preflightCopy.unverified.balanceLookup': "Your token balance, which couldn't be read",
+    'preflightCopy.unverified.nativeBalanceLookup': "Your coin balance, which couldn't be read",
+    'preflightCopy.unverified.sweepState': "Whether your balance covers the fee for this sweep",
+    'preflightCopy.unverified.stakeState': "Whether the stake target accepts this stake",
+    'preflightCopy.unverified.unstakeState': "Whether you have an active stake to withdraw and its waiting period has passed",
+    'preflightCopy.unverified.delegateState': "Whether you have an active stake to delegate",
+    'preflightCopy.unverified.voteState': "Whether the poll is open, your ballot is valid, and how much your vote counts",
+    'preflightCopy.unverified.collectState': "Your unclaimed rewards, and whether the pool can pay them",
+    'preflightCopy.unverified.deployState': "Whether the contract code is complete and valid, and the gas its setup needs",
+    'preflightCopy.unverified.executeState': "The contract's state and the gas this call needs. A call that fails still charges its fee.",
+    'preflightCopy.unverified.depositState': "Whether the contract is active and the token's rules allow this deposit",
+    'preflightCopy.unverified.withdrawState': "Whether you may withdraw from this contract and the token's rules allow it",
+    'preflightCopy.unverified.coinpayState': "Whether the payment request exists, matches this payment, and hasn't expired",
+    'preflightCopy.unverified.fileState': "Ownership and escrow of the gated content",
+    'preflightCopy.unverified.linkState': "Whether you own what this link points to",
+    'preflightCopy.unverified.listState': "Who owns this list, and its sharing and size limits",
+    'preflightCopy.unverified.addressState': "Whether the contract can be bound to this address",
+    'preflightCopy.unverified.priceState': "Whether this address may publish prices",
+    'preflightCopy.unverified.sleepState': "Ownership, locks and escrow on what this action pauses",
+    'preflightCopy.unverified.listSetMetaFee': "Whether this list is shared. Editing a shared list charges an extra fee.",
+    'preflightCopy.unverified.balanceInsufficient': "Whether your balance covers this action",
+    'preflightCopy.unverified.amountFormatInvalid': "Whether each amount fits its token's decimal places",
+    'preflightCopy.unverified.amountRepresentability': "Whether every amount is written in a form the network accepts",
+    'preflightCopy.unverified.airdropTotalVsBalance': "Who receives this airdrop, and so its total cost",
+    'preflightCopy.unverified.dividendDebitTotal': "Who receives this dividend, and so its total cost",
+    'preflightCopy.unverified.supplyExceeded': "Whether this mint stays within the token's supply limit",
+    'preflightCopy.unverified.mintOverMax': "Whether this mint stays within the token's mint limits",
+    'preflightCopy.unverified.mintAddressHeadroom': "Per-address mint limits, allow and block lists, and the token's own rules",
+    'preflightCopy.unverified.notOwner': "Whether this address owns the token",
+    'preflightCopy.unverified.issueGasTick': "Whether this token name is reserved on this network",
+    'preflightCopy.unverified.issueTickNamespace': "Whether this token name is available",
+    'preflightCopy.unverified.issueTickCoinPrefix': "Whether this token name is allowed",
+    'preflightCopy.unverified.issueBridgeActivation': "Whether the network supports this bridging option yet",
+    'preflightCopy.unverified.issueLockRatchets': "Whether the token's locks allow this change",
+    'preflightCopy.unverified.issueBridgePolicyExclusion': "Whether the token's bridging and transfer rules allow this change",
+    'preflightCopy.unverified.sendRestrictions': "Transfer rules on the token and on both addresses",
+    'preflightCopy.unverified.destroyBridgeSupply': "Whether this token can be destroyed on this network",
+    'preflightCopy.unverified.destroyRestrictions': "Burn rules on the token and on your address",
+    'preflightCopy.unverified.caretRefUnresolvable': "Which address a short address reference points to",
+    'preflightCopy.unverified.listNotFound': "Whether the list this action names exists",
+    'preflightCopy.unverified.listReferenceValidity': "Whether the list this action names is valid",
+    'preflightCopy.unverified.orderReference': "Whether the order this action changes exists",
+    'preflightCopy.unverified.swapReference': "Whether the swap this action changes exists",
+    'preflightCopy.unverified.orderRestrictions': "Trading rules on the token",
+    'preflightCopy.unverified.dispenserNotFound': "Whether the dispenser exists",
+    'preflightCopy.unverified.dispenserLifecycle': "Whether the dispenser is still open",
+    'preflightCopy.unverified.dispenserEmpty': "Whether the dispenser still has enough to sell",
+    'preflightCopy.unverified.dispenserMaxRefills': "Whether this dispenser has refills left",
+    'preflightCopy.unverified.dispenserOracleFee': "Whether the oracle usage fee is paid",
+    'preflightCopy.unverified.dispenserSettlementPrice': "Whether a price is available for this dispenser when the transaction confirms",
+    'preflightCopy.unverified.dispenseSettlementMatch': "Whether your payment exactly matches what the dispenser expects",
+    'preflightCopy.unverified.gatedHandoffRef': "How the key to locked content reaches the recipient, when this token unlocks any",
+    'preflightCopy.unverified.dispenserRestrictions': "Pause, allow and block rules on the dispenser's token and addresses",
+};
+
+addEnglish(messages);
+
+export default messages;

@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 
 const mocks = vi.hoisted(() => ({
     fetchApproval: vi.fn(),
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ children }) => <main>{children}</main>,
     ListPage: ({ children }) => <div data-testid="list-page">{children}</div>,
+    Notice: ({ children }) => <div role="alert">{children}</div>,
+    Skeleton: ({ ariaLabel }) => <span role="status" aria-label={ariaLabel} />,
 }));
 vi.mock('@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx', () => ({
     RouteErrorBoundary: ({ children }) => children,
@@ -58,6 +61,15 @@ afterEach(() => {
 });
 
 describe('approval Router', () => {
+    it('uses a content-shaped status while the request is loading', async () => {
+        mocks.fetchApproval.mockImplementation(() => new Promise(() => {}));
+
+        await renderRoute();
+
+        expect(screen.getByRole('status', { name: 'Loading approval request…' })).toBeTruthy();
+        expect(screen.queryByText('Loading approval request…')).toBeNull();
+    });
+
     it('wraps a missing-id summary in ListPage without messaging the background', async () => {
         await renderRoute('');
 
@@ -119,6 +131,17 @@ describe('approval Router', () => {
         expect(screen.getByRole('alert').textContent).toBe('Approval request expired');
     });
 
+    it('replaces developer load details with a useful next step', async () => {
+        mocks.fetchApproval.mockRejectedValue(new Error('approval.fetch: broker lookup failed'));
+
+        await renderRoute();
+
+        expect(screen.getByRole('alert').textContent).toBe(
+            "We couldn't load this request. Close this window and try again from the site.",
+        );
+        expect(screen.queryByText(/approval\.fetch/)).toBeNull();
+    });
+
     it('refuses a broker response for a different approval id', async () => {
         mocks.fetchApproval.mockResolvedValue({
             id: 'another-request',
@@ -131,6 +154,23 @@ describe('approval Router', () => {
         expect(screen.getByRole('alert').textContent)
             .toBe('Approval response did not match this request.');
         expect(screen.queryByTestId('connect-approval')).toBeNull();
+    });
+
+    it('keeps help off page headers and preserves whole-word wrapping', () => {
+        const header = readFileSync('packages/extension/src/approval/ApprovalHeader.jsx', 'utf8');
+        const connect = readFileSync('packages/extension/src/approval/kinds/ConnectApproval.jsx', 'utf8');
+        const locale = readFileSync('packages/core/src/i18n/locales/en/extension.js', 'utf8');
+        const sharedCss = readFileSync('packages/extension/src/approval/approval.module.css', 'utf8');
+        const signCss = readFileSync('packages/extension/src/approval/kinds/SignApproval.module.css', 'utf8');
+
+        expect(header).not.toMatch(/InfoTip|trailing=|\{ title, help \}/);
+        expect(locale).toContain("'extension.connect.title': 'Connect Wallet'");
+        expect(connect.indexOf('testId="connect-error-summary"'))
+            .toBeLessThan(connect.indexOf('styles.siteIdentity'));
+        expect(connect).not.toContain('CONNECT_SITE_WARNING');
+        expect(connect).not.toMatch(/<div className=\{shared\.error\} role="alert"/);
+        expect(sharedCss).not.toMatch(/word-break:\s*break-all/);
+        expect(signCss).not.toMatch(/word-break:\s*break-all/);
     });
 });
 

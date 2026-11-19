@@ -103,23 +103,33 @@ describe('address management async guards', () => {
             </MessagingProvider>,
         );
 
+        // View Address now edits the label on its own Edit Label form; Back
+        // stays shut while the save runs, so the save cannot be left behind
+        // on another address mid-flight.
         fireEvent.click(await screen.findByRole('button', { name: `View address ${FIRST}` }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit label/ }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), {
             target: { value: 'Renamed first' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        fireEvent.click(screen.getByRole('button', { name: `View address ${SECOND}` }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Label' }));
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
+        expect(back).toBeDisabled();
+        fireEvent.click(back);
+        expect(screen.getByRole('textbox', { name: 'Address label' })).toBeInTheDocument();
 
         await act(async () => save.resolve({ ok: true, label: 'Renamed first' }));
 
+        expect(messaging.setAddressLabel).toHaveBeenCalledTimes(1);
         expect(messaging.setAddressLabel).toHaveBeenCalledWith('address-1', 'Renamed first');
-        expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Second');
-        expect(screen.getByText(SECOND)).toBeInTheDocument();
+        expect(screen.getByTestId('address-detail-label')).toHaveTextContent('Renamed first');
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('button', { name: `View address ${FIRST}` }))
             .toHaveTextContent('Renamed first');
+        fireEvent.click(screen.getByRole('button', { name: `View address ${SECOND}` }));
+        expect(screen.getByTestId('address-detail-label')).toHaveTextContent('Second');
+        fireEvent.click(screen.getByRole('button', { name: /^Edit label/ }));
+        expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Second');
     });
 
     it('restores the generated label when a persisted label is cleared', async () => {
@@ -185,7 +195,7 @@ describe('address management async guards', () => {
             </MessagingProvider>,
         );
 
-        const button = await screen.findByRole('button', { name: 'Generate' });
+        const button = await screen.findByRole('button', { name: 'Add Address' });
         const form = button.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);

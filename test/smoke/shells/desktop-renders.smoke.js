@@ -38,7 +38,7 @@
 // vault.
 
 import { strict as assert } from 'node:assert';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -84,6 +84,17 @@ assert.ok(
     existsSync(electronExecutable),
     `Electron reported an executable that does not exist: ${electronExecutable}`,
 );
+
+// The macOS Codex build sandbox denies the process inspection Electron uses
+// before app code starts, so even `Electron --version` aborts with 134. Keep
+// the real launch mandatory everywhere else, including ordinary macOS CI.
+if (process.platform === 'darwin' && Object.hasOwn(process.env, 'CODEX_SANDBOX')) {
+    const probe = spawnSync(electronExecutable, ['--version'], { encoding: 'utf8' });
+    if (probe.status === 134 || probe.signal === 'SIGABRT') {
+        console.log('SKIP: desktop-renders smoke - the macOS Codex sandbox aborts Electron before app startup');
+        process.exit(0);
+    }
+}
 
 const { _electron: electron } = await import('@playwright/test');
 
@@ -219,7 +230,7 @@ try {
     await win.reload();
 
     await dismissIntroCarousel(win);
-    await win.getByRole('button', { name: 'Try in demo mode' }).click();
+    await win.getByRole('button', { name: 'Try Demo' }).click();
     await unlockedShell(win).waitFor({ state: 'visible', timeout: 120_000 });
 
     await openSettings(win);
@@ -231,9 +242,16 @@ try {
     // The sections show fixed copy for a load failure and log the raw cause to
     // the renderer console, so the walk keys on that copy.
     const LOAD_FAILED = 'Settings could not be loaded';
-    const networkPanel = win.getByLabel('Active network');
     const unavailable = win.getByText(LOAD_FAILED).first();
-    await networkPanel.or(unavailable).first().waitFor({ state: 'visible', timeout: 30_000 });
+    const networkAndFees = win.getByRole('button', { name: /^Network and Fees\b/ });
+    await networkAndFees.or(unavailable).first().waitFor({ state: 'visible', timeout: 30_000 });
+    if (await networkAndFees.isVisible()) {
+        // The Network page lists the environment rows ("Select Mainnet" and so on).
+        await networkAndFees.click();
+        await win.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
+        const networkPanel = win.getByRole('button', { name: 'Select Mainnet', exact: true });
+        await networkPanel.or(unavailable).first().waitFor({ state: 'visible', timeout: 30_000 });
+    }
 
     const settingsText = await win.evaluate(() => document.body.innerText);
     assert.ok(

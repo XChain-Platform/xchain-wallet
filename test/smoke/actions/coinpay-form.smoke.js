@@ -20,10 +20,12 @@
 //   5. Three shells' messaging.js expose coinpayAction / coinpayActionHw /
 //      getCoinpayObligationsForAddress / getCoinpaysForAddress.
 //   6. Three App.jsx files track the 'coinpay' sub-route, register the
-//      ActionsMenu 'coinpay' entry, and thread onResumeCoinpay to Home.
-//   7. Home reads pending obligations from the shared coinpay scan (one per
-//      tree, never its own per-poll read) and renders a resume card that
-//      invokes onResumeCoinpay.
+//      ActionsMenu 'coinpay' entry, and thread onResumeCoinpay to the
+//      Alerts screen behind the header bell.
+//   7. The bell's notice hook (usePendingNoticeAlerts) reads pending
+//      obligations from the shared coinpay scan (one per tree, never its own
+//      per-poll read) and turns each into a notice that invokes
+//      onResumeCoinpay; Home no longer carries a resume card or a scan.
 //   8. SDK pin bumped to ^1.9.1 (matches the getCoinpayObligations method
 //      that lands in xchain-sdk 1.9.1).
 
@@ -111,10 +113,17 @@ assert.ok(
     /if \(ownerLane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.ownerLane\.confirmProps\}/.test(formSrc),
     'CoinpayForm renders the shared dry-run confirmation screen',
 );
-assert.ok(/pending_coinpay/.test(formSrc),
-    'CoinpayForm filters obligations on pending_coinpay status');
-assert.ok(/payer_address/.test(formSrc),
-    'CoinpayForm filters obligations on payer_address matching the wallet address');
+// The pending and payer rules live in one shared reader; the form must call
+// it per row with the wallet address, and the reader must hold both rules.
+const obligationStatusSrc = readFileSync(
+    join(core, 'src', 'market', 'obligationStatus.js'), 'utf8',
+);
+assert.ok(/if \(!isPendingForPayer\(row, pair\.address\)\) continue;/.test(formSrc),
+    'CoinpayForm filters obligations through isPendingForPayer against the wallet address');
+assert.ok(/PENDING_COINPAY_STATUS = 'pending_coinpay'/.test(obligationStatusSrc),
+    'the shared obligation reader keys pending on the pending_coinpay status');
+assert.ok(/export function isPendingForPayer\b[\s\S]*?isPendingObligation\(row\)[\s\S]*?payer_address[\s\S]*?payer === address/.test(obligationStatusSrc),
+    'the shared obligation reader matches payer_address against the wallet address');
 
 // Review stage: form -> review -> submitting -> done. Signing must not
 // be reachable from the form stage.
@@ -125,8 +134,9 @@ assert.ok(/handleReview/.test(formSrc),
 assert.ok(/setStage\('review'\)/.test(formSrc),
     "CoinpayForm transitions to 'review' before submitting");
 // The local review hands signing to the shared confirmation screen.
+// The review action is a Title Case verb with no amount or ticker.
 assert.ok(
-    /ownerLane\.isWatcherMode[\s\S]*?'Create unsigned transaction'[\s\S]*?: 'Continue to confirmation'/.test(formSrc),
+    /ownerLane\.isWatcherMode[\s\S]*?'Create Unsigned Transaction'[\s\S]*?: 'Pay'/.test(formSrc),
     'CoinpayForm continues from local review to confirmation for signing wallets',
 );
 // handleSubmit must only be reachable from the review stage form.
@@ -138,9 +148,9 @@ assert.ok(
 assert.ok(/Network fee/.test(formSrc), 'CoinpayForm shows a Network fee row on review');
 assert.ok(/estimateNativeSendFee/.test(formSrc), 'CoinpayForm imports estimateNativeSendFee');
 // Header title switches on review/submitting.
-assert.ok(/Review payment/.test(formSrc), "CoinpayForm header says 'Review payment' in review stage");
-// Form-stage primary button label is "Review".
-assert.ok(/>\s*Review\s*<\/Button>/.test(formSrc), "CoinpayForm form-stage button label is 'Review'");
+assert.ok(/Review Payment/.test(formSrc), "CoinpayForm header says 'Review Payment' in review stage");
+// Form-stage primary button label is "Pay Order", in the standard FormAction.
+assert.ok(/>\s*Pay Order\b[\s\S]{0,80}<\/FormAction>/.test(formSrc), "CoinpayForm form-stage button label is 'Pay Order'");
 
 // --- 4. Background host registrations ---------------------------------
 
@@ -200,20 +210,29 @@ for (const [shell, appPath] of [
         `${shell} App.jsx wires onPayCoinpay`);
     assert.ok(/resumeCoinpay/.test(app),
         `${shell} App.jsx tracks resumeCoinpay state`);
-    assert.ok(/onResumeCoinpay\s*=/.test(app),
-        `${shell} App.jsx threads onResumeCoinpay to Home`);
+    // The props of the <AlertsRoute ...> element, up to its self-closing `/>`.
+    const alertsRouteProps = (app.match(/<AlertsRoute\b[\s\S]*?\/>/) || [''])[0];
+    assert.ok(/onResumeCoinpay\s*=/.test(alertsRouteProps),
+        `${shell} App.jsx threads onResumeCoinpay to the Alerts screen`);
 }
 
-// --- 7. Home wiring ----------------------------------------------------
+// --- 7. Bell notice wiring ---------------------------------------------
 
-const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/onResumeCoinpay/.test(homeSrc), 'Home.jsx accepts onResumeCoinpay prop');
-assert.ok(/useSharedCoinpayObligations\(/.test(homeSrc),
-    'Home.jsx reads pending obligations from the shared scan');
+// A pending payment is a notice behind the header bell, not a card on Home.
+const noticeSrc = readFileSync(join(core, 'src', 'shared', 'hooks', 'usePendingNoticeAlerts.js'), 'utf8');
+assert.ok(/onResumeCoinpay/.test(noticeSrc), 'usePendingNoticeAlerts accepts onResumeCoinpay');
+assert.ok(/useSharedCoinpayObligations\(/.test(noticeSrc),
+    'usePendingNoticeAlerts reads pending obligations from the shared scan');
+const alertsSrc = readFileSync(join(core, 'src', 'shared', 'walletAlerts.js'), 'utf8');
+assert.ok(/onSelect: \(\) => onResumeCoinpay\(/.test(alertsSrc),
+    'the payment-due notice invokes onResumeCoinpay');
 // The per-poll read Home once ran beside the badge scan doubled the coinpay
 // traffic (rate-limits spec, row 29); its return is the regression this pins.
-assert.ok(!/messaging\.getCoinpayObligationsForAddress/.test(homeSrc),
-    'Home.jsx runs no coinpay scan of its own');
+const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+for (const [name, src] of [['Home.jsx', homeSrc], ['usePendingNoticeAlerts.js', noticeSrc]]) {
+    assert.ok(!/messaging\.getCoinpayObligationsForAddress/.test(src),
+        `${name} runs no coinpay scan of its own`);
+}
 
 // --- 7b. the obligation-rebuild chokepoint -----------------------------
 //

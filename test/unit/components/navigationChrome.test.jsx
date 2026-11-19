@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent as keyboardUser } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
@@ -26,10 +26,6 @@ import {
 } from '../../../packages/core/src/shared/routeRegistry.js';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => cleanup());
 
@@ -69,19 +65,19 @@ const userEvent = {
     },
 };
 
-const settleFocus = () => act(async () => {
-    await new Promise((resolve) => { setTimeout(resolve, 25); });
-});
-
 const NAV_ITEMS = [
     'home',
     'history',
     'send',
     'receive',
+    'my-tokens',
     'scan',
     'markets',
     'market-activity',
     'dispensers-list',
+    'bet-markets',
+    'governance-polls',
+    'staking-dashboard',
     'contracts-list',
     'messaging',
     'contacts',
@@ -94,24 +90,27 @@ describe('navigation route highlighting', () => {
     it('uses the shared section assignment for every registered route', () => {
         const bottomTabBySection = {
             home: 'Home',
-            history: 'History',
             send: 'Send',
-            scan: 'Scan',
+            receive: 'Receive',
+            history: 'History',
+            settings: 'Settings',
         };
         const sidebarLabelBySection = {
             home: 'Home',
             history: 'History',
             send: 'Send',
             receive: 'Receive',
-            scan: 'Scan',
-            markets: 'DEX',
+            'my-tokens': 'My Tokens',
+            markets: 'Exchange (DEX)',
             'market-activity': 'Marketplace',
             'dispensers-list': 'Dispensers',
+            'bet-markets': 'Prediction markets',
+            'governance-polls': 'Governance',
+            'staking-dashboard': 'Staking',
             'contracts-list': 'Contracts',
+            'cosigner-accounts': 'My Agents',
             messaging: 'Messaging',
             contacts: 'Contacts',
-            lists: 'Lists',
-            obligations: 'Payments due',
             settings: 'Settings',
         };
         const { rerender } = render(
@@ -122,6 +121,8 @@ describe('navigation route highlighting', () => {
                     onSelect={() => {}}
                     onOpenSettings={() => {}}
                     hasVmAddress
+                    hasBtcAddress
+                    hasGovernanceAddress
                 />
             </>,
         );
@@ -137,6 +138,8 @@ describe('navigation route highlighting', () => {
                         onSelect={() => {}}
                         onOpenSettings={() => {}}
                         hasVmAddress
+                        hasBtcAddress
+                        hasGovernanceAddress
                     />
                 </>,
             );
@@ -161,11 +164,13 @@ describe('navigation route highlighting', () => {
 
     it.each([
         ['send-picker', 'send'],
-        ['receive-picker', 'receive'],
         ['action-detail', 'history'],
         ['cross-chain-order', 'markets'],
         ['market-activity', 'market-activity'],
         ['contract-stake', 'contracts-list'],
+        ['staking-dashboard', 'staking-dashboard'],
+        ['stake-detail', 'staking-dashboard'],
+        ['staking-claim', 'staking-dashboard'],
         ['list-transfer', 'lists'],
         ['coinpay', 'obligations'],
         ['connected-sites', 'settings'],
@@ -185,66 +190,57 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('places Marketplace after DEX and removes both when trading is unavailable', () => {
+    it('lights Staking rather than Contracts while Staking is open', () => {
+        render(<LeftNav currentView="staking-dashboard" onSelect={() => {}} hasVmAddress hasBtcAddress />);
+        expect(screen.getByRole('button', { name: 'Contracts' })).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Staking' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('places Marketplace after Exchange and removes both when trading is unavailable', () => {
         const { rerender } = render(<LeftNav currentView="market-activity" onSelect={() => {}} />);
         const labels = screen.getAllByRole('button').map((button) => button.textContent.trim());
 
-        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('DEX') + 1);
+        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('Exchange (DEX)') + 1);
         expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('title', 'Marketplace');
 
         rerender(<LeftNav currentView="home" onSelect={() => {}} hasDexSurface={false} />);
-        expect(screen.queryByRole('button', { name: 'DEX' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange (DEX)' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Marketplace' })).toBeNull();
     });
 
-    it('marks the matching row without treating More as the current page', () => {
+    it('leaves tabs unselected for a sidebar-only destination', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
                 onSelect={() => {}}
-                hasVmAddress
             />,
         );
-        const more = screen.getByRole('button', { name: 'More' });
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
-        expect(more).not.toHaveAttribute('aria-current');
-        fireEvent.click(more);
-        expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getAllByRole('button').filter((button) => button.hasAttribute('aria-current')))
+            .toHaveLength(0);
     });
 
-    it('marks the More sheet Settings row on Settings routes, as the desktop rail does', () => {
+    it('marks Settings on Settings routes', () => {
         const { rerender } = render(
             <BottomTabBar currentView="connected-sites" onSelect={() => {}} onOpenSettings={() => {}} />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
 
         rerender(<BottomTabBar currentView="home" onSelect={() => {}} onOpenSettings={() => {}} />);
-        if (!screen.queryByRole('button', { name: 'Settings' })) {
-            fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        }
         expect(screen.getByRole('button', { name: 'Settings' })).not.toHaveAttribute('aria-current');
     });
 
     it('does not attribute account management to a different nav item', () => {
         render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
-        expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('marks Home for the compact menu route in the shared Home group', () => {
-        render(<BottomTabBar currentView="menu" onSelect={() => {}} />);
-        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-        expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
-    });
-
-    it.each(['receive', 'addresses', 'contacts', 'wizard', 'account-picker', 'wallet-picker'])(
+    it.each(['addresses', 'contacts', 'wizard', 'account-picker', 'wallet-picker'])(
         'does not highlight an unrelated bottom tab on %s',
         (view) => {
             render(<BottomTabBar currentView={view} onSelect={() => {}} />);
             expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
-            expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
         },
     );
 
@@ -256,12 +252,12 @@ describe('navigation route highlighting', () => {
     });
 });
 
-describe('More sheet dismissal', () => {
+describe('bottom tab keyboard behavior', () => {
     it('roves one bottom-bar tab stop and supports jump keys', async () => {
         const user = keyboardUser.setup();
         const onSelect = vi.fn();
         render(<BottomTabBar currentView="home" onSelect={onSelect} />);
-        const tabs = ['Home', 'History', 'Send', 'Scan', 'More'].map((name) => (
+        const tabs = ['Home', 'Send', 'Receive', 'History', 'Settings'].map((name) => (
             screen.getByRole('button', { name })
         ));
 
@@ -271,17 +267,15 @@ describe('More sheet dismissal', () => {
         fireEvent.keyDown(tabs[0], { key: 'ArrowRight' });
         expect(tabs[1]).toHaveFocus();
         expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1, -1, -1]);
-        expect(onSelect).toHaveBeenLastCalledWith('history');
+        expect(onSelect).not.toHaveBeenCalled();
         fireEvent.keyDown(tabs[1], { key: 'End' });
-        expect(screen.getByRole('dialog', { name: 'More' })).toBeInTheDocument();
-        await user.keyboard('{Escape}');
         expect(tabs[4]).toHaveFocus();
         expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
         fireEvent.keyDown(tabs[4], { key: 'Home' });
         expect(tabs[0]).toHaveFocus();
     });
 
-    it('closes immediately when a destination or footer action is selected', () => {
+    it('calls the Settings callback instead of selecting a route directly', () => {
         const onSelect = vi.fn();
         const onOpenSettings = vi.fn();
         render(
@@ -291,64 +285,9 @@ describe('More sheet dismissal', () => {
                 onOpenSettings={onOpenSettings}
             />,
         );
-        const more = screen.getByRole('button', { name: 'More' });
-
-        fireEvent.click(more);
-        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        expect(onSelect).toHaveBeenCalledWith('receive');
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
-
-        fireEvent.click(more);
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
-    });
-
-    it('returns focus to More after Escape closes the sheet', () => {
-        render(<BottomTabBar currentView="home" onSelect={() => {}} />);
-        const more = screen.getByRole('button', { name: 'More' });
-        fireEvent.click(more);
-        screen.getByRole('button', { name: 'Receive' }).focus();
-
-        fireEvent.keyDown(document, { key: 'Escape' });
-
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
-    });
-
-    it('traps user-event Tab in the sheet and restores More on close', async () => {
-        render(
-            <>
-                <button type="button">Before navigation</button>
-                <BottomTabBar
-                    currentView="home"
-                    onSelect={() => {}}
-                    onLock={() => {}}
-                    onOpenSettings={() => {}}
-                />
-                <button type="button">After navigation</button>
-            </>,
-        );
-        const more = screen.getByRole('button', { name: 'More' });
-        more.focus();
-        fireEvent.click(more);
-        await settleFocus();
-
-        const receive = screen.getByRole('button', { name: 'Close more navigation' });
-        const lock = screen.getByRole('button', { name: 'Lock wallet' });
-        expect(receive).toHaveFocus();
-
-        lock.focus();
-        userEvent.tab();
-        expect(receive).toHaveFocus();
-        userEvent.tab({ shift: true });
-        expect(lock).toHaveFocus();
-        expect(screen.getByRole('button', { name: 'After navigation' })).not.toHaveFocus();
-
-        fireEvent.keyDown(document, { key: 'Escape' });
-        expect(more).toHaveFocus();
+        expect(onSelect).not.toHaveBeenCalled();
     });
 });
 
@@ -377,12 +316,13 @@ describe('navigation Tab order', () => {
                 <LeftNav
                     currentView="home"
                     onSelect={() => {}}
-                    onCommandPalette={() => {}}
                     onOpenWalletPicker={() => {}}
                     onOpenSettings={() => {}}
                     onLock={() => {}}
                     walletName="Main wallet"
                     hasVmAddress
+                    hasBtcAddress
+                    hasGovernanceAddress
                 />
                 <button type="button">After navigation</button>
             </>,
@@ -390,9 +330,10 @@ describe('navigation Tab order', () => {
         screen.getByRole('button', { name: 'Before navigation' }).focus();
 
         const order = [
-            'Open command palette', 'Home', 'History', 'Send', 'Receive',
-            'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
-            'Lists', 'Payments due', 'Settings', 'Lock',
+            'Home', 'Send', 'Receive', 'My Tokens', 'History',
+            'Exchange (DEX)', 'Marketplace', 'Dispensers', 'Prediction markets',
+            'Governance', 'Staking', 'Contracts', 'My Agents', 'Messaging', 'Contacts',
+            'Settings', 'Lock wallet',
             'After navigation',
         ];
         for (const label of order) {
@@ -434,8 +375,9 @@ describe('Settings account picker navigation', () => {
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
 
         const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
+        // The label follows the navigation history: Settings below the picker.
         expect(webApp).toContain(
-            "backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}",
+            "backLabel={nav.previousView === 'settings' ? t('shell.settings.back') : undefined}",
         );
     });
 });
@@ -497,29 +439,27 @@ describe('route scroll position', () => {
 });
 
 describe('AppHeader button labels and tooltips', () => {
-    it('labels the three visible header controls and the overflow rows', () => {
+    it('exposes the wallet-menu trigger as the one header menu control', () => {
+        const onMenuToggle = vi.fn();
         render(
             <AppHeader
-                onMenuOpen={() => {}}
-                onScan={() => {}}
-                onCommandPalette={() => {}}
+                onMenuToggle={onMenuToggle}
+                menuOpen
                 onLock={() => {}}
-                onOpenWalletPicker={() => {}}
-                platformCurrent="wallet"
+                activeWallet={{ id: 'wallet-1', name: 'Primary wallet' }}
             />,
         );
 
-        const expected = [
-            ['Lock wallet', 'Lock wallet'],
-            ['Open menu', 'Open menu'],
-        ];
-        for (const [label, title] of expected) {
-            expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', title);
-        }
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
+        const menu = screen.getByRole('button', { name: 'Open menu' });
+        expect(menu).toHaveAttribute('title', 'Open menu');
+        expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(menu).toHaveAttribute('aria-expanded', 'true');
+        // The approved header carries icons only; the wallet's name is no longer drawn in it.
+        expect(screen.queryByText('Primary wallet')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-        for (const label of ['Settings', 'Search', 'Scan', 'More wallet actions']) {
-            expect(screen.getByRole('menuitem', { name: label })).toBeTruthy();
-        }
+        fireEvent.click(menu);
+        expect(onMenuToggle).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('menu')).toBeNull();
     });
 });

@@ -10,6 +10,7 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
+import { FieldIconButton } from './FieldIconButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
@@ -43,10 +44,8 @@ function capContactSuggestions(matches) {
  * This component owns dropdown visibility, filtering against the live
  * input, keyboard navigation, and selection.
  *
- * Like AddressField, it can render one trailing icon action inside the
- * field (`icon` + `onIconClick`), so the autocomplete field keeps the
- * standardized in-field affordance (e.g. the contacts book on Send's To)
- * instead of a separate floating button.
+ * Like AddressField, it can render one icon action inside the trailing edge
+ * of the autocomplete text box (`icon` + `onIconClick`).
  *
  * Props
  *   - value, onChange       same shape as `<Input>`; onChange fires
@@ -59,9 +58,9 @@ function capContactSuggestions(matches) {
  *   - onPaste               called first for BIP21 / WIF handling; when the
  *                             host does not consume the event, surrounding
  *                             whitespace is trimmed before insertion.
- *   - icon                  'contacts' | 'addresses'; renders the in-field
- *                             trailing button when set.
- *   - onIconClick           handler for the trailing icon button.
+ *   - icon                  'contacts' | 'addresses'; renders an in-field
+ *                             icon button when set.
+ *   - onIconClick           handler for the in-field icon button.
  *   - iconLabel             accessible label override for the icon button.
  *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
@@ -160,7 +159,6 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
     const wrapClass = [
         styles.wrap,
         styles[size] || '',
-        label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
 
     return (
@@ -176,12 +174,20 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 label={label}
                 size={size}
                 disabled={disabled}
+                fieldAction={IconComponent ? (
+                    <FieldIconButton
+                        icon={<IconComponent />}
+                        label={iconLabel || defaultLabel}
+                        onClick={() => {
+                            close();
+                            onIconClick?.();
+                        }}
+                        disabled={disabled}
+                    />
+                ) : null}
                 dir="ltr"
                 autoComplete="off"
-                style={IconComponent ? {
-                    '--address-end-room': 'calc(var(--address-control-height) + var(--xc-space-2))',
-                    ...style,
-                } : style}
+                style={style}
                 value={value}
                 onChange={(e) => {
                     onChange(e);
@@ -215,21 +221,6 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 error={error}
                 {...rest}
             />
-            {IconComponent ? (
-                <button
-                    type="button"
-                    className={styles.iconButton}
-                    onClick={() => {
-                        close();
-                        onIconClick?.();
-                    }}
-                    disabled={disabled}
-                    aria-label={iconLabel || defaultLabel}
-                    title={iconLabel || defaultLabel}
-                >
-                    <IconComponent />
-                </button>
-            ) : null}
             {showDropdown ? (
                 <ul
                     id={listboxId}
@@ -250,8 +241,12 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                             onMouseEnter={() => setActiveIndex(i)}
                         >
                             <span className={styles.label}>
-                                {s.label}
-                                <span className={styles.badge}>
+                                {/* A recent destination has no name: its label is
+                                    the address itself, which the fitting line below
+                                    already shows whole when it fits (G99), so the
+                                    fixed short copy is not drawn above it. */}
+                                {s.source === 'history' ? null : s.label}
+                                <span className={s.source === 'history' ? `${styles.badge} ${styles.badgeOnly}` : styles.badge}>
                                     {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>

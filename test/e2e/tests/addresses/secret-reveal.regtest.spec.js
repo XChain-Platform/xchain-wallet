@@ -12,21 +12,23 @@
 // wallet whose whole job is to hand over a spending key, and the only ⬜ on that
 // line where a defect is unrecoverable rather than merely annoying.
 //
-// SIX THINGS THAT CAN BE WRONG HERE, and none of them is visible without
+// The page (operator ruling, simplified View Private Key): the address, one
+// never-share danger notice, the wallet password and I Understand on one form.
+// The key shows at once after the password; there is no separate reveal tap
+// and no Hide, and the back arrow, a window blur or the timeout wipes it.
+//
+// FOUR THINGS THAT CAN BE WRONG HERE, and none of them is visible without
 // driving it:
 //   1. The key is in the DOM before the user has agreed to see it. Everything
 //      else on this screen is a warning ABOUT a key that is, in that case,
 //      already there.
 //   2. Export skips the wallet-password confirmation.
-//   3. Password confirmation renders the key before a separate reveal tap.
-//   4. The revealed key is not this address's key. A screen that shows A's
+//   3. The revealed key is not this address's key. A screen that shows A's
 //      address beside B's key looks completely correct, and the only way to
 //      catch it is to derive the address back from the key independently.
-//   5. Hide does not hide.
-//   6. The blur auto-hide (§17.7.1) is not wired. It is the control that covers
-//      the case the warning list explicitly raises - screen-sharing - and a
-//      listener that quietly stops firing looks identical to one that works
-//      until the moment it matters.
+//   4. The blur auto-wipe (§17.7.1) is not wired. It covers accidental
+//      exposure during screen sharing, and a listener that quietly stops
+//      firing looks identical to one that works until the moment it matters.
 //
 // HOW THIS SPEC HANDLES THE KEY ITSELF, and it is a real constraint rather than
 // a note: a spec that asserts ON a secret can leak it into the run's own output.
@@ -51,9 +53,10 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
-    selectVenueChain,
+    readFromAddress,
     switchToRegtest,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -106,14 +109,26 @@ function wifControlsAddress(wif, address) {
     return candidates.filter(Boolean).includes(String(address));
 }
 
-/** The revealed key element, which only exists once the user has agreed. */
-const wifCode = (page) => page.getByRole('main').locator('code').filter({ hasText: /^[5KLc9]/ });
+/** The read-only Private key field, which only exists once the user has agreed. */
+const wifField = (page) => page.getByRole('main').getByRole('textbox', { name: 'Private key', exact: true });
+
+/**
+ * Is anything key-shaped in the page, as text or as a field value? A BOOLEAN,
+ * so a failure never prints the key.
+ */
+async function keyShapedInDom(page) {
+    return page.getByRole('main').evaluate((root) => {
+        const wifRe = /\b[5KLc9][1-9A-HJ-NP-Za-km-z]{50,51}\b/;
+        if (wifRe.test(root.innerText || '')) return true;
+        return [...root.querySelectorAll('input, textarea')].some((el) => wifRe.test(el.value || ''));
+    });
+}
 
 test.describe('revealing an address private key', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('is gated, correct, hideable, and hides itself when the window blurs',
+    test('is gated, correct, and wipes itself when the window blurs',
         async ({ page }) => {
             let address;
 
@@ -129,9 +144,8 @@ test.describe('revealing an address private key', () => {
                 // addressed by its exact accessible name.
                 await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
-                await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-                await selectVenueChain(form);
-                address = await form.getByLabel('From').inputValue();
+                await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
+                address = await readFromAddress(form);
                 expect(address, `no ${REGTEST_CHAIN_LABEL} address in this wallet`)
                     .toMatch(REGTEST_ADDRESS_RE);
 
@@ -153,63 +167,68 @@ test.describe('revealing an address private key', () => {
 
             await test.step('the warning stands BETWEEN the user and the key', async () => {
                 const main = page.getByRole('main');
-                await expect(main.getByRole('heading', { name: 'Before you continue' }),
+                await expect(main.getByRole('form', { name: 'Before you continue' }),
                     'the Secret screen went straight to the key with no warning stage')
                     .toBeVisible({ timeout: 30_000 });
 
-                // The warning that the auto-hide below exists to back up.
-                await expect(main, 'the warning does not raise screen-sharing, which is the case '
-                    + 'the blur auto-hide is for')
-                    .toContainText(/screen-sharing or recording/i);
+                // The one danger notice: never share the key, and what holding
+                // it means.
+                await expect(main, 'the warning does not say never to share the key')
+                    .toContainText(/never share this private key/i);
                 await expect(main, 'the warning does not say what having the key means')
                     .toContainText(/anyone with it can spend/i);
 
                 // THE ASSERTION THIS STEP EXISTS FOR: nothing key-shaped is in
                 // the DOM yet. A warning about a key that is already rendered
                 // is decoration.
-                await expect(wifCode(page),
+                await expect(wifField(page),
+                    'the Private key field is already on the warning screen, before the user has '
+                    + 'agreed to see anything')
+                    .toHaveCount(0);
+                expect(await keyShapedInDom(page),
                     'a key-shaped string is already in the DOM on the warning screen, before the '
                     + 'user has agreed to see anything')
-                    .toHaveCount(0);
-
+                    .toBe(false);
             });
 
             await test.step('the revealed key really controls THIS address', async () => {
                 const main = page.getByRole('main');
-                await main.getByRole('button', { name: 'I understand, continue' }).click();
-                const password = main.getByLabel('Wallet password');
+                // The label carries a help tip button named after it (U57), so
+                // the field is found by its textbox role.
+                const password = main.getByRole('textbox', { name: 'Wallet password', exact: true });
                 await expect(password, 'private-key export did not request the wallet password')
                     .toBeVisible();
-                await password.fill(PASSWORD);
-                await main.getByRole('button', { name: 'Confirm password' }).click();
+                const agree = main.getByRole('button', { name: 'I Understand' });
 
-                const reveal = main.getByRole('button', { name: 'Tap to reveal private key' });
-                await expect(reveal, 'password confirmation did not leave the key masked')
-                    .toBeVisible({ timeout: 60_000 });
-                await expect(wifCode(page),
-                    'the private key entered the DOM before the explicit reveal tap')
+                // I Understand with no password exports nothing: the field is
+                // marked and the key stays out of the DOM.
+                await agree.click();
+                await expect(main, 'I Understand with an empty password did not ask for it')
+                    .toContainText('Enter your wallet password.');
+                await expect(wifField(page),
+                    'the private key showed without the wallet password')
                     .toHaveCount(0);
-                await reveal.click();
 
-                const code = wifCode(page);
-                await expect(code, 'no key appeared after the explicit reveal tap')
-                    .toBeVisible({ timeout: 15_000 });
+                await password.fill(PASSWORD);
+                await agree.click();
+
+                const field = wifField(page);
+                await expect(field, 'no key appeared after the password and I Understand')
+                    .toBeVisible({ timeout: 60_000 });
 
                 // From here on the key is held in a local and never printed.
-                const wif = (await code.textContent() || '').trim();
+                const wif = (await field.inputValue() || '').trim();
                 expect(wif.length > 40 && wif.length < 60,
                     'the revealed string is not the length of a WIF').toBe(true);
 
                 // The screen must still be about the address it was opened
                 // from: the pair checked below is only meaningful if the user is
-                // looking at that pair. Matched on the ABBREVIATED form the
-                // screen actually renders (`rltc1q…jpqld3`), which is also all a
-                // user has to compare against - so this asserts what they can
-                // actually check, not what is in the DOM behind it.
-                const screen = await main.innerText();
-                const onScreen = screen.includes(address.slice(0, 6))
-                    && screen.includes(address.slice(-6));
-                expect(onScreen,
+                // looking at that pair. The screen shows it whole, in a
+                // read-only Address field above the key (a field value, which
+                // innerText does not carry), so the field is read and compared
+                // in full.
+                const shownAddress = main.getByRole('textbox', { name: 'Address', exact: true });
+                expect(await shownAddress.inputValue().catch(() => '') === address,
                     'the reveal screen no longer names the address it was opened from')
                     .toBe(true);
 
@@ -223,30 +242,31 @@ test.describe('revealing an address private key', () => {
                     .toBe(true);
             });
 
-            await test.step('Hide hides it, and the blur auto-hide is wired', async () => {
+            await test.step('the blur auto-wipe is wired', async () => {
                 const main = page.getByRole('main');
 
-                await main.getByRole('button', { name: 'Hide', exact: true }).click();
-                await expect(wifCode(page), 'Hide left the key on screen')
-                    .toHaveCount(0);
-                await expect(main.getByRole('button', { name: /Tap to reveal/ }),
-                    'hiding the key left no way to bring it back')
-                    .toBeVisible({ timeout: 15_000 });
-
-                await main.getByRole('button', { name: /Tap to reveal/ }).click();
-                await expect(wifCode(page), 'the key did not come back within the session')
-                    .toBeVisible({ timeout: 15_000 });
-
-                // §17.7.1's auto-hide. Dispatched rather than produced by a real
+                // §17.7.1's auto-wipe. Dispatched rather than produced by a real
                 // OS focus change, and the distinction is worth stating: this
                 // proves the LISTENER is wired and wipes the reveal, not that
                 // every platform's blur reaches it. A listener that is silently
                 // removed - the regression this guards - fails here.
                 await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-                await expect(wifCode(page),
+                await expect(wifField(page),
                     'the window blurred and the private key stayed on screen, which is the '
-                    + 'screen-sharing case the warning list raises by name')
+                    + 'screen-sharing case the auto-wipe covers')
                     .toHaveCount(0, { timeout: 15_000 });
+                expect(await keyShapedInDom(page),
+                    'a key-shaped string stayed in the DOM after the window blurred')
+                    .toBe(false);
+
+                // The wipe returns to the warning form with the password
+                // cleared, so seeing the key again costs the password again.
+                await expect(main.getByRole('form', { name: 'Before you continue' }),
+                    'the blur wipe did not return to the warning form')
+                    .toBeVisible({ timeout: 15_000 });
+                await expect(main.getByRole('textbox', { name: 'Wallet password', exact: true }),
+                    'the blur wipe left the wallet password filled in')
+                    .toHaveValue('');
             });
         });
 });

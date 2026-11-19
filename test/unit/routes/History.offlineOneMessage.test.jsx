@@ -67,13 +67,16 @@ describe('History offline message', () => {
         const online = mountHistory(client);
         await screen.findByRole('button', { name: /Send.*Confirmed/i });
         await waitFor(() => expect(readHistoryCache('wallet-a', 'account-a')).not.toBeNull());
-        expect(screen.getByText(/^Updated /)).toBeInTheDocument();
+        // History is just the list: no "Updated ..." freshness line online.
+        expect(screen.queryByText(/^Updated /)).toBeNull();
         online.unmount();
 
         setNavigatorOnline(false);
         mountHistory(client);
 
+        // Offline, the page notice is the one message about the saved rows.
         expect(await screen.findByText(/Showing the last saved history/)).toBeInTheDocument();
         expect(screen.queryByText('Offline, showing saved data')).toBeNull();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
     });
 });

@@ -78,11 +78,20 @@ function renderDetail({ displayName = 'Collectible', tokenInfo = {} } = {}) {
     );
 }
 
+function openDetails() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+}
+
+function openFiles() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+}
+
 describe('TokenDetail collectible media', () => {
     it('shows chain context as an icon without network-kind text', async () => {
         renderDetail();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        // The network is a Details row, shown as the chain badge.
+        openDetails();
         expect(await screen.findByRole('img', { name: 'Bitcoin' })).toBeTruthy();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
@@ -90,30 +99,30 @@ describe('TokenDetail collectible media', () => {
     it('shows text and ticker fallbacks when published images fail', async () => {
         renderDetail();
 
-        await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(1));
+        // The icon shows in the header and again in the hero.
+        await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(2));
         for (const image of [...document.querySelectorAll(`img[src="${ICON_URL}"]`)]) {
             fireEvent.error(image);
         }
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
         expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(1);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        openFiles();
         const media = await screen.findByRole('img', { name: MEDIA_NAME });
         fireEvent.error(media);
 
-        expect(screen.getByRole('img', { name: `${MEDIA_NAME} unavailable` })).toBeTruthy();
-        expect(screen.getByText('Image unavailable')).toBeTruthy();
+        expect(screen.queryByRole('img', { name: MEDIA_NAME })).toBeNull();
         expect(screen.getByText(MEDIA_NAME)).toBeTruthy();
     });
 
     it('names media links by the action even when an image has no title', async () => {
         renderDetail();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        openFiles();
 
-        expect(await screen.findByRole('link', { name: 'Open token image' }))
+        expect(await screen.findByRole('link', { name: 'Open unnamed.png' }))
             .toHaveAttribute('href', UNNAMED_MEDIA_URL);
-        expect(screen.getByRole('link', { name: `Open image ${MEDIA_NAME}` }))
+        expect(screen.getByRole('link', { name: `Open ${MEDIA_NAME}` }))
             .toHaveAttribute('href', MEDIA_URL);
     });
 
@@ -122,8 +131,10 @@ describe('TokenDetail collectible media', () => {
         const description = '<script>globalThis.tokenDescriptionExecuted = true</script>';
         const { container } = renderDetail({ displayName, tokenInfo: { description } });
 
+        openDetails();
         expect(await screen.findByText(description)).toBeInTheDocument();
-        expect(screen.getByText(displayName)).toBeInTheDocument();
+        // The name shows in the page identity and the information profile.
+        expect(screen.getAllByText(displayName).length).toBeGreaterThanOrEqual(2);
         expect(container.querySelector('script')).toBeNull();
         expect(container.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.tokenNameExecuted).toBeUndefined();
@@ -152,10 +163,10 @@ describe('TokenDetail collectible media', () => {
             ],
         } });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'About' }));
-        expect(await screen.findByRole('link', { name: 'Website · issuer.example' }))
+        openDetails();
+        expect(await screen.findByRole('link', { name: 'Website 1: https://issuer.example/' }))
             .toHaveAttribute('href', 'https://issuer.example/');
-        expect(screen.getByRole('link', { name: /safe\.example/ }))
+        expect(screen.getByRole('link', { name: /http:\/\/safe\.example\/profile/ }))
             .toHaveAttribute('href', 'http://safe.example/profile');
         expect(screen.getByRole('link', { name: /https:\/\/contact\.example/ }))
             .toHaveAttribute('href', 'https://contact.example/');
@@ -163,11 +174,11 @@ describe('TokenDetail collectible media', () => {
         expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
         expect(document.querySelector('a[href^="data:"]')).toBeNull();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
-        fireEvent.click(await screen.findByRole('tab', { name: 'File' }));
-        expect(await screen.findByRole('link', { name: /Safe file/ }))
+        openFiles();
+        expect(await screen.findByRole('link', { name: 'Open Safe file' }))
             .toHaveAttribute('href', 'https://files.example/readme.txt');
-        expect(screen.queryByText('Unsafe file')).toBeNull();
+        expect(screen.getByText('Unsafe file')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Open Unsafe file' })).toBeNull();
 
         for (const link of document.querySelectorAll('a[target="_blank"]')) {
             expect(link.getAttribute('rel')).toContain('noopener');

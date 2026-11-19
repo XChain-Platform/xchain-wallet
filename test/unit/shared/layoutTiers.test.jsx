@@ -30,9 +30,7 @@ import {
 import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
-import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
 
 // The app loads these on idle after first paint; load them up front here.
@@ -249,34 +247,5 @@ describe('layout tiers', () => {
             }
         });
 
-        it('renders the header settings popover outside the scrolling notice stack', () => {
-            window.innerWidth = 360;
-            const { container } = render(
-                <FullLayoutWithNav
-                    nav={<nav />}
-                    bottomBar={<div />}
-                    header={(
-                        <HeaderSettingsButton
-                            activeWallet={{ id: 'w1', name: 'Main' }}
-                            onOpenWalletPicker={() => {}}
-                        />
-                    )}
-                    notices={<div data-testid="notice">Queued broadcast</div>}
-                >
-                    <main />
-                </FullLayoutWithNav>,
-            );
-            expect(container.firstChild.getAttribute('data-xc-tier')).toBe('compact');
-            fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-            const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
-
-            const ancestors = [];
-            for (let el = popover.parentElement; el; el = el.parentElement) ancestors.push(el);
-            // The popover portals to the document body so no scrolling layout
-            // region (menu, notices or content) can clip it on iOS.
-            expect(container.contains(popover)).toBe(false);
-            expect(ancestors.some((el) => el.classList.contains(layoutStyles.notices))).toBe(false);
-            expect(screen.getByTestId('notice').closest(`.${layoutStyles.notices}`)).not.toBeNull();
-        });
     });
 });

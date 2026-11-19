@@ -66,11 +66,11 @@ function measureHitAreas(selectors) {
     });
 }
 
-function expectTapAreas(results) {
+function expectTapAreas(results, { width = TAP_MIN, height = TAP_MIN } = {}) {
     for (const r of results) {
         expect(r.missing, `${r.name} is on screen`).toBeFalsy();
-        expect(r.width, `${r.name} tap width`).toBeGreaterThanOrEqual(TAP_MIN - TOLERANCE);
-        expect(r.height, `${r.name} tap height`).toBeGreaterThanOrEqual(TAP_MIN - TOLERANCE);
+        expect(r.width, `${r.name} tap width`).toBeGreaterThanOrEqual(width - TOLERANCE);
+        expect(r.height, `${r.name} tap height`).toBeGreaterThanOrEqual(height - TOLERANCE);
         expect(r.centreOwned, `${r.name} centre is not covered by a neighbour's tap area`).toBe(true);
     }
 }
@@ -79,12 +79,19 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
     test.slow();
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
     const rangePills = page.getByRole('main').locator('[role="tablist"][aria-label*="ange"] [role="tab"]');
     await expect(rangePills.first()).toBeVisible();
     const rangeCount = await rangePills.count();
+    const rangeRowWidth = await rangePills.first().evaluate((el) => el.parentElement.getBoundingClientRect().width);
+    // U42 keeps the painted chips compact and U67 requires all eight options
+    // on one minimal row. At 360px, each exclusive slot is the row's even
+    // share; the height remains the full 44px touch target. The share is
+    // floored to the half-pixel sampling grid, since a slot on a fractional
+    // position can lose one sample at its edge.
+    const rangeTapWidth = Math.min(TAP_MIN, Math.floor((rangeRowWidth / rangeCount) * 2) / 2);
     expectTapAreas(await page.evaluate(
         measureHitAreas,
         Array.from({ length: rangeCount }, (_, i) => ({
@@ -92,33 +99,40 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
             selector: 'main [role="tablist"][aria-label*="ange"] [role="tab"]',
             index: i,
         })),
-    ));
+    ), { width: rangeTapWidth });
 
     await gotoSection(page, 'Send');
-    await expect(page.getByRole('button', { name: 'Create a real wallet' })).toBeVisible();
+    // A demo wallet shows the Create a Real Wallet exit once a send is refused.
+    await page.getByRole('main').getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Create a Real Wallet' })).toBeVisible();
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
     expectTapAreas(await page.evaluate(measureHitAreas, [
         { name: 'Create a real wallet', selector: 'button[class*="recovery"]' },
-        { name: 'Advanced disclosure', selector: 'summary' },
+        // The Advanced disclosure is one of the form's collapsible section headers.
+        { name: 'Payment section header', selector: 'main form button[aria-expanded][aria-controls]', index: 0 },
+        { name: 'Advanced section header', selector: 'main form button[aria-expanded][aria-controls]', index: 1 },
+        { name: 'Speed and Fees section header', selector: 'main form button[aria-expanded][aria-controls]', index: 2 },
         { name: 'help dot', selector: 'button[class*="trigger"][aria-describedby]' },
     ]));
 });
 
 test('fee selector stops and edit buttons give a 44px tap area on touch', async ({ page }) => {
     test.slow();
-    await page.goto('/style-guide/#fee-selector');
-    const section = page.locator('#fee-selector');
-    await section.scrollIntoViewIfNeeded();
-    // The style guide renders each example in an iframe; the first one in the
-    // section is the Send variant, with four stops and both edit buttons.
-    const iframe = section.locator('iframe').first();
-    await expect(iframe).toBeVisible();
-    const frame = await (await iframe.elementHandle()).contentFrame();
-    await frame.waitForSelector('[class*="sliderTick"]', { timeout: 60_000 });
+    await page.goto('/');
+    await dismissIntroCarousel(page);
+    await page.getByRole('button', { name: 'Try Demo' }).click();
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+
+    // A form's Speed and Fees section holds the fee selector: four stops and the
+    // fee amount edit button. The demo wallet prices tiers on the New message form; the Send
+    // form stays on Calculating.
+    await gotoSection(page, 'Messaging');
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    const header = page.getByRole('main').getByRole('button', { name: /^Speed and Fees\b/ });
+    if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
+    await expect(page.locator('button[class*="sliderTick"]').first()).toBeVisible({ timeout: 60_000 });
     const targets = [0, 1, 2, 3].map((i) => ({ name: `fee tier stop ${i + 1}`, selector: 'button[class*="sliderTick"]', index: i }));
-    targets.push(
-        { name: 'fee amount edit', selector: 'button[class*="readoutEdit"]', index: 0 },
-        { name: 'fee rate edit', selector: 'button[class*="readoutEdit"]', index: 1 },
-    );
-    expectTapAreas(await frame.evaluate(measureHitAreas, targets));
+    // One custom fee editor, the fee amount (G113), so there is no separate rate edit button.
+    targets.push({ name: 'fee amount edit', selector: 'button[class*="readoutEdit"]', index: 0 });
+    expectTapAreas(await page.evaluate(measureHitAreas, targets));
 });

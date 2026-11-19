@@ -6,9 +6,33 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
-    gap: var(--xc-space-3);
+    /* Three tiles per row on a 360px phone, more on wider screens. */
+    grid-template-columns: repeat(auto-fill, minmax(min(5.75rem, 100%), 1fr));
+    gap: var(--xc-space-2);
     align-items: stretch;
+}
+
+/* Home's NFTs tab (operator 2026-11-15): large images to browse, three across
+   at phone, popup and side panel widths (a container under 31rem). Wider
+   containers keep each tile about a phone three-across tile (6.75rem to
+   7.5rem) and add columns as the width allows. The container query measures
+   the list's own width, not the window, so a narrow pane in a wide window
+   still reads three across. A webview without container queries (Chrome
+   102) keeps the three-across grid at every width. */
+.wrap[data-size='large'] .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .wrap[data-size='large'] {
+        container-type: inline-size;
+    }
+
+    @container (min-width: 31rem) {
+        .wrap[data-size='large'] .grid {
+            grid-template-columns: repeat(auto-fill, minmax(6.75rem, 7.5rem));
+        }
+    }
 }
 
 .card {
@@ -20,15 +44,32 @@
     min-width: 0;
 }
 
+/* On a clickable card this sits on the shared Button base: the column layout,
+   start alignment and transparent hover fill below replace the base's centred
+   row and ghost hover, so the outer card keeps its own hover surface. Button's
+   single-class rules tie a single-class rule here, so whichever sheet loads
+   last would win; the doubled class outranks them in any sheet order (the
+   plain class is listed too so the rule is found under its own name). The
+   content stays unpositioned so the card's corner badges keep the card as
+   their frame. */
+.cardContent.cardContent,
 .cardContent {
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentColor;
     appearance: none;
+    position: static;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    align-items: normal;
+    justify-content: normal;
+    gap: var(--xc-space-1);
     width: 100%;
     min-width: 0;
+    max-width: none;
     height: 100%;
-    padding: var(--xc-card-pad);
+    min-height: 0;
+    /* The same inset as the gap between tiles. */
+    padding: var(--xc-space-2);
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -36,6 +77,13 @@
     text-align: start;
     color: inherit;
     font: inherit;
+}
+
+/* Button's press rule weighs three classes; four keep the card content from
+   dimming or nudging. */
+.cardContent.cardContent:active:not(:disabled) {
+    filter: none;
+    transform: none;
 }
 
 .cardClickable {
@@ -64,6 +112,19 @@
 .cardPinned {
     border-color: var(--xc-control-selected);
     box-shadow: var(--xc-shadow-accent-ring);
+}
+
+/* The card whose detail shows beside the grid on wide Home (G115): an
+   accent outline inside its edge, so the card's own surface stays as drawn. */
+.card[data-selected='true'] {
+    outline: 2px solid var(--xc-accent-primary);
+    outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+    .card[data-selected='true'] {
+        outline-color: Highlight;
+    }
 }
 
 .cardHidden {
@@ -142,14 +203,24 @@
     margin-top: auto;
 }
 
+/* No reserved second line: the ticker sits directly under the name's last
+   line, and .meta's auto top margin keeps each pair at its tile's foot. */
 .name {
     font-weight: 600;
     color: var(--xc-text);
     display: block;
-    min-height: 2.4em;
     overflow-wrap: break-word;
     word-break: normal;
     line-height: 1.2;
+}
+
+/* Home's three-across tiles are narrow: the name keeps one readable line with
+   an ellipsis (the full name is the title and the card's accessible name). */
+.wrap[data-size='large'] .name {
+    font-size: var(--xc-text-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .subtitle {
@@ -160,25 +231,51 @@
     white-space: nowrap;
 }
 
+/* The shared ghost Button draws the control at the shared md height; this
+   keeps the quiet divider look. Doubled, as .cardContent is, so it outranks
+   Button's single-class rules in any sheet order. */
+.hiddenToggle.hiddenToggle,
 .hiddenToggle {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-border);
+    position: static;
+    display: revert;
+    justify-content: normal;
+    align-items: normal;
+    gap: normal;
+    width: 100%;
+    max-width: none;
     border: 0;
+    border-radius: 0;
     background: transparent;
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
     text-align: center;
+    font-family: revert;
     font-size: var(--xc-text-xs);
+    font-weight: 400;
+    line-height: normal;
     color: var(--xc-text-muted);
     cursor: pointer;
-    width: 100%;
 }
 
-.hiddenToggle:hover {
+/* Four classes outrank Button's three-class hover and press rules: the row
+   fills on hover and press, keeps its divider, and does not dim or nudge. */
+.hiddenToggle.hiddenToggle:hover:not(:disabled),
+.hiddenToggle.hiddenToggle:active:not(:disabled) {
     color: var(--xc-text);
     background: var(--xc-bg-muted);
+    border-color: currentColor;
+    border-top-color: var(--xc-border);
+}
+
+.hiddenToggle.hiddenToggle:active:not(:disabled) {
+    filter: none;
+    transform: none;
 }
 
 @media (min-width: 48rem) {
     .grid {
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 12rem));
+        grid-template-columns: repeat(auto-fill, minmax(7.5rem, 9rem));
     }
 }

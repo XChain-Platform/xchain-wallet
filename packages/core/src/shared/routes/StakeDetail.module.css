@@ -1,93 +1,74 @@
-/* Stake detail: home-style layout. Info hero at the top, a 4-up
-   quick-action grid, then a tab strip with rewards / delegation /
-   position history. Quick-action styles mirror DispenserDetail /
-   Home.module.css. */
+/* Stake detail: the coin page's layout. The hero, tabs and action tiles
+   come from TotalBalanceHero, HomeTabs, PortfolioChart and TokenDetail
+   styles; this sheet holds only what is the stake's own: the two reward
+   bubbles under the hero and the rows of the Rewards, Positions,
+   Penalties and Details lists. */
 
-.quickActions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-    gap: var(--xc-space-2);
-    /* Pull up against .detailsList's space-4 bottom margin so the grid
-       sits tight under the stats card. */
-    margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
+/* The stake-detail route's measured box around the page (StakingList decides
+   from its width whether the route is two panels), the same box the stake
+   list measures, so both read one width. */
+.measureBox {
+    min-width: 0;
 }
 
-.quickActions > button,
-.quickActionMoreWrap > button {
-    padding: var(--xc-space-3) var(--xc-space-1);
-    flex-direction: column;
-}
-
-.quickActionIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.quickActionMoreWrap {
-    position: relative;
-    display: flex;
-    align-self: stretch;
-}
-
-.quickActionMoreWrap > button {
-    flex: 1 1 auto;
-    width: 100%;
-}
-
-.quickActionMoreMenu {
-    position: absolute;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    min-width: 200px;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    box-shadow: var(--xc-shadow-md);
-    padding: var(--xc-space-1);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-}
-
-.quickActionMoreMenu > button {
-    justify-content: flex-start;
-}
-
-/* Tab strip, shaped like the home tabs. */
-.tabBar {
-    display: flex;
-    gap: var(--xc-space-4);
-    border-bottom: 1px solid var(--xc-border);
-    margin-bottom: var(--xc-space-3);
-}
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: var(--xc-space-2) 0;
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
+/* Every staking chart hero uses the same single title above its change and total. */
+.heroTitle.heroTitle {
+    display: block;
+    text-transform: none;
+    letter-spacing: normal;
+    /* It names the chart, so it reads as a heading, not a caption (operator 2026-11-17). */
+    font-size: var(--xc-text-lg);
     font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-}
-
-.tabActive {
     color: var(--xc-text);
-    border-bottom-color: var(--xc-accent-primary);
 }
 
-/* Tab-panel rows (reward events, delegations, positions, slashes):
-   one card, hairline dividers. */
+/* Claimable and Earned: two equal bubbles 8px apart. */
+.bubbles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+/* The shared card (8px inside its edge) with label, amount and fiat
+   centred; the lines' own leading spaces them. */
+.bubble {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    text-align: center;
+}
+
+/* The bubble's small lines are 11.5px by the approved design; no type token
+   sits at that size (xs is 11px, sm 13px). */
+.bubbleLabel,
+.bubbleFiat {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+}
+
+/* A huge amount wraps inside the bubble instead of clipping. */
+.bubbleAmount {
+    max-width: 100%;
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.bubbleFiat {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+/* Tab-panel rows (rewards, positions, penalties, details): one card,
+   hairline dividers. */
 .eventList {
     composes: flush from '../../ui/Card.module.css';
     list-style: none;
@@ -125,7 +106,40 @@
     unicode-bidi: isolate;
 }
 
-/* Slash events read as warnings. */
+/* A reward row's right side: the coin amount with its fiat under it. */
+.rewardValue {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 0;
+    text-align: end;
+}
+
+.rewardEarned {
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--xc-success);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.rewardFiat {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* A Details value sits at the row's end and wraps rather than overflow. */
+.detailValue {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* Penalty events read as warnings. */
 .slashAmount {
     font-weight: 600;
     min-width: 0;
@@ -135,44 +149,12 @@
     unicode-bidi: isolate;
 }
 
-/* Status pill in the hero, tinted per state (mirrors the list chips). */
-.statusPill {
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 9px;
-    border-radius: 999px;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.statusActive {
-    background: color-mix(in srgb, var(--xc-success) 14%, transparent);
-    color: var(--xc-success);
-}
-
-.statusCooldown {
-    background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
-    color: var(--xc-warning);
-}
-
 @media not all and (min-width: 400px) {
-    .quickActions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tabBar {
-        gap: var(--xc-space-3);
-        overflow-x: auto;
-    }
-
     .eventAmount,
     .eventMeta,
     .eventWhen,
-    .slashAmount {
+    .slashAmount,
+    .rewardEarned {
         max-width: 100%;
         white-space: normal;
         overflow-wrap: anywhere;

@@ -106,7 +106,7 @@ const PROTOCOL_COIN_TICKER = {
  * @property {string} tick   ticker (coin family, e.g., "BTC" for the native coin)
  * @property {string} amount string-encoded big-number balance
  * @property {boolean} [isCoin]
- * @property {boolean} [unknown]  the coin balance could not be read (tick and amount are empty)
+ * @property {boolean} [unknown]  the balance could not be read; with no tick, the whole coin (isCoin) or token ledger is unknown
  */
 
 /**
@@ -121,6 +121,7 @@ const PROTOCOL_COIN_TICKER = {
  *                                            UNKNOWN, which is not the same claim as `'0'` and
  *                                            must not be projected as if it were.
  * @param {ProtocolFee} [opts.protocolFee]    the action's own protocol fee, when the caller knows it
+ * @param {string} [opts.source]              source address whose balances are being projected
  * @param {string} [opts.chainId]
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {SimulationResult}
@@ -146,6 +147,7 @@ function simulateActionData({
     balances,
     feeEstimate,
     protocolFee,
+    source,
     chainId,
     chainRegistry,
 }) {
@@ -156,7 +158,7 @@ function simulateActionData({
         : inferCoinTick(balances);
     const balMap = indexBalances(balances, coinTick);
 
-    const result = simulateBody(action, p, balMap, coinTick, feeEstimate, chainId, chainRegistry);
+    const result = simulateBody(action, p, balMap, coinTick, feeEstimate, source, chainId, chainRegistry);
     // Applied AFTER the per-action projection so the protocol fee lands on
     // whatever coin row that projection produced (a coin SEND folds its own
     // principal in first), and so a new action type gets it for free.
@@ -172,8 +174,8 @@ function simulateActionData({
     return result;
 }
 
-function simulateBody(action, p, balMap, coinTick, feeEstimate, chainId, chainRegistry) {
-    if (action === 'SEND') return simulateSend(p, balMap, coinTick, feeEstimate);
+function simulateBody(action, p, balMap, coinTick, feeEstimate, source, chainId, chainRegistry) {
+    if (action === 'SEND') return simulateSend(p, balMap, coinTick, feeEstimate, source);
     if (action === 'SWEEP') return simulateSweep(p, balMap, coinTick, feeEstimate);
     if (action === 'MINT') return simulateMint(p, balMap, coinTick, feeEstimate);
     if (action === 'DESTROY') return simulateDestroy(p, balMap, coinTick, feeEstimate);
@@ -183,26 +185,32 @@ function simulateBody(action, p, balMap, coinTick, feeEstimate, chainId, chainRe
     if (action === 'BROADCAST') return simulateBroadcast(p, balMap, coinTick, feeEstimate);
     if (action === 'AIRDROP') return simulateAirdrop(p, balMap, coinTick, feeEstimate);
     if (action === 'LIST') return simulateList(p, balMap, coinTick, feeEstimate);
-    if (action === 'BATCH') return simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry);
+    if (action === 'BATCH') return simulateBatch(p, balMap, coinTick, feeEstimate, source, chainId, chainRegistry);
 
     return genericFallback(action, balMap, coinTick, feeEstimate);
 }
 
 // --- per-action simulators -----------------------------------------------
 
-function simulateSend(p, balMap, coinTick, feeEstimate) {
+function simulateSend(p, balMap, coinTick, feeEstimate, source) {
     const tick = upper(p.TICK);
     const amount = str(p.AMOUNT);
+    const destination = str(p.DESTINATION);
+    const sentToSource = destination !== '' && str(source) !== '' && destination === str(source);
     const deltas = [];
 
-    if (tick && amount && tick !== coinTick) {
+    if (!sentToSource && tick && amount && tick !== coinTick) {
         deltas.push(deltaRow(tick, balMap, neg(amount), false));
-    } else if (tick && amount && tick === coinTick) {
+    } else if (!sentToSource && tick && amount && tick === coinTick) {
         // Coin send: combine principal + fee on the coin row below.
         deltas.push(deltaRow(coinTick, balMap, neg(amount), true));
     }
     pushFeeRow(deltas, balMap, coinTick, feeEstimate);
-    return { deltas, sideEffects: [], notes: [] };
+    return {
+        deltas,
+        sideEffects: [],
+        notes: sentToSource ? ['Sent to the same address; only the fee leaves.'] : [],
+    };
 }
 
 function simulateSweep(p, balMap, coinTick, feeEstimate) {
@@ -476,7 +484,7 @@ function simulateBroadcast(p, balMap, coinTick, feeEstimate) {
     } else {
         sideEffects.push({
             kind: 'broadcast',
-            label: 'Broadcast',
+            label: 'Announcement',
             value: message ? `"${message}"` : '(empty message)',
         });
     }
@@ -541,7 +549,7 @@ function simulateList(p, balMap, coinTick, feeEstimate) {
     };
 }
 
-function simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry) {
+function simulateBatch(p, balMap, coinTick, feeEstimate, source, chainId, chainRegistry) {
     const commands = Array.isArray(p.COMMANDS) ? p.COMMANDS : [];
     if (commands.length === 0) {
         const deltas = [];
@@ -579,6 +587,7 @@ function simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry)
             params: cmd.params,
             balances: balancesFromMap(balMap),
             feeEstimate: '0',
+            source,
             chainId,
             chainRegistry,
         });
@@ -636,10 +645,12 @@ function indexBalances(balances, coinTick) {
     return map;
 }
 
-function blankUnknownBalances(result, balances, coinTick) {
-    if (!result || !Array.isArray(result.deltas)) return;
-    const deltas = result.deltas;
+// Ticks whose balance the read could not give, mapped to whether each is the
+// coin. A tickless token marker means the whole token ledger was unreadable,
+// so every token the action touches is unknown too.
+function unknownBalanceTicks(balances, coinTick, deltas) {
     const unknown = new Map();
+    let tokenLedgerUnknown = false;
     if (Array.isArray(balances)) {
         for (const balance of balances) {
             if (!balance?.unknown) continue;
@@ -647,8 +658,21 @@ function blankUnknownBalances(result, balances, coinTick) {
                 ? String(balance.tick).toUpperCase()
                 : balance.isCoin ? coinTick : '';
             if (tick) unknown.set(tick, Boolean(balance.isCoin));
+            else if (!balance.isCoin) tokenLedgerUnknown = true;
         }
     }
+    if (tokenLedgerUnknown) {
+        for (const d of deltas) {
+            if (d.tick && !d.isCoin && !d.isFee && !unknown.has(d.tick)) unknown.set(d.tick, false);
+        }
+    }
+    return unknown;
+}
+
+function blankUnknownBalances(result, balances, coinTick) {
+    if (!result || !Array.isArray(result.deltas)) return;
+    const deltas = result.deltas;
+    const unknown = unknownBalanceTicks(balances, coinTick, deltas);
     for (const [tick, isCoin] of unknown) {
         let touched = false;
         let balanceRow = null;

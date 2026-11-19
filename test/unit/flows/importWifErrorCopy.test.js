@@ -39,7 +39,31 @@ function memCollection(initial = []) {
         findBy: async (field, value) => Array.from(m.values())
             .filter((r) => r[field] === value)
             .map((r) => JSON.parse(JSON.stringify(r))),
+        _restore: (records) => {
+            m.clear();
+            records.forEach((r) => m.set(r.id, JSON.parse(JSON.stringify(r))));
+        },
     };
+}
+
+function withGuardedPutMany(vault) {
+    vault.putManyGuarded = async (buildEntries) => {
+        const document = {
+            wallets: await vault.wallets.list(),
+            addresses: await vault.addresses.list(),
+        };
+        const entries = buildEntries(document);
+        const stores = [...new Set(entries.map((entry) => entry.store))];
+        const snapshots = new Map();
+        for (const store of stores) snapshots.set(store, await store.list());
+        try {
+            for (const entry of entries) await entry.store.put(entry.record);
+        } catch (error) {
+            for (const [store, records] of snapshots) store._restore(records);
+            throw error;
+        }
+    };
+    return vault;
 }
 
 const DESCRIPTOR = {
@@ -58,13 +82,13 @@ function throwingSdk(err) {
 let vault;
 beforeEach(async () => {
     const encryptedSeed = bytesToBase64(await encrypt(MASTER_KEY, new Uint8Array(16).fill(3)));
-    vault = {
+    vault = withGuardedPutMany({
         wallets: memCollection([
             { id: 'w1', schemaVersion: 1, name: 'Main', encryptedSeed, kdfParams: {}, importedKeys: [] },
         ]),
         accounts: memCollection(),
         addresses: memCollection(),
-    };
+    });
 });
 
 function doImport(sdkRegistry, masterKey = MASTER_KEY) {
@@ -184,7 +208,7 @@ describe('D-64: the wif-only onboarding lane says the same thing', () => {
 describe('importWif with an uncompressed key', () => {
     const UNCOMPRESSED_PUB = `04${'cd'.repeat(64)}`;
     function uncompressedSdk() {
-        return {
+        return withGuardedPutMany({
             get: () => ({
                 wallet: {
                     importWIF: () => ({ publicKeyHex: UNCOMPRESSED_PUB, compressed: false }),
@@ -194,7 +218,7 @@ describe('importWif with an uncompressed key', () => {
                     },
                 },
             }),
-        };
+        });
     }
 
     it('refuses the segwit type the form sends with copy naming P2PKH', async () => {
@@ -283,7 +307,7 @@ describe('importWif on a wif-only wallet', () => {
     // sealed value a password check can open.
     async function wifOnlyVault() {
         const sealed = bytesToBase64(await encrypt(MASTER_KEY, new TextEncoder().encode('cFirstKeyStub')));
-        return {
+        return withGuardedPutMany({
             wallets: memCollection([{
                 id: 'w2',
                 schemaVersion: 1,
@@ -295,7 +319,7 @@ describe('importWif on a wif-only wallet', () => {
             }]),
             accounts: memCollection(),
             addresses: memCollection(),
-        };
+        });
     }
     const okSdk = {
         get: () => ({ wallet: { importWIF: () => ({ publicKeyHex: '02ee', compressed: true }), deriveAddress: () => 'mSecondKey' } }),

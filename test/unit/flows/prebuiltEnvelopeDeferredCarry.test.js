@@ -103,10 +103,11 @@ describe('no surface builds a PrebuiltPsbt by hand', () => {
 
     it('finds the surfaces that must call the helper', () => {
         const callers = walk(CORE_SRC)
+            .filter((f) => !f.endsWith('ResumeConfirm.jsx'))
             .filter((f) => readFileSync(f, 'utf8').includes('prebuiltPsbtFromComposed('))
             .map((f) => relative(CORE_SRC, f));
-        // The shared confirm hook, ResumeConfirm and the eight forms that confirm directly.
-        expect(callers.length).toBeGreaterThanOrEqual(10);
+        // The shared confirm hook and the eight forms that confirm directly.
+        expect(callers.length).toBeGreaterThanOrEqual(9);
     });
 
     it('finds no hand-built one anywhere under shared/', () => {

@@ -40,20 +40,21 @@
 //
 // MECHANICS. The wallet is given two more addresses on the venue chain, so the
 // batch body carries three addresses and the fallback run shows three pairs of
-// GETs. Counting starts one full poll interval after the shell is unlocked,
-// so the cold open's requests (and, on the fallback venue, the one refused
-// probe that teaches the flow the route is absent) sit outside the window;
-// the window then closes after another interval, which holds exactly one
-// poll of every chain.
+// GETs. Counting starts once the cold open has settled, so its requests (and,
+// on the fallback venue, the one refused probe that teaches the flow the route
+// is absent) sit outside the window. Home then reuses that read for five
+// minutes, so the window's one load is the palette Refresh it runs: exactly
+// one balance read of every chain.
 
 import { createWallet, expect, openPaletteCommand, test, unlockedShell } from '../../fixtures/wallet.js';
 import { switchToRegtest, selectVenueChain, EXPLORER_URL, REGTEST_COIN, REGTEST_CHAIN_ID, REGTEST_TICKER } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../../packages/core/src/flows/balances.js';
 
 const PASSWORD = 'regtestpassword123';
 const EXPECT = process.env.XC_BATCH_EXPECT;
 const EXTRA_ADDRESSES = 2;
+// Long enough for the cold open, or one read and its SDK retries, to land.
+const SETTLE_MS = 22_000;
 
 const WIRE_RE = /Explorer returned HTTP|error 429|temporarily unavailable/i;
 
@@ -84,7 +85,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
     const generated = (await listedAddresses(page)).filter((a) => !before.has(a));
     expect(generated.length, 'generating added exactly one address to the list').toBe(1);
     return generated[0];
@@ -132,7 +134,7 @@ test.describe(`batch balance reads (${EXPECT})`, () => {
 
         // Let the cold open (and the fallback venue's one refused probe per
         // chain) pass before counting.
-        await page.waitForTimeout(BALANCE_POLL_INTERVAL_MS + 2_000);
+        await page.waitForTimeout(SETTLE_MS);
 
         const seen = [];
         const onRequest = (req) => {
@@ -142,7 +144,10 @@ test.describe(`batch balance reads (${EXPECT})`, () => {
             seen.push({ kind, coin: new URL(req.url()).pathname.split('/')[1], body: kind === 'batch' ? req.postDataJSON() : null });
         };
         page.on('request', onRequest);
-        await page.waitForTimeout(BALANCE_POLL_INTERVAL_MS + 2_000);
+        // The saved read is fresh, so only an explicit refresh reads again.
+        await openPaletteCommand(page, 'Refresh');
+        await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+        await page.waitForTimeout(SETTLE_MS);
         page.off('request', onRequest);
 
         const count = (kind) => seen.filter((r) => r.kind === kind).length;

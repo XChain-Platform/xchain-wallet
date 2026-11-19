@@ -19,6 +19,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import {
@@ -71,6 +72,18 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
+// The form error standard (Notice Standard, 2026-11-15): a refused press
+// shows the "Form errors" notice and a line under each failing field, so
+// several alerts can be on the page. The refusal is found in any of them.
+async function findAlertWith(text) {
+    let found = null;
+    await waitFor(() => {
+        found = screen.getAllByRole('alert').find((alert) => alert.textContent.includes(text)) || null;
+        expect(found, `an alert saying ${text}`).not.toBeNull();
+    });
+    return found;
+}
+
 describe('issueDescriptionError', () => {
     it('accepts text up to the indexer ceiling', () => {
         expect(issueDescriptionError('a'.repeat(MAX_ISSUE_TEXT_LENGTH))).toBeNull();
@@ -99,21 +112,21 @@ describe('IssueTokenForm description rules', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'OWNED' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), { target: { value: description } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Token description'), { target: { value: description } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         return composeForConfirm;
     }
 
     it('refuses a pipe in the description with a named cause', async () => {
         const composeForConfirm = await submitWith('a|b');
-        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain | or ; characters.');
+        await findAlertWith('Description cannot contain | or ; characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a 250 character description', async () => {
         const composeForConfirm = await submitWith('x'.repeat(250));
-        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot be longer than 249 characters.');
+        await findAlertWith('Description cannot be longer than 249 characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -141,12 +154,12 @@ describe('TokenAdminForm description rules', () => {
                 />
             </MessagingProvider>,
         );
-        fireEvent.change(await screen.findByLabelText('New description'), { target: { value: 'one;two' } });
-        const button = screen.getByRole('button', { name: /update token/i });
+        fireEvent.change(await screen.findByLabelText('Description'), { target: { value: 'one;two' } });
+        const button = screen.getByRole('button', { name: 'Update Description' });
         await waitFor(() => expect(button).toBeEnabled());
         fireEvent.click(button);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain | or ; characters.');
+        await findAlertWith('Description cannot contain | or ; characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -172,24 +185,26 @@ describe('collectible image URL', () => {
                 <TokenWizard walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByText('Collectible'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'ART' } });
+        // The Collectible template on the one Issue Token form.
+        fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Collectible/ }));
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'ART' } });
         fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: url } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         return composeForConfirm;
     }
 
-    it('keeps a javascript: link out of the collectible wizard', async () => {
+    it('keeps a javascript: link out of the collectible template', async () => {
         const composeForConfirm = await submitCollectible('javascript:alert(1)');
-        expect(await screen.findByRole('alert')).toHaveTextContent('Image URL must use http, https, ipfs, or ar.');
-        expect(screen.queryByRole('button', { name: 'Continue to confirmation' })).toBeNull();
+        await findAlertWith('Image URL must use http, https, ipfs, or ar.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('lets an https image through to the review step', async () => {
-        await submitCollectible('https://example.com/art.png');
-        expect(await screen.findByRole('button', { name: 'Continue to confirmation' })).toBeTruthy();
+    it('composes an https image as the collectible description', async () => {
+        const composeForConfirm = await submitCollectible('https://example.com/art.png');
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.DESCRIPTION)
+            .toBe('https://example.com/art.png');
     });
 });
 
@@ -210,28 +225,25 @@ describe('supply ceiling', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BIGGER' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000000000000000000001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000000000000000000001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
+        await findAlertWith('Max supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('is named on the wizard details step', async () => {
+    it('is named on the Create a token route', async () => {
         const { messaging, composeForConfirm } = messagingFor();
         render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <TokenWizard walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByText('Custom'));
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'BIGGER' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000000000000000000001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BIGGER' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000000000000000000001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply cannot be more than');
-        expect(screen.queryByRole('button', { name: 'Continue to confirmation' })).toBeNull();
+        await findAlertWith('Max supply cannot be more than');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });

@@ -25,6 +25,7 @@ export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
+export * as pendingFileUpload from './pendingFileUpload.js';
 export * as watchlistEntry from './watchlistEntry.js';
 export * as gatedKey from './gatedKey.js';
 export * as autopayOrder from './autopayOrder.js';
@@ -38,6 +39,7 @@ export { createAccount, validateAccount } from './account.js';
 export { createAddress, validateAddress } from './address.js';
 export { createContact, validateContact } from './contact.js';
 export { createConnectedSite, validateConnectedSite } from './connectedSite.js';
+export { isSiteIconDataUrl, sanitizeSiteIcon } from './siteIcon.js';
 export { validateMultisigConfig, buildMultisigConfig } from './multisigConfig.js';
 export {
     createMultisigSigningSession,
@@ -48,13 +50,12 @@ export {
 } from './multisigSigningSession.js';
 export {
     createDefaultSettings,
-    createDefaultAdsChainState,
+    createDefaultAdsSettings,
     validateSettings,
     inflateSettings,
     deflateSettings,
-    resolveAdsChainConfig,
     resolveFeeConfig,
-    ADS_DEFAULT_ENABLED,
+    ADS_RECIPIENTS,
 } from './settings.js';
 export { createPendingTx, validatePendingTx } from './pendingTx.js';
 export { createSignerRecord, validateSignerRecord, SIGNER_KINDS } from './signer.js';
@@ -63,6 +64,11 @@ export {
     validatePendingAirdrop,
     PENDING_AIRDROP_STAGES,
 } from './pendingAirdrop.js';
+export {
+    createPendingFileUpload,
+    validatePendingFileUpload,
+    PENDING_FILE_UPLOAD_STAGES,
+} from './pendingFileUpload.js';
 export {
     createWatchlistEntry,
     validateWatchlistEntry,
@@ -88,6 +94,7 @@ export {
     migrateMultisigSigningSession,
     migrateSigner,
     migratePendingAirdrop,
+    migratePendingFileUpload,
     migrateWatchlistEntry,
     migratePriceAlert,
 } from './migrations.js';

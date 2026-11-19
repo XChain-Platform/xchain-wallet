@@ -31,7 +31,7 @@
 // Exercise all-chain fan-out because one failing network must not hide another.
 
 import { describe, it, expect, vi } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserExplorer } from '../../../packages/core/src/shared/routes/DispenserExplorer.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
@@ -59,42 +59,61 @@ function renderExplorer({ activeNetwork, getDispensersForToken }) {
     );
 }
 
+// The search box lives in the title bar's standard filter panel.
+function openFilter() {
+    if (!screen.queryByRole('dialog', { name: 'Filter dispensers' })) {
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+    }
+    return screen.getByRole('dialog', { name: 'Filter dispensers' });
+}
+
 async function searchFor(token) {
     // The settings load is async; the chain list is empty until it lands, and
     // searching before then would escape the filter - so wait for it.
-    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-    const input = screen.getByRole('textbox');
+    openFilter();
+    await waitFor(() => expect(screen.queryByText('Loading available networks…')).toBeNull());
+    const input = screen.getByRole('searchbox');
     fireEvent.change(input, { target: { value: token } });
-    fireEvent.click(screen.getByRole('button', { name: /search/i }));
+    fireEvent.keyDown(input, { key: 'Enter' });
 }
 
 describe('DispenserExplorer network scoping', () => {
     it('explains that a search term is required once the network is ready', async () => {
-        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
-        const action = await screen.findByRole('button', { name: /search/i });
+        const getDispensersForToken = vi.fn().mockResolvedValue({ data: [] });
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
+        // The page body has no search box; it lives in the filter panel.
+        expect(screen.queryByRole('searchbox')).toBeNull();
+        openFilter();
 
-        expect(screen.getByRole('form', { name: 'Find open dispensers' })).toBeTruthy();
-        expect(screen.getByRole('region', { name: 'Find open dispensers' })).toBeTruthy();
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        expect(screen.getByRole('dialog', { name: 'Filter dispensers' })).toBeTruthy();
+        expect(screen.queryByRole('region', { name: 'Find open dispensers' })).toBeNull();
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
-        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeTruthy();
-        expect(action).toBeDisabled();
-        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
+        // Enter with an empty search searches nothing.
+        const callsBefore = getDispensersForToken.mock.calls.length;
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+        expect(getDispensersForToken).toHaveBeenCalledTimes(callsBefore);
+        expect(screen.queryByRole('status', { name: 'Searching dispensers' })).toBeNull();
     });
 
-    it('says All networks and keeps the ticker hint with the search field', async () => {
+    it('says All networks without repeating ticker guidance', async () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
 
-        expect(screen.getByRole('option', { name: 'All networks' })).toBeInTheDocument();
-        expect(screen.queryByRole('option', { name: 'All chains' })).toBeNull();
-        const field = screen.getByLabelText('Token ticker');
-        const hint = screen.getByText(/Ticker name, such as MYTOKEN/);
-        expect(field.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
-        // The hint sits in the field's own block, before the Search button.
-        const search = screen.getByRole('button', { name: 'Search' });
-        expect(hint.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(field.closest('div[class]').parentElement.contains(hint)).toBe(true);
+        // The Network field sits in the title-bar filter panel and opens the
+        // full-screen network list (operator ruling 2026-11-13).
+        openFilter();
+        await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Network: All networks' }));
+        const list = screen.getByRole('dialog', { name: 'Network' });
+        const networkLabels = within(list).getAllByRole('button', { name: /^Select / })
+            .map((row) => row.getAttribute('aria-label'));
+        expect(networkLabels).toContain('Select All networks');
+        expect(networkLabels).not.toContain('Select All chains');
+        fireEvent.click(within(list).getByRole('button', { name: /^Back/ }));
+        const field = screen.getByLabelText('Search a token or seller address');
+        expect(field).not.toHaveAttribute('aria-describedby');
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
     });
 
     it('explains and disables search until the active network is loaded', async () => {
@@ -112,15 +131,15 @@ describe('DispenserExplorer network scoping', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
+        openFilter();
+        const input = screen.getByRole('searchbox');
+        fireEvent.change(input, { target: { value: 'XCHAIN' } });
         expect(screen.getByText('Loading available networks…')).toBeTruthy();
-        const action = screen.getByRole('button', { name: /search/i });
-        expect(action).toBeDisabled();
-        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
+        fireEvent.keyDown(input, { key: 'Enter' });
         expect(getDispensersForToken).not.toHaveBeenCalled();
 
         await act(async () => resolveSettings({ schemaVersion: 2, activeNetwork: 'mainnet' }));
-        await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).not.toBeDisabled());
+        await waitFor(() => expect(screen.queryByText('Loading available networks…')).toBeNull());
     });
 
     it('keeps a slower earlier search from replacing newer results', async () => {
@@ -132,29 +151,26 @@ describe('DispenserExplorer network scoping', () => {
         }));
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        const input = screen.getByRole('textbox');
-        const form = input.closest('form');
-
-        fireEvent.change(input, { target: { value: 'FIRST' } });
-        fireEvent.submit(form);
+        // A second Enter starts the newer search from the same standard panel.
+        await searchFor('FIRST');
         await waitFor(() => expect(pending.has('FIRST')).toBe(true));
 
-        fireEvent.change(input, { target: { value: 'SECOND' } });
-        fireEvent.submit(form);
+        await searchFor('SECOND');
         await waitFor(() => expect(pending.has('SECOND')).toBe(true));
 
         pending.get('SECOND').forEach((resolve, index) => resolve({
             rows: index === 0 ? [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] : [],
         }));
-        expect(await screen.findByText(/SECOND @/)).toBeTruthy();
+        // Results are grouped cards, so the token name can show more than once.
+        expect((await screen.findAllByText(/SECOND/)).length).toBeGreaterThan(0);
 
         pending.get('FIRST').forEach((resolve, index) => resolve({
             rows: index === 0 ? [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] : [],
         }));
         await Promise.resolve();
-        expect(screen.queryByText(/FIRST @/)).toBeNull();
-        expect(screen.getByText(/SECOND @/)).toBeTruthy();
+        expect(screen.queryAllByText(/FIRST/)).toHaveLength(0);
+        expect(screen.queryAllByText(/old-result/)).toHaveLength(0);
+        expect(screen.getAllByText(/SECOND/).length).toBeGreaterThan(0);
     });
 
     it('a REGTEST search queries only regtest chains', async () => {
@@ -250,21 +266,19 @@ describe('DispenserExplorer network scoping', () => {
             .mockResolvedValue({ data: [] });
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        const input = screen.getByRole('textbox');
-        fireEvent.change(input, { target: { value: 'XCHAIN' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        await searchFor('XCHAIN');
 
         expect(screen.getByRole('status', { name: 'Searching dispensers' })).toBeInTheDocument();
         await waitFor(() => expect(resolveFirst).toBeTruthy());
         await act(async () => resolveFirst.reject(new Error('service unavailable')));
-        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
         expect(getDispensersForToken).toHaveBeenCalledTimes(chainIdsOn('mainnet').length * 2);
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
-        expect(input).toHaveValue('');
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Search' }));
+        openFilter();
+        expect(screen.getByRole('searchbox')).toHaveValue('');
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
-        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeInTheDocument();
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
     });
 });

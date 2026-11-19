@@ -1,0 +1,218 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Trading, bridge, market, batch, contract and staking forms give every
+// Network, Token and Checkbox field a help tip written for that form.
+
+import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
+import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
+import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
+import { BridgeMoveForm } from '../../../packages/core/src/shared/routes/BridgeMoveForm.jsx';
+import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
+import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
+import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
+import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    ContractStakeRoute as ContractStakeForm,
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
+
+const CHAIN = 'bitcoin-mainnet';
+const ADDRESS = Object.freeze({
+    id: 'address-1',
+    address: 'bc1qexampleexampleexampleexampleexampleex',
+    publicKey: '02ab',
+    derivationPath: "m/84'/0'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-1',
+});
+
+const DOGE = 'dogecoin-mainnet';
+const DOGE_ADDRESS = Object.freeze({
+    id: 'address-2',
+    address: 'DExampleDogeAddressxxxxxxxxxxxxxxxx',
+    publicKey: '02cd',
+    derivationPath: "m/44'/3'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-1',
+});
+
+const REGTEST = 'bitcoin-regtest';
+const REGTEST_ADDRESS = Object.freeze({
+    id: 'address-3',
+    address: 'bcrt1qactiveactiveactiveactiveactiveactive0',
+    publicKey: '02ef',
+    derivationPath: "m/84'/1'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-1',
+});
+
+function messagingWith(extra = {}) {
+    const target = {
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [ADDRESS], [DOGE]: [DOGE_ADDRESS], [REGTEST]: [REGTEST_ADDRESS],
+        }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+        getContractByActionIndex: vi.fn().mockResolvedValue({
+            row: { cooldown_blocks: 10, slash_destination: REGTEST_ADDRESS.address },
+        }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
+        getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        listContacts: vi.fn().mockResolvedValue([]),
+        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getTokenInfo: vi.fn().mockResolvedValue(null),
+        ...extra,
+    };
+    return new Proxy(target, {
+        get(object, property) {
+            if (property in object) return object[property];
+            if (typeof property !== 'string') return undefined;
+            return vi.fn().mockResolvedValue(null);
+        },
+        has: (object, property) => property in object,
+    });
+}
+
+function mount(Component, props) {
+    render(
+        <MessagingProvider shell="web" messaging={messagingWith()}>
+            <Component walletId="wallet-1" onBack={() => {}} {...props} />
+        </MessagingProvider>,
+    );
+}
+
+afterEach(() => {
+    // The Quick | Full choice is remembered per form; start each test on Quick.
+    globalThis.localStorage?.clear();
+    cleanup();
+    __clearTokenInfoCache();
+    vi.clearAllMocks();
+});
+
+// Every field's tip is checked, so the Full view of a Give/Get form is shown
+// and each closed standard section is opened before the tips are read.
+async function showEveryField() {
+    await screen.findAllByRole('button', { name: /^About / });
+    const full = screen.queryByRole('radio', { name: 'Full' });
+    if (full && !full.checked) fireEvent.click(full);
+    for (const toggle of document.querySelectorAll('[data-form-section-toggle][aria-expanded="false"]')) {
+        fireEvent.click(toggle);
+    }
+}
+
+async function expectTip(name, copy) {
+    await showEveryField();
+    const button = (await screen.findAllByRole('button', { name }))[0];
+    fireEvent.click(button);
+    expect(screen.getAllByRole('tooltip').map((node) => node.textContent).join(' | ')).toContain(copy);
+    fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
+}
+
+describe('Network, Token and Checkbox field help on trading, contract and staking forms', () => {
+    it('Swap: Network, Give token and Get token tips', async () => {
+        mount(SwapForm, {});
+        await expectTip('About Network', 'A swap settles on one network.');
+        await expectTip('About Give token', 'held in escrow until the offer is matched');
+        await expectTip('About Get token', 'paid to your receive address');
+        await expectTip(/^About Give this token's ownership/, 'single-fill swap');
+    });
+
+    it('Create order: Network tip carries the line that used to sit under the field', async () => {
+        mount(CreateOrderForm, {});
+        await expectTip('About Network', 'Both sides of the order settle on this network. A picked token decides it.');
+        expect(screen.queryByText(/^Both sides of this order settle on the same chain\./)).toBeNull();
+        await expectTip(/^About Trade ownership of the give token/, 'no partial fills');
+    });
+
+    it('Cross-chain order: one Network tip for the give side, the get network follows the get token', async () => {
+        mount(CrossChainOrderForm, {});
+        await expectTip('About Network', 'The chain you pay from.');
+        expect(screen.queryByRole('button', { name: 'About Give network' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
+        await expectTip(/^About Give this token's ownership/, 'Offer control of the whole token instead of a quantity.');
+    });
+
+    it('Cross-chain swap: one Network tip, then token tips', async () => {
+        mount(CrossChainSwapForm, {});
+        await expectTip('About Network', 'changing it clears the give token');
+        expect(screen.queryByRole('button', { name: 'About Give network' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
+        await expectTip('About Give token', 'held in escrow');
+        await expectTip('About Get token', 'paid to your Receive at address');
+        await expectTip(/^About Require the matcher/, "ownership record across chains");
+    });
+
+    it('Bridge move: Move from, Token and Move to tips', async () => {
+        mount(BridgeMoveForm, {});
+        await expectTip('About Network', 'The network the token leaves.');
+        await expectTip('About Token', 'Only tokens with a bridge route');
+    });
+
+    it('Bet market: Network and Token tips', async () => {
+        mount(CreateBetFeedForm, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+        await expectTip('About Network', 'The chain the market is created on.');
+        await expectTip('About Token', 'Every purchase and payout uses this token.');
+    });
+
+    // Batch (layout 1) picks each transaction's network with its From on the
+    // own-address picker, so it has no Network field; its Action field keeps
+    // its tip.
+    it('Batch composer: Action tip', async () => {
+        mount(BatchComposerForm, {});
+        await expectTip('About Action', 'One sub-action included in this single BATCH transaction.');
+    });
+
+    it('Contract funds: Network and Token tips follow the mode', async () => {
+        mount(ContractFundsForm, { mode: 'deposit', chainId: CHAIN, contractActionIndex: '5' });
+        await expectTip('About Network', 'It is fixed by the contract');
+        await expectTip('About Token', 'The token to send into the contract.');
+    });
+
+    it('Contract funds withdraw: Token tip names the withdrawal', async () => {
+        mount(ContractFundsForm, { mode: 'withdraw', chainId: CHAIN, contractActionIndex: '5' });
+        await expectTip('About Token', 'The token to pull out of the contract.');
+    });
+
+    it('Contract stake: Token tip', async () => {
+        mount(ContractStakeForm, { chainId: REGTEST, contractActionIndex: '5' });
+        await expectTip('About Token', 'The token staked in this contract.');
+    });
+
+    it('Deploy contract: Network tip', async () => {
+        mount(DeployContractForm, {});
+        await expectTip('About Network', 'The chain the contract is published on.');
+    });
+
+    it('Stake, staking action and delegation: Network tips', async () => {
+        mount(StakeForm, { chainId: CHAIN });
+        await expectTip('About Network', 'The chain your stake is locked on.');
+        cleanup();
+        mount(StakingActionForm, { mode: 'unstake', chainId: CHAIN });
+        await expectTip('About Network', 'The chain your stake is on.');
+        cleanup();
+        mount(DelegationActionForm, { mode: 'delegate', chainId: CHAIN });
+        await expectTip('About Network', 'The chain the staked address is on.');
+    });
+
+    it('Execute contract: the deposit token help is a dictionary key', () => {
+        expect(en['execute.depositTokenHelp']).toMatch(/same transaction, before the method runs/);
+    });
+
+    it('Execute contract: the deposit token field is labelled Token inside the Deposit section', () => {
+        expect(en['execute.deposit']).toBe('Deposit');
+        expect(en['execute.tokenLabel']).toBe('Token');
+    });
+});

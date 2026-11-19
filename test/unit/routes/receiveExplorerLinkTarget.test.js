@@ -8,12 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Receive's "View address on explorer" link sits in the QR action row. In a
-// row it stretches to the buttons' height, but below 400px the row becomes a
-// column and the bare link shrank to its 17px text line, under the 24px
-// pointer-target floor (the responsive e2e walk measured 334x17 at 360px).
-// The stylesheet sweep only audits rules it can see, so the link must carry
-// the class that states the floor.
+// Receive's "View address in block explorer" link once shrank to its 17px
+// text line below 400px, under the 24px pointer-target floor (the responsive
+// e2e walk measured 334x17 at 360px). It is now a row of the QR's ActionList
+// (G101), so it takes the kit ListRow's interactive row, whose stylesheet
+// states the floor where the sweep can see it.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,18 +21,21 @@ import { describe, expect, it } from 'vitest';
 const read = (rel) => readFileSync(join(process.cwd(), rel), 'utf8');
 
 describe('Receive explorer link pointer target', () => {
-    it('the link carries the explorerLink class', () => {
+    it('the link is an ActionList row that opens a new tab', () => {
         const src = read('packages/core/src/shared/routes/Receive.jsx');
-        const anchor = src.match(/<a\s[^>]*href=\{addressExplorerUrl\}[^>]*>/);
-        expect(anchor).not.toBeNull();
-        expect(anchor[0]).toMatch(/className=\{styles\.explorerLink\}/);
+        const row = src.split('<ActionListItem').slice(1)
+            .map((block) => block.split(/\n\s*\/>/)[0])
+            .filter((block) => block.includes('href={addressExplorerUrl}'));
+        expect(row).toHaveLength(1);
+        expect(row[0]).toMatch(/target="_blank"/);
+        expect(row[0]).toMatch(/rel="noopener noreferrer"/);
     });
 
-    it('explorerLink states the 24px floor and is visible to the tap-target sweep', () => {
-        const css = read('packages/core/src/shared/routes/Receive.module.css');
-        const rule = css.match(/\.explorerLink\s*\{([^}]*)\}/);
+    it('the interactive row states the 24px floor and is visible to the tap-target sweep', () => {
+        const css = read('packages/core/src/ui/ListRow.module.css');
+        const rule = css.match(/\.interactive\s*\{([^}]*)\}/);
         expect(rule).not.toBeNull();
-        expect(rule[1]).toMatch(/min-height:\s*var\(--xc-tap-min\)/);
+        expect(rule[1]).toMatch(/min-height:\s*var\(--xc-control-h-lg, 24px\)/);
         expect(rule[1]).toMatch(/cursor:\s*pointer/);
     });
 });

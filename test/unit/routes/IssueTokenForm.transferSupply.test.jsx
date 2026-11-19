@@ -65,26 +65,26 @@ async function fill({ supply, initialMint, owner, holder }) {
     fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'Charlie_Lee' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: supply } });
     if (initialMint !== undefined) {
-        fireEvent.change(screen.getByLabelText('Initial mint (optional)'), {
+        fireEvent.change(screen.getByLabelText('Initial mint'), {
             target: { value: initialMint },
         });
     }
     if (owner !== undefined) {
-        fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), {
+        fireEvent.change(screen.getByLabelText('New owner address'), {
             target: { value: owner },
         });
     }
     if (holder !== undefined) {
-        fireEvent.change(screen.getByLabelText('Send the initial mint to (optional)'), {
+        fireEvent.change(screen.getByLabelText('Send initial mint to'), {
             target: { value: holder },
         });
     }
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -134,7 +134,8 @@ describe('IssueTokenForm ownership transfer versus supply transfer', () => {
         await fill({ supply: '5000', initialMint: '0', holder: HOLDER });
         await submit();
 
-        await screen.findByText('Sending the initial mint somewhere needs an initial mint above 0.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Sending the initial mint somewhere needs an initial mint above 0.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

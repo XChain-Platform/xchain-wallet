@@ -77,7 +77,7 @@ export function addDecimalStrings(a, b) {
 
 export class WindowStateCorruptError extends Error {
     constructor(message) {
-        super(`co-signer window state is unreadable (${message}); inspect/remove it deliberately to reset the spending window`);
+        super(`cosigner window state is unreadable (${message}); inspect/remove it deliberately to reset the spending window`);
         this.name = 'WindowStateCorruptError';
         this.code = 'WINDOW_STATE_CORRUPT';
     }
@@ -144,7 +144,7 @@ export class VaultWindowStore {
         this._revision = 0;
         this._loadPromise = null;
         this._flushPromise = null;
-        /** @type {WindowEntry[]} entries snapshot() could not accumulate */
+        /** @type {WindowEntry[]} always empty: kept so quarantined() matches the SDK store API */
         this._quarantined = [];
     }
 
@@ -271,10 +271,6 @@ export class VaultWindowStore {
 
     /**
      * Current window usage in the shape the SDK policy evaluator expects.
-     * @returns {{ count: number, perTick: Record<string, string> }}
-     */
-    /**
-     * Current window usage in the shape the SDK policy evaluator expects.
      *
      * `perTick` is NULL-PROTOTYPE, and the accumulate is guarded. Ticks come
      * from the agent's own OP_RETURN, so they are attacker-chosen strings used
@@ -340,10 +336,11 @@ export class VaultWindowStore {
         this._markDirty();
     }
 
+    /** @returns {boolean} whether the persistence port takes the account lock on write */
+    get locksAccount() { return this._persistence.locksAccount === true; }
+
     /** @returns {boolean} whether there are unpersisted writes */
-    get dirty() {
-        return this._dirty;
-    }
+    get dirty() { return this._dirty; }
 
     /**
      * Persist the in-memory state through the port when dirty. The

@@ -15,8 +15,8 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'backupReminder.backupNow': 'Back up now',
-    'backupReminder.remindTomorrow': 'Remind me tomorrow',
+    'backupReminder.backupNow': 'Back Up Now',
+    'backupReminder.remindTomorrow': 'Remind Me Tomorrow',
 };
 
 addEnglish(messages);

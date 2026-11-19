@@ -73,7 +73,8 @@ describe('long content layout', () => {
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
-        expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(balanceCss, '.name')).toMatch(/white-space:\s*normal/);
+        expect(rule(balanceCss, '.name')).toMatch(/overflow-wrap:\s*anywhere/);
         // The shared row keeps the amount column at its full width and lets the label column yield.
         expect(rule(listRowCss, '.content')).toMatch(/flex:\s*1 1 auto;[^}]*min-width:\s*0/s);
         expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
@@ -82,7 +83,7 @@ describe('long content layout', () => {
         // A figure is never cut: no ellipsis and no clipping on the figure or
         // its column. When it does not fit beside the name (large text on a
         // phone) the row wraps and the figures take their own line, ending at
-        // the row's end, while the name column keeps a rem floor and truncates.
+        // the row's end, while the name itself remains available by wrapping.
         for (const selector of ['.amountFit', '.qty', '.fiat', '.amounts', '.amountsSlot.amountsSlot']) {
             expect(rule(balanceCss, selector)).not.toMatch(/text-overflow:\s*ellipsis/);
             expect(rule(balanceCss, selector)).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);
@@ -96,7 +97,7 @@ describe('long content layout', () => {
         expect(quantityText.closest(`.${balanceStyles.rowContent}`).querySelector(`.${balanceStyles.rowBody}`)).not.toBeNull();
     });
 
-    it('keeps a full history address and pending amount available without digit ellipsis', () => {
+    it('keeps a long history address off the row and the pending amount without digit ellipsis', () => {
         const address = `bc1q${'addresssegment'.repeat(12)}`;
         const amount = '1234567890123456789012345678901234567890';
         render(
@@ -124,8 +125,11 @@ describe('long content layout', () => {
             </MessagingProvider>,
         );
 
-        // The whole address stays in the title; the row shows both ends.
-        expect(screen.getByTitle(address)).toHaveTextContent(`${address.slice(0, 6)}…${address.slice(-6)}`);
+        // A history row shows no counterparty address (the history-rows change,
+        // 2026-11-14): it lives on the action's detail page, so the row cannot
+        // overflow on a long one.
+        expect(screen.queryByTitle(address)).toBeNull();
+        expect(document.body.textContent).not.toContain(address.slice(0, 12));
         // The amount is shown digit-grouped; every digit must still be there.
         const pendingAmount = document.querySelector('[data-pending-amount]');
         expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);
@@ -163,7 +167,10 @@ describe('long content layout', () => {
         );
 
         expect(screen.getByRole('heading', { name: displayName })).toBeInTheDocument();
-        expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
+        // The name is drawn in the header and as the blue card's caption, each with its full tooltip.
+        const titled = screen.getAllByTitle(displayName);
+        expect(titled.length).toBeGreaterThan(0);
+        for (const element of titled) expect(element).toHaveTextContent(displayName);
         expect(rule(tokenDetailCss, '.headerTitle')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(pageHeaderCss, '.titleGroup')).toMatch(/overflow:\s*hidden/);
     });
@@ -186,9 +193,12 @@ describe('long content layout', () => {
             );
         });
 
-        expect(await screen.findByTitle(walletName)).toHaveTextContent(walletName);
+        // The row is a list row whose title shows the full name and wraps inside the row
+        // (min-width 0) rather than pushing the chevron off the screen.
+        expect(await screen.findByText(walletName)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: new RegExp(walletName) })).toBeInTheDocument();
-        expect(rule(walletPickerCss, '.rowName')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(listRowCss, '.title')).toMatch(/min-width:\s*0/);
+        expect(rule(listRowCss, '.title')).not.toMatch(/white-space:\s*nowrap/);
     });
 
     it('retains a complete string title on a generic PageHeader', () => {
@@ -196,7 +206,9 @@ describe('long content layout', () => {
         render(<PageHeader title={title} onBack={() => {}} trailing={<button type="button">Action</button>} />);
 
         expect(screen.getByRole('heading', { name: title })).toHaveAttribute('title', title);
-        expect(rule(pageHeaderCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(rule(pageHeaderCss, '.title')).not.toMatch(/text-overflow:\s*ellipsis/);
+        // The approved header shows one line that ends in an ellipsis; the whole title stays in the
+        // heading's title attribute (asserted above) so nothing is lost.
+        expect(rule(pageHeaderCss, '.title')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(pageHeaderCss, '.title')).toMatch(/white-space:\s*nowrap/);
     });
 });

@@ -35,10 +35,23 @@ import { buildActionPsbt } from './buildActionPsbt.js';
 import { composeActionForConfirm } from './composeActionForConfirm.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
+import { encoderSignerOptions } from './signerCapability.js';
 import { indexerWatermark } from './balances.js';
 import { resolveGateMinAmountActive } from './protocolActivations.js';
+import { fileUploadStart } from './fileUploadStart.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+/**
+ * Whether the request picked the Taproot envelope upload method, which the
+ * form sends as `encoding: 'AUTO'`. Anything else is the Standard lane, which
+ * sends no encoding and keeps the legacy ceiling.
+ *
+ * @param {{ encoding?: string }} opts
+ */
+function asksEnvelope(opts) {
+    return opts?.encoding === 'AUTO';
+}
 const pendingGeneratedKeys = new Map();
 
 export function clearPendingGeneratedKeysForWallet(walletId) {
@@ -65,6 +78,15 @@ async function persistGeneratedKey(vault, record) {
  * envelope), which for realistic metadata lands well above this floor.
  */
 export const MAX_GATED_PLAINTEXT_BYTES = 6500;
+
+export function gatedPublishMultipartStart(upload = {}) {
+    if (upload?.gate == null) {
+        const error = new TypeError('gatedPublishMultipartStart: gate is required');
+        error.code = 'GATED_MULTIPART_GATE_REQUIRED';
+        throw error;
+    }
+    return fileUploadStart(upload);
+}
 
 /**
  * Validate the canonical decimal spelling accepted by FILE.GATE_MIN_AMOUNT.
@@ -117,6 +139,10 @@ export function gateMinAmountValidationError(value, maxDecimals = 18) {
  *                                    re-checks activation itself and refuses
  *                                    to emit the field early.
  * @property {number} [feePerKb]
+ * @property {'AUTO'} [encoding]      the Taproot envelope upload method: sizes the
+ *                                    ceiling to the envelope and asks the encoder
+ *                                    for AUTO with the signer's capability asserted.
+ *                                    Absent for the Standard lane.
  * @property {boolean} [trackPendingTx]
  * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]
  * @property {{ action: string, params: object }} [prebuiltActionData]
@@ -132,8 +158,10 @@ export function gateMinAmountValidationError(value, maxDecimals = 18) {
  *
  * @param {GatedPublishOpts} opts
  * @param {string} caller
+ * @param {{ envelope?: boolean }} [lane]  true only on the confirm compose, the one
+ *   path that requests the envelope, so no other path sizes for a carrier it never asks for
  */
-async function prepareGatedPublish(opts, caller) {
+async function prepareGatedPublish(opts, caller, { envelope = false } = {}) {
     if (!opts) throw new Error(`${caller}: opts is required`);
     if (typeof opts.gateTicker !== 'string' || opts.gateTicker.trim().length === 0) {
         throw new Error(`${caller}: gateTicker is required`);
@@ -200,8 +228,9 @@ async function prepareGatedPublish(opts, caller) {
     }
 
     // Encoding-aware ceiling (PC-28): the exact plaintext budget left
-    // under the 8192-byte compiled push once THIS publish's BATCH
-    // string and the AES-GCM envelope are counted. plainData is a
+    // under the compiled ceiling of the picked upload method (8192 bytes
+    // for Standard, the envelope ceiling for Taproot) once THIS publish's
+    // BATCH string and the AES-GCM envelope are counted. plainData is a
     // Latin-1 binary string, so .length is the byte length.
     const plainCap = maxGatedPlaintextBytes({
         name: opts.name,
@@ -212,7 +241,7 @@ async function prepareGatedPublish(opts, caller) {
         coin,
         address: source.address,
         gateMinAmount,
-    });
+    }, envelope ? { encoding: 'TAPROOT' } : {});
     if (opts.plainData.length > plainCap) {
         throw new Error(
             `${caller}: file is ${opts.plainData.length} bytes; with this metadata the `
@@ -305,15 +334,24 @@ async function prepareGatedPublish(opts, caller) {
  * shared confirm page. The prepared action accompanies the
  * envelope so approval can sign it without generating a second key or cipher.
  *
- * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
+ * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object, envelopeSigner?: object|null }} opts
  * @returns {Promise<import('./composeActionForConfirm.js').HostComposeEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
  */
 export async function composeGatedPublishForConfirm(opts) {
-    const prepared = await prepareGatedPublish(opts, 'composeGatedPublishForConfirm');
+    // Only the confirm lane carries an envelope's commit, reveal and recovery
+    // record to Approve, so only this path asks for one and sizes for it; the
+    // watcher and direct-sign paths keep the Standard request and ceiling.
+    const envelope = asksEnvelope(opts);
+    const prepared = await prepareGatedPublish(opts, 'composeGatedPublishForConfirm', { envelope });
     const encoderOpts = {
         ...prepared.encoderOpts,
         ...(opts.confirmEncoderOpts || {}),
         ...(opts.change ? { change: opts.change } : {}),
+        // The capability is asserted from the same record that gates the build:
+        // the host's vault record when it supplies one, else the request's `from`.
+        ...(envelope
+            ? { encoding: opts.encoding, options: encoderSignerOptions('envelopeSigner' in opts ? opts.envelopeSigner : opts.from) }
+            : {}),
     };
     const composed = await composeActionForConfirm({
         vault: opts.vault,
@@ -324,6 +362,10 @@ export async function composeGatedPublishForConfirm(opts) {
         encoderOpts,
         source: prepared.source.address,
         ownAddresses: opts.ownAddresses,
+        // The spending record decides whether the envelope may be built. A host
+        // that resolves it from the vault (envelopeSigner) is authoritative;
+        // without one, an envelope request falls back to the request's `from`.
+        signer: 'envelopeSigner' in opts ? (opts.envelopeSigner ?? null) : (envelope ? opts.from : null),
     });
     rememberGeneratedKey(prepared.generatedKey);
     return {

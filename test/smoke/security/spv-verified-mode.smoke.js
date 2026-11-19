@@ -40,31 +40,40 @@ const balancePath = join(core, 'src', 'shared', 'components', 'BalanceList.jsx')
 const flowPath = join(core, 'src', 'flows', 'verifyBalances.js');
 assert.ok(existsSync(detailPath) && existsSync(flowPath), 'the SPV surfaces exist');
 
-const detailSrc = read(detailPath);
+// ActionDetail keeps the verdict's data path; ActionDetailView draws it in
+// the Details view.
+const detailSrc = [detailPath, join(core, 'src', 'shared', 'routes', 'ActionDetailView.jsx')]
+    .map(read)
+    .join('\n');
 const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
     .map((n) => read(join(core, 'src', 'shared', 'routes', `${n}.jsx`)))
     .join('\n');
 const balanceSrc = read(balancePath);
 const flowSrc = read(flowPath);
 
-// 1: the three badge surfaces.
+// 1: the badge surfaces. Operator ruling 2026-11-14: the history list rows
+// carry no verification pill (action, details, time and status only), so the
+// verdict is pinned on the action detail view and balance rows, and the list
+// is pinned to stay badge-free.
 for (const [label, src] of [
     ['balance rows', balanceSrc],
-    ['history list', historySrc],
     ['action detail', detailSrc],
 ]) {
     assert.ok(/<VerifiedBadge/.test(src), `${label}: renders a VerifiedBadge`);
 }
+assert.ok(!/<VerifiedBadge/.test(historySrc), 'history list: renders no VerifiedBadge on its rows');
+assert.ok(!/useActionProofVerification/.test(historySrc), 'history list: runs no proof checks of its own');
 
 // 2: one switch, and demo wallets never claim a proof.
 assert.equal(createDefaultSettings().verifyProofs, true, 'verifyProofs is on by default');
-for (const [label, src] of [['history list', historySrc], ['action detail', detailSrc]]) {
+for (const [label, src] of [['action detail', detailSrc]]) {
     assert.ok(
         /settings\?\.verifyProofs !== false/.test(src),
         `${label}: gates on the verifyProofs setting`,
     );
+    // A demo wallet reads through the sample-data source, which is not live (U64).
     assert.ok(
-        /isDemoWallet\(walletId\)/.test(src),
+        /verifyProofs !== false\s*\n\s*&& source\.live/.test(src),
         `${label}: never badges a demo wallet, whose rows are synthesized`,
     );
 }
@@ -98,5 +107,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: SPV verified mode smoke (PC-50: badge on balances + history + action detail, one verifyProofs switch, checkpointable-only, explorer-independent verdicts)',
+    'OK: SPV verified mode smoke (PC-50: badge on balances + action detail and none on history rows, one verifyProofs switch, checkpointable-only, explorer-independent verdicts)',
 );

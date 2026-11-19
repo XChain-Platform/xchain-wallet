@@ -12,10 +12,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../helpers/openFormSections.js';
+
+// The picked token names its network when a test sets `pickedOn`: the swap
+// has no network picker of its own once a token is chosen, so a token on
+// another network is how the network changes.
+const pickedOn = { chainId: null };
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => (
-        <button type="button" onClick={() => onSelect({ tick: title.includes('give') ? 'ALPHA' : 'BETA' })}>
+        <button
+            type="button"
+            onClick={() => onSelect({
+                tick: pickedOn.chainId ? 'GAMMA' : (/give/i.test(title) ? 'ALPHA' : 'BETA'),
+                ...(pickedOn.chainId ? { chainId: pickedOn.chainId } : {}),
+            })}
+        >
             Choose {title}
         </button>
     ),
@@ -44,6 +56,7 @@ const byChain = {
 };
 
 afterEach(() => {
+    pickedOn.chainId = null;
     cleanup();
     __clearTokenInfoCache();
 });
@@ -77,27 +90,33 @@ describe('SwapForm network switch', () => {
         );
         await screen.findByRole('button', { name: /Get token:/ });
         fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('button', { name: /Advanced options/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Set allow-list' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Pick Choose allow-list' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Set block-list' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Pick Choose block-list' }));
-        expect(screen.getByRole('button', { name: 'Allow-list #12' })).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/Receive at/), { target: { value: 'bc1qdevmockabcdef' } });
+        await openSection('Swap Terms');
+        await openSection('Lists');
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick Choose Allow-List' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Block list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick Choose Block-List' }));
+        expect(screen.getByRole('button', { name: 'Allow list: List #12' })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/Receive at/, { selector: 'input' }), { target: { value: 'bc1qdevmockabcdef' } });
 
-        fireEvent.click(screen.getByRole('button', { name: /Give and get network: Bitcoin/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/ }));
+        // Picking a give token that lives on Dogecoin moves the swap there and
+        // starts everything chosen on Bitcoin over.
+        pickedOn.chainId = DOGE;
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select Give Token' }));
 
-        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token'));
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('GAMMA'));
+        await openSection('From');
+        expect(screen.getByRole('button', { name: /Network: Dogecoin/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Get token:/ })).toHaveTextContent('Select a token');
-        expect(screen.getByLabelText('Give amount')).toHaveValue('');
+        expect(screen.getByLabelText('Give amount (GAMMA)')).toHaveValue('');
         expect(screen.getByLabelText('Get amount')).toHaveValue('');
-        expect(screen.getByRole('button', { name: 'Set allow-list' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Set block-list' })).toBeInTheDocument();
-        expect(screen.getByLabelText(/Receive at/)).toHaveValue('');
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Block list: None set' })).toBeInTheDocument();
+        expect(screen.getByLabelText(/Receive at/, { selector: 'input' })).toHaveValue('');
     });
 
     it('keeps a seeded give token when the form opens on its chain', async () => {

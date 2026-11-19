@@ -43,6 +43,9 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     expectConfirmModal,
     EXPLORER_URL,
+    fillOrderSide,
+    placeOrderButton,
+    REGTEST_TICKER,
     fundAddress,
     minerRpc,
     mintXchain,
@@ -53,7 +56,10 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -63,8 +69,6 @@ const MINT = 1000;
 const GIVE = 100;
 /** The ask, in native coin. Never paid here - nothing matches this order. */
 const GET = '0.5';
-/** The chain's own ticker. */
-const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -189,7 +193,7 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     // No \b anchors: this screen renders the id with no separators around it.
     await expect(main, 'no transaction id ever appeared after Approve')
@@ -207,13 +211,13 @@ async function onboardFundMint(page, walletName) {
 
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     // Every action form carries its own chain picker and they all default to
     // Bitcoin (§3.5), so a form without one composes on whatever chain the
     // wallet happens to list first - which on a regtest wallet is not this
     // venue. This form had no picker at all until this spec asked for one.
     await selectVenueChain(main);
-    const source = await main.getByLabel('From address').inputValue();
+    const source = await (await openFromAddress(main)).inputValue();
     expect(source, `the Create order form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -233,24 +237,17 @@ async function onboardFundMint(page, walletName) {
 async function placeOrder(page) {
     await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
+    await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    // The default sides are exactly the pair this spec is about (give a
-    // token, get native coin); asserted rather than assumed, because a
-    // changed default would silently move the test onto a shape that
-    // escrows nothing.
-    // `exact` matters on both fields: the give side also carries a "Trade
-    // ownership of this ticker" checkbox, and the get side an "Amount (LTC)"
-    // - a loose label match resolves to two elements.
-    await expect(main.getByLabel('Ticker', { exact: true }),
-        'the give side no longer defaults to a token, so nothing would be escrowed')
-        .toBeVisible();
-    await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
-    await main.getByLabel('Amount', { exact: true }).fill(String(GIVE));
-    await main.getByLabel(`Amount (${COIN})`).fill(GET);
+    // The pair this spec is about: give a token (the only side that
+    // escrows), get native coin. Both sides are picked by name rather than
+    // left to the form's defaults, and the helper asserts each pick, so a
+    // changed default cannot move the test onto a shape that escrows nothing.
+    await fillOrderSide(page, 'give', 'XCHAIN', GIVE);
+    await fillOrderSide(page, 'get', REGTEST_TICKER, GET);
 
-    await main.getByRole('button', { name: /^Place order/ }).click();
+    await placeOrderButton(page).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -264,9 +261,29 @@ async function placeOrder(page) {
     return action;
 }
 
-/** The open-order row in My orders, located by the index the chain gave it. */
+/**
+ * The order's row in My orders, located by the index the chain gave it. The
+ * ring layout's row names the trade, not the order number, so it is found by
+ * its order key.
+ */
 function orderRow(page, orderIndex) {
-    return page.getByRole('main').getByRole('listitem').filter({ hasText: `#${orderIndex}` });
+    return page.getByRole('main').locator(`[data-order-row$=":${orderIndex}"]`);
+}
+
+/**
+ * Opens the order's detail page from its row (the row is one button) and
+ * presses one of its actions there: Cancel and Edit left the row on
+ * 2026-11-13, and are rows of the detail page's Actions list (G101).
+ */
+async function openOrderAction(page, orderIndex, action) {
+    await orderRow(page, orderIndex).getByRole('button').click();
+    const main = page.getByRole('main');
+    // The order number sits in the facts under Details (G102).
+    await main.getByRole('tab', { name: 'Details' }).click({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Order details'), `the detail page for #${orderIndex} never opened`)
+        .toContainText(`#${orderIndex}`, { timeout: 30_000 });
+    await main.getByRole('tab', { name: 'Actions' }).click();
+    await main.getByRole('button', { name: new RegExp(`^${action} order`) }).click();
 }
 
 test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
@@ -314,22 +331,29 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('cancel it, and the escrow comes back', async () => {
             const before = await tokenBalance(source, 'XCHAIN');
             const main = page.getByRole('main');
-            await orderRow(page, orderIndex).getByRole('button', { name: 'Cancel', exact: true }).click();
+            await openOrderAction(page, orderIndex, 'Cancel');
 
-            // The panel's own promise, which is the claim the chain settles
-            // below. (Its title lives in the page header, not in a heading
-            // element, so asserting a heading here would fail on a correct
-            // screen.)
-            await expect(main.getByText(/Cancelling closes the order and returns the escrowed/),
-                'the cancel panel never opened for this order')
+            // The standard Cancel Order form on its own route. (Its title
+            // lives in the page header, not in a heading element, so
+            // asserting a heading here would fail on a correct screen.)
+            await expect(main.locator('[data-form-standard="cancel-order"]'),
+                'the cancel form never opened for this order')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main, 'the cancel panel is pointed at a different order')
+            await expect(main, 'the cancel form is pointed at a different order')
                 .toContainText(`#${orderIndex}`);
-            // Signed on the shared confirm page, after its network dry run.
-            await page.getByRole('button', { name: 'Cancel order' }).click();
+            // Signed on the shared confirm page, after its network dry run;
+            // the cancel's promise is the confirm page's warning slot (G105,
+            // G127): the title "Cancelling closes the order" over the line
+            // "Any escrowed side returns to you.", the claim the chain
+            // settles below.
+            await page.getByRole('button', { name: 'Cancel Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            const cancelWarning = page.getByTestId('confirm-warning');
+            await expect(cancelWarning, 'the review never said what the cancel does')
+                .toContainText('Cancelling closes the order');
+            await expect(cancelWarning, 'the review never said the escrow comes back')
+                .toContainText('Any escrowed side returns to you.');
+            await approveConfirm(page);
             await expect(page.getByText('Cancel broadcast'),
                 'the cancel never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });
@@ -353,10 +377,13 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} vanished from My orders after being cancelled`)
                 .toBeVisible({ timeout: 60_000 });
+            // A cancelled order reads "Closed": the stored status stays
+            // cancelled, the list shows the short word (ORDER_STATUS_LABELS,
+            // operator 2026-11-14).
             await expect(row,
                 'a cancelled order still reads as open, which is an invitation to wait for a match '
                 + 'that can never come')
-                .toContainText('Cancelled', { timeout: 60_000 });
+                .toContainText('Closed', { timeout: 60_000 });
         });
     });
 
@@ -395,10 +422,10 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} is not in My orders to edit`)
                 .toBeVisible({ timeout: 60_000 });
-            await row.getByRole('button', { name: 'Edit', exact: true }).click();
+            await openOrderAction(page, orderIndex, 'Edit');
 
             const main = page.getByRole('main');
-            const expiration = main.getByLabel('New expiration (optional)');
+            const expiration = fieldByLabel(main, 'New expiration');
             await expect(expiration, 'the edit panel never opened for this order')
                 .toBeVisible({ timeout: 30_000 });
             await expect(main, 'the edit panel is pointed at a different order')
@@ -407,7 +434,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // A blank edit is refused before anything is signed: the wire has
             // no way to say "change nothing", so an empty submit would spend a
             // miner fee to say nothing.
-            await main.getByRole('button', { name: 'Edit order' }).click();
+            await main.getByRole('button', { name: 'Update Order' }).click();
             await expect(main, 'a blank edit was not refused with the no-change notice')
                 .toContainText('Change at least one field', { timeout: 30_000 });
             await expect(page.getByTestId('confirm-approve'),
@@ -415,10 +442,9 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveCount(0);
 
             await expiration.fill(localInput);
-            await main.getByRole('button', { name: 'Edit order' }).click();
+            await main.getByRole('button', { name: 'Update Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByText('Edit broadcast'),
                 'the edit never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });

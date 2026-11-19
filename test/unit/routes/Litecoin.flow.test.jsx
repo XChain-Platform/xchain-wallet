@@ -129,12 +129,13 @@ describe('Litecoin receive flow', () => {
         render(provider(messaging, <Receive walletId={WALLET_ID} />));
 
         const address = await screen.findByRole('textbox', {
-            name: 'Litecoin savings',
+            name: 'Address',
         });
         expect(address).toHaveValue(SOURCE.address);
         expect(address.value).toMatch(/^ltc1q/);
-        expect(screen.getByLabelText('Address type')).toHaveValue('p2wpkh');
-        expect(screen.getByRole('option', { name: 'SegWit' })).toBeInTheDocument();
+        // Receive has no Address type select; the SegWit type shows in the
+        // ltc1q address itself.
+        expect(screen.queryByLabelText('Address type')).toBeNull();
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Amount (LTC)' }), {
             target: { value: '0.125' },
@@ -159,12 +160,13 @@ describe('Litecoin send flow', () => {
     it('enforces the Litecoin dust floor and composes a valid address with sat/vB fee units', async () => {
         const messaging = mountSend();
 
-        expect(await screen.findByLabelText('From')).toHaveValue(SOURCE.address);
+        expect(await screen.findByLabelText('From address')).toHaveValue(SOURCE.address);
         await waitFor(() => expect(messaging.estimateFee).toHaveBeenCalledWith({ chainId: CHAIN }));
-        expect(screen.getByRole('button', { name: 'Edit fee rate (sat/vB)' }))
-            .toHaveTextContent('4 sat/vB');
-        expect(screen.getByRole('button', { name: 'Edit exact fee amount' }).closest('[role="status"]'))
-            .toHaveTextContent('0.00001 LTC');
+        // The Fees section starts closed: open it to see the Network fee line.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
+        const feeFigure = screen.getByRole('button', { name: 'Edit exact fee amount' });
+        expect(feeFigure.closest('[role="status"]')).toHaveTextContent('0.00001 LTC');
+        expect(feeFigure.closest('[data-fees-row="network"]')).toHaveTextContent(/^Network fee/);
 
         fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: DESTINATION } });
         const amount = screen.getByLabelText('Amount (LTC)');
@@ -192,7 +194,7 @@ describe('Litecoin send flow', () => {
 });
 
 describe('Litecoin native protocol fee flow', () => {
-    it('adds the mandatory fee output before a fee-bearing XChain action reaches review', async () => {
+    it('keeps the mandatory flag on a feeless action without adding a fee output', async () => {
         const chainRegistry = registryLib.defaultRegistry();
         const createTx = vi.fn(async () => ({
             psbt: '70736274ff',
@@ -211,7 +213,7 @@ describe('Litecoin native protocol fee flow', () => {
             quoteNativeFee: vi.fn().mockResolvedValue({
                 supported: true,
                 valid: true,
-                requiredFeeSats: 5000,
+                requiredFeeSats: 0,
                 feeDestination: FEE_DESTINATION,
             }),
             wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
@@ -259,7 +261,7 @@ describe('Litecoin native protocol fee flow', () => {
                     ...composed,
                     chainId: CHAIN,
                     networkFeeSats: 1000,
-                    protocolFeeSats: 5460,
+                    protocolFeeSats: 0,
                     decoded: {
                         summary: 'Destroy 1 XCHAIN',
                         details: [],
@@ -280,18 +282,17 @@ describe('Litecoin native protocol fee flow', () => {
             />
         )));
 
-        expect(await screen.findByText('Protocol fees are paid in LTC')).toBeInTheDocument();
         await waitFor(() => expect(document.body.textContent).toContain('2 XCHAIN available'));
+        expect(screen.queryByText('Protocol fees are paid in LTC')).not.toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: 'Destroy' }));
 
         expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
         expect(sdk.quoteNativeFee).toHaveBeenCalledTimes(1);
         expect(createTx.mock.calls[0][0]).not.toHaveProperty('payFeeInNativeCoin');
-        expect(createTx.mock.calls[0][0].customOutputs).toContainEqual({
-            address: FEE_DESTINATION,
-            value: 5460,
-        });
+        expect(createTx.mock.calls[0][0].customOutputs || []).not.toContainEqual(
+            expect.objectContaining({ address: FEE_DESTINATION }),
+        );
     });
 });
 
@@ -304,7 +305,8 @@ describe('Litecoin history flow', () => {
                 action: 'SEND',
                 action_index: '91',
                 block_index: 1234,
-                timestamp: 1791900000,
+                // An hour ago, inside History's default last-30-days window.
+                timestamp: Math.floor(Date.now() / 1000) - 3600,
                 tx_hash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
                 details: {
                     source: external,

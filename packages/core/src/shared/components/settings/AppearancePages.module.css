@@ -1,0 +1,95 @@
+/* Settings > Appearance pages: the Theme, Language and Fiat Currency pick
+   lists, the Number Format and Hide Small Balances pages, and the two
+   confirm pages (Clear Remembered Network Filters, Reset Display Settings). */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* One card of rows, as every Settings group page draws its rows. Inside the
+   Settings page surface the shared nested-card rule strips this class's
+   surface, so the list also carries the group lists' inline surface
+   (LIST_SURFACE in AppearancePages.jsx). */
+.list {
+    composes: flush from '../../../ui/Card.module.css';
+}
+
+.choiceWithAction {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+}
+
+.choiceWithAction > :last-child {
+    align-self: center;
+    margin-inline-end: var(--xc-space-2);
+}
+
+.rowIcon {
+    --xc-icon-size: var(--xc-icon-xl);
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* The selected row's check, in the accent green. */
+.check {
+    --xc-icon-size: var(--xc-icon-lg);
+    display: inline-flex;
+    color: var(--xc-success);
+}
+
+/* The Number Format sample, centred over the Display format field. */
+.sample {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--xc-space-1);
+}
+
+.sampleLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.sampleValue {
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.body {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.changes {
+    margin: 0;
+    padding-inline-start: var(--xc-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    line-height: 1.45;
+}
+
+/* The page's one button, full width under the text. */
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}

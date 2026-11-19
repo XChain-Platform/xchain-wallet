@@ -24,6 +24,7 @@ import { createMultisigConfig } from '../../packages/core/src/flows/createMultis
 import { MAX_MULTISIG_COSIGNERS } from '../../packages/core/src/schemas/multisigConfig.js';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { MultisigCreate } from '../../packages/core/src/shared/routes/MultisigCreate.jsx';
+import { selectOption } from '../helpers/selectOption.js';
 
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -105,23 +106,24 @@ describe('regression/multisig-cosigner-ceiling', () => {
                 </MessagingProvider>,
             );
         });
-        const add = await screen.findByRole('button', { name: /Add cosigner/i });
+        const add = await screen.findByRole('button', { name: /Add Cosigner/ });
         for (let i = 0; i < 20; i += 1) {
             await act(async () => { fireEvent.click(add); });
         }
         // The form opens on SegWit with 2 rows.
-        expect(screen.getAllByRole('group', { name: /^Cosigner \d+$/ })).toHaveLength(16);
+        // Each cosigner is a Form Standard section now, not a fieldset.
+        expect(document.querySelectorAll('section[data-form-section^="cosigner-"]')).toHaveLength(16);
         expect(add.disabled).toBe(true);
 
         // Taproot allows more rows; switching back to SegWit names the limit.
-        await act(async () => {
-            fireEvent.click(screen.getByRole('radio', { name: /^Taproot multi-signature/i }));
-        });
+        selectOption(screen.getByLabelText('Type'), 'taproot-musig2');
+        await act(async () => {});
         await act(async () => { fireEvent.click(add); });
-        await act(async () => {
-            fireEvent.click(screen.getByRole('radio', { name: /^SegWit multi-signature/i }));
-        });
+        selectOption(screen.getByLabelText('Type'), 'p2wsh-multisig');
+        await act(async () => {});
         expect(screen.getByText(/supports at most 16 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        // G22/G130: submit remains enabled so pressing it can focus and explain
+        // the invalid row count in the form error notice.
+        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(false);
     });
 });

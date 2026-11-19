@@ -120,14 +120,29 @@ function scanRequest(request) {
     fireEvent.change(screen.getByLabelText('Or paste it here'), {
         target: { value: request },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Pasted Text' }));
     const outcome = onClassified.mock.calls[0]?.[0];
     cleanup();
     return outcome;
 }
 
 function sendMessaging(descriptor, source, initialDescriptor, initialSource) {
+    const balancesFor = (chainId) => ({
+        native: {
+            tick: NATIVE_TICK[registry.get(chainId)?.coin],
+            quantity: '100000000',
+            divisibility: 8,
+        },
+        tokens: [{ tick: 'ROUNDTRIP', quantity: '1000', divisibility: 0 }],
+    });
     const base = {
+        // The token picker reads each chain's wallet balances on its own.
+        getWalletBalances: vi.fn(async (_walletId, _accountId, chainId) => ({
+            [chainId]: [{
+                address: (chainId === descriptor.id ? source : initialSource).address,
+                balances: balancesFor(chainId),
+            }],
+        })),
         getAddressesByChain: vi.fn().mockResolvedValue({
             [initialDescriptor.id]: [initialSource],
             [descriptor.id]: [source],
@@ -136,14 +151,7 @@ function sendMessaging(descriptor, source, initialDescriptor, initialSource) {
             [initialDescriptor.id]: { id: initialSource.id, address: initialSource.address },
             [descriptor.id]: { id: source.id, address: source.address },
         }),
-        getAddressBalances: vi.fn(async (chainId) => ({
-            native: {
-                tick: NATIVE_TICK[registry.get(chainId)?.coin],
-                quantity: '100000000',
-                divisibility: 8,
-            },
-            tokens: [],
-        })),
+        getAddressBalances: vi.fn(async (chainId) => balancesFor(chainId)),
         getSettings: vi.fn().mockResolvedValue(settingsFor(descriptor)),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
@@ -174,14 +182,18 @@ async function pasteRequestIntoSend(descriptor, request) {
     );
 
     const to = await screen.findByLabelText(/^To$/);
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(initialSource.address));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(initialSource.address));
     fireEvent.paste(to, { clipboardData: { getData: () => request } });
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(source.address));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(source.address));
     expect(to).toHaveValue(recordFor(descriptor, 'receive').address);
     expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
 
-    fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'ROUNDTRIP' } });
-    expect(screen.getByLabelText('Memo (optional)')).toHaveValue(LABEL);
+    // A memo belongs to a token send: pick the token, then open the closed
+    // Advanced section that holds the memo.
+    fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Select ROUNDTRIP on / }));
+    fireEvent.click(await screen.findByText('Advanced', { selector: '[data-form-section-title]' }));
+    expect(screen.getByLabelText('Memo')).toHaveValue(LABEL);
 }
 
 afterEach(() => {

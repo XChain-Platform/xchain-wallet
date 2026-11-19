@@ -11,6 +11,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -26,16 +27,20 @@ const SOURCE = {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
 describe('TokenAdminForm access lists', () => {
     it('refuses one list in both the allow and block slots', async () => {
         const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
+        // The wallet's mode is read from the wallet list, not from settings.
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getSettings: vi.fn().mockResolvedValue({}),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: 'watcher' }]),
             getTokenInfo: vi.fn().mockResolvedValue({
                 chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {}, allowList: '42', blockList: null,
             }),
@@ -62,9 +67,9 @@ describe('TokenAdminForm access lists', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: /Choose block-list/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Block list: None set/ }));
         fireEvent.click(await screen.findByText(/Address list #42/));
-        const preview = await screen.findByRole('button', { name: 'Preview' });
+        const preview = await screen.findByRole('button', { name: 'Update Access Lists' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 

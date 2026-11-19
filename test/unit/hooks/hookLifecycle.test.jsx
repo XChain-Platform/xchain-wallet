@@ -148,9 +148,8 @@ describe('shared hook lifecycle cleanup', () => {
         await expect(answer).resolves.toBe(false);
     });
 
-    it('settles and clears an active action confirmation on unmount', async () => {
+    it('settles and releases an active action confirmation on unmount', async () => {
         const preflight = deferred();
-        const session = { put: vi.fn(async () => {}), clear: vi.fn(async () => {}) };
         const releaseEncoderInputs = vi.fn(async () => {});
         const hook = renderHook(() => useConfirmAction());
         let confirmation;
@@ -165,8 +164,6 @@ describe('shared hook lifecycle cleanup', () => {
                 preflight: vi.fn(() => preflight.promise),
                 onApprove: vi.fn(),
                 releaseEncoderInputs,
-                session,
-                resume: { software: 'mintToken', base: {} },
             });
         });
         const rejected = expect(confirmation).rejects.toMatchObject({ reason: 'user-rejected' });
@@ -179,7 +176,6 @@ describe('shared hook lifecycle cleanup', () => {
         expect(isConfirmActive()).toBe(false);
         await waitFor(() => {
             expect(releaseEncoderInputs).toHaveBeenCalledWith('release-1');
-            expect(session.clear).toHaveBeenCalledWith(expect.stringMatching(/^cs:/));
         });
     });
 

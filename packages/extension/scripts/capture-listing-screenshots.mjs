@@ -137,7 +137,10 @@ const {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIST = path.resolve(HERE, '../dist');
 const OUT_DIR = path.resolve(HERE, '../docs/listing-assets');
-const LOGO_PATH = path.resolve(HERE, '../../core/src/branding/images/xchain-color-750.png');
+// The promo tile is designed art the operator approved, committed beside the
+// listing (its @2x master sits next to it). The capture copies it rather than
+// composing one, so a recapture can never overwrite the approved tile.
+const PROMO_TILE_SOURCE = path.resolve(HERE, '../docs/listing-source/promo-tile-source.png');
 
 // Chrome Web Store's fixed canvas sizes (spec §5).
 const SCREENSHOT_W = 1280;
@@ -145,11 +148,9 @@ const SCREENSHOT_H = 800;
 const TILE_W = 440;
 const TILE_H = 280;
 
-// packages/core/src/ui/tokens.css: --xc-accent-primary / --xc-accent-secondary
-// and the light-theme background pair. Reused here so the composited canvas
-// reads as the same product rather than a mismatched marketing wrapper.
-const ACCENT_PRIMARY = '#1A7BAC';
-const ACCENT_SECONDARY = '#7B2C8F';
+// packages/core/src/ui/tokens.css: the light-theme background pair. Reused
+// here so the composited canvas reads as the same product rather than a
+// mismatched marketing wrapper.
 const BG_LIGHT = '#F5F6F8';
 const BG_LIGHTER = '#FFFFFF';
 const BORDER = '#C7CCD4';
@@ -223,7 +224,7 @@ async function main() {
         await popup.goto(`chrome-extension://${extensionId}/popup.html`);
 
         await dismissIntroCarousel(popup);
-        await popup.getByRole('button', { name: 'Try in demo mode' }).click();
+        await popup.getByRole('button', { name: 'Try Demo' }).click();
         await unlockedShell(popup).waitFor({ state: 'visible', timeout: 90_000 });
         log('demo wallet created and unlocked (popup)');
 
@@ -250,21 +251,27 @@ async function main() {
         const sidepanel = await context.newPage();
         await sidepanel.setViewportSize({ width: 400, height: 760 });
         await seedLicense(sidepanel);
+        // The side panel now probes the active tab's content script and shows
+        // "can't connect to this page" unless a regular website is active. Here
+        // the panel is itself the active tab, so satisfy the probe in this page.
+        await sidepanel.addInitScript(() => {
+            try {
+                const t = globalThis.chrome && globalThis.chrome.tabs;
+                Object.defineProperty(t, 'query', { configurable: true, writable: true, value: (_q, cb) => cb([{ id: 1 }]) });
+                Object.defineProperty(t, 'sendMessage', { configurable: true, writable: true, value: (_id, _m, cb) => cb({ available: true }) });
+            } catch (e) { /* capture will show the unsupported gate */ }
+        });
         await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
         await unlockedShell(sidepanel).waitFor({ state: 'visible', timeout: 30_000 });
-        // Switch to the Tokens tab so this screenshot shows different demo
-        // content than the popup one: every non-native demo tick, including
-        // EXAMPLE and PEPECREATURE (HomeTabs.jsx: "Tokens = every non-native
-        // tick, regardless of divisibility or imagery"). The NFTs tab was
-        // tried first but classifies collectibles by a live registry check
-        // (LOCK_MAX_SUPPLY=1) that the offline demo fixtures never satisfy,
-        // so it always renders "No collectibles yet" here.
-        await sidepanel.getByRole('tab', { name: 'Tokens' }).click();
+        // Switch to the DeFi tab so this screenshot shows different demo
+        // content than the popup one. The retired Tokens tab used to serve
+        // here; tokens now list under Balances, which the popup shot shows.
+        await sidepanel.getByRole('tab', { name: 'DeFi' }).click();
         await sidepanel.waitForTimeout(1500);
         await settleImages(sidepanel);
         const sidepanelPng = await sidepanel.screenshot();
         await composeOnCanvas(sidepanelPng, path.join(OUT_DIR, 'screenshot-sidepanel.png'), {
-            label: 'Side panel, Tokens view',
+            label: 'Side panel, DeFi view',
         });
         produced.push('screenshot-sidepanel.png');
 
@@ -289,8 +296,8 @@ async function main() {
             missing.push(`sign-approval screenshot: ${err && err.message ? err.message : err}`);
         }
 
-        // ---- 4. Small promo tile (440x280), no browser needed --------------
-        await composePromoTile(path.join(OUT_DIR, 'promo-tile-440x280.png'));
+        // ---- 4. Small promo tile (440x280), copied from the approved art ----
+        await copyPromoTile(path.join(OUT_DIR, 'promo-tile-440x280.png'));
         produced.push('promo-tile-440x280.png');
     } finally {
         await context.close();
@@ -355,6 +362,15 @@ async function seedLicense(page) {
  */
 async function switchToMainnet(page) {
     await openSettings(page);
+    await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+    const already = page.getByRole('button', { name: /^Network\s*Mainnet$/ });
+    if (await already.isVisible().catch(() => false)) {
+        // Demo lands on Mainnet; the picker now lives on a sub-page, so leave it.
+        await page.reload();
+        await page.waitForLoadState('load', { timeout: 30_000 }).catch(() => {});
+        return;
+    }
+    await page.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
     const select = page.getByLabel('Active network');
     await select.waitFor({ state: 'visible', timeout: 15_000 });
     await select.selectOption('mainnet');
@@ -392,14 +408,19 @@ async function captureSignApproval(context, popup) {
 
     const connecting = dapp.evaluate(() => window.xchain.connect({}).then(
         (r) => ({ ok: true, r }), (e) => ({ ok: false, e: String(e && e.message || e) })));
+    connecting.catch(() => {});
     const connectApproval = await waitForApprovalPage(context, { timeout: 30_000 });
     await connectApproval.waitForLoadState('domcontentloaded');
-    await connectApproval.getByRole('button', { name: 'Connect', exact: true })
-        .waitFor({ state: 'visible', timeout: 20_000 });
-    const bitcoinChain = connectApproval.getByRole('checkbox', { name: /^Allow Bitcoin\b/i }).first();
+    // The Connect approval now picks networks on a sub-page of switches and
+    // confirms with Approve.
+    const approveBtn = connectApproval.getByRole('button', { name: 'Approve', exact: true });
+    await approveBtn.waitFor({ state: 'visible', timeout: 20_000 });
+    await connectApproval.getByRole('button', { name: /^Networks it can see/ }).click();
+    const bitcoinChain = connectApproval.getByRole('switch', { name: /^Allow Bitcoin\b/i }).first();
     await bitcoinChain.waitFor({ state: 'attached', timeout: 20_000 });
     if (!(await bitcoinChain.isChecked())) await bitcoinChain.check({ force: true });
-    await clickAndLetItClose(connectApproval.getByRole('button', { name: 'Connect', exact: true }));
+    await connectApproval.getByRole('button', { name: /back/i }).first().click();
+    await clickAndLetItClose(approveBtn);
     const connectResult = await connecting;
     if (!connectResult.ok) throw new Error(`demo dApp connect failed: ${connectResult.e}`);
 
@@ -418,7 +439,7 @@ async function captureSignApproval(context, popup) {
         { address },
     );
     const signApproval = await waitForApprovalPage(context, { timeout: 30_000, pending: requesting });
-    await signApproval.getByText('Sign message').first().waitFor({ state: 'visible', timeout: 20_000 });
+    await signApproval.getByText('Sign Message').first().waitFor({ state: 'visible', timeout: 20_000 });
     // Let the layout settle (password field focus, chain badge) before the shot.
     await signApproval.waitForTimeout(500);
     await signApproval.setViewportSize({ width: 400, height: 700 });
@@ -524,36 +545,18 @@ async function composeOnCanvas(rawPng, outPath, { label }) {
         .toFile(outPath);
 }
 
-/** Small promo tile: brand gradient, logo, name, one-line description. */
-async function composePromoTile(outPath) {
-    const logoTargetH = 96;
-    const logo = await sharp(LOGO_PATH).resize({ height: logoTargetH }).toBuffer();
-    const logoMeta = await sharp(logo).metadata();
-    const logoLeft = Math.round((TILE_W - logoMeta.width) / 2);
-    const logoTop = 36;
-
-    const bg = svgBuffer(`
-        <svg width="${TILE_W}" height="${TILE_H}" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="${ACCENT_PRIMARY}"/>
-                    <stop offset="100%" stop-color="${ACCENT_SECONDARY}"/>
-                </linearGradient>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#tile)"/>
-            <text x="${TILE_W / 2}" y="${logoTop + logoTargetH + 40}" text-anchor="middle"
-                  font-family="-apple-system,Helvetica,Arial,sans-serif"
-                  font-size="20" font-weight="700" fill="#FFFFFF">The wallet for the XChain Platform</text>
-            <text x="${TILE_W / 2}" y="${logoTop + logoTargetH + 64}" text-anchor="middle"
-                  font-family="-apple-system,Helvetica,Arial,sans-serif"
-                  font-size="14" fill="#EAF3FA">Current chains: Bitcoin, Litecoin &amp; Dogecoin</text>
-        </svg>
-    `);
-
-    await sharp(bg)
-        .composite([{ input: logo, left: logoLeft, top: logoTop }])
-        .png()
-        .toFile(outPath);
+/**
+ * Small promo tile: the operator-approved art, copied byte for byte from its
+ * committed source. Refuses a source at any canvas but the store's 440x280,
+ * since the upload form would refuse it later and more slowly.
+ */
+async function copyPromoTile(outPath) {
+    const meta = await sharp(PROMO_TILE_SOURCE).metadata();
+    if (meta.width !== TILE_W || meta.height !== TILE_H) {
+        throw new Error(`promo tile source ${PROMO_TILE_SOURCE} is ${meta.width}x${meta.height}, `
+            + `not the ${TILE_W}x${TILE_H} the Chrome Web Store takes`);
+    }
+    fs.copyFileSync(PROMO_TILE_SOURCE, outPath);
 }
 
 function svgBuffer(svg) {

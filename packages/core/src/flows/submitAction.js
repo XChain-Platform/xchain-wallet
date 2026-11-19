@@ -25,9 +25,23 @@
 // submitWithSigner directly (re-unlocking is expensive with Argon2id).
 
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.js';
 import { createPendingTx } from '../schemas/pendingTx.js';
-import { commitAdsStep, applyAdsPlanToEncoderOpts } from './ads.js';
+import {
+    adsReservationOf,
+    commitAdsStep,
+    forgetInFlightAdsReservation,
+    isAdsCountedSend,
+    newAdsReservationId,
+    reconcileAdsReservation,
+    releaseAdsReservation,
+    reserveAdsPayout,
+    resolveAdsPayout,
+    returnAdsReservationToReview,
+    withAdsAtEncode,
+    withoutAdsPayout,
+} from './ads.js';
 import {
     classifyBroadcastFailure,
     BROADCAST_FAILED_PERMANENT_NAME,
@@ -37,9 +51,9 @@ import {
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
-import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { assertNoOfferCancelInFlight, assertReferencedOfferActionable } from './marketExpiry.js';
+import { withDefaultFeePerKb } from './feeEstimate.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
@@ -100,6 +114,15 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
     return debit >= 0n ? debit.toString() : null;
 }
 
+/** Names handed over by a queued ownership ORDER or DISPENSER. */
+function queuedSoldNames(actionData) {
+    if (actionData?.action !== 'ORDER' && actionData?.action !== 'DISPENSER') return [];
+    const params = actionData?.params;
+    if (!params || Number(params.GIVE_OWNERSHIP || 0) !== 1) return [];
+    const tick = typeof params.GIVE_TICK === 'string' ? params.GIVE_TICK.trim() : '';
+    return tick ? [tick] : [];
+}
+
 /**
  * @typedef {Object} PendingTxMeta
  * @property {string} fromAddress
@@ -126,9 +149,11 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string, finalPsbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {boolean} [verifyBuiltTx]   hold the encoder's PSBT to the confirm pipeline's tamper checks before signing (submitWithSigner)
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
+ * @property {boolean} [scopedPayment]   locked auto pay: build with no rotated change address; it follows the automatic donation rule like every other send
+ * @property {boolean} [adsPayout]       default true. False when the screen that approved this send cannot name a donation (the dApp approval window): the send still accrues, but never carries the queued donation
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean, donatedFiat?: string | null, currency?: string | null } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
 /**
@@ -167,9 +192,13 @@ export async function submitAction({
     beforeBroadcast,
     onBroadcastFailure,
     verifyBuiltTx = false,
+    scopedPayment = false,
+    adsPayout = true,
 }) {
     assertSafeActionText(actionData);
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet signs only on its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
         throw new Error('submitAction: either `password` or `signer` is required');
     }
     const descriptor = chainRegistry.get(chainId);
@@ -178,51 +207,99 @@ export async function submitAction({
     await assertReferencedOfferActionable({ sdkRegistry, chainId, actionData });
     await assertNoOfferCancelInFlight({ vault, chainRegistry, chainId, actionData });
 
-    // §36.3 ADS: resolve the donation plan ONCE up front against the
-    // current settings snapshot. If `canSubmit`, schedule a customOutput
-    // for the encoder so it builds the donation into the same transaction.
-    // After a successful broadcast we call
-    // `commitAdsStep` with the resolved `donationIncluded` so the
-    // accumulator resets / lifetimeDonatedSats advances correctly.
-    //
-    // If ADS is enabled but not `canSubmit` (e.g. placeholder donation
-    // address still in the descriptor), we still advance the counter
-    // with `donationIncluded=false` so the user's lifetimeTxCount
-    // reflect the actual tx that was broadcast, regardless of whether
-    // the donation fired.
-    const adsSettingsSnapshot = await vault.settings.get();
-    const { encoderOpts: encoderOptsWithAds, adsPlan, adsEnabledForChain } =
-        applyAdsPlanToEncoderOpts(adsSettingsSnapshot, chainId, chainRegistry, encoderOpts);
-
-    // Confirmation composition runs fee preflights before ADS, so its output
-    // order is caller outputs, protocol fees, then donation. Atomic submission
-    // reaches the same preflights inside submitWithSigner; defer its donation
-    // fold to the encoder boundary so both routes build byte-identical output
-    // order. Seed a shared array because a chunk-lane reveal reads the same
-    // options after createTx returns.
-    const effectiveEncoderOpts = !prebuiltPsbt && adsPlan.canSubmit
-        ? {
-            ...encoderOpts,
-            customOutputs: Array.isArray(encoderOpts?.customOutputs)
-                ? encoderOpts.customOutputs.slice()
-                : [],
+    // §36 automatic donations. Every mainnet send this flow broadcasts adds the
+    // per-transaction amount to the wallet-wide queue (commitAdsStep, after the
+    // broadcast); a testnet or regtest send adds nothing and never pays. When
+    // the queue is due, a live build carries the whole queue as one donation
+    // output if the encoder can build it; withAdsAtEncode folds it at the
+    // encoder boundary, after the fee preflights, so the output order matches
+    // the confirm route's, and rebuilds without it when the build fails.
+    // Locked Auto pay follows the same rule. A send approved on a screen that
+    // cannot name the donation (adsPayout false, the dApp approval window) only
+    // accrues, so nothing rides it unseen. A resolve that throws only means no
+    // donation this time: it never fails the send.
+    let storedSettings = await vault.settings.get();
+    // A claim left by a send whose owner is gone is judged first, so it
+    // neither holds the payout back for good nor gets paid twice.
+    if (adsReservationOf(storedSettings)) {
+        try {
+            storedSettings = (await reconcileAdsReservation({ vault })) ?? storedSettings;
+        } catch {
+            // The read above stands; a held claim only means no payout this time.
         }
-        : encoderOptsWithAds;
-    const effectiveSdkRegistry = !prebuiltPsbt && adsPlan.canSubmit
-        ? withAdsPlanAtEncode(sdkRegistry, adsSettingsSnapshot, chainId, chainRegistry)
-        : sdkRegistry;
+    }
+    const adsCounts = isAdsCountedSend({ settings: storedSettings, descriptor });
+    let adsPlan = null;
+    if (!prebuiltPsbt && adsPayout !== false) {
+        try {
+            adsPlan = await resolveAdsPayout({
+                settings: storedSettings,
+                chainId,
+                chainRegistry,
+                sdk: sdkRegistry.get(chainId),
+            });
+        } catch {
+            adsPlan = null;
+        }
+    }
+    // Set once the build is armed, just before signing (see the claim below).
+    let adsAtEncode = null;
+    let effectiveEncoderOpts = withDefaultFeePerKb({ chainId, chainRegistry, encoderOpts });
+    let effectiveSdkRegistry = sdkRegistry;
+    // The claim this send holds on the due queue while it is pending: cleared
+    // when it is released, and booked with the broadcast otherwise.
+    let adsReservationId = null;
+    let adsClaimId = null;
+    // The review claim the approved bytes were composed under (prebuilt path):
+    // the claim this send takes over, and hands back when it stops before any
+    // broadcast, since the confirm screen may approve the same bytes again.
+    const adsReviewId = typeof prebuiltPsbt?.adsDonation?.reservationId === 'string'
+        && prebuiltPsbt.adsDonation.reservationId
+        ? prebuiltPsbt.adsDonation.reservationId
+        : null;
 
-    // Which verdict the accounting books. On the prebuilt path the donation was
-    // decided and folded at COMPOSE time, and one background host serves every
-    // popup window, so the snapshot read a line above can have crossed the
-    // trigger since: booking from it resets the accumulator and credits
-    // lifetimeDonatedSats for a PSBT carrying no donation (or leaves the
-    // accumulator growing on top of one already paid). The bytes the user
-    // approved are the only description of what broadcasts. An envelope from an
-    // older composer carries no verdict and keeps today's behaviour.
-    const donationIncluded = typeof prebuiltPsbt?.adsDonation?.included === 'boolean'
-        ? prebuiltPsbt.adsDonation.included
-        : adsPlan.canSubmit;
+    // Which verdict the accounting books, read when it is booked. On the
+    // prebuilt path the donation was decided and folded at COMPOSE time, and one
+    // background host serves every popup window, so the bytes the user approved
+    // are the only description of what broadcasts; an envelope with no verdict
+    // only accrues. On a live build it is whether the build kept the output.
+    // `mainnet` says whether this send accrues; `reservationId` names the claim
+    // the broadcast settles.
+    const adsVerdict = () => {
+        const booking = { mainnet: adsCounts, reservationId: adsReservationId };
+        if (prebuiltPsbt) {
+            const carried = prebuiltPsbt.adsDonation;
+            return carried?.included === true
+                ? { donationIncluded: true, donatedFiat: carried.fiat ?? null, currency: carried.currency ?? null, ...booking }
+                : { donationIncluded: false, donatedFiat: null, currency: null, ...booking };
+        }
+        return adsAtEncode?.state.included
+            ? { donationIncluded: true, donatedFiat: adsPlan.donationFiat, currency: adsPlan.currency, ...booking }
+            : { donationIncluded: false, donatedFiat: null, currency: null, ...booking };
+    };
+    // Let the claim go: these bytes will never broadcast, or no longer carry
+    // the donation, so the next send may carry the payout. Never fails the send.
+    // `toReview` hands a taken-over claim back to its confirm screen instead
+    // (the bytes were never sent and may be approved again); that screen's
+    // Reject releases it, and an abandoned one lapses.
+    const releaseAdsClaim = async ({ toReview = false } = {}) => {
+        if (!adsReservationId) return;
+        const reservationId = adsReservationId;
+        adsReservationId = null;
+        try {
+            if (toReview && adsReviewId) {
+                await returnAdsReservationToReview({ vault, reservationId, reviewId: adsReviewId });
+            } else {
+                await releaseAdsReservation({ vault, reservationId });
+            }
+        } catch {
+            // A refused write leaves the claim held. Keep naming it, so the
+            // booking after a broadcast clears it unpaid (these bytes carry no
+            // donation); a send that never broadcasts leaves it to
+            // reconcileAdsReservation, which reads its record as failed.
+            adsReservationId = reservationId;
+        }
+    };
 
     // If the caller supplied pendingTxMeta, set up lifecycle persistence.
     // The tracker mutates a mutable record and writes through to the vault
@@ -244,6 +321,7 @@ export async function submitAction({
             action: actionData.action,
             actionSummary: pendingTxMeta.actionSummary,
             psbtHex: '',
+            params: actionData.params,
             ...(sendDelta ? { tick: sendDelta.tick, amount: sendDelta.amount } : {}),
             balanceDebits: Array.isArray(pendingTxMeta.balanceDebits)
                 ? pendingTxMeta.balanceDebits
@@ -386,25 +464,78 @@ export async function submitAction({
     // the value must land, and a privacy preference does not get to move it.
     let changeRotation = null;
     if (!prebuiltPsbt
-        && effectiveEncoderOpts?.change
-        && effectiveEncoderOpts.change === effectiveEncoderOpts.sourceAddress) {
+        && !scopedPayment
+        && encoderOpts?.change
+        && encoderOpts.change === encoderOpts.sourceAddress) {
         changeRotation = await resolveChangeAddress({
             vault,
             walletId,
             signer,
             chainRegistry,
             chainId,
-            sourceAddress: effectiveEncoderOpts.sourceAddress,
-            settings: adsSettingsSnapshot,
+            sourceAddress: encoderOpts.sourceAddress,
+            settings: storedSettings,
         });
     }
+
+    // §36: claim the due queue for this send before anything is signed, so no
+    // other send carries the payout while this one is pending (signing, an undo
+    // hold, a retry or broadcast queue). The claim is the send's PendingTx id
+    // when it has one, which lets a later reconcile judge it by that record. A
+    // live build that loses the claim builds without the donation; bytes
+    // composed with it cannot change, so they still go out (a send is never
+    // refused for donations) and book their carried amount without a claim.
+    // Bytes composed for a confirm screen were claimed at compose time under a
+    // review id; the send takes that claim over (`takeOver`), so a second
+    // review composed meanwhile already planned without the donation.
+    const carriedDonation = prebuiltPsbt?.adsDonation?.included === true ? prebuiltPsbt.adsDonation : null;
+    const claimFiat = prebuiltPsbt ? carriedDonation?.fiat : (adsPlan?.canSubmit ? adsPlan.donationFiat : null);
+    // Only a mainnet chain's bytes can pay the queue, so only they claim it.
+    if (typeof claimFiat === 'string' && claimFiat && descriptor.networkKind === 'mainnet') {
+        const claimId = pending?.id ?? newAdsReservationId();
+        let claimed = false;
+        try {
+            claimed = await reserveAdsPayout({
+                vault,
+                id: claimId,
+                fiat: claimFiat,
+                currency: prebuiltPsbt ? carriedDonation.currency : adsPlan.currency,
+                chainId,
+                pendingTxId: pending?.id ?? null,
+                takeOver: adsReviewId,
+            });
+        } catch {
+            claimed = false;
+        }
+        if (claimed) {
+            adsReservationId = claimId;
+            adsClaimId = claimId;
+        } else if (!prebuiltPsbt) {
+            adsPlan = withoutAdsPayout(adsPlan, 'reserved');
+        }
+    }
+    adsAtEncode = adsPlan?.canSubmit ? withAdsAtEncode(sdkRegistry, adsPlan, chainId) : null;
+    // A shared array, because a chunk-lane reveal and the built-transaction
+    // check read the same options after createTx returns.
+    effectiveEncoderOpts = adsAtEncode
+        ? {
+            ...effectiveEncoderOpts,
+            customOutputs: Array.isArray(effectiveEncoderOpts?.customOutputs)
+                ? effectiveEncoderOpts.customOutputs.slice()
+                : [],
+        }
+        : effectiveEncoderOpts;
+    effectiveSdkRegistry = adsAtEncode ? adsAtEncode.registry : sdkRegistry;
     const encoderOptsForSubmit = changeRotation?.rotated
         ? { ...effectiveEncoderOpts, change: changeRotation.address }
         : effectiveEncoderOpts;
 
     const composedBeforeBroadcast = async (transactions) => {
-        // A hardware signer returns signedPsbtHex '' after checking its transaction
-        // spends and pays exactly what the commit PSBT does, so that PSBT gives the debit.
+        // The built bytes are final here: a live build that could not afford
+        // the donation dropped it, so its claim goes back before the send waits
+        // on anything (an undo hold, the network).
+        if (adsReservationId && !prebuiltPsbt && !adsAtEncode?.state.included) await releaseAdsClaim();
+        // A hardware signer's commit PSBT gives the debit when signedPsbtHex is empty.
         const debitPsbtHex = transactions?.signed?.signedPsbtHex || transactions?.psbtHex;
         if (pending && debitPsbtHex) {
             const owned = new Set([
@@ -428,16 +559,38 @@ export async function submitAction({
                 // Source and explicit change still provide a safe minimum when ownership lookup is unavailable.
             }
             let nativeDebitSats = null;
+            let replacementPlan = null;
             try {
                 const sdk = sdkRegistry.get(chainId);
-                nativeDebitSats = nativeDebitSatsFromPsbt(
-                    sdk.wallet.decomposePsbt(debitPsbtHex),
-                    owned,
-                );
+                const debitPlan = sdk.wallet.decomposePsbt(debitPsbtHex);
+                nativeDebitSats = nativeDebitSatsFromPsbt(debitPlan, owned);
+                const finalPsbtHex = transactions?.finalPsbtHex
+                    || transactions?.revealSigned?.signedPsbtHex
+                    || transactions?.signed?.signedPsbtHex
+                    || transactions?.psbtHex;
+                if (typeof finalPsbtHex === 'string' && finalPsbtHex) {
+                    const finalPlan = finalPsbtHex === debitPsbtHex
+                        ? debitPlan
+                        : sdk.wallet.decomposePsbt(finalPsbtHex);
+                    const inputs = Array.isArray(finalPlan?.inputs) ? finalPlan.inputs : [];
+                    const sequencesKnown = inputs.length > 0
+                        && inputs.every((input) => Number.isInteger(input?.sequence));
+                    replacementPlan = {
+                        psbtHex: finalPsbtHex,
+                        ...(sequencesKnown
+                            ? { rbf: inputs.some((input) => input.sequence < 0xfffffffe) }
+                            : {}),
+                    };
+                }
             } catch {
                 nativeDebitSats = null;
+                replacementPlan = null;
             }
-            if (nativeDebitSats !== null) await writePending({ nativeDebitSats });
+            const patch = {
+                ...(nativeDebitSats !== null ? { nativeDebitSats } : {}),
+                ...(replacementPlan ?? {}),
+            };
+            if (Object.keys(patch).length > 0) await writePending(patch);
         }
         if (typeof beforeBroadcast === 'function') await beforeBroadcast(transactions);
     };
@@ -481,7 +634,15 @@ export async function submitAction({
             // carries only those.
             // The record id rides on the error so a host whose vault refused the
             // stamp below can finish the record once the vault opens again.
-            if (pending && err && typeof err === 'object') err.pendingTxId = pending.id;
+            if (err && typeof err === 'object') {
+                if (pending) err.pendingTxId = pending.id;
+                if (phase1Landed) {
+                    err.commitLanded = true;
+                    err.commitTxid = commitTxid;
+                }
+            }
+            // Set when a durable half (the PendingTx or the host queue) kept the bytes.
+            let adsHandedOff = false;
             const stampPending = async (patch) => {
                 if (!pending) return false;
                 try {
@@ -572,13 +733,12 @@ export async function submitAction({
                                 // can settle the durable half; without the id
                                 // the record stays 'queued' after the bytes land.
                                 pendingTxId: pending?.id ?? null,
-                                // Carry the ADS-commit intent so the queue's
-                                // eventual-success handler advances the
-                                // accumulator (a queued tx is what donates,
-                                // not the failed immediate attempt). §5.3.4.
-                                adsCommit: adsEnabledForChain
-                                    ? { chainId, donationIncluded }
-                                    : null,
+                                soldNames: queuedSoldNames(actionData),
+                                // Carry the donation verdict of these signed
+                                // bytes so the queue's eventual-success handler
+                                // books it (a queued tx is what donates, not
+                                // the failed immediate attempt). §5.3.4.
+                                adsCommit: { chainId, ...adsVerdict() },
                             }) !== false;
                         } catch (_inner) {
                             // Swallow callback errors; the broadcast
@@ -588,6 +748,10 @@ export async function submitAction({
                     if (!pendingSaved && !queueSaved) {
                         err.name = BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME;
                     }
+                    // A saved half will send these bytes later, so their claim
+                    // stays held until that broadcast settles it or a discard
+                    // or permanent refusal releases it.
+                    adsHandedOff = pendingSaved || queueSaved;
                 }
             } else if (pending) {
                 // Never retire a transaction the network holds as 'failed': that stops it
@@ -597,12 +761,22 @@ export async function submitAction({
                     ? { status: 'broadcast', broadcastAt: pending.broadcastAt ?? new Date().toISOString(), error }
                     : { status: 'failed', error });
             }
+            // Bytes nothing will send again (a refusal, a cancelled sign, a
+            // permanent rejection, a transient one neither half kept) never pay
+            // the donation, so the next send may carry it. A failure before any
+            // broadcast (a wrong password, a hardware retry, a refusal) hands a
+            // taken-over claim back to its confirm screen instead, which may
+            // approve the same bytes again.
+            if (!adsHandedOff) {
+                await releaseAdsClaim({ toReview: !(err instanceof BroadcastFailedError) && !phase1Landed });
+            }
             throw err;
         }
     } finally {
         if (!injectedSigner && typeof signer.lock === 'function') {
             signer.lock();
         }
+        forgetInFlightAdsReservation(adsClaimId);
     }
 
     // The broadcast landed, so any cached metadata for the ticks this
@@ -614,32 +788,22 @@ export async function submitAction({
     // action from the new one, recoverable only by a full page reload.
     invalidateTokenInfoForAction(chainId, actionData);
 
-    // §36.3: advance the ADS accumulator after a successful submit.
-    // Only fire when ADS is actually enabled for this chain; otherwise
-    // `stepAdsAccumulator` is identity but the extra vault write is
-    // wasted. `donationIncluded` is the compose-time verdict on the prebuilt
-    // path and this snapshot's otherwise, resolved once up top.
-    if (adsEnabledForChain) {
-        try {
-            await commitAdsStep({
-                vault,
-                chainId,
-                donationIncluded,
-                chainRegistry,
-            });
-        } catch (e) {
-            // ADS accounting is non-critical; don't let a write failure
-            // here obscure the successful broadcast from the caller.
-            // The next tx will try again. Surface via onProgress for
-            // observability.
-            if (onProgress) {
-                try {
-                    onProgress('ads-commit-failed', {
-                        chainId,
-                        error: e && e.message ? String(e.message) : String(e),
-                    });
-                } catch { /* swallow */ }
-            }
+    // §36: the broadcast landed, so book it in the donation queue: this send's
+    // per-transaction amount, and the donated amount when these bytes carried
+    // the donation. Never before the broadcast.
+    try {
+        await commitAdsStep({ vault, ...adsVerdict() });
+    } catch (e) {
+        // ADS accounting is non-critical; don't let a write failure
+        // here obscure the successful broadcast from the caller.
+        // Surface via onProgress for observability.
+        if (onProgress) {
+            try {
+                onProgress('ads-commit-failed', {
+                    chainId,
+                    error: e && e.message ? String(e.message) : String(e),
+                });
+            } catch { /* swallow */ }
         }
     }
 

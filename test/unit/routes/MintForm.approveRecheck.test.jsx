@@ -110,8 +110,12 @@ async function reachConfirm() {
     await screen.findByText(/4,000 CAPTEST available to mint/);
     fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '4000' } });
     fireEvent.click(screen.getByRole('button', { name: /^Mint$/ }));
-    // The confirm page's Approve button names the action it signs.
-    return screen.findByRole('button', { name: /^Mint 4,000 CAPTEST$/ });
+    // The footer is the bare Approve; the sentence names the action it signs.
+    const approve = await screen.findByRole('button', { name: /^Approve$/ });
+    expect(screen.getByTestId('confirm-sentence')).toHaveTextContent(/^Mint 4,000 CAPTEST/);
+    expect(screen.queryByTestId('confirm-fee-protocol')).not.toBeInTheDocument();
+    expect(screen.getByTestId('confirm-modal').textContent).not.toMatch(/unavailable/i);
+    return approve;
 }
 
 afterEach(() => {

@@ -44,9 +44,9 @@ const chainRegistry = {
 };
 const approvals = { signPsbt: vi.fn() };
 
-function makeVault() {
+function makeVault(settings = { activeNetwork: 'regtest', blockedOrigins: [] }) {
     return {
-        settings: { get: async () => ({ blockedOrigins: [] }) },
+        settings: { get: async () => settings },
         connectedSites: {
             list: async () => [SITE],
             findBy: async (field, value) => (SITE[field] === value ? [SITE] : []),
@@ -72,8 +72,8 @@ function makeVault() {
     };
 }
 
-function buildHost() {
-    const host = new MessageHost({ vault: makeVault(), chainRegistry, sdkRegistry: {} });
+function buildHost(vault = makeVault()) {
+    const host = new MessageHost({ vault, chainRegistry, sdkRegistry: {} });
     registerBridgeHandlers(host, {
         approvals,
         signThrottle: { check: () => ({ allowed: true }) },
@@ -131,4 +131,36 @@ describe('bridge.signPsbt broadcast contract', () => {
             expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
         },
     );
+
+    it('refuses an inactive network before prompting', async () => {
+        const response = await buildHost(makeVault({ activeNetwork: 'mainnet', blockedOrigins: [] }))
+            .handle(request(false));
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(approvals.signPsbt).not.toHaveBeenCalled();
+        expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
+    });
+
+    it('keeps INVALID_PARAMS for broadcast true on an inactive network', async () => {
+        const response = await buildHost(makeVault({ activeNetwork: 'mainnet', blockedOrigins: [] }))
+            .handle(request(true));
+
+        expect(response.ok).toBe(false);
+        expect(response.error.code).toBe('INVALID_PARAMS');
+        expect(approvals.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the network changes during approval', async () => {
+        const settings = { activeNetwork: 'regtest', blockedOrigins: [] };
+        approvals.signPsbt.mockImplementationOnce(async () => {
+            settings.activeNetwork = 'mainnet';
+            return { approved: true, password: 'pw' };
+        });
+        const response = await buildHost(makeVault(settings)).handle(request(false));
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
+        expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
+    });
 });

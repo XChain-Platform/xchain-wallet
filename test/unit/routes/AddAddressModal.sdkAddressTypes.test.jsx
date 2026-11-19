@@ -11,6 +11,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AddAddressModal } from '../../../packages/core/src/shared/routes/AddAddressModal.jsx';
+import { selectOptionLabels } from '../../helpers/selectOption.js';
+
+// The address Type dropdown's option labels (opened and closed again).
+const typeLabels = () => selectOptionLabels(screen.getByRole('combobox', { name: 'Type' }));
 
 const SETTINGS = {
     schemaVersion: 1,
@@ -37,8 +41,8 @@ describe('Add address and an SDK that cannot build p2tr', () => {
         renderModal({ getSettings: async () => SETTINGS, getSupportedAddressTypes, generateReceiveAddress: vi.fn() });
 
         await waitFor(() => expect(getSupportedAddressTypes).toHaveBeenCalled());
-        await waitFor(() => expect(screen.queryByRole('option', { name: /P2TR/ })).toBeNull());
-        expect(screen.getByRole('option', { name: /^P2WPKH/ })).toBeTruthy();
+        await waitFor(() => expect(typeLabels().some((l) => /P2TR/.test(l))).toBe(false));
+        expect(typeLabels().some((l) => /^P2WPKH/.test(l))).toBe(true);
     });
 
     it('offers P2TR while the host reports it supported', async () => {
@@ -48,7 +52,7 @@ describe('Add address and an SDK that cannot build p2tr', () => {
         renderModal({ getSettings: async () => SETTINGS, getSupportedAddressTypes, generateReceiveAddress: vi.fn() });
 
         await waitFor(() => expect(getSupportedAddressTypes).toHaveBeenCalled());
-        expect(await screen.findByRole('option', { name: /P2TR/ })).toBeTruthy();
+        await waitFor(() => expect(typeLabels().some((l) => /P2TR/.test(l))).toBe(true));
     });
 
     it('generates with the default type, and the refusal reads as an address type message', async () => {
@@ -63,8 +67,9 @@ describe('Add address and an SDK that cannot build p2tr', () => {
             generateReceiveAddress,
         });
 
-        await waitFor(() => expect(screen.queryByRole('option', { name: /P2TR/ })).toBeNull());
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        await waitFor(() => expect(typeLabels().some((l) => /^P2WPKH/.test(l))).toBe(true));
+        expect(typeLabels().some((l) => /P2TR/.test(l))).toBe(false);
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Address' }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
         expect(generateReceiveAddress.mock.calls[0][0].addressType).toBe('p2wpkh');

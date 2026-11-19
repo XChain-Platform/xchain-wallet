@@ -21,7 +21,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+// The staking-unstake and staking-claim routes: the one Staking form on the network.
+import { NetworkPositionRoute as StakingActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const ADDRESSES = {
@@ -83,7 +84,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         await screen.findByText('12 XCHAIN available');
 
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
 
         // Reaching the host compose round trip proves the client-side
         // amount check did NOT bounce this partial.
@@ -97,7 +98,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         await screen.findByText('12 XCHAIN available');
 
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '999' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
 
         expect(await screen.findByText('Amount exceeds the 12 XCHAIN available.')).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -115,7 +116,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         }, 'unstake');
 
         expect(await screen.findByText('12 XCHAIN available')).toBeInTheDocument();
-        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
+        expect(screen.getByLabelText(/Signing public key/, { selector: 'input, select' })).toHaveValue(activeKey);
     });
 
     it('refuses an unstake before activation and names the unlock height', async () => {
@@ -132,7 +133,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         }, 'unstake');
 
         expect(await screen.findByText('0 XCHAIN available')).toBeInTheDocument();
-        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(lockedKey);
+        expect(screen.getByLabelText(/Signing public key/, { selector: 'input, select' })).toHaveValue(lockedKey);
         fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
 
         expect(await screen.findByText('This stake cannot be unstaked until block 1,106.')).toBeInTheDocument();
@@ -149,6 +150,8 @@ describe('StakingActionForm network picker', () => {
             }),
         }, 'claim-rewards', chainId);
 
+        // Network lives in the standard's From section, closed on load.
+        fireEvent.click(await screen.findByRole('button', { name: /^From/, expanded: false }));
         await screen.findByRole('button', { name: 'Network: Bitcoin' });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
@@ -157,8 +160,10 @@ describe('StakingActionForm network picker', () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         for (const mode of ['unstake', 'claim-rewards']) {
             mountForm({ getAddressesByChain: vi.fn().mockResolvedValue(held) }, mode);
+            // Network lives in the standard's From section, closed on load.
+            fireEvent.click(await screen.findByRole('button', { name: /^From/, expanded: false }));
             fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
-            const offered = screen.getAllByRole('option').map((o) => o.textContent);
+            const offered = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
             expect(offered.some((t) => /Litecoin|Dogecoin/.test(t)), mode).toBe(false);
             expect(offered.some((t) => /Bitcoin/.test(t)), mode).toBe(true);
             cleanup();

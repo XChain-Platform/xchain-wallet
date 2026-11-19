@@ -8,13 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Mint headroom is min(MAX_MINT, MAX_SUPPLY - supply). The case
-// that made the defect visible is a token exactly at its cap, where the
-// answer has to be a hard '0' and not "whatever you happen to hold".
+// Mint headroom is min(MAX_MINT, MAX_SUPPLY - supply,
+// MINT_ADDRESS_MAX - this address's prior mints). Boundary arithmetic stays
+// exact for divisible tokens, and a reached cap is a hard zero.
 
 import { describe, it, expect } from 'vitest';
 import {
     mintHeadroom,
+    addDecimal,
     exceedsHeadroom,
     subtractDecimal,
     compareDecimal,
@@ -40,6 +41,60 @@ describe('mintHeadroom', () => {
     it('is the supply headroom when MAX_MINT is the looser of the two', () => {
         expect(mintHeadroom({ maxSupply: '5000', totalSupply: '4990', mintMax: '100' }))
             .toBe('10');
+    });
+
+    it('is the per-address remainder when that is the smallest cap', () => {
+        expect(mintHeadroom({
+            maxSupply: '5000',
+            totalSupply: '1000',
+            mintMax: '500',
+            mintAddressMax: '100',
+            mintedByAddress: '60',
+        })).toBe('40');
+    });
+
+    it('lets transaction or supply headroom bind ahead of the address remainder', () => {
+        expect(mintHeadroom({
+            maxSupply: '100', totalSupply: '91', mintMax: '20',
+            mintAddressMax: '50', mintedByAddress: '10',
+        })).toBe('9');
+        expect(mintHeadroom({
+            maxSupply: null, mintMax: '7',
+            mintAddressMax: '50', mintedByAddress: '10',
+        })).toBe('7');
+    });
+
+    // All three caps set at once, so each case proves the min() picks the
+    // one smallest bound out of three live ones, to the exact unit.
+    it.each([
+        ['MAX_MINT', { maxSupply: '10000', totalSupply: '2500', mintMax: '73', mintAddressMax: '400', mintedByAddress: '120' }, '73'],
+        ['supply room', { maxSupply: '10000', totalSupply: '9958', mintMax: '73', mintAddressMax: '400', mintedByAddress: '120' }, '42'],
+        ['address room', { maxSupply: '10000', totalSupply: '2500', mintMax: '73', mintAddressMax: '400', mintedByAddress: '389' }, '11'],
+        ['a tie between MAX_MINT and address room', { maxSupply: '10000', totalSupply: '2500', mintMax: '73', mintAddressMax: '400', mintedByAddress: '327' }, '73'],
+        ['divisible supply room', { maxSupply: '21.5', totalSupply: '21.49999999', mintMax: '0.5', mintAddressMax: '3', mintedByAddress: '1.25' }, '0.00000001'],
+        ['divisible address room', { maxSupply: '21.5', totalSupply: '1', mintMax: '0.5', mintAddressMax: '3', mintedByAddress: '2.87654321' }, '0.12345679'],
+        ['divisible MAX_MINT', { maxSupply: '21.5', totalSupply: '1', mintMax: '0.05', mintAddressMax: '3', mintedByAddress: '1.25' }, '0.05'],
+    ])('with all three caps set, %s binds', (_name, caps, expected) => {
+        expect(mintHeadroom(caps)).toBe(expected);
+    });
+
+    it('is zero when this address has reached or exceeded its cap', () => {
+        expect(mintHeadroom({ mintAddressMax: '100', mintedByAddress: '100' })).toBe('0');
+        expect(mintHeadroom({ mintAddressMax: '100', mintedByAddress: '100.1' })).toBe('0');
+    });
+
+    it('does not apply an unset or still-loading address cap', () => {
+        expect(mintHeadroom({ mintMax: '25', mintAddressMax: null, mintedByAddress: '20' }))
+            .toBe('25');
+        expect(mintHeadroom({ mintMax: '25', mintAddressMax: '10', mintedByAddress: null }))
+            .toBe('25');
+    });
+
+    it('subtracts divisible per-address amounts exactly', () => {
+        expect(mintHeadroom({
+            mintAddressMax: '1.00000000',
+            mintedByAddress: '0.99999999',
+        })).toBe('0.00000001');
     });
 
     it('is MAX_MINT alone for an uncapped token that sets a per-tx cap', () => {
@@ -89,6 +144,12 @@ describe('exceedsHeadroom', () => {
 });
 
 describe('decimal helpers', () => {
+    it('adds exactly across differing scales', () => {
+        expect(addDecimal('0.1', '0.02')).toBe('0.12');
+        expect(addDecimal('9007199254740992.1', '0.9')).toBe('9007199254740993');
+        expect(addDecimal('1', 'x')).toBeNull();
+    });
+
     it('subtracts exactly and floors at zero', () => {
         expect(subtractDecimal('1', '0.9')).toBe('0.1');
         expect(subtractDecimal('0.3', '0.1')).toBe('0.2');

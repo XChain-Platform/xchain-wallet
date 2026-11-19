@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -36,7 +37,7 @@ function contractMessaging(overrides = {}) {
 afterEach(() => cleanup());
 
 describe('MyTokens list states and actions', () => {
-    it('offers the first issue action from the true empty state', async () => {
+    it('offers token creation from the true empty state', async () => {
         const onIssue = vi.fn();
         mount(
             <MyTokens walletId="w" onBack={() => {}} onIssue={onIssue} onSelectTick={() => {}} />,
@@ -47,7 +48,7 @@ describe('MyTokens list states and actions', () => {
         );
 
         expect(await screen.findByText('Tokens this wallet owns appear here.')).toBeInTheDocument();
-        const actions = screen.getAllByRole('button', { name: 'Issue token' });
+        const actions = screen.getAllByRole('button', { name: 'Create Token' });
         fireEvent.click(actions[actions.length - 1]);
         expect(onIssue).toHaveBeenCalledTimes(1);
     });
@@ -67,7 +68,7 @@ describe('MyTokens list states and actions', () => {
         expect(screen.getByRole('status', { name: 'Loading owned tokens' })).toBeInTheDocument();
         expect(await screen.findByText('Could not load your owned tokens. Try again.')).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getOwnedTokens).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No owned tokens yet')).toBeInTheDocument();
     });
@@ -81,7 +82,7 @@ describe('ContractsList ownership and empty actions', () => {
             contractMessaging(),
         );
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         const actions = screen.getAllByRole('button', { name: /Publish contract/ });
         fireEvent.click(actions[actions.length - 1]);
         expect(onDeploy).toHaveBeenCalledTimes(1);
@@ -98,8 +99,13 @@ describe('ContractsList ownership and empty actions', () => {
             }),
         );
 
+        // Contracts this wallet published are on the Mine tab; All is the default.
+        fireEvent.click(await screen.findByRole('tab', { name: 'My Contracts' }));
         const row = await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' });
-        expect(row).toHaveTextContent('published by');
+        expect(row).toHaveTextContent('Published by');
+        // Status is a sentence-case pill, not "status VALID" text.
+        expect(row).toHaveTextContent('Valid');
+        expect(row).not.toHaveTextContent('status valid');
         expect(row).not.toHaveTextContent('owner');
         fireEvent.click(row);
         expect(onOpenContract).toHaveBeenCalledWith(CHAIN, '12');
@@ -116,9 +122,13 @@ describe('ContractsList ownership and empty actions', () => {
         );
 
         expect(await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' })).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Filter contracts'), { target: { value: 'treasury' } });
+        // Search sits behind the title-line filter.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contracts' }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search contracts' }), { target: { value: 'treasury' } });
         expect(await screen.findByText('No matching contracts')).toBeInTheDocument();
-        expect(screen.getByText('No published contracts')).toBeInTheDocument();
+        // Mine holds nothing at all, so it says so rather than claiming a filtered miss.
+        fireEvent.click(screen.getByRole('tab', { name: 'My Contracts' }));
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
     });
 
     it('hides transport details in a retryable chain error', async () => {
@@ -132,9 +142,9 @@ describe('ContractsList ownership and empty actions', () => {
 
         expect(await screen.findByText("Couldn't load contracts. Try again.")).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getContractsForSource).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
     });
 
     it('says an empty section once, not once per chain', async () => {
@@ -149,11 +159,12 @@ describe('ContractsList ownership and empty actions', () => {
             messaging,
         );
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryAllByRole('status', { name: /Loading contracts/ })).toHaveLength(0));
-        expect(screen.getAllByText('No published contracts')).toHaveLength(1);
-        expect(screen.getAllByText('No contract interactions')).toHaveLength(1);
-        expect(screen.getAllByText('No indexed contracts')).toHaveLength(1);
+        expect(screen.getAllByText('No contracts yet')).toHaveLength(1);
+        expect(screen.queryByText('No published contracts')).toBeNull();
+        expect(screen.queryByText('No contract interactions')).toBeNull();
+        expect(screen.queryByText('No indexed contracts')).toBeNull();
         // Both chains were asked, so the single message stands for both.
         expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: 'litecoin-testnet' });
         expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: CHAIN });
@@ -226,7 +237,7 @@ describe('DispensersList supported-address empty state', () => {
 
         expect(await screen.findByText(/Couldn't load some dispensers/)).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(getDispensersForSource).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No dispensers yet')).toBeInTheDocument();
     });

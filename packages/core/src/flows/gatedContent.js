@@ -22,7 +22,13 @@
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
-import { inflateGatedPlaintext, resolveGatedCompression } from './payloadCompression.js';
+import {
+    AES_GCM_ENVELOPE_BYTES,
+    GATED_MULTIPART_MAX_BYTES,
+} from './fileSizeLimits.js';
+import { inflateGatedPlaintext } from './payloadCompression.js';
+import { resolveGatedInflate } from './gatedInflateLimit.js';
+import { readRawFile } from './rawFileRead.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import {
     getDemoGatedGroupsForTick,
@@ -41,6 +47,58 @@ const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
 
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
 function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
+
+function multipartDetailOf(action) {
+    const records = Array.isArray(action?.data) ? action.data : [action?.data ?? action];
+    for (const record of records) {
+        const multipart = record?.multipart ?? record?.data?.multipart;
+        if (multipart && typeof multipart === 'object') return multipart;
+    }
+    return null;
+}
+
+async function gatedActionDetail(sdk, actionIndex) {
+    if (typeof sdk?.getAction !== 'function') return null;
+    try {
+        return await sdk.getAction(String(actionIndex));
+    } catch {
+        return null;
+    }
+}
+
+function assertGatedStoredBound(action) {
+    const multipart = multipartDetailOf(action);
+    if (!multipart) return;
+    const totalBytes = Number(multipart.total_bytes ?? multipart.totalBytes);
+    const maxBytes = GATED_MULTIPART_MAX_BYTES + AES_GCM_ENVELOPE_BYTES;
+    if (Number.isSafeInteger(totalBytes) && totalBytes > maxBytes) {
+        const err = new Error('Gated file exceeds the wallet unlock limit.');
+        err.code = 'GATED_FILE_TOO_LARGE';
+        err.totalBytes = totalBytes;
+        err.maxBytes = maxBytes;
+        throw err;
+    }
+}
+
+async function readGatedCiphertext(sdk, actionIndex) {
+    const action = await gatedActionDetail(sdk, actionIndex);
+    assertGatedStoredBound(action);
+    const result = await readRawFile(sdk, actionIndex);
+    if (result.state === 'ready') return { bytes: result.bytes, action };
+    if (result.state === 'missing') {
+        const err = new Error('Gated file ciphertext not available from explorer.');
+        err.code = 'GATED_FILE_NOT_FOUND';
+        throw err;
+    }
+    const message = result.status === 409
+        ? 'Gated file is still being assembled.'
+        : 'Gated file parts do not match its manifest.';
+    const err = new Error(message);
+    err.code = 'GATED_FILE_NOT_READY';
+    err.reason = result.reason;
+    err.status = result.status;
+    throw err;
+}
 function sha256Hex(buf) {
     // Copy into the ambient Uint8Array class before hashing: @noble/hashes
     // type-checks its input against it, and a Buffer is not a subclass of
@@ -162,12 +220,7 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
     }
 
     // Fetch the ciphertext bytes from the explorer.
-    const ciphertext = await sdk.getGatedFileRaw(actionIndex);
-    if (!ciphertext || !Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
-        const err = new Error('Gated file ciphertext not available from explorer.');
-        err.code = 'GATED_FILE_NOT_FOUND';
-        throw err;
-    }
+    const { bytes: ciphertext, action } = await readGatedCiphertext(sdk, actionIndex);
 
     // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
@@ -177,8 +230,10 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
     // recovered: the serving layer holds no key and never inflates ciphertext.
     // Fail-closed: an invalid stream or a tripped ratio guard yields the
     // decrypted bytes as stored-form, never partial output and never a throw.
-    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
-    const result = await inflateGatedPlaintext(decrypted, declared);
+    const inflate = await resolveGatedInflate({
+        sdk, actionIndex, declared: compression, action,
+    });
+    const result = await inflateGatedPlaintext(decrypted, inflate.declared, inflate.options);
     const plaintext = Buffer.from(result.bytes);
 
     // Cache the FINAL bytes so a repeat unlock neither re-inflates nor re-probes.
@@ -328,16 +383,17 @@ export async function unlockGatedFileForAddress({
                 const cacheAddr = `vault:${walletId}`;
                 let plaintext = PT_CACHE.get(ptKey(cacheAddr, actionIndex));
                 if (!plaintext) {
-                    const ciphertext = await sdk.getGatedFileRaw(actionIndex);
-                    if (!ciphertext || !Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
-                        const err = new Error('Gated file ciphertext not available from explorer.');
-                        err.code = 'GATED_FILE_NOT_FOUND';
-                        throw err;
-                    }
+                    const { bytes: ciphertext, action } = await readGatedCiphertext(
+                        sdk, actionIndex,
+                    );
                     const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
                     // Inflate-after-decrypt, same rule as unlockGatedFile (§5.4).
-                    const declared = await resolveGatedCompression({ sdk, actionIndex, declared: compression });
-                    const inflatedResult = await inflateGatedPlaintext(decrypted, declared);
+                    const inflate = await resolveGatedInflate({
+                        sdk, actionIndex, declared: compression, action,
+                    });
+                    const inflatedResult = await inflateGatedPlaintext(
+                        decrypted, inflate.declared, inflate.options,
+                    );
                     plaintext = Buffer.from(inflatedResult.bytes);
                     PT_CACHE.set(ptKey(cacheAddr, actionIndex), plaintext);
                 }

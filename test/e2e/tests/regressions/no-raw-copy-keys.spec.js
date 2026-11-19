@@ -60,7 +60,7 @@ test('first screens and lazy routes render copy, never raw keys', async ({ page 
     await page.setViewportSize({ width: 1280, height: 800 });
 
     await page.goto('/');
-    await expect(page.getByRole('button', { name: /Create new wallet|Next|Get started/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Create New Wallet|Next|Get started/ }).first()).toBeVisible();
     await expectNoRawKeys(page, 'Onboarding');
 
     await createWallet(page, { navigate: false });
@@ -73,7 +73,7 @@ test('first screens and lazy routes render copy, never raw keys', async ({ page 
         await expectNoRawKeys(page, section);
     }
 
-    for (const title of ['Addresses', 'Create a token', 'Open DEX']) {
+    for (const title of ['Addresses', 'Create a token', 'DEX']) {
         await openPaletteCommand(page, title);
         await expect(page.getByRole('main')).toBeVisible();
         await expectNoRawKeys(page, title);

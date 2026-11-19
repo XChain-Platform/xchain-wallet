@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 const scanner = vi.hoisted(() => ({ onFrame: null }));
 
@@ -126,16 +126,19 @@ describe('ScanRoute Send recovery', () => {
         act(() => {
             scanner.onFrame(`bitcoin:${DESTINATION}?amount=0.25`);
         });
+        // Refuse the read only once Send has asked for it, so the refusal
+        // lands on a live request instead of a promise nobody awaits yet.
+        await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1));
         setNavigatorOnline(false);
         await act(async () => { firstRead.reject(new Error('HTTP 500')); });
 
         expect(await screen.findByText(/Couldn't load addresses/)).toBeInTheDocument();
         setNavigatorOnline(true);
         act(() => { window.dispatchEvent(new Event('online')); });
-        screen.getByRole('button', { name: 'Try again' }).click();
+        screen.getByRole('button', { name: 'Try Again' }).click();
 
         expect(await screen.findByDisplayValue(DESTINATION)).toBeInTheDocument();
-        expect(screen.getByDisplayValue('0.25')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('0.25000000')).toBeInTheDocument();
         expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2);
     });
 });

@@ -6,28 +6,9 @@ import {
     assertNoTamper, buildExpectedOutputs, TamperDetectedError,
 } from '../../../packages/core/src/flows/confirmChecks.js';
 import {
-    assertNoCredentials, isResumable, resumeAfter, resumeDispatch,
-} from '../../../packages/core/src/flows/confirmResume.js';
-import {
     classifyBroadcastFailure, isAlreadyOnNetworkRejection,
 } from '../../../packages/core/src/flows/broadcastPermanence.js';
 import { CpfpPlanError, planCpfpChild } from '../../../packages/core/src/flows/cpfpPlan.js';
-
-const CHAIN = 'bitcoin-mainnet';
-
-function resumable(overrides = {}) {
-    return {
-        id: 'cs:1:a',
-        createdAt: Date.now(),
-        request: { walletId: 'w1', chainId: CHAIN, from: { address: 'bc1qsource' } },
-        composed: { psbt: '00', chainId: CHAIN },
-        dispatch: {
-            software: 'sendToken',
-            base: { walletId: 'w1', chainId: CHAIN, from: { address: 'bc1qsource' }, params: { tick: 'X' } },
-        },
-        ...overrides,
-    };
-}
 
 describe('confirm flow safety audit', () => {
     it('refuses surplus carrier outputs beyond the exact compiled payload count', () => {
@@ -54,39 +35,6 @@ describe('confirm flow safety audit', () => {
             carrier,
             { address: 'own-change', scriptPubKeyHex: 'a91433', scriptType: 'p2sh', value: 100000 },
         ], ['own-change'])).not.toThrow();
-    });
-
-    it('rejects nested credentials and cross-scope resume descriptors', () => {
-        expect(() => assertNoCredentials({ nested: { password: 'secret' } })).toThrow(/password/);
-
-        const wrongNetwork = resumable();
-        wrongNetwork.dispatch = {
-            ...wrongNetwork.dispatch,
-            base: { ...wrongNetwork.dispatch.base, chainId: 'litecoin-mainnet' },
-        };
-        expect(isResumable(wrongNetwork, Date.now())).toBe(false);
-
-        const wrongWallet = resumable();
-        wrongWallet.dispatch = {
-            ...wrongWallet.dispatch,
-            base: { ...wrongWallet.dispatch.base, walletId: 'w2' },
-        };
-        expect(isResumable(wrongWallet, Date.now())).toBe(false);
-    });
-
-    it('deep-clones dispatch input and skips a half-written follow-up without a txid', () => {
-        const stored = resumable();
-        const { base } = resumeDispatch(stored);
-        base.params.tick = 'MUTATED';
-        expect(stored.dispatch.base.params.tick).toBe('X');
-
-        stored.dispatch.after = {
-            method: 'savePendingAirdrop',
-            base: { record: { listTxid: '' } },
-            txidPath: ['record', 'listTxid'],
-        };
-        expect(resumeAfter(stored, '')).toBeNull();
-        expect(resumeAfter(stored, 'abc').body.record.listTxid).toBe('abc');
     });
 
     it('treats an already-confirmed rebroadcast as delivery and never throws on cyclic causes', () => {

@@ -1,0 +1,47 @@
+/* ListField takes TokenField's chrome (TokenField.module.css) and adds the
+   room for an in-field clear action beside the list icon. */
+
+.controlWrap {
+    position: relative;
+    display: flex;
+    min-width: 0;
+}
+
+/* Text never runs under the clear action: the spacer holds its place inside
+   the control, so the list icon stays at the trailing edge. */
+.clearSpace {
+    flex: 0 0 var(--xc-tap-min);
+    margin-inline-start: auto;
+}
+
+.caretAfterSpace {
+    margin-inline-start: 0;
+}
+
+.clear {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: calc(var(--xc-control-pad-x) + var(--xc-icon-md) + var(--xc-space-3));
+    display: flex;
+    align-items: center;
+    transform: translateY(-50%);
+}
+
+/* G112: a selected option uses the same square leading slot as NetworkField. */
+.icon {
+    --xc-icon-size: var(--xc-icon-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 var(--xc-icon-md);
+    color: var(--xc-text-muted);
+}
+
+.value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--xc-text);
+}

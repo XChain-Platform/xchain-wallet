@@ -4,9 +4,13 @@
 // DiagnosticDetails render contract.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { act, render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, render, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { DiagnosticDetails } from '../../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
-import { LogConsole } from '../../../../packages/core/src/shared/components/LogConsole.jsx';
+import {
+    LogConsole,
+    LogConsoleControls,
+    useLogConsole,
+} from '../../../../packages/core/src/shared/components/LogConsole.jsx';
 import {
     DIAGNOSTIC_TEXT_LIMIT,
     redactDiagnosticText,
@@ -46,6 +50,24 @@ afterEach(() => {
 });
 
 const collapse = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+
+// The console as its page wires it: the page's filter panel holds the search
+// box and LogConsoleControls, the body the list, all on one useLogConsole.
+function ConsoleHarness() {
+    const state = useLogConsole();
+    return (
+        <>
+            <input
+                type="search"
+                aria-label="Search log messages"
+                value={state.search}
+                onChange={(e) => state.setSearch(e.target.value)}
+            />
+            <LogConsoleControls state={state} />
+            <LogConsole state={state} />
+        </>
+    );
+}
 
 describe('DiagnosticDetails empty input', () => {
     it('renders nothing when items is not an array', () => {
@@ -217,15 +239,61 @@ describe('LogConsole safety and controls', () => {
         expect(screen.queryByText('initial')).toBeNull();
     });
 
-    it('gives every compact console control a 24px pointer-target floor', () => {
-        render(<LogConsole />);
+    // The controls moved into the page's filter panel (operator walk
+    // 2026-11-15), drawn by the kit Chip and Button, so they take the kit's
+    // tap targets instead of a hand-set inline floor.
+    it('draws the level toggles and the actions with the kit, all levels on', () => {
+        render(<ConsoleHarness />);
 
-        for (const button of screen.getAllByRole('button')) {
-            expect(button.style.minWidth).toBe('var(--xc-tap-min)');
-            expect(button.style.minHeight).toBe('var(--xc-tap-min)');
+        for (const name of ['Log', 'Info', 'Warn', 'Error']) {
+            const toggle = screen.getByRole('button', { name });
+            expect(toggle).toHaveAttribute('aria-pressed', 'true');
+            expect(toggle.getAttribute('style')).toBeNull();
         }
-        expect(screen.getByRole('searchbox', { name: 'Search log messages' }).style.minHeight)
-            .toBe('var(--xc-tap-min)');
+        for (const name of ['Copy all log entries', 'Clear log buffer']) {
+            const action = screen.getByRole('button', { name });
+            expect(action.getAttribute('style')).toBeNull();
+            expect(action.querySelector('svg')).not.toBeNull();
+        }
+    });
+
+    it('filters by level and by search exactly as before', () => {
+        mocks.entries = [
+            { id: 1, timestamp: 1, level: 'log', source: 'one', message: 'plain line' },
+            { id: 2, timestamp: 2, level: 'warn', source: 'two', message: 'careful line' },
+            { id: 3, timestamp: 3, level: 'error', source: 'three', message: 'broken thing' },
+        ];
+        render(<ConsoleHarness />);
+        expect(screen.getByRole('log').children).toHaveLength(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Log' }));
+        expect(screen.getByRole('button', { name: 'Log' })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.queryByText('plain line')).toBeNull();
+        expect(screen.getByText('careful line')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Search log messages'), { target: { value: 'three' } });
+        expect(screen.getByRole('log').children).toHaveLength(1);
+        expect(screen.getByText('broken thing')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Error' }));
+        expect(screen.getByText(/No log entries yet/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Error' }));
+        fireEvent.change(screen.getByLabelText('Search log messages'), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Log' }));
+        expect(screen.getByRole('log').children).toHaveLength(3);
+    });
+
+    it('shows the console messages a step larger, still monospace', async () => {
+        const { LOG_TEXT_SIZE } = await import('../../../../packages/core/src/shared/components/LogConsole.jsx');
+        expect(LOG_TEXT_SIZE).toBe('var(--xc-text-sm)');
+        mocks.entries = [{ id: 1, timestamp: 1, level: 'log', source: 'one', message: 'sized line' }];
+        render(<LogConsole />);
+        const panel = screen.getByRole('log').parentElement;
+        expect(panel.style.fontSize).toBe('var(--xc-text-sm)');
+        expect(panel.style.fontFamily).toMatch(/--xc-font-mono/);
+        // The list carries no controls of its own.
+        expect(within(panel).queryAllByRole('button')).toHaveLength(0);
+        expect(within(panel).queryByRole('searchbox')).toBeNull();
     });
 
     it('renders only the newest 200 redacted entries', () => {
@@ -249,7 +317,7 @@ describe('LogConsole safety and controls', () => {
             { id: 1, timestamp: 1, level: 'log', source: 'one', message: 'searchable' },
             { id: 2, timestamp: 2, level: 'error', source: 'two', message: '{"password":"hunter2"}' },
         ];
-        render(<LogConsole />);
+        render(<ConsoleHarness />);
         fireEvent.change(screen.getByLabelText('Search log messages'), { target: { value: 'searchable' } });
         fireEvent.click(screen.getByRole('button', { name: 'Copy all log entries' }));
 
@@ -266,14 +334,14 @@ describe('LogConsole safety and controls', () => {
 
     it('handles a rejected clipboard write without an unhandled rejection', async () => {
         mocks.copyText.mockRejectedValueOnce(new Error('clipboard failed'));
-        render(<LogConsole />);
+        render(<ConsoleHarness />);
 
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Copy all log entries' }));
         });
 
         expect(screen.getByRole('button', { name: 'Copy all log entries' }))
-            .toHaveTextContent('Copy failed: clipboard unavailable');
+            .toHaveTextContent(/^Copy failed: clipboard unavailable$/i);
     });
 
     it('ignores an older copy result that settles after a newer attempt', async () => {
@@ -282,7 +350,7 @@ describe('LogConsole safety and controls', () => {
         mocks.copyText
             .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
             .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
-        render(<LogConsole />);
+        render(<ConsoleHarness />);
 
         const copyButton = screen.getByRole('button', { name: 'Copy all log entries' });
         fireEvent.click(copyButton);
@@ -296,7 +364,7 @@ describe('LogConsole safety and controls', () => {
 
     it('clears copy feedback timers when unmounted', async () => {
         vi.useFakeTimers();
-        const { unmount } = render(<LogConsole />);
+        const { unmount } = render(<ConsoleHarness />);
         fireEvent.click(screen.getByRole('button', { name: 'Copy all log entries' }));
         await act(async () => {});
 

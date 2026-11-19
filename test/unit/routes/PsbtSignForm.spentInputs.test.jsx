@@ -50,10 +50,10 @@ function setup(liveness) {
 }
 
 async function openReview() {
-    await screen.findByRole('button', { name: /Network: Bitcoin/ });
-    fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT } });
+    await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // In the closed "Signing with" section.
+    fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT } });
     await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Sign transaction' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Sign transaction$/i }));
     return screen.findByTestId('confirm-approve');
 }
 
@@ -68,7 +68,11 @@ describe('pasted PSBT with spent inputs', () => {
 
         const notice = await screen.findByTestId('confirm-error');
         expect(notice.textContent).toContain(livenessMessage(SPENT));
-        expect(screen.getByTestId('confirm-modal').firstElementChild).toBe(notice);
+        // At the top of the page: directly under the status notice, which is
+        // always first (G127 revised 2026-11-16), else first itself.
+        const modal = screen.getByTestId('confirm-modal');
+        const status = modal.querySelector(':scope > [data-testid="confirm-status-slot"]');
+        expect(status ? status.nextElementSibling : modal.firstElementChild).toBe(notice);
         expect(target.checkInputLiveness).toHaveBeenCalledTimes(1);
         expect(target.signPsbtUserInitiated).not.toHaveBeenCalled();
     });

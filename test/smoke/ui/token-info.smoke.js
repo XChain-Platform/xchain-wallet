@@ -159,12 +159,10 @@ for (const label of ['Creator', 'Total supply', 'Status']) {
         `TokenDetail renders the "${label}" row/card`,
     );
 }
-// The description body renders as plain prose (no labeled `Description`
-// row anymore. Moved into its own .descriptionBody block as part of
-// the §27.6 redesign).
-assert.ok(/descriptionBody/.test(td),
-    'TokenDetail still renders the description body block');
-assert.ok(/socialLabel\(s\.platform\)[\s\S]*?s\.host/.test(td),
+// The description stays on the primary Details profile as escaped React text.
+assert.ok(/className=\{styles\.profileDescription\}>\{assetInfo\.description\}/.test(td),
+    'TokenDetail renders the description in its Details profile');
+assert.ok(/socialLabel\(social\.platform\)[\s\S]*?social\.value/.test(td),
     'TokenDetail shows the actual destination host beside each social label');
 
 // --- 7. Locked / Mutable status copy ------------------------------------
@@ -329,9 +327,10 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     const mockResp = {
         ok: true,
         text: async () => JSON.stringify({
-            token: 'MOCK',
+            tick: 'MOCK',
+            name: 'Mock token',
             description: 'Mock body',
-            image: 'https://example.com/mock.png',
+            images: [{ type: 'icon', data: 'https://example.com/mock.png' }],
         }),
     };
     const fetchedBundle = await mod.fetchTisBundle({

@@ -25,8 +25,9 @@ describe('Contacts desktop actions and narrow layout', () => {
 
         expect(contactsRoute).toMatch(/onSend=\{\(prefill\) => \{/);
         expect(contactsRoute).toMatch(/setSendPrefill\(prefill\)/);
-        expect(contactsRoute).toMatch(/setSendBackTo\('contacts'\)/);
+        // Send opens on top of Contacts in the history, so its Back returns here.
         expect(contactsRoute).toMatch(/setUnlockedView\('send'\)/);
+        expect(contactsRoute).toMatch(/onBack=\{goBack\}/);
     });
 
     it('uses the wrapping list-page toolbar with a full-width phone sort control', () => {
@@ -35,8 +36,8 @@ describe('Contacts desktop actions and narrow layout', () => {
             resolve(process.cwd(), 'packages/core/src/shared/components/ListToolbar.module.css'),
             'utf8',
         );
-        // Every control, the sort select included, takes a full row once the toolbar wraps.
-        expect(toolbarCss).toMatch(/\.field\s*\{[\s\S]*?flex:\s*1 1 12rem/);
+        // The search box shrinks and the sort select keeps its own width on the same row.
+        expect(toolbarCss).toMatch(/\.filter\s*\{[\s\S]*?flex:\s*0 1 auto/);
     });
 
     it('ends a long contact name in an ellipsis inside the row', () => {
@@ -49,12 +50,17 @@ describe('Contacts desktop actions and narrow layout', () => {
         expect(name).toMatch(/overflow:\s*hidden/);
     });
 
-    it('lays the five contact actions out as one row of stacked icon tiles', () => {
-        const grid = /(?:^|\n)\.quickActions\s*\{([^}]*)\}/.exec(contactsCss)?.[1] || '';
-        // A fixed four-column grid left Delete alone on a second row.
-        expect(grid).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(56px,\s*1fr\)\)/);
-        // Icon beside label left "Message" too little room, so it broke mid-word.
-        const label = /(?:^|\n)\.quickAction > span\s*\{([^}]*)\}/.exec(contactsCss)?.[1] || '';
-        expect(label).toMatch(/flex-direction:\s*column/);
+    // G101 (2026-11-13): the five contact actions are rows of the shared
+    // action list, so the page paints no tile grid of its own.
+    it('draws the five contact actions as the shared action list, not tiles', () => {
+        expect(contactsCss).not.toMatch(/(?:^|\n)\.quickActions?\b/);
+        const contactsJsx = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.jsx'),
+            'utf8',
+        );
+        expect(contactsJsx).toMatch(/<ActionList label="Contact actions">/);
+        // Counted inside the contact list only: View Address has its own list.
+        const contactActions = contactsJsx.split('<ActionList label="Contact actions">')[1].split('</ActionList>')[0];
+        expect(contactActions.match(/<ActionListItem\b/g)).toHaveLength(5);
     });
 });

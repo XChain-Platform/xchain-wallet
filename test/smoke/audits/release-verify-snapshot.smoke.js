@@ -111,6 +111,32 @@ try {
     const snapDir = dirname(readSeen('manifest-path') ?? '');
     check('the snapshot directory is removed on exit',
         snapDir !== '.' && spawnSync('test', ['-e', snapDir]).status !== 0, snapDir);
+
+    // A manifest signed with skipped payload checks says so in its header;
+    // verify.sh must repeat it, and say nothing when the field is absent.
+    const withPayload = (extra) => header('v9.9.9').replace('# artifacts: 1\n', `# artifacts: 1\n${extra}`);
+    const verifyHeader = (name, text) => {
+        const pdir = join(work, name);
+        mkdirSync(pdir);
+        writeFileSync(join(pdir, artifact), 'not a real zip, hashed like one\n');
+        writeFileSync(join(pdir, 'RELEASE_HASHES.txt'), text);
+        return spawnSync('bash', [VERIFY, '--input', pdir, '--tag', 'v9.9.9', '--no-sig'], { encoding: 'utf8' });
+    };
+    const partial = verifyHeader('payload-partial', withPayload([
+        '# payload-check: partial',
+        '# payload-unchecked architecture: ./xchain-wallet-linux-v9.9.9.snap',
+        '# payload-unchecked native: ./xchain-wallet-linux-v9.9.9.deb',
+        '',
+    ].join('\n')));
+    check('a partial payload check does not fail the verify', partial.status === 0, partial.stderr);
+    check('verify.sh warns that payload checks were partial',
+        /WARNING - payload checks were PARTIAL/.test(partial.stderr), partial.stderr);
+    check('and lists each unchecked gate and artifact',
+        /^ {4}architecture: \.\/xchain-wallet-linux-v9\.9\.9\.snap$/m.test(partial.stderr)
+        && /^ {4}native: \.\/xchain-wallet-linux-v9\.9\.9\.deb$/m.test(partial.stderr), partial.stderr);
+    const full = verifyHeader('payload-full', original);
+    check('a manifest without the field verifies without the warning',
+        full.status === 0 && !/payload checks/.test(full.stderr), full.stderr);
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

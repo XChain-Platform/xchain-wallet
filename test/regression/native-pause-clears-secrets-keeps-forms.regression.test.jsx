@@ -84,18 +84,45 @@ describe('native pause with a secret screen and an ordinary form', () => {
         };
         mount(messaging, <ViewPrivateKey walletId="w1" address={ADDRESS} onBack={() => {}} />);
         const input = await typeNote();
-        fireEvent.click(screen.getByRole('button', { name: /I understand, continue/i }));
+        // The warning and the password share one form, and the key shows as
+        // soon as the password is accepted (in a read-only field).
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw-for-test' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
-        await act(async () => { await Promise.resolve(); });
-        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
-        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
+        expect(await screen.findByRole('textbox', { name: 'Private key' })).toHaveValue(PRIVATE_KEY);
 
         act(() => document.dispatchEvent(new Event('pause')));
 
         expect(document.body.textContent).not.toContain(PRIVATE_KEY);
+        expect(screen.queryByRole('textbox', { name: 'Private key' })).toBeNull();
+        expect(screen.queryByAltText('Private key QR code')).toBeNull();
+        expect([...document.querySelectorAll('input, textarea')].map((el) => el.value))
+            .not.toContain(PRIVATE_KEY);
         expect(document.body.style.visibility).toBe('hidden');
         expect(screen.getByLabelText('Note')).toBe(input);
+        expect(input).toHaveValue('kept text');
+    });
+
+    it('drops a private-key export that resolves after a native pause', async () => {
+        let finishExport;
+        const messaging = {
+            exportPrivateKey: vi.fn(() => new Promise((resolve) => { finishExport = resolve; })),
+            getSettings: vi.fn(async () => ({ privacy: { clipboardAutoClearSeconds: 17 } })),
+        };
+        mount(messaging, <ViewPrivateKey walletId="w1" address={ADDRESS} onBack={() => {}} />);
+        const input = await typeNote();
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw-for-test' } });
+        fireEvent.click(screen.getByRole('button', { name: 'I Understand' }));
+        expect(messaging.exportPrivateKey).toHaveBeenCalledOnce();
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        await act(async () => { finishExport({ wif: PRIVATE_KEY }); });
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(screen.queryByRole('textbox', { name: 'Private key' })).toBeNull();
+        expect(screen.queryByAltText('Private key QR code')).toBeNull();
+        expect(document.body.textContent).not.toContain(PRIVATE_KEY);
+        expect([...document.querySelectorAll('input, textarea')].map((el) => el.value))
+            .not.toContain(PRIVATE_KEY);
         expect(input).toHaveValue('kept text');
     });
 
@@ -112,7 +139,7 @@ describe('native pause with a secret screen and an ordinary form', () => {
         const input = await typeNote();
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw-for-test' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         act(() => document.dispatchEvent(new Event('pause')));

@@ -27,25 +27,15 @@ describe('K51 small-screen UI', () => {
         const ads = source('packages/core/src/shared/components/settings/AdsSection.jsx');
         const inputCss = source('packages/core/src/ui/Input.module.css');
 
-        expect(ads).toMatch(/import \{ (?:EmptyState, )?InfoTip, Input, Select \} from '@xchain-wallet\/core\/ui'/);
-        // The amount fields share one AmountField, the donation address is a
-        // read-only kit Input and the recipient picker is the kit Select, which
-        // wears Input's control class, so every field takes the kit heights.
-        expect(ads.match(/<Input\s/g)).toHaveLength(3);
+        expect(ads).toMatch(/import \{ Icon, Input, Notice, Select \} from '@xchain-wallet\/core\/ui'/);
+        // Per transaction and Send at share one AmountRow: the kit Select on
+        // the row and the kit Input that Custom opens under it; Donate to is the
+        // shared inline row's kit Select. Select wears Input's control class, so
+        // every field takes the kit heights.
+        expect(ads.match(/<Input\s/g)).toHaveLength(1);
         expect(ads.match(/<Select\s/g)).toHaveLength(1);
         expect(source('packages/core/src/ui/Select.jsx')).toMatch(/import styles from '\.\/Input\.module\.css'/);
         expect(rule(inputCss, '.input:not(textarea)')).toMatch(/height:\s*var\(--xc-control-height\)/);
-    });
-
-    it('keeps the active wallet ring inside the clipped name region', () => {
-        const pickerCss = source('packages/core/src/shared/routes/WalletPicker.module.css');
-        const rowName = rule(pickerCss, '.rowName');
-
-        expect(rowName).toMatch(/padding-block:\s*var\(--xc-space-1\)/);
-        expect(rowName).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
-        expect(rowName).toMatch(/margin-block:\s*calc\(0px - var\(--xc-space-1\)\)/);
-        expect(rowName).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
-        expect(rowName).toMatch(/overflow:\s*hidden/);
     });
 
     it('gives Add wallet the shared titled page header', () => {
@@ -65,7 +55,7 @@ describe('K51 small-screen UI', () => {
             </MessagingContext.Provider>,
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Add wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Add Wallet' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallets' }));
         expect(onBack).toHaveBeenCalledOnce();
     });
@@ -75,8 +65,13 @@ describe('K51 small-screen UI', () => {
 
         // Each Display group is its own FormSection card, which owns the gap
         // between groups, so no ad hoc section header margins remain.
-        expect(display.match(/<FormSection\b/g)).toHaveLength(7);
+        // Four groups remain: balances, row buttons, saved network filters and
+        // the reset; the watched, pinned and hidden token lists moved to the
+        // Tokens page (TokenListsSection) on 2026-11-14.
+        expect(display.match(/<FormSection\b/g)).toHaveLength(4);
         expect(display).not.toMatch(/SectionHeader/);
-        expect(display).toContain('<FormSection title="Balance display">');
+        // Display now opens as row pages: a group opened on its own row page
+        // drops its card title, since the page header already names it.
+        expect(display).toContain("<FormSection title={only ? undefined : 'Balance display'}>");
     });
 });

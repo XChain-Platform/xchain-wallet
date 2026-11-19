@@ -196,11 +196,13 @@ export async function swapsForToken({ sdkRegistry, chainId, tick, opts }) {
 
 /**
  * Every SWAP an address placed, across all pairs (PC-18 "My swaps").
- * Same shape + caveat as ordersForAddress: cross-pair per-owner feed
- * whose rows carry action-validity status, not the live lifecycle
- * status; the caller enriches via swapDetail and derives cancelled from
- * swapCancelsForAddress (the immediate, authoritative signal - a single
- * swap's getAction state.status lags a cancel, same as ORDER).
+ * The list feed carries each swap's lifecycle as `swap_status` but its
+ * creation expiration and lists; the owner's SWAP v2 edits come from one
+ * address-scoped edits read and overlay a `state` block (status, current
+ * expiration, allow and block lists) on every row, the same block the
+ * action detail serves. The reads are the swap pages, the edit pages and
+ * the chain clock, never one per swap. Cancelled is still derived from
+ * swapCancelsForAddress (the immediate, authoritative signal).
  *
  * @param {SdkCtx & { address: string, opts?: object }} params
  */
@@ -209,7 +211,76 @@ export async function swapsForAddress({ sdkRegistry, chainId, address, opts }) {
     if (!chainId) throw new Error('swapsForAddress: chainId is required');
     if (!address) throw new Error('swapsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return withMarketExpiry(sdk, await readAllPages((o) => sdk.getSwaps(address, 'address', o), opts), 'swap', { hydrate: true });
+    const swaps = await readAllPages((o) => sdk.getSwaps(address, 'address', o), opts);
+    return withMarketExpiry(sdk, await withSwapEditState(sdk, address, swaps), 'swap');
+}
+
+/** The list rows of an explorer response, or null for a response with none. */
+function responseRows(response) {
+    if (Array.isArray(response)) return response;
+    for (const key of ['data', 'rows', 'swaps']) {
+        if (Array.isArray(response?.[key])) return response[key];
+    }
+    return null;
+}
+
+/** The same response with its list rows replaced. */
+function withResponseRows(response, rows) {
+    if (Array.isArray(response)) return rows;
+    for (const key of ['data', 'rows', 'swaps']) {
+        if (Array.isArray(response?.[key])) return { ...response, [key]: rows };
+    }
+    return response;
+}
+
+const present = (value) => value !== null && value !== undefined && value !== '';
+
+/**
+ * Overlay each swap's live `state` from its row and the owner's valid SWAP v2
+ * edits, applied oldest first so the latest expiration and lists win (the
+ * explorer's action detail applies them the same way). A failed edits read
+ * leaves the creation terms in place.
+ */
+async function withSwapEditState(sdk, address, response) {
+    const rows = responseRows(response);
+    if (!rows || rows.length === 0) return response;
+    let edits = [];
+    if (typeof sdk.getSwapEdits === 'function') {
+        try {
+            edits = responseRows(await readAllPages((o) => sdk.getSwapEdits(address, 'address', o))) || [];
+        } catch {
+            edits = [];
+        }
+    }
+    const latest = new Map();
+    const ordered = edits
+        .filter((edit) => edit && typeof edit === 'object' && String(edit.status || 'valid') === 'valid')
+        .sort((a, b) => Number(a.action_index || 0) - Number(b.action_index || 0));
+    for (const edit of ordered) {
+        const key = String(edit.swap_action_index ?? '');
+        if (!key) continue;
+        const prior = latest.get(key) || {};
+        latest.set(key, {
+            ...prior,
+            ...(present(edit.expiration) ? { expiration: edit.expiration } : {}),
+            ...(present(edit.allow_list) ? { allow_list: edit.allow_list } : {}),
+            ...(present(edit.block_list) ? { block_list: edit.block_list } : {}),
+        });
+    }
+    return withResponseRows(response, rows.map((row) => {
+        if (!row || typeof row !== 'object' || (row.state && typeof row.state === 'object')) return row;
+        const edit = latest.get(String(row.action_index ?? '')) || {};
+        const status = typeof row.swap_status === 'string' ? row.swap_status.trim() : '';
+        return {
+            ...row,
+            state: {
+                ...(status ? { status } : {}),
+                expiration: edit.expiration ?? row.expiration ?? null,
+                allow_list: edit.allow_list ?? row.allow_list ?? null,
+                block_list: edit.block_list ?? row.block_list ?? null,
+            },
+        };
+    }));
 }
 
 /**

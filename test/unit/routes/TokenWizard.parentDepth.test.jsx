@@ -19,9 +19,11 @@
 // this was written: `GAT530653.KID.GRAND` quotes `valid` at 0.50000000 XCHAIN
 // against a plain ISSUE's 1.00000000.
 //
-// It mattered because this wizard is the ONLY surface that can author a subtoken
-// at all - `IssueTokenForm` rejects the dot in its own ticker field - so a
-// grandchild was uncreatable from the wallet rather than merely awkward.
+// It mattered because the Subtoken template is the ONLY way to author a
+// subtoken at all - the Ticker field refuses a dot - so a grandchild was
+// uncreatable from the wallet rather than merely awkward. The template now
+// lives on the one Issue Token form (its Parent token field, a pick from the
+// tokens this wallet owns), which is what these cases drive.
 //
 // The parent field is a REFERENCE to something already on the ledger, which is
 // why D-168 widened it while leaving the child-name field alone. Both fields
@@ -39,13 +41,16 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
+const OWNER = 'bc1qownerownerownerownerownerownerownerow';
 const ADDRESSES = {
     'bitcoin-mainnet': [
         {
             id: 'addr-0',
-            address: 'bc1qownerownerownerownerownerownerownerow',
+            address: OWNER,
             publicKey: '02ab',
             derivationPath: "m/84'/0'/0'/0/0",
             source: 'hd',
@@ -53,11 +58,20 @@ const ADDRESSES = {
     ],
 };
 
-function mountWizard() {
-    const messaging = {
+let messaging;
+
+function mountWizard(parent) {
+    messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        // The Parent token picker lists the case's parent as owned, so the
+        // grammar check at submit is what the refusal cases reach.
+        getOwnedTokens: ownedTokensFor(vi.fn, OWNER, [parent]),
+        // Any parent is this wallet's; the full PARENT.CHILD tick is free.
+        getTokenInfo: vi.fn(({ tick }) => Promise.resolve(
+            tick.endsWith('.GRAND') ? {} : { creator: OWNER },
+        )),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
@@ -75,56 +89,54 @@ function mountWizard() {
 }
 
 /**
- * Walk template -> chain -> details on the Subtoken template, then submit
- * `parent` as the parent ticker with a fixed child name.
+ * Pick the Subtoken template on the Issue Token form, choose `parent` on the
+ * Parent token picker, then submit with a fixed child name.
  *
- * Assertions read the form error off the screen afterwards. The wizard
- * uppercases both fields on input, so these values are already uppercase: the
- * subject here is the RULE, not the coercion.
+ * Assertions read the form error off the screen afterwards. These values are
+ * already uppercase: the subject here is the RULE, not any coercion.
  */
 async function submitParent(parent) {
-    mountWizard();
-    fireEvent.click(await screen.findByText('Subtoken'));
-    // The chain stage sits between the template and the details; its Next is
-    // disabled until an address resolves, which is why this waits for the
-    // field D-163 added rather than clicking straight through.
-    await screen.findByLabelText('Fee paid by');
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    mountWizard(parent);
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Subtoken/ }));
 
-    const parentField = await screen.findByLabelText('Parent ticker');
-    fireEvent.change(parentField, { target: { value: parent } });
+    await pickParentToken(parent);
     fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'GRAND' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 /**
  * Any refusal this field can produce, so both directions assert on it.
  *
  * The rule lives in `shared/utils/tickerGrammar.js`, which names the field
- * and then the reason ("Parent ticker cannot start or end with a dot.",
- * "Parent ticker can only use ..."), so no single-sentence matcher covers
+ * and then the reason ("Parent token cannot start or end with a dot.",
+ * "Parent token can only use ..."), so no single-sentence matcher covers
  * every refusal. Anchored on the field noun plus the verb rather than on any
  * one reason: this test is about DEPTH, and it must not fail when a
  * different rule rewords itself.
  */
-const PARENT_RULE = /parent ticker (cannot|can only use|is required)/i;
+const PARENT_RULE = /parent token (cannot|can only use|is required)/i;
 
-describe('TokenWizard subtoken parent depth (D-168)', () => {
+async function composedTick() {
+    await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+    return messaging.composeForConfirm.mock.calls[0][0].actionData.params.TICK;
+}
+
+describe('Issue Token subtoken parent depth (D-168)', () => {
     afterEach(cleanup);
 
     it('accepts a plain parent, which is the case that always worked', async () => {
         await submitParent('GAT530653');
-        await waitFor(() => {
-            expect(screen.queryByText(PARENT_RULE)).toBeNull();
-        });
+        expect(await composedTick()).toBe('GAT530653.GRAND');
+        expect(screen.queryByText(PARENT_RULE)).toBeNull();
     });
 
     it('accepts a parent that is itself a subtoken, so a grandchild is authorable', async () => {
         await submitParent('GAT530653.KID');
-        await waitFor(() => {
-            expect(screen.queryByText(PARENT_RULE)).toBeNull();
-        });
+        // The full path, never truncated to the parent's first level.
+        expect(await composedTick()).toBe('GAT530653.KID.GRAND');
+        expect(screen.queryByText(PARENT_RULE)).toBeNull();
     });
 
     it('still refuses a leading dot, which the chain refuses too', async () => {
@@ -132,18 +144,23 @@ describe('TokenWizard subtoken parent depth (D-168)', () => {
         // through would only move the refusal to a screen that costs a round
         // trip. The empty first segment is what the regex catches.
         await submitParent('.GAT530653');
-        expect(await screen.findByText(PARENT_RULE)).toBeTruthy();
+        // The form error notice lists it; the Parent token field also says it
+        // under itself (the form error standard), so the notice is found by name.
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('still refuses a trailing dot', async () => {
         await submitParent('GAT530653.');
-        expect(await screen.findByText(PARENT_RULE)).toBeTruthy();
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('still refuses an empty middle segment', async () => {
         // `A..B` splits to an empty parent segment; the chain would read the
         // parent as `A.` and never find it.
         await submitParent('GAT..KID');
-        expect(await screen.findByText(PARENT_RULE)).toBeTruthy();
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

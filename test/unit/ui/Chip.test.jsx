@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Chip } from '../../../packages/core/src/ui/Chip.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 
 describe('<Chip>', () => {
     it('renders static content without button semantics', () => {
@@ -61,8 +63,9 @@ describe('<Chip>', () => {
         expect(css).toMatch(/\.toggle\s*\{[^}]*min-height:\s*var\(--xc-tap-min\)/s);
         expect(css).toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
         expect(css).toMatch(/\.toggle:focus-visible\s*{[^}]*outline:\s*2px solid var\(--xc-control-focus-ring\)/s);
-        expect(css).toMatch(/\.pressed[^}]*background:\s*var\(--xc-control-selected\)/s);
-        expect(css).toMatch(/\.toggle:disabled\s*{[^}]*border-color:\s*var\(--xc-control-disabled-border\)/s);
+        expect(css).toMatch(/\.pressed[^}]*background:\s*var\(--xc-toggle-selected-bg\)/s);
+        // G130: a disabled chip keeps its colours.
+        expect(css).not.toMatch(/\.toggle:disabled\s*{/);
         expect(css).not.toMatch(/color-mix\(|:has\(/);
     });
 
@@ -84,7 +87,9 @@ describe('<Chip>', () => {
         const btn = ruleBody(buttonCss, '.btn');
         const sm = ruleBody(buttonCss, '.sm');
 
-        expect(css).not.toMatch(/composes:\s*btn\b/);
+        // Chip.jsx adds the shared button base in markup (see the test below);
+        // a CSS-file composes would inline a second copy of Button's sheet.
+        expect(css).not.toMatch(/composes:/);
         expect(declaration(chip, 'border')).toBe('1px solid var(--xc-control-border)');
         expect(declaration(chip, 'justify-content')).toBe('center');
         expect(declaration(chip, 'padding')).toBe('0 var(--xc-space-3)');
@@ -94,9 +99,22 @@ describe('<Chip>', () => {
         expect(declaration(btn, 'border-radius')).toMatch(/^var\(--xc-control-radius\b/);
 
         expect(declaration(toggle, 'font-size')).toBe('var(--xc-control-font-sm)');
-        expect(declaration(sm, '--xc-button-font-size')).toMatch(/^var\(--xc-control-font-sm\b/);
+        expect(declaration(sm, '--xc-button-font-size')).toBe('var(--xc-text-xs)');
         expect(declaration(btn, 'font-size')).toMatch(/^var\(--xc-button-font-size\b/);
 
         expect(declaration(toggle, 'font-weight')).toBe(declaration(btn, 'font-weight'));
+    });
+
+    it('gives a toggle the shared button base class and leaves the static chip without it', () => {
+        render(
+            <>
+                <Chip>BTC / LTC</Chip>
+                <Chip pressed={false} onPressedChange={() => {}}>Watchlist</Chip>
+            </>,
+        );
+
+        expect(buttonStyles.btn).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Watchlist' })).toHaveClass(buttonStyles.btn, chipStyles.toggle);
+        expect(screen.getByText('BTC / LTC')).not.toHaveClass(buttonStyles.btn);
     });
 });

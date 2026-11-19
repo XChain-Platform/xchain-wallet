@@ -25,7 +25,7 @@
  * THE CAMPAIGN'S OWN MAP SAYS WHY THERE ARE TWO OF THEM. Its widget table
  * records that forms pick a chain three different ways and that a grep for one
  * reports the others as "has no picker". `CrossChainSwapForm` uses two of the
- * three AT ONCE: `ChainPicker`s labelled `Give network` / `Get network`
+ * three AT ONCE: `NetworkField`s labelled `Give network` / `Get network`
  * (:628, :678) and `TokenField`s labelled `Give token` / `Get token`
  * (:646, :697). The frontier row for this area recorded that ONE helper was
  * missing; measured at HEAD it is two, and the second is the widget class that
@@ -34,9 +34,11 @@
  */
 
 import { expect } from '@playwright/test';
+import { revealChainPicker } from './wallet.js';
+import { searchTokenPicker } from './fields.js';
 
 /**
- * Picks a NAMED chain in a `ChainPicker`, on a named NETWORK, and proves the
+ * Picks a named chain in a `NetworkField`, on a named network, and proves the
  * pick took.
  *
  * The venue-pinned sibling (`selectVenueChain`) is the one to use for any
@@ -62,8 +64,7 @@ import { expect } from '@playwright/test';
  */
 export async function selectNamedChain(scope, field, chainLabel, networkKind = 'regtest') {
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
-    await expect(trigger, `no "${field}" chain picker on this screen`)
-        .toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(scope, trigger, field);
 
     // Pickers name the chain without its network kind (operator ruling); the
     // active Settings network already scopes the options to one network.
@@ -72,16 +73,14 @@ export async function selectNamedChain(scope, field, chainLabel, networkKind = '
     if (((await trigger.getAttribute('aria-label')) || '') === want) return;
 
     await trigger.click();
-    // An option's accessible name is its label, its ticker and its network
-    // suffix run together ("Dogecoin DOGE · regtest"), so both halves are
-    // matched: the label alone would also select the mainnet entry sitting
-    // beside it whenever the wallet holds an address on one.
-    await scope.getByRole('option', {
-        name: new RegExp(`^${chainLabel}\\b`),
+    // The row's accessible name includes the network kind, so the visible
+    // label alone never silently picks a mainnet row beside a regtest row.
+    await trigger.page().getByRole('dialog', { name: field }).getByRole('button', {
+        name: new RegExp(`^Select ${chainLabel} ${networkKind}\\b`),
     }).first().click();
 
     // Assert the switch took, WHOLE. The picker closes on click whether or not
-    // the option was the one intended, so an unasserted click is a silent
+    // the row was the one intended, so an unasserted click is a silent
     // wrong-chain run - the same hazard `selectVenueChain` ends on, and the
     // reason both helpers end this way.
     await expect(trigger, `the "${field}" picker did not settle on ${chainLabel}`)
@@ -132,19 +131,23 @@ export async function selectNamedToken(page, field, {
 
     await trigger().click();
 
-    const search = page.getByLabel('Search coins or tokens');
-    await expect(search, `the "${field}" field did not open the asset picker`)
-        .toBeVisible({ timeout: 30_000 });
     // Filtering is not cosmetic here: the held list is cross-chain, and on the
     // get side the "On the platform" section only appears AT ALL once a tick
-    // has been typed, because discovery is a search.
-    await search.fill(tick);
+    // has been typed, because discovery is a search. The search sits behind
+    // the picker's Filter button.
+    await searchTokenPicker(page, tick);
+    // On a narrow screen the open filter panel floats over the results, so close it.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
 
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the asset picker lists no ${tick} on ${chainLabel}. On the GIVE side that `
         + 'means the source address does not hold it; on the GET side it means platform discovery '
         + 'returned nothing, which is a venue answer rather than a wallet one')
         .toBeVisible({ timeout: timeoutMs });
+    // An open filter panel keeps the list re-flowing, so close it before the tap lands.
+    const filterToggle = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filterToggle.getAttribute('aria-expanded') === 'true') await filterToggle.click();
     await row.click();
 
     // Assert the selection took, for the same reason the chain helper does:

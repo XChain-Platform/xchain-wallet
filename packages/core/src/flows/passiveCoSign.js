@@ -22,6 +22,8 @@
 //   - §26.5 panic-mode freeze    -> { approved:false, reason:'PANIC_MODE' } when armed in
 //                                   Settings; a duress freeze throws the plain cover error
 //   - corrupt spending-window     -> { approved:false, reason:'WINDOW_STATE_CORRUPT' }
+//   - a token outside policy.allowedTicks -> the wallet's own refusal (the SDK
+//                                   evaluator has no allowed-tokens rule)
 //   - any policy / decode / output-gate denial comes straight from CoSigner.
 //
 // This is the transport-agnostic core (Vitest-testable against a mock SDK).
@@ -35,6 +37,13 @@ import {
     panicCoverError,
     PanicModeActiveError,
 } from './panicMode.js';
+import { logConsole } from '../shared/utils/logConsole.js';
+import {
+    evaluateAllowedTicks,
+    normalizeAllowedTicks,
+    sdkValueUnreadable,
+    TOKEN_UNCHECKABLE,
+} from '../cosigner/allowedTicks.js';
 
 // ── Exclusive bracket (G4) ──────────────────────────────────────────────
 //
@@ -52,13 +61,19 @@ import {
 // is exactly the case that needs serializing, so an identity-based lock would
 // never fire. The instance fallback covers direct passiveCoSign callers that
 // share one store and pass no key.
+//
+// Lock order: the account lock (cosigner/accountLock.js) is always taken BEFORE
+// this keyed slot. A caller that passes a lockKey therefore holds the account
+// lock already and builds its store with { accountLocked: true }, so flush()
+// never queues for the account lock while holding the keyed slot. The reverse
+// order can wedge both locks, so passiveCoSign refuses that combination.
 const KEYED_LOCKS = new Map();
 const STORE_LOCKS = new WeakMap();
 
 function lockSlot(lockKey, windowStore) {
     if (typeof lockKey === 'string' && lockKey.length > 0) {
         let slot = KEYED_LOCKS.get(lockKey);
-        if (!slot) { slot = { tail: Promise.resolve() }; KEYED_LOCKS.set(lockKey, slot); }
+        if (!slot) { slot = { tail: Promise.resolve(), key: lockKey }; KEYED_LOCKS.set(lockKey, slot); }
         return slot;
     }
     if (windowStore) {
@@ -70,12 +85,25 @@ function lockSlot(lockKey, windowStore) {
     return null;
 }
 
+/** @returns {number} keyed lock slots currently held (a drained account holds none) */
+export function keyedLockCount() {
+    return KEYED_LOCKS.size;
+}
+
 function runExclusive(slot, fn) {
     if (!slot) return fn();
     // Chain on both settle paths: a previous request that threw must not wedge
     // the queue behind it.
     const run = slot.tail.then(fn, fn);
-    slot.tail = run.then(() => {}, () => {});
+    const tail = run.then(() => {}, () => {});
+    slot.tail = tail;
+    // Release a keyed slot once nothing is queued behind it, so the map holds
+    // only accounts with a request in flight.
+    if (slot.key !== undefined) {
+        tail.then(() => {
+            if (slot.tail === tail && KEYED_LOCKS.get(slot.key) === slot) KEYED_LOCKS.delete(slot.key);
+        });
+    }
     return run;
 }
 
@@ -105,8 +133,11 @@ function runExclusive(slot, fn) {
  * @property {boolean} [allowConfirmable]        default false; a daemon denies confirm-required actions
  * @property {PassiveCoSignRequest} request      the inbound co-sign request
  * @property {number} [now]                      injectable clock (ms) for the panic-mode check
+ * @property {string|null} [nativeTick]          the chain's own coin, never limited by policy.allowedTicks
  * @property {string} [lockKey]                  serializes the load/decide/charge/persist bracket
- *           across concurrent requests for the same account (G4); pass the account id
+ *           across concurrent requests for the same account (G4); pass the account id. Needs a
+ *           store built with { accountLocked: true } inside withAccountLock of that same id; a
+ *           store whose write() takes the account lock itself is refused
  */
 
 /**
@@ -141,6 +172,7 @@ export async function passiveCoSign(opts = {}) {
         request,
         now,
         lockKey,
+        nativeTick,
     } = opts;
 
     if (!sdk || !sdk.coSigner || typeof sdk.coSigner.CoSigner !== 'function') {
@@ -157,6 +189,10 @@ export async function passiveCoSign(opts = {}) {
     }
     if (!request || typeof request.psbt !== 'string' || request.psbt.length === 0) {
         throw new Error('passiveCoSign: request.psbt (hex) is required');
+    }
+    if (typeof lockKey === 'string' && lockKey.length > 0 && windowStore?.locksAccount === true) {
+        throw new Error('passiveCoSign: a lockKey needs a window store built with accountLocked: true '
+            + 'inside withAccountLock; this store takes the account lock itself and would deadlock');
     }
 
     // Wire collapse: the SDK daemon takes exactly ONE request shape (an `inputs`
@@ -193,6 +229,39 @@ export async function passiveCoSign(opts = {}) {
     // second concurrent request cannot decide against a snapshot that is about
     // to be superseded (see the lock notes at the top of this file).
     return runExclusive(lockSlot(lockKey, windowStore), async () => {
+        // Allowed tokens, checked on the action decoded from the PSBT before
+        // the window loads, so a refused token neither signs nor charges. A
+        // PSBT this decode cannot read is refused while a list is set: an
+        // envelope commit carries its action in a leaf CoSigner reads but
+        // this check cannot, so deferring would sign tokens nobody checked.
+        // A token sent by ^<id> matches only through the policy's own tickIds,
+        // written when the rules were saved; no explorer is asked here.
+        if (normalizeAllowedTicks(policy.allowedTicks) !== null) {
+            if (typeof sdk.coSigner.decodeActionFromPsbt !== 'function') {
+                return { approved: false, reason: 'POLICY_CONFIG_INVALID',
+                         detail: { message: 'this SDK cannot decode the action, so the allowed tokens cannot be checked' } };
+            }
+            let decoded = null;
+            try {
+                decoded = sdk.coSigner.decodeActionFromPsbt(request.psbt, { network: network || undefined });
+            } catch {
+                decoded = null;
+            }
+            if (!decoded || !decoded.ok) {
+                return { approved: false, reason: TOKEN_UNCHECKABLE,
+                         detail: { decodeReason: (decoded && decoded.reason) || 'DECODE_FAILED' } };
+            }
+            const tokenVerdict = evaluateAllowedTicks(
+                policy,
+                { action: decoded.action, version: decoded.version, params: decoded.params },
+                { nativeTick: nativeTick ?? null, valueUnreadable: sdkValueUnreadable(sdk) },
+            );
+            if (!tokenVerdict.ok) {
+                return { approved: false, reason: tokenVerdict.violation.code,
+                         detail: tokenVerdict.violation.details, action: decoded.action };
+            }
+        }
+
         // Load the spending window into memory before the synchronous process()
         // call. Corrupt state fails closed as a refusal (the UI slice surfaces the
         // distinct reason so the user can reset the window deliberately).
@@ -201,6 +270,15 @@ export async function passiveCoSign(opts = {}) {
                 await windowStore.load();
             } catch (e) {
                 return { approved: false, reason: 'WINDOW_STATE_CORRUPT', detail: { message: e?.message ?? String(e) } };
+            }
+        }
+
+        // A host clock that stepped backward is a local fault the owner should be
+        // able to see. It goes to the local log only: the verdict is relayed to
+        // the requester, who has no business learning the device clock state.
+        if (windowStore && typeof windowStore.clockWarnings === 'function') {
+            for (const message of windowStore.clockWarnings()) {
+                logConsole.record({ source: 'cosigner', level: 'warn', message });
             }
         }
 

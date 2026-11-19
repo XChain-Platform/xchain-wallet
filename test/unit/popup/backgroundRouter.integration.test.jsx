@@ -113,7 +113,6 @@ function makeBackground(chrome) {
         ...createDefaultSettings(),
         activeNetwork: 'mainnet',
         fees: { [CHAIN_ID]: {} },
-        walletMode: 'watcher',
         verifyProofs: false,
         privacy: {
             ...createDefaultSettings().privacy,
@@ -143,6 +142,7 @@ function makeBackground(chrome) {
             origin: 'imported',
             importedKeys: [],
             multisigs: [],
+            walletMode: 'watcher',
             createdAt: '2026-10-13T00:00:00.000Z',
         }]),
         accounts: collection([{
@@ -229,7 +229,13 @@ describe('extension popup with the background message router', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 
-        const quickActions = await screen.findByRole('group', { name: 'Quick actions' });
+        // Home has no quick action row; Send and Receive are rows of the wallet menu in the header.
+        await screen.findByRole('button', { name: 'Open menu' });
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        const openFromMenu = async (name) => {
+            fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+            fireEvent.click(await screen.findByRole('option', { name }));
+        };
         expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
         expect(chrome.messages).toContainEqual({
             type: 'wallet.unlock',
@@ -241,31 +247,36 @@ describe('extension popup with the background message router', () => {
             request: { walletId: WALLET_ID, accountId: ACCOUNT_ID },
         });
 
-        fireEvent.click(within(quickActions).getByRole('button', { name: 'Receive' }));
+        await openFromMenu('Receive');
 
         expect(await screen.findByRole('heading', { name: 'Receive' })).toBeInTheDocument();
-        expect(await screen.findByText(FROM)).toBeInTheDocument();
+        // The address sits in Receive's read-only address field.
+        expect(await screen.findByDisplayValue(FROM)).toBeInTheDocument();
         expect(chrome.messages).toContainEqual({
             type: 'addresses.newest',
             request: { walletId: WALLET_ID, chainId: CHAIN_ID, accountId: ACCOUNT_ID },
         });
-        const addressType = screen.getByLabelText('Address type');
-        fireEvent.change(addressType, { target: { value: 'p2pkh' } });
-        expect(screen.queryByText(FROM)).not.toBeInTheDocument();
-        fireEvent.change(addressType, { target: { value: 'p2wpkh' } });
-        expect(await screen.findByText(FROM)).toBeInTheDocument();
+        // Receive has no Address type select any more: the address field's own
+        // picker icon opens the address list instead.
+        expect(screen.queryByLabelText('Address type')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Choose receive address' })).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to home' }));
-        const homeActions = await screen.findByRole('group', { name: 'Quick actions' });
-        fireEvent.click(within(homeActions).getByRole('button', { name: 'Send' }));
+        // Opened from the menu, Receive is a root page with no Back (G06);
+        // the next menu pick starts the history over on Send.
+        expect(screen.queryByRole('button', { name: 'Back to previous screen' })).toBeNull();
+        await openFromMenu('Send');
 
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.01' } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
-        expect(review).toHaveTextContent(`Send 0.01 BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Watch-only mode creates a transaction without signing or sending it');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Send 0.01 BTC');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(review.querySelector(`[aria-label="${TO}"]`)).not.toBeNull();
+        expect(screen.getByTestId('confirm-reject')).toHaveTextContent('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent('Approve');
+        expect(review).toHaveTextContent('Another phone signs for this wallet: this prepares the transaction for it.');
         expect(chrome.messages).toContainEqual({
             type: 'addresses.byChain',
             request: { walletId: WALLET_ID, accountId: ACCOUNT_ID },

@@ -110,6 +110,25 @@ describe('layout sweep control rows', () => {
         ]);
     });
 
+    it('counts a label help tip as part of its label, but still fails a real control beside it', () => {
+        document.body.innerHTML = `
+            <div id="field-row" style="display: flex">
+                <label for="lang">Language</label>
+                <span><button id="tip" aria-label="About the language setting" aria-describedby="tip-text" aria-expanded="false" style="border: 0; background: transparent; border-radius: 0px; font-size: 11px">?</button><span id="tip-text" role="tooltip" hidden>The language the wallet uses.</span></span>
+                <select id="lang" style="border: 1px solid #888; border-radius: 8px; font-size: 14px"><option>English</option></select>
+                <button id="reset" style="border: 1px solid #888; border-radius: 4px; font-size: 11px">Reset</button>
+            </div>
+        `;
+        place(document.getElementById('tip'), rect(80, 6, 24, 24));
+        place(document.getElementById('lang'), rect(200, 0, 160, 36));
+        place(document.getElementById('reset'), rect(368, 4, 60, 28));
+
+        const findings = measureControlRows();
+        expect(findings).toHaveLength(1);
+        expect(findings[0].controls.map((control) => control.el)).toEqual(['select "English"', 'button "Reset"']);
+        expect(findings[0].problems).toEqual(['height', 'border-radius', 'font-size']);
+    });
+
     it('forms rows only inside one region and skips visually hidden controls', () => {
         document.body.innerHTML = `
             <div id="shell" style="display: flex">
@@ -179,6 +198,93 @@ describe('layout sweep control rows', () => {
         place(document.querySelector('select'), rect(300, 0, 120, 36));
 
         expect(measureControlRows()).toEqual([]);
+    });
+
+    it('leaves the Quick Give/Get amount (G31) and the bare header Back (G02, U38) their own size, and nothing else', () => {
+        document.body.innerHTML = `
+            <section class="_card_1juic_131" aria-label="You give">
+                <div id="quick" class="_cardMid_1juic_161" style="display: flex">
+                    <input class="_bigAmount_1juic_169" aria-label="Give amount" style="border: 0; background: transparent; border-radius: 8px; font-size: 32px">
+                    <button style="border: 1px solid #888; border-radius: 9999px; font-size: 13px">Select a token</button>
+                </div>
+            </section>
+            <div id="plain" style="display: flex">
+                <input aria-label="Amount" style="border: 0; background: transparent; border-radius: 8px; font-size: 32px">
+                <button style="border: 1px solid #888; border-radius: 9999px; font-size: 13px">Pick a token</button>
+            </div>
+            <div class="_header_9x2_5" id="header" style="display: grid">
+                <button class="_back_9x2_43" aria-label="Back to settings" style="border: 0; background: transparent"><svg></svg></button>
+                <span><button aria-label="Filter sites" style="border: 1px solid #888; border-radius: 8px"><svg></svg></button></span>
+            </div>
+            <div id="icons" style="display: flex">
+                <button class="_back_9x2_43" aria-label="Previous" style="border: 0; background: transparent"><svg></svg></button>
+                <button aria-label="Next" style="border: 1px solid #888; border-radius: 8px"><svg></svg></button>
+            </div>
+        `;
+        const [bigAmount, quickPick] = document.querySelectorAll('#quick > *');
+        const [plainAmount, plainPick] = document.querySelectorAll('#plain > *');
+        const [back, filter] = document.querySelectorAll('#header button');
+        const [previous, next] = document.querySelectorAll('#icons button');
+        place(bigAmount, rect(0, 0, 200, 48));
+        place(quickPick, rect(210, 2, 120, 44));
+        place(plainAmount, rect(0, 100, 200, 48));
+        place(plainPick, rect(210, 102, 120, 44));
+        place(back, rect(0, 200, 28, 28));
+        place(filter, rect(300, 192, 44, 44));
+        place(previous, rect(0, 300, 28, 28));
+        place(next, rect(40, 292, 44, 44));
+
+        // The same 32px amount outside a Give/Get card, and a bare chevron
+        // outside the page header, are still held to their row.
+        expect(measureControlRows()).toEqual([
+            expect.objectContaining({
+                problems: ['font-size'],
+                controls: [
+                    expect.objectContaining({ el: 'input "Amount"' }),
+                    expect.objectContaining({ el: 'button "Pick a token"' }),
+                ],
+            }),
+            expect.objectContaining({
+                problems: ['height'],
+                controls: [
+                    expect.objectContaining({ el: 'button "Previous"', height: 28 }),
+                    expect.objectContaining({ el: 'button "Next"', height: 44 }),
+                ],
+            }),
+        ]);
+    });
+
+    it('reads the list and detail panels of a two-panel page (G115, G128) as separate regions', () => {
+        const page = (panels) => `
+            <main>
+                <div style="display: flex">
+                    <div class="${panels ? '_listPanel_7k1_40' : ''}">
+                        <button style="border: 0; background: transparent; border-radius: 8px; font-size: 14px">Open Dogecoin details</button>
+                    </div>
+                    <div class="${panels ? '_detailPanel_7k1_60' : ''}" style="display: flex">
+                        <button style="border: 0; background: transparent; border-radius: 0px; font-size: 11px">24h</button>
+                        <button style="border: 0; background: transparent; border-radius: 0px; font-size: 11px">All</button>
+                    </div>
+                </div>
+            </main>
+        `;
+        const lay = () => {
+            const [row, day, all] = document.querySelectorAll('button');
+            place(row, rect(0, 0, 400, 44));
+            place(day, rect(500, 8, 40, 28));
+            place(all, rect(550, 8, 40, 28));
+        };
+
+        document.body.innerHTML = page(true);
+        lay();
+        expect(measureControlRows()).toEqual([]);
+
+        // Without the panels the same controls form one row and fail on type.
+        document.body.innerHTML = page(false);
+        lay();
+        expect(measureControlRows()).toEqual([
+            expect.objectContaining({ problems: ['font-size'] }),
+        ]);
     });
 
     it('runs the route sweep at each required width', () => {

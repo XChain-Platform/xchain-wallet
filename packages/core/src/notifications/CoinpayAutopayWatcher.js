@@ -19,13 +19,16 @@
 // chain immediately before signing, giving the spec's pre-sign
 // re-check for free.
 //
-// Signing model (Phase A): unlocked sessions only. The engine signs
-// with the pre-unlocked SoftwareSigner from the shell's SignerPool via
-// the injected `getSigner`; when that returns null (locked session,
-// HW/watch-only wallet, desktop keychain-only unlock - seeds have
-// their own per-wallet KDF, so an open vault alone cannot sign) the
-// engine degrades to the high-urgency manual notification. It never
-// stores or receives a password.
+// Signing model. Unlocked, the engine signs with the pre-unlocked
+// SoftwareSigner from the shell's SignerPool via the injected
+// `getSigner` (a desktop keychain restore pools the primary wallet's
+// signer too). Locked (Phase B, market/autopaySession.js), the shell
+// runs a second instance on the locked session: `getPaySigner` hands
+// out a ScopedPaySigner bound to the one payment, which signs nothing
+// else. When no signer exists (HW/watch-only wallet, a wallet the
+// session holds no key for, a session that has ended) the engine
+// degrades to the high-urgency manual notification. It never stores
+// or receives a password.
 //
 // Single active payer: exactly one instance holds the vault's payer
 // lease per cycle; the rest stay notify-only. Vaults are per-shell at
@@ -63,10 +66,11 @@ import {
     getCoinpayObligationsForAddress,
 } from '../flows/coinpayQueries.js';
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
-import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
+import { baseUnitsToCoinText, isPendingObligation, obligationBaseUnits } from '../market/obligationStatus.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 const NOTIFIED_CAP = 500;
@@ -100,6 +104,10 @@ export class CoinpayAutopayWatcher {
      * @param {string} [deps.instanceId] stable shell identity when one process is the only payer
      * @param {() => Promise<string[] | Set<string>>} [deps.loadNotified]
      * @param {(keys: string[]) => (void | Promise<void>)} [deps.saveNotified]
+     * @param {(payment: { walletId: string, consentId: string, chainId: string, payeeAddress: string, amountBase: string, matchIndex: string, deadlineSeconds: number }) => (object | null)} [deps.getPaySigner]
+     *   locked auto pay: a signer bound to exactly this payment; null = cannot sign it
+     * @param {(result: { ok: boolean, chainId: string, matchIndex: string, consentId: string, amountBase: string }) => void} [deps.onPaymentResult]
+     * @param {(consents: object[]) => void} [deps.onCycle]   the autopay-on consent list read each cycle
      */
     constructor({
         vault,
@@ -109,6 +117,7 @@ export class CoinpayAutopayWatcher {
         getSettings,
         reservationLedger,
         notify,
+        recordAlert,
         shellKind,
         intervalMs,
         now,
@@ -117,6 +126,9 @@ export class CoinpayAutopayWatcher {
         instanceId,
         loadNotified,
         saveNotified,
+        getPaySigner,
+        onPaymentResult,
+        onCycle,
     } = {}) {
         if (!vault) throw new Error('CoinpayAutopayWatcher: vault is required');
         if (!sdkRegistry) throw new Error('CoinpayAutopayWatcher: sdkRegistry is required');
@@ -134,7 +146,7 @@ export class CoinpayAutopayWatcher {
         this._getSigner = getSigner;
         this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert, now });
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
@@ -144,6 +156,12 @@ export class CoinpayAutopayWatcher {
         this._instanceId = typeof instanceId === 'string' && instanceId ? instanceId : randomUUID();
         this._loadNotified = typeof loadNotified === 'function' ? loadNotified : null;
         this._saveNotified = typeof saveNotified === 'function' ? saveNotified : null;
+        this._stopped = false;
+        this._getPaySigner = typeof getPaySigner === 'function' ? getPaySigner : null;
+        this._onPaymentResult = typeof onPaymentResult === 'function' ? onPaymentResult : null;
+        this._onCycle = typeof onCycle === 'function' ? onCycle : null;
+        /** @type {Promise<void> | null} */
+        this._inflight = null;
         this._timer = null;
         this._ticking = false;
         this._unsubs = [];
@@ -162,6 +180,7 @@ export class CoinpayAutopayWatcher {
     /** Begin the cycle loop + WS triggers. Idempotent. */
     start() {
         if (this._timer) return this;
+        this._stopped = false;
         this.pollOnce().catch((e) => this._log.error('CoinpayAutopayWatcher: initial cycle failed', e));
         this._timer = setInterval(() => {
             this.pollOnce().catch((e) => this._log.error('CoinpayAutopayWatcher: cycle failed', e));
@@ -172,6 +191,10 @@ export class CoinpayAutopayWatcher {
 
     /** Stop the loop, drop WS triggers, release nothing (holds stay until terminal). */
     stop() {
+        // A cycle still in flight checks this after each await: a lock that
+        // stops this instance hands payment to the locked session (or to
+        // nobody), so this one must neither pay nor notify afterwards.
+        this._stopped = true;
         if (this._timer) {
             clearInterval(this._timer);
             this._timer = null;
@@ -225,10 +248,35 @@ export class CoinpayAutopayWatcher {
     async pollOnce() {
         if (this._ticking) return;
         this._ticking = true;
+        const run = this._cycle();
+        this._inflight = run.then(() => {}, () => {});
         try {
-            await this._cycle();
+            await run;
         } finally {
             this._ticking = false;
+            this._inflight = null;
+        }
+    }
+
+    /** Resolves once no cycle is running (lock and unlock hand-overs wait on it). */
+    whenIdle() {
+        return this._inflight || Promise.resolve();
+    }
+
+    /** Payer-lease identity, so a hand-over keeps the lease instead of waiting it out. */
+    get instanceId() {
+        return this._instanceId;
+    }
+
+    /** Matches this instance attempted, for the next instance across a lock or unlock. */
+    attemptedMatches() {
+        return Array.from(this._attempted);
+    }
+
+    /** @param {Iterable<string>} matches  attempted set carried from the previous instance */
+    seedAttempted(matches) {
+        for (const m of matches || []) {
+            if (typeof m === 'string' && m) this._attempted.add(m);
         }
     }
 
@@ -245,6 +293,7 @@ export class CoinpayAutopayWatcher {
         }
         if (consents.length === 0) {
             this._lastStatus = { payer: false, armed: 0, unsignable: [] };
+            this._reportCycle(consents);
             return;
         }
 
@@ -257,6 +306,7 @@ export class CoinpayAutopayWatcher {
         } catch (e) {
             this._log.warn('CoinpayAutopayWatcher: index backfill failed', e);
         }
+        this._reportCycle(consents);
 
         const isPayer = await this._acquireOrRenewLease();
 
@@ -359,12 +409,11 @@ export class CoinpayAutopayWatcher {
 
     async _handleObligation({ chainId, row, addrConsents, tipHeight, matchesByBlock, isPayer, pendingTxs }) {
         const matchIndex = String(row.action_index ?? row.actionIndex ?? '');
-        if (!matchIndex) return;
+        if (!matchIndex || this._stopped) return;
 
         // Any obligation leaving pending releases its hold in the
         // terminal sweep; skip early here for non-pending rows.
-        const status = row.coinpay_status ?? row.coinpayStatus;
-        if (status !== 'pending_coinpay') {
+        if (!isPendingObligation(row)) {
             this._terminalMatches = this._terminalMatches || new Set();
             this._terminalMatches.add(matchIndex);
             for (const key of this._notified) {
@@ -447,8 +496,8 @@ export class CoinpayAutopayWatcher {
             const payment = this._paymentText(row, chainId);
             await this._notifyOnce(matchIndex, 'locked', {
                 kind: 'coinpay-autopay-manual',
-                title: 'Auto-pay is disarmed',
-                body: `${payment ? `${payment} is due` : 'Payment is due'} for order #${consent.orderActionIndex}. Unlock to use auto-pay, or open Payments due.`,
+                title: 'Auto pay is paused',
+                body: `${payment ? `${payment} is due` : 'Payment is due'} for order #${consent.orderActionIndex}. Unlock to resume auto pay, or open Payments due.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: 'locked', urgency: 'high' },
             });
             return;
@@ -497,6 +546,31 @@ export class CoinpayAutopayWatcher {
             return;
         }
 
+        // Locked auto pay: a signer bound to exactly this payment (payee,
+        // amount, match, deadline), or none, in which case nothing signs.
+        let paySigner = signer;
+        if (this._getPaySigner) {
+            paySigner = this._getPaySigner({
+                walletId: consent.walletId,
+                consentId: consent.id,
+                chainId,
+                payeeAddress: payee,
+                amountBase,
+                matchIndex,
+                deadlineSeconds: Number(row.expiration),
+            });
+            if (!paySigner) {
+                const payment = this._paymentText(row, chainId);
+                await this._notifyOnce(matchIndex, 'locked', {
+                    kind: 'coinpay-autopay-manual',
+                    title: 'Auto pay is paused',
+                    body: `${payment ? `${payment} is due` : 'Payment is due'} for order #${consent.orderActionIndex}. Unlock to resume auto pay, or open Payments due.`,
+                    data: { chainId, orderMatchActionIndex: matchIndex, reason: 'locked', urgency: 'high' },
+                });
+                return;
+            }
+        }
+
         // Reservation hold: payee amount + estimated network fee, so a
         // user send cannot race the payment out of its funds.
         const holdId = `autopay:${chainId}:${matchIndex}`;
@@ -528,6 +602,10 @@ export class CoinpayAutopayWatcher {
             ? displayRateToSettingsCustom(feeTiers.unit, fastTier.rateValue)
             : undefined;
 
+        if (this._stopped) {
+            await this._releaseHold(matchIndex);
+            return;
+        }
         // Mark attempted BEFORE signing so a crash mid-broadcast can
         // never double-pay from this instance.
         this._attempted.add(matchIndex);
@@ -536,7 +614,10 @@ export class CoinpayAutopayWatcher {
             const result = await this._coinpayAction({
                 vault: this._vault,
                 walletId: consent.walletId,
-                signer,
+                signer: paySigner,
+                // The locked lane builds with no rotated change address; a
+                // due automatic donation rides it like any other send.
+                ...(paySigner?.kind === 'scoped-pay' && { scopedPayment: true }),
                 chainRegistry: this._chainRegistry,
                 sdkRegistry: this._sdkRegistry,
                 chainId,
@@ -545,7 +626,7 @@ export class CoinpayAutopayWatcher {
                 payeeAddress: payee,
                 coinAmount: amountBase,
                 ...(feePerKb !== undefined && { feePerKb }),
-                actionSummary: `Auto-paid match #${matchIndex} for order #${consent.orderActionIndex}`,
+                actionSummary: `Auto paid match #${matchIndex} for order #${consent.orderActionIndex}`,
                 onProgress: (p) => { phase = p; },
             });
             const txid = result?.txid || result?.broadcast?.txid || '';
@@ -563,9 +644,10 @@ export class CoinpayAutopayWatcher {
                 // into a duplicate payment.
                 this._log.error('CoinpayAutopayWatcher: payment ledger write failed', e);
             }
+            this._reportPayment({ ok: true, chainId, matchIndex, consentId: consent.id, amountBase });
             await this._notifyOnce(matchIndex, 'autopaid', {
                 kind: 'coinpay-autopaid',
-                title: 'Auto-pay complete',
+                title: 'Auto pay complete',
                 body: `Paid ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} for order #${consent.orderActionIndex}.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, txid },
             });
@@ -578,18 +660,33 @@ export class CoinpayAutopayWatcher {
                 this._attempted.delete(matchIndex);
                 await this._releaseHold(matchIndex);
             }
+            this._reportPayment({ ok: false, chainId, matchIndex, consentId: consent.id, amountBase });
             const short = /insufficient|fund|utxo/i.test(String(e?.message));
             const failureReason = (String(e?.message || '').trim()
                 || 'The wallet service returned no explanation').replace(/[.!?]+$/, '');
             await this._notifyOnce(matchIndex, short ? 'balance-short' : 'pay-failed', {
                 kind: 'coinpay-autopay-manual',
-                title: short ? `Not enough ${coinTicker} for auto-pay` : 'Auto-pay failed',
+                title: short ? `Not enough ${coinTicker} for auto pay` : 'Auto pay failed',
                 body: short
                     ? `Order #${consent.orderActionIndex} needs ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker}. Fund its address or open Payments due.`
                     : `Could not pay ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} for order #${consent.orderActionIndex}: ${failureReason}. Open Payments due before the deadline.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: short ? 'balance-short' : 'pay-failed', urgency: 'high' },
             });
             this._log.error('CoinpayAutopayWatcher: payment failed', e);
+        }
+    }
+
+    _reportPayment(result) {
+        if (!this._onPaymentResult) return;
+        try { this._onPaymentResult(result); } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: payment result hook threw', e);
+        }
+    }
+
+    _reportCycle(consents) {
+        if (!this._onCycle) return;
+        try { this._onCycle(consents); } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: cycle hook threw', e);
         }
     }
 
@@ -650,7 +747,7 @@ export class CoinpayAutopayWatcher {
         switch (reason) {
             case 'past-arming-cutoff':
             case 'past-retry-cutoff':
-                return `${payment ? `Pay ${payment}` : 'Payment is due'} for ${orderRef} before the deadline. Auto-pay is off; open Payments due.`;
+                return `${payment ? `Pay ${payment}` : 'Payment is due'} for ${orderRef} before the deadline. Auto pay is off; open Payments due.`;
             case 'amounts-unavailable':
             case 'match-unavailable':
                 return `Payment for ${orderRef} could not be verified. Open Payments due to review it.`;
@@ -669,6 +766,9 @@ export class CoinpayAutopayWatcher {
         const chainId = typeof payload?.data?.chainId === 'string' ? payload.data.chainId : '';
         const key = `${chainId}:${matchIndex}:${reason}`;
         if (this._notified.has(key)) return;
+        // The payment itself still reports; anything else after a stop is
+        // stale (a lock in between means the locked session speaks now).
+        if (this._stopped && reason !== 'autopaid') return;
         let settings;
         try {
             settings = await this._getSettings();

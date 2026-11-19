@@ -49,22 +49,20 @@ function encoderError(message, code) {
 
 describe('ComposeMessage turns a failed send into a sentence', () => {
     it('routes BOTH submit catches through the shared helper', () => {
-        const calls = SRC.match(/submitFailureMessage\(err, \{[\s\S]{0,160}?\}\)/g) || [];
-        expect(calls.length, 'the confirm-flow catch and the legacy submit catch each map their failure')
+        const calls = SRC.match(/showSubmitFailure\(err(?:, \{ clearPubkeyError: true \})?\)/g) || [];
+        expect(calls.length, 'the confirm-flow catch and the legacy submit catch share one failure mapper')
             .toBe(2);
-        for (const call of calls) {
-            // The fallback keeps err.message AHEAD of this form's own copy,
-            // which is submitFailureMessage's stated contract ("the message the
-            // form would have shown") and what every other swept form passes.
-            // Pinning the bare house string instead let a specific host reason,
-            // such as an insufficient-funds shortfall naming the amount
-            // required, be swallowed behind "Send failed." while this guard
-            // stayed green; composeMessageSendPath.test.jsx is the behavioural
-            // test that caught it.
-            expect(call).toContain("fallback: err?.message || 'Send failed.'");
-            expect(call).toContain('coinTicker: nativeTicker');
-            expect(call).toContain('chainId');
-        }
+        const mappings = SRC.match(/submitFailureMessage\(err, \{[\s\S]{0,160}?\}\)/g) || [];
+        expect(mappings).toHaveLength(1);
+        expect(mappings[0]).toContain("fallback: err?.message || 'Send failed.'");
+        expect(mappings[0]).toContain('coinTicker: nativeTicker');
+        expect(mappings[0]).toContain('chainId');
+    });
+
+    it('builds both submit payloads in one place', () => {
+        expect((SRC.match(/buildMessageRequest\(\)/g) || [])).toHaveLength(3);
+        expect((SRC.match(/broadcastChainId: chainId/g) || [])).toHaveLength(1);
+        expect(SRC).not.toContain('await messaging.messageActionHw');
     });
 
     it('imports the helper it calls, so the catch cannot throw a ReferenceError', () => {

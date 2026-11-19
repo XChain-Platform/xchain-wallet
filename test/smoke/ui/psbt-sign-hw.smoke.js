@@ -90,8 +90,8 @@ assert.match(handlerBlock, /vault\.addresses\.get\(addressId\)/, 'fetches Addres
 assert.match(handlerBlock, /resolveSigner\(\{ vault, address \}\)/, 'resolves descriptor via shared helper');
 assert.match(handlerBlock, /descriptor\.kind !== 'trezor' && descriptor\.kind !== 'ledger'/,
     'rejects non-HW source addresses');
-assert.match(handlerBlock, /signerBridge\.getTransport\(descriptor\.signerRecord\.id\)/,
-    'fetches transport from signer bridge');
+assert.match(handlerBlock, /signerBridge\.requireTransport\(descriptor\.signerRecord\.id\)/,
+    'fetches transport from signer bridge (HW_NOT_CONNECTED when absent)');
 assert.match(handlerBlock, /buildRemoteSigner\(descriptor, transport\)/,
     'builds RemoteSigner against the transport');
 assert.match(handlerBlock, /sdk\?\.wallet\?\.decomposePsbt/, 'guards against missing decomposePsbt');
@@ -164,13 +164,18 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /\(isHwSource \? hwStatus !== 'available' : \(!signerReady && password\.length === 0\)\)/,
-    'PsbtSignForm gates submit on HW status when HW, password length when software',
+    /'form:device': isHwSource && hwStatus !== 'available'[\s\S]{0,220}'psbt-sign-password': !useConfirmPage && !isHwSource && !signerReady && password\.length === 0/,
+    'PsbtSignForm validates HW readiness or the software password after the always-active submit is pressed',
+);
+assert.doesNotMatch(
+    formSrc,
+    /Sign on \$\{/,
+    'submit button keeps one label on both paths, with no per-vendor suffix',
 );
 assert.match(
     formSrc,
-    /isHwSource && selectedAddress\s*\?\s*`Sign on \$\{selectedAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\}`/,
-    'submit button copy switches per HW vendor',
+    /Sign Transaction\s*<\/FormAction>/,
+    'submit button reads Sign Transaction on the hardware path too',
 );
 assert.match(
     formSrc,

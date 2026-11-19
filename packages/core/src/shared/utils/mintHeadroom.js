@@ -9,12 +9,10 @@
 // contact legal@dankest.llc.
 
 // How much of a token can still be minted, which is NOT what the
-// minter holds. A MINT is bounded by two independent caps the indexer
-// enforces (xchain-indexer src/actions/mint.js, mirrored in the SDK's
-// preflight check): the per-transaction MAX_MINT, and the remaining
-// MAX_SUPPLY headroom (max supply minus current supply). The smaller of
-// the two is the largest amount a single MINT can carry; a wallet balance
-// has no bearing on it at all.
+// minter holds. A MINT is bounded by three independent caps the indexer
+// enforces: the per-transaction MAX_MINT, the remaining MAX_SUPPLY
+// headroom, and MINT_ADDRESS_MAX less this source address's prior valid
+// mints. The smallest is the largest amount a single MINT can carry.
 //
 // Supply values arrive as pre-formatted decimal strings ("5000",
 // "1000.5"), so every comparison here is exact string/BigInt decimal math.
@@ -95,17 +93,41 @@ export function subtractDecimal(a, b) {
 }
 
 /**
+ * `a + b` as an exact decimal string. Null when either side is unparseable.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {string | null}
+ */
+export function addDecimal(a, b) {
+    const pa = parseDecimal(a);
+    const pb = parseDecimal(b);
+    if (!pa || !pb) return null;
+    const scale = Math.max(pa.scale, pb.scale);
+    return render(rescale(pa, scale) + rescale(pb, scale), scale);
+}
+
+/**
  * The largest amount a single MINT of this token can carry.
  *
  * @param {object} args
  * @param {string | null} [args.maxSupply]    MAX_SUPPLY, null/absent when the token is uncapped
  * @param {string | null} [args.totalSupply]  supply in existence right now
  * @param {string | null} [args.mintMax]      per-transaction MAX_MINT, null/absent when unset
+ * @param {string | null} [args.mintAddressMax] cumulative MINT_ADDRESS_MAX, null/absent when unset
+ * @param {string | null} [args.mintedByAddress] valid mints already authored by this source;
+ *                                                null while that total is unknown
  * @returns {string | null}                   decimal string; '0' at the cap; null when NOTHING bounds
  *                                            the mint (uncapped supply and no MAX_MINT) or when the
  *                                            token record hasn't loaded yet
  */
-export function mintHeadroom({ maxSupply = null, totalSupply = null, mintMax = null } = {}) {
+export function mintHeadroom({
+    maxSupply = null,
+    totalSupply = null,
+    mintMax = null,
+    mintAddressMax = null,
+    mintedByAddress = null,
+} = {}) {
     // An uncapped token still has a per-tx cap if MAX_MINT is set, and a
     // capped token still has supply headroom if MAX_MINT is not: each
     // bound stands on its own, and the answer is whichever binds first.
@@ -113,9 +135,17 @@ export function mintHeadroom({ maxSupply = null, totalSupply = null, mintMax = n
         ? subtractDecimal(maxSupply, totalSupply ?? '0')
         : null;
     const perTx = parseDecimal(mintMax) ? String(mintMax).trim() : null;
-    if (supplyRoom === null) return perTx;
-    if (perTx === null) return supplyRoom;
-    return compareDecimal(perTx, supplyRoom) === -1 ? perTx : supplyRoom;
+    // Do not apply the per-address cap until its historical total is known.
+    // The form uses the other two caps while the read is loading, and passes
+    // zero after a failed read so the stated cap itself remains the fallback.
+    const addressRoom = parseDecimal(mintAddressMax) && parseDecimal(mintedByAddress)
+        ? subtractDecimal(mintAddressMax, mintedByAddress)
+        : null;
+    const bounds = [supplyRoom, perTx, addressRoom].filter((value) => value !== null);
+    if (bounds.length === 0) return null;
+    return bounds.reduce((smallest, value) => (
+        compareDecimal(value, smallest) === -1 ? value : smallest
+    ));
 }
 
 /**

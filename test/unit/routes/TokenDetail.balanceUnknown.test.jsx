@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const CHAIN = 'bitcoin-regtest';
 
@@ -35,7 +36,7 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); });
 
-function renderDetail(getWalletBalances) {
+function renderDetail(getWalletBalances, { kind = 'token', tick = 'UNKNOWNBAL' } = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', divisibility: 0 }),
@@ -47,17 +48,35 @@ function renderDetail(getWalletBalances) {
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <TokenDetail walletId="w1" chainId={CHAIN} tick="UNKNOWNBAL" kind="token" onBack={() => {}} onSend={() => {}} />
+            <TokenDetail walletId="w1" chainId={CHAIN} tick={tick} kind={kind} onBack={() => {}} onSend={() => {}} />
         </MessagingProvider>,
     );
 }
 
 describe('TokenDetail balance that is not known', () => {
+    it('reads the amount from Home\'s saved balances while they are under five minutes old', async () => {
+        writeBalanceCache('w1', null, {
+            balances: { [CHAIN]: [{
+                address: 'bcrt1qsaved',
+                error: null,
+                balances: { native: null, tokens: [{ tick: 'UNKNOWNBAL', quantity: '7', divisibility: 0 }] },
+            }] },
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        }, 'mainnet');
+        const getWalletBalances = vi.fn().mockResolvedValue({});
+        renderDetail(getWalletBalances);
+        await waitFor(() => expect(screen.queryByText('Loading balance…')).toBeNull());
+        expect(screen.queryByText('Balance is unavailable.')).toBeNull();
+        expect(screen.queryByText('No balance to send.')).toBeNull();
+        expect(getWalletBalances).not.toHaveBeenCalled();
+    });
+
     it('says the balance is unavailable after a failed read, not that there is none', async () => {
         renderDetail(vi.fn().mockRejectedValue(new Error('offline')));
         expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
         expect(screen.queryByText('No balance to send.')).toBeNull();
-        expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
+        expect(screen.getByRole('region', { name: 'UNKNOWNBAL' }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
     });
 
     it('says the balance is unavailable when one address on the chain failed to read', async () => {
@@ -71,7 +90,7 @@ describe('TokenDetail balance that is not known', () => {
         }));
         expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
         expect(screen.queryByText('No balance to send.')).toBeNull();
-        expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
+        expect(screen.getByRole('region', { name: 'UNKNOWNBAL' }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
     });
 
     it('says the balance is loading while the read is pending', async () => {
@@ -83,5 +102,29 @@ describe('TokenDetail balance that is not known', () => {
     it('still reports an empty wallet as no balance once the read answers', async () => {
         renderDetail(vi.fn().mockResolvedValue({}));
         await waitFor(() => expect(screen.getByText('No balance to send.')).toBeTruthy());
+    });
+});
+
+describe('TokenDetail balance with one unreadable half', () => {
+    const halfRead = (unavailable, native, tokens) => vi.fn().mockResolvedValue({
+        [CHAIN]: [{ address: 'bcrt1qone', error: null, balances: { native, tokens, unavailable } }],
+    });
+
+    it('says a token balance is unavailable when the token ledger half could not be read', async () => {
+        renderDetail(halfRead(['tokens'], { tick: 'BTC', divisibility: 8, quantity: '0' }, []));
+        expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
+        expect(screen.queryByText('No balance to send.')).toBeNull();
+    });
+
+    it('says the coin balance is unavailable when the coin half could not be read', async () => {
+        renderDetail(halfRead(['native'], null, []), { kind: 'native', tick: 'BTC' });
+        expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
+        expect(screen.queryByText('No balance to send.')).toBeNull();
+    });
+
+    it('does not blame an unreadable coin half for a token total', async () => {
+        renderDetail(halfRead(['native'], null, []));
+        await waitFor(() => expect(screen.getByText('No balance to send.')).toBeTruthy());
+        expect(screen.queryByText('Balance is unavailable.')).toBeNull();
     });
 });

@@ -10,19 +10,21 @@
 
 // ensureNetworkAddresses.
 //
-// Addresses used to be derived exactly once, at wallet creation, one per
-// `activeChainIds` - which the shells hardcode to the three MAINNETS. The
-// `activeNetwork` setting only FILTERS the visible set, so switching
-// Settings > Network to Testnet or Regtest left the wallet with zero visible
-// addresses: Receive said "No addresses yet on any chain", the app reported
-// itself offline, and nothing in the UI could create one. A two-click dead end
-// out of a shipped settings control, with no way back but switching the
-// network again. Regtest is developer-only, but Testnet is offered to
+// Wallet creation derives addresses once, one per `activeChainIds`, which the
+// shells hardcode to the three MAINNETS. The `activeNetwork` setting only
+// FILTERS the visible set, so without this flow switching Settings > Network to
+// Testnet or Regtest would leave the wallet with zero visible addresses:
+// Receive would say "No addresses yet on any chain", the app would report
+// itself offline, and nothing in the UI could create one. That is a two-click
+// dead end out of a shipped settings control, with no way back but switching
+// the network again. Regtest is developer-only, but Testnet is offered to
 // everyone.
 //
-// This closes it by deriving the first address for each chain on the network
-// being switched TO, mirroring exactly what wallet creation does for its
-// active chains (one address, `descriptor.defaultAddressType`, account 0).
+// The flow closes that gap by deriving the first address for each chain on the
+// network being switched TO, mirroring wallet creation with one address at
+// index 0 on account 0. Calling receiveAddress without an explicit type
+// resolves the wallet-format default, including p2pkh for counterwallet-legacy
+// wallets.
 //
 // Deliberately best-effort per chain: a network has several chains, and one
 // failing to derive must not deny the user the others. The caller gets a

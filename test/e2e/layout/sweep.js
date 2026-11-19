@@ -26,6 +26,7 @@ import {
     completeRecoveryPhraseChallenge, dismissIntroCarousel, gotoSection, nav, openSettings,
     readRecoveryPhrase, unlockedShell,
 } from '../fixtures/wallet.js';
+import { measureButtonSizes } from './button-outlines.js';
 
 /** Names never clicked: they lock, delete, reset, or leave the wallet. */
 const DESTRUCTIVE = /lock|remove|delete|reset|wipe|erase|sign ?out|log ?out|forget|revoke|uninstall|export|backup|reveal|show (seed|recovery)|recovery phrase|private key|clear (all|data)|factory/i;
@@ -68,6 +69,25 @@ export function measureInPage(opts = {}) {
         seen.add(key);
         res[list].push(item);
     };
+    // An icon is judged by the shapes it draws, not by its box. G07 clips a
+    // list row's chevron, a 32px icon box, to its middle third, so the svg's
+    // empty sides are cut by design. Its path, line and polygon children are
+    // leaves measured on their own, so a glyph that is itself cut (a wider
+    // down chevron in that slot loses its arm ends) still fails.
+    const drawnByShapes = (el) => el.tagName === 'svg'
+        && el.querySelector('path, line, polyline, polygon, circle, ellipse, rect') !== null;
+    // Text that ends in an ellipsis is shortened, not cut: a leaf drawing its
+    // own ellipsis passes below, and an inline run inside a box that draws
+    // one (an amount in a <bdi>, a span of help) shows the same ellipsis at
+    // that box's edge. Only inline runs: a block or inline-block inside the
+    // box is cut whole, with no ellipsis drawn over it.
+    const ellipsizedBy = (el, box) => {
+        if (getComputedStyle(box).textOverflow !== 'ellipsis') return false;
+        for (let a = el; a && a !== box; a = a.parentElement) {
+            if (getComputedStyle(a).display !== 'inline') return false;
+        }
+        return true;
+    };
     for (const el of document.querySelectorAll('body *')) {
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
@@ -106,7 +126,7 @@ export function measureInPage(opts = {}) {
         if (!leaf) continue;
         if (R > vw + 1 || L < -1) {
             push('offscreen', { el: desc(el), left: Math.round(L), right: Math.round(R) });
-        } else if (clipX && (r.right > R + 2 || r.left < L - 2)) {
+        } else if (clipX && (r.right > R + 2 || r.left < L - 2) && !drawnByShapes(el) && !ellipsizedBy(el, clipX)) {
             const ccs = getComputedStyle(clipX);
             if (ccs.overflowX === 'hidden' || ccs.overflowX === 'clip') {
                 push('clipped', { el: desc(el), by: desc(clipX), cut: Math.round(Math.max(r.right - R, L - r.left)) });
@@ -352,9 +372,20 @@ export function measureInPage(opts = {}) {
         const padR = parseFloat(scs.paddingRight) || 0;
         const usable = scroller.clientWidth - padL - padR;
         const left = sr.left + (parseFloat(scs.borderLeftWidth) || 0) + padL;
+        // The scroller's right frame edge: where its scrollbar begins, or
+        // its right border in a right-to-left frame, which draws the
+        // scrollbar on the left (WebKit leaves clientLeft at the border then,
+        // so the side comes from the direction).
+        const borderL = parseFloat(scs.borderLeftWidth) || 0;
+        const frameRight = scs.direction === 'rtl'
+            ? sr.right - (parseFloat(scs.borderRightWidth) || 0)
+            : sr.left + borderL + scroller.clientWidth;
         const LISTY = /(^|_|-)(list|lists|card|cards|table|items|grid|panel|feed|results)(_|-|$)/i;
         const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
         const isCandidate = (el) => {
+            // An icon is never a list, whatever its class says: the Network
+            // field's list icon (U59) is a lucide "layout-list" svg.
+            if (el instanceof SVGElement) return false;
             if (!BLOCK.test(getComputedStyle(el).display)) return false;
             const role = el.getAttribute('role');
             if (role === 'list' || role === 'table' || role === 'grid') return true;
@@ -411,18 +442,65 @@ export function measureInPage(opts = {}) {
                 target = parent;
             }
             const r = target.getBoundingClientRect();
+            // The panel the block sits in. A list-and-detail page (G115 wide
+            // Home, G128 two-panel pages) scrolls each panel on its own, so
+            // each panel is a content area with its own scrollbar, and a list
+            // fills its panel, not the page.
+            // The list column's fixed header (tabs, the DEX asset picker) sits
+            // in PanelSplit's listPanel above the scrolling list body, so a
+            // named G128 column counts as a panel as a scroller does.
+            let panel = null;
+            for (let a = target.parentElement; a && a !== scroller; a = a.parentElement) {
+                if (scrollable(getComputedStyle(a).overflowY)
+                    || [...a.classList].some((c) => /(^|_)(listPanel|detailPanel)(_|$)/.test(c))) { panel = a; break; }
+            }
+            // A wrapper as wide as the block (a grid cell holding a card) is
+            // the block's slot, and the row is read beside that slot: wide
+            // Home's value hero and Allocation card sit in two cells of one
+            // row (G115).
+            let slot = target;
+            while (slot.parentElement && slot.parentElement !== scroller && slot.parentElement !== panel) {
+                const pr = slot.parentElement.getBoundingClientRect();
+                if (Math.abs(pr.left - r.left) > 1 || Math.abs(pr.right - r.right) > 1) break;
+                slot = slot.parentElement;
+            }
             // The row this block sits in: siblings overlapping it vertically.
             let rowL = r.left; let rowR = r.right;
-            for (const sib of target.parentElement ? target.parentElement.children : []) {
-                if (sib === target) continue;
+            for (const sib of slot.parentElement ? slot.parentElement.children : []) {
+                if (sib === slot) continue;
                 const sr2 = sib.getBoundingClientRect();
                 if (sr2.width < 1 || sr2.bottom <= r.top || sr2.top >= r.bottom) continue;
                 rowL = Math.min(rowL, sr2.left); rowR = Math.max(rowR, sr2.right);
                 judged.add(sib);
             }
-            const short = Math.round(usable - (rowR - rowL));
-            if (short > 2) {
-                out.push({ el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(usable), short, offset: Math.round(rowL - left) });
+            // A block clipped by its own sideways scroll or clip box shows
+            // only the part inside that box, so the row is judged by it.
+            for (let a = target.parentElement; a && a !== scroller; a = a.parentElement) {
+                if (getComputedStyle(a).overflowX === 'visible') continue;
+                const ar = a.getBoundingClientRect();
+                rowL = Math.max(rowL, ar.left + a.clientLeft);
+                rowR = Math.min(rowR, ar.left + a.clientLeft + a.clientWidth);
+            }
+            // The frame the row is judged in: its panel, else the page scroller.
+            let frameUsable = usable; let frameLeft = left; let frameEdge = frameRight;
+            if (panel) {
+                const pcs = getComputedStyle(panel);
+                const pr = panel.getBoundingClientRect();
+                const pPadL = parseFloat(pcs.paddingLeft) || 0;
+                const pBorderL = parseFloat(pcs.borderLeftWidth) || 0;
+                frameUsable = panel.clientWidth - pPadL - (parseFloat(pcs.paddingRight) || 0);
+                frameLeft = pr.left + pBorderL + pPadL;
+                frameEdge = pcs.direction === 'rtl'
+                    ? pr.right - (parseFloat(pcs.borderRightWidth) || 0)
+                    : pr.left + pBorderL + panel.clientWidth;
+            }
+            const short = Math.round(frameUsable - (rowR - rowL));
+            // A block that runs past the frame edge sits under the scrollbar.
+            const under = Math.round(rowR - frameEdge);
+            if (short > 2 || under > 1) {
+                out.push({
+                    el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(frameUsable), short, offset: Math.round(rowL - frameLeft), under: Math.max(under, 0),
+                });
                 if (out.length >= 15) break;
             }
         }
@@ -456,17 +534,43 @@ export function measureControlRows() {
         '[role="main"]', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
         '[role="complementary"]', '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]',
     ].join(',');
+    // A CSS module class (`_bigAmount_1juic_169` in dev) by its local name.
+    const sharedClass = (el, part) => Boolean(el) && [...el.classList].some((c) => new RegExp(`(^|_)${part}(_|$)`).test(c));
+    // A list-and-detail page (G115 wide Home, G128 two-panel pages) scrolls
+    // its list and its detail as two panels, so a list row never forms a row
+    // with the detail's range chips or tabs that happen to sit level with it.
+    const panel = (node) => sharedClass(node, 'listPanel') || sharedClass(node, 'detailPanel');
     const regionOf = (el) => {
         for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
-            if (node.matches(regionSelector)) return node;
+            if (node.matches(regionSelector) || panel(node)) return node;
             if (/^(fixed|sticky)$/.test(getComputedStyle(node).position)) return node;
         }
         return document.body;
     };
+    // A label's help tip (U57) belongs to the label line, not to the row of
+    // controls beside it, the way an in-field button belongs to its field
+    // (U53). It is known by its own markup: a button described by an element
+    // whose role is tooltip.
+    const labelHelpTip = (el) => {
+        const describedBy = el.getAttribute('aria-describedby');
+        if (!describedBy || !el.hasAttribute('aria-expanded')) return false;
+        return describedBy.split(/\s+/).some((id) => document.getElementById(id)?.getAttribute('role') === 'tooltip');
+    };
+    // Two ruled controls keep their own size beside the row they sit in:
+    // - The Quick Give/Get cards' large amount (G31): borderless 2rem type
+    //   beside the card's asset pill, restored to the approved look in
+    //   fe2bc59bb. measureRulings' borderless-field rule and the U14 form
+    //   gate skip it the same way.
+    // - The page header's bare Back chevron (G02, U38): no outline, border or
+    //   fill, so its box never shows beside the header's 44px outlined
+    //   actions.
+    const ruledOwnSize = (el) => (sharedClass(el, 'bigAmount')
+            && sharedClass(el.parentElement, 'cardMid') && sharedClass(el.parentElement.parentElement, 'card'))
+        || (sharedClass(el, 'back') && sharedClass(el.parentElement, 'header'));
     // Nested interactive markup represents one control even when both the
     // wrapper and its implementation carry an interactive role.
     const controls = [...document.querySelectorAll(selector)].filter((el) => (
-        visible(el) && !el.parentElement?.closest(selector)
+        visible(el) && !el.parentElement?.closest(selector) && !labelHelpTip(el) && !ruledOwnSize(el)
     ));
     // A control with no background and no full border draws no box: an
     // underlined text link in a sentence, an underline tab. Its height and
@@ -732,7 +836,8 @@ export function layoutSweepFindings(screens) {
             add('headerScrolledAway', label, `${label}: ${item.el} scrolled out of view (top ${item.top}px, bottom ${item.bottom}px)`);
         }
         for (const item of narrow) {
-            add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
+            if (item.under > 1) add('contentEdge', label, `${label}: ${item.el} runs ${item.under}px under the scrollbar`);
+            else add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
         }
     }
     return findings;
@@ -755,6 +860,14 @@ export async function recordMeasuredScreen(page, {
         result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
     } catch { /* reported as a root font failure below */ }
     if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
+    // This shared recorder is used by browser mobile, extension and Electron
+    // sweeps, so each shell reports its real button sizes and role-like
+    // surfaces on every screen instead of relying on the web-only audit.
+    try {
+        result.buttons = await page.evaluate(measureButtonSizes);
+    } catch (err) {
+        result.buttonsError = String(err?.message || err);
+    }
     if (rulings) {
         try {
             result.rulings = await page.evaluate(measureRulings);
@@ -960,7 +1073,7 @@ export function createSweep(page, {
         await measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await measure('onboarding: welcome');
-        for (const name of ['Import wallet', 'From FreeWallet', 'Pair a watcher or signer']) {
+        for (const name of ['Import wallet', 'Import FreeWallet', 'Connect Hardware Wallet']) {
             const btn = page.getByRole('button', { name });
             if (await btn.count() === 0) continue;
             await btn.click();
@@ -974,24 +1087,24 @@ export function createSweep(page, {
         await page.getByLabel('Password', { exact: true }).fill('layoutsweep1234');
         await page.getByLabel(/^Confirm( password)?$/).fill('layoutsweep1234');
         await page.getByRole('button', { name: 'Next' }).click();
-        await page.getByLabel(/written down|saved my recovery phrase/i).waitFor({ timeout: 60_000 });
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).waitFor({ timeout: 60_000 });
         // readRecoveryPhrase asserts the stage opens concealed, then reveals it.
         const words = await readRecoveryPhrase(page);
         await measure('create: recovery phrase');
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await measure('create: verify phrase');
         await completeRecoveryPhraseChallenge(page, words);
         if (demo) {
             await restart();
             await dismissIntroCarousel(page);
-            await page.getByRole('button', { name: 'Try in demo mode' }).click();
+            await page.getByRole('button', { name: 'Try Demo' }).click();
             await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
             await applyFontScale(page, fontScale);
             return;
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
-        const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+        const notice = page.getByRole('heading', { name: 'Automatic Donations', exact: true });
         await notice.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 240_000 });
         if (await notice.isVisible()) {
             await measure('create: donation notice');
@@ -1002,8 +1115,10 @@ export function createSweep(page, {
     }
 
     async function unlocked() {
+        // Home opens on Balances (coins and tokens, operator 2026-11-15); the
+        // label keeps its old name so the measures stay comparable.
         await measure('home: coins');
-        for (const tab of ['Tokens', 'NFTs', 'DeFi', 'Activity']) {
+        for (const tab of ['NFTs', 'DeFi']) {
             const t = page.getByRole('tab', { name: tab }).or(page.getByRole('button', { name: tab, exact: true })).first();
             if (await t.count() === 0) continue;
             await t.click().catch(() => {});
@@ -1020,7 +1135,7 @@ export function createSweep(page, {
                 (e.getAttribute('title') || e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
             )));
             const navLabels = (await labelsNow())
-                .filter((label) => label && !/^(search|more|open command palette)$/i.test(label) && !DESTRUCTIVE.test(label));
+                .filter((label) => label && !/^(search|open menu)$/i.test(label) && !DESTRUCTIVE.test(label));
             for (const label of [...new Set(navLabels)]) {
                 try {
                     await home();
@@ -1035,20 +1150,9 @@ export function createSweep(page, {
             await home();
         }
 
-        // Header popovers.
-        for (const name of ['Settings', 'Scan and addresses', 'XChain platform sites']) {
-            const b = page.getByRole('button', { name, exact: true }).first();
-            if (await b.count() === 0 || !(await b.isVisible())) continue;
-            await b.click();
-            await measure(`header: ${name} popover`);
-            await page.keyboard.press('Escape');
-            if (await b.getAttribute('aria-expanded') === 'true') await b.click().catch(() => {});
-        }
-
-        // Every destination the command palette offers. The desktop app has
-        // no header button for it; there the keyboard shortcut opens it.
-        const paletteButton = page.getByRole('button', { name: 'Open command palette' }).first();
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        // Every catalogue destination the wallet menu offers.
+        const paletteButton = page.getByRole('button', { name: 'Open menu' }).first();
+        const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         const openPalette = async () => {
             if (await paletteButton.count() > 0 && await paletteButton.isVisible().catch(() => false)) {
                 await paletteButton.click();
@@ -1059,42 +1163,25 @@ export function createSweep(page, {
         };
         let destinations = [];
         if (await openPalette().then(() => true, () => false)) {
-            await measure('palette: open');
-            destinations = await palette.getByRole('option').evaluateAll((els) => els
-                .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
-            destinations = [...new Set(destinations.filter((x) => x && !/^\d/.test(x)))];
+            await measure('menu: open');
+            destinations = await palette.locator('[data-wallet-menu-row]').evaluateAll((els) => els
+                .map((e) => ({
+                    id: e.getAttribute('data-wallet-menu-row'),
+                    label: (e.textContent || '').trim(),
+                }))
+                .filter((row) => row.id && row.id !== 'lock' && row.label));
             await page.keyboard.press('Escape');
         }
         for (const dest of destinations) {
-            if (DESTRUCTIVE.test(dest)) continue;
+            if (DESTRUCTIVE.test(dest.label)) continue;
             try {
                 await openPalette();
-                await palette.getByRole('combobox').fill(dest);
-                const option = palette.getByRole('option').filter({ hasText: dest }).first();
-                await option.click({ timeout: 5_000 });
-                await measure(`palette: ${dest}`);
+                await palette.locator(`[data-wallet-menu-row="${dest.id}"]`).click({ timeout: 5_000 });
+                await measure(`menu: ${dest.label}`);
             } catch (err) {
-                appendFileSync(linesPath, `${JSON.stringify({ venue, label: `palette: ${dest}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
+                appendFileSync(linesPath, `${JSON.stringify({ venue, label: `menu: ${dest.label}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
             }
             await home();
-        }
-
-        // The header menu and each of its rows. Its links open the platform
-        // sites in a new window and Open in new window opens another wallet
-        // window; neither is a wallet screen, so neither is walked.
-        const menu = page.getByRole('button', { name: 'Open menu' }).first();
-        if (await menu.count() > 0 && await menu.isVisible()) {
-            const menuPanel = page.getByRole('menu', { name: 'Header actions' });
-            await home();
-            await menu.click();
-            await measure('menu: list');
-            // Reopened fresh for every row: the Settings row opens a flyout
-            // over the menu that would take the next row's click.
-            await crawlRows('menu', async () => {
-                await home();
-                await menu.click();
-                await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
-            }, () => menuPanel.locator('button[role="menuitem"]:visible:not([disabled])'), /new window/i);
         }
 
         // Settings and every section in it.
@@ -1108,18 +1195,11 @@ export function createSweep(page, {
                 await page.waitForTimeout(250);
                 return;
             }
-            if (await page.getByRole('searchbox', { name: 'Search settings' }).isVisible().catch(() => false)) return;
+            if (await page.getByRole('button', { name: 'Filter settings' }).isVisible().catch(() => false)) return;
             await home();
             await openSettings(page);
         });
 
-        // The bottom navigation's More sheet, where it exists.
-        const more = nav(page).getByRole('button', { name: 'More', exact: true });
-        if (await more.count() > 0) {
-            await more.click();
-            await measure('nav: More sheet');
-            await page.keyboard.press('Escape');
-        }
     }
 
     return { measure, home, onboarding, unlocked };
@@ -1196,8 +1276,15 @@ export function measureRulings() {
         }
         return null;
     };
+    // A CSS module class (`_bigAmount_1juic_169` in dev) by its local name.
+    const sharedClass = (el, part) => [...el.classList].some((c) => new RegExp(`(^|_)${part}(_|$)`).test(c));
     for (const field of fields) {
-        if (field.closest('[role="dialog"][aria-label="Command palette"]')) continue;
+        if (field.closest('[role="dialog"][data-wallet-menu]')) continue;
+        // The Quick Give/Get cards' large amount (G31) is their own ruled
+        // design: borderless and transparent inside its You give or You get
+        // card, restored to the approved look in fe2bc59bb. The U14 form gate
+        // (form-consistency.spec.js) skips it the same way.
+        if (sharedClass(field, 'bigAmount')) continue;
         if (!frameOf(field)) cap(out.borderlessFields, desc(field));
     }
 
@@ -1207,7 +1294,8 @@ export function measureRulings() {
         if (!visible(btn)) continue;
         const name = text(btn);
         if (/^paste\b/i.test(name)) { cap(out.fieldButtonsOutside, { button: name, paste: true }); continue; }
-        if (!/^max\b/i.test(name)) continue;
+        // Max is an icon named by its aria-label ("Use max available amount").
+        if (!/^(max|use max)\b/i.test(name)) continue;
         let field = null;
         for (let a = btn.parentElement, i = 0; a && i < 4 && !field; a = a.parentElement, i += 1) {
             field = [...a.querySelectorAll('input, textarea')].find(visible) || null;
@@ -1228,6 +1316,21 @@ export function measureRulings() {
     const tok = getComputedStyle(probe);
     const token = { w: tok.borderTopWidth, c: tok.borderTopColor, r: tok.borderTopLeftRadius };
     probe.remove();
+    // The chart hero's surface (G10): every hero, wide Home's Allocation card
+    // included, wears the hero border on the card radius, which the operator
+    // ruled is the hero's own look, not an off-token card.
+    probe.style.cssText = 'position:absolute;visibility:hidden;border:1px solid var(--xc-hero-border);border-radius:var(--xc-card-radius)';
+    document.body.appendChild(probe);
+    const heroTok = getComputedStyle(probe);
+    const hero = { w: heroTok.borderTopWidth, c: heroTok.borderTopColor, r: heroTok.borderTopLeftRadius };
+    probe.remove();
+    const heroSurface = (cs) => cs.borderTopStyle === 'solid' && cs.borderTopWidth === hero.w
+        && cs.borderTopColor === hero.c && cs.borderTopLeftRadius === hero.r;
+    // The Quick Give/Get You give and You get cards (G31, the operator's pick
+    // of the swap-card layout, n.492) keep their approved look, and boxes
+    // inside a form card stay as drawn (operator 2026-11-18, "Box-in-card:
+    // keep"); test/unit/ui/cardSurfaces.allowlist.json records the same card.
+    const giveGetCard = (el) => sharedClass(el, 'card') && [...el.children].some((c) => sharedClass(c, 'cardMid'));
     void root;
     const NOT_CARD = 'button, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="dialog"], [role="menu"], [role="listbox"], header, nav, img, svg';
     const NOTICE = '[role="status"], [role="alert"], [data-variant]';
@@ -1242,7 +1345,8 @@ export function measureRulings() {
         if (styled.some((s) => /dotted|dashed/.test(cs[`border${s}Style`]))) {
             cap(out.dashedBorders, { el: desc(el), style: cs.borderTopStyle });
         }
-        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"]')) continue;
+        // An open help tip bubble is a tooltip with its own small radius, not a card (U16 covers cards).
+        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"], [role="tooltip"]')) continue;
         const r = el.getBoundingClientRect();
         if (r.height < 44 || r.width < 120) continue;
         if (parseFloat(cs.borderTopLeftRadius) === 0) continue;
@@ -1250,7 +1354,7 @@ export function measureRulings() {
         if (el.querySelector('input, textarea, select') && r.height < 70) continue; // a field frame
         const off = cs.borderTopWidth !== token.w || cs.borderTopStyle !== 'solid'
             || cs.borderTopColor !== token.c || cs.borderTopLeftRadius !== token.r;
-        if (off) {
+        if (off && !heroSurface(cs) && !giveGetCard(el)) {
             cap(out.offTokenCards, {
                 el: desc(el), border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`, radius: cs.borderTopLeftRadius,
                 token: `${token.w} solid ${token.c} / ${token.r}`,
@@ -1282,7 +1386,7 @@ export function measureRulings() {
     const seen = new Map();
     const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(visible).pop();
     for (const el of (modal || document).querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
-        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][aria-label="Command palette"]')) continue;
+        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][data-wallet-menu]')) continue;
         if (el.querySelector('h1, h2, h3, h4, p')) continue;
         const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
         if (t.length < 4) continue;
@@ -1324,22 +1428,41 @@ export function measureRulings() {
         const NOTICE = '[data-xc-notice], [role="alert"], [role="status"]';
         const notices = [...main.querySelectorAll(NOTICE)]
             .filter((el) => visible(el) && text(el).length > 0 && !el.parentElement.closest(NOTICE));
+        // On a list-and-detail page each panel scrolls on its own (G115, G128),
+        // so a notice's content column is its panel: it is first in that
+        // panel and spans that panel's width (U15: "full width of its page's
+        // content column").
+        const panelOf = (el) => {
+            for (let a = el.parentElement; a && a !== main; a = a.parentElement) {
+                if (/^(auto|scroll|overlay)$/.test(getComputedStyle(a).overflowY)
+                    || sharedClass(a, 'listPanel') || sharedClass(a, 'detailPanel')) return a;
+            }
+            return null;
+        };
         for (const el of notices) {
             if (el.closest('form, [role="dialog"], [role="group"]')) continue; // a form's own status line
             // A status that announces nothing is a label of the data beside
             // it ("Updated just now" under a balance), not a notice.
             if (el.matches('[role="status"][aria-live="off"]')) continue;
             const r = el.getBoundingClientRect();
-            const contentAbove = [...main.querySelectorAll('h2, h3, p, li, button, input, table')]
+            const panel = panelOf(el);
+            let colLeft = left; let colRight = right;
+            if (panel) {
+                const pr = panel.getBoundingClientRect();
+                const pcs = getComputedStyle(panel);
+                colLeft = pr.left + panel.clientLeft + (parseFloat(pcs.paddingLeft) || 0);
+                colRight = pr.left + panel.clientLeft + panel.clientWidth - (parseFloat(pcs.paddingRight) || 0);
+            }
+            const contentAbove = [...(panel || main).querySelectorAll('h2, h3, p, li, button, input, table')]
                 .some((other) => visible(other) && !el.contains(other) && !other.closest(NOTICE)
                     && other.getBoundingClientRect().bottom <= r.top + 1);
-            const narrow = right - left - r.width > 2;
+            const narrow = colRight - colLeft - r.width > 2;
             // An empty state stands where its list would be, below the
             // page's own controls; U15 asks of it only that it fill the
             // content width, so it is measured for width, not for place.
             const emptyState = el.matches('[data-xc-empty-state]');
             if ((contentAbove && !emptyState) || narrow) {
-                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(right - left) });
+                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(colRight - colLeft) });
             }
         }
     }

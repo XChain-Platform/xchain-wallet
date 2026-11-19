@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 // Contact network replies stay ordered, duplicate submissions stay single,
-// and conflict retries carry the version the screen reloads.
+// conflict retries carry the version the screen reloads, and a refused
+// Undo restore keeps Undo available for the same snapshot.
 
 import { describe, it, expect, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -17,6 +18,7 @@ import { base58check } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 
 const CONFLICT = 'Contact changed since this screen loaded. Reopen it and try again.';
 const OLD_VERSION = '2026-10-01T00:00:00.000Z';
@@ -72,41 +74,43 @@ async function openDetail(messaging) {
         </MessagingProvider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
-    await screen.findByRole('group', { name: 'Contact actions' });
+    await screen.findByRole('list', { name: 'Contact actions' });
 }
 
 describe('ContactsList version conflict retry', () => {
     it('lets the user save an edit again after a version conflict, as the message says', async () => {
         const messaging = conflictMessaging();
         await openDetail(messaging);
-        fireEvent.click(within(screen.getByRole('group', { name: 'Contact actions' })).getByRole('button', { name: 'Edit' }));
+        fireEvent.click(within(screen.getByRole('list', { name: 'Contact actions' })).getByRole('button', { name: /^Edit/ }));
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Alice B' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Contact' }));
         expect(await screen.findByText(CONFLICT)).toBeTruthy();
         expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt).toBe(OLD_VERSION);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Contact' }));
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledTimes(2));
         expect(messaging.saveContact.mock.calls[1][0].expectedUpdatedAt).toBe(NEW_VERSION);
         expect(messaging.saveContact.mock.calls[1][0].record.name).toBe('Alice B');
-        await screen.findByRole('group', { name: 'Contact actions' });
+        await screen.findByRole('list', { name: 'Contact actions' });
         expect(screen.queryByText(CONFLICT)).toBeNull();
     });
 
     it('lets the user add an address again after a version conflict', async () => {
         const messaging = conflictMessaging();
         await openDetail(messaging);
-        fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
-        const dialog = await screen.findByRole('dialog');
-        fireEvent.change(within(dialog).getByLabelText('Address'), { target: { value: ADDRESS_B } });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
-        expect(await within(dialog).findByText(CONFLICT)).toBeTruthy();
+        // The addresses sit under the Addresses tab; Actions opens first (G102).
+        fireEvent.click(screen.getByRole('tab', { name: /Addresses/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add address/ }));
+        fireEvent.change(await screen.findByLabelText('Address'), { target: { value: ADDRESS_B } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save Address' }));
+        expect(await screen.findAllByText(CONFLICT)).toHaveLength(2);
         expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt).toBe(OLD_VERSION);
 
-        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Address' }));
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledTimes(2));
         expect(messaging.saveContact.mock.calls[1][0].expectedUpdatedAt).toBe(NEW_VERSION);
-        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        // Saved: back on View Contact's Addresses tab.
+        expect(await screen.findByRole('tab', { name: /Addresses/, selected: true })).toBeTruthy();
     });
 });
 
@@ -150,9 +154,9 @@ describe('ContactsList response ordering', () => {
         };
         render(contactsTree(messaging));
         fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit/ }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice current' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update Contact' }));
 
         await screen.findByRole('heading', { name: 'View Contact' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -180,10 +184,11 @@ describe('ContactsList duplicate submission', () => {
             deleteContact: vi.fn(async () => {}),
         };
         render(contactsTree(messaging));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
+        await screen.findByText('No contacts yet');
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS_A } });
-        const form = screen.getByRole('button', { name: 'Save' }).closest('form');
+        const form = screen.getByRole('button', { name: 'Create contact' }).closest('form');
 
         act(() => {
             form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -196,5 +201,44 @@ describe('ContactsList duplicate submission', () => {
             await saveDone.promise;
         });
         await screen.findByText('No contacts yet');
+    });
+});
+
+describe('ContactsList Undo after a refused restore', () => {
+    it('keeps Undo available after a refused restore write and restores the contact on the next Undo', async () => {
+        const snapshot = contactAt(OLD_VERSION);
+        const store = new Map([[snapshot.id, snapshot]]);
+        const saveContact = vi.fn(async ({ record }) => {
+            if (saveContact.mock.calls.length === 1) throw new Error('Storage is busy.');
+            store.set(record.id, record);
+            return record;
+        });
+        const messaging = {
+            listContacts: vi.fn(async () => [...store.values()]),
+            saveContact,
+            deleteContact: vi.fn(async ({ id }) => { store.delete(id); }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <ContactsList walletId="w1" onBack={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Delete/ }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        await waitFor(() => expect(saveContact).toHaveBeenCalledTimes(1));
+        expect(saveContact).toHaveBeenCalledWith({ record: snapshot, expectedUpdatedAt: null });
+        expect(screen.queryByRole('button', { name: 'Alice' })).toBeNull();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(saveContact).toHaveBeenCalledTimes(2));
+        expect(saveContact.mock.calls[1][0]).toEqual({ record: snapshot, expectedUpdatedAt: null });
+        expect(await screen.findByRole('button', { name: 'Alice' })).toBeTruthy();
     });
 });

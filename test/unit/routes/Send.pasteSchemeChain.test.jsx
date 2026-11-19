@@ -83,7 +83,7 @@ async function pasteLink(text, { open, others }) {
         </MessagingProvider>,
     );
     const to = await screen.findByLabelText(/^To$/);
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(record(openDescriptor).address));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(record(openDescriptor).address));
     fireEvent.paste(to, { clipboardData: { getData: () => text } });
     return to;
 }
@@ -99,10 +99,10 @@ describe('payment link scheme against the open chain', () => {
             open: 'litecoin-testnet',
             others: ['bitcoin-testnet'],
         });
-        await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(record(registry.get('bitcoin-testnet')).address));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(record(registry.get('bitcoin-testnet')).address));
         expect(to).toHaveValue(SHARED_TESTNET_ADDRESS);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('1');
-        expect(screen.getByLabelText("Token")).toHaveValue("BTC");
+        expect(screen.getByRole('button', { name: 'Asset: BTC on Bitcoin' })).toBeTruthy();
         expect(screen.getByLabelText(/^Amount \(BTC\)/)).toBeTruthy();
     });
 
@@ -112,8 +112,8 @@ describe('payment link scheme against the open chain', () => {
             others: ['bitcoin-testnet'],
         });
         await waitFor(() => expect(to).toHaveValue(SHARED_TESTNET_ADDRESS));
-        expect(screen.getByLabelText(/^From$/)).toHaveValue(record(registry.get('litecoin-testnet')).address);
-        expect(screen.getByLabelText("Token")).toHaveValue("LTC");
+        expect(screen.getByLabelText('From address')).toHaveValue(record(registry.get('litecoin-testnet')).address);
+        expect(screen.getByRole('button', { name: 'Asset: LTC on Litecoin' })).toBeTruthy();
         expect(screen.getByLabelText(/^Amount \(LTC\)/)).toBeTruthy();
     });
 });

@@ -50,6 +50,8 @@ const HD_ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
+// The card shows the question, not the market number, so each market is
+// told apart by its label.
 function market(index, status) {
     return {
         action_index: String(index),
@@ -122,7 +124,7 @@ describe('BetFeedsList refresh', () => {
             [market(1248, 'open')],
         ]);
         const { container } = await renderList(messaging);
-        expect(container.textContent).toContain('#1252');
+        expect(container.textContent).toContain('Market 1252');
         const before = calls.length;
 
         await tick(30_000);
@@ -132,8 +134,8 @@ describe('BetFeedsList refresh', () => {
             .toBeGreaterThan(before);
         expect(container.textContent,
             'the closed market is still listed after a refresh that no longer returns it')
-            .not.toContain('#1252');
-        expect(container.textContent).toContain('#1248');
+            .not.toContain('Market 1252');
+        expect(container.textContent).toContain('Market 1248');
     });
 
     it('does not blank the list to refresh it', async () => {
@@ -158,11 +160,11 @@ describe('BetFeedsList refresh', () => {
             .not.toContain('Loading markets');
         expect(container.textContent,
             'the markets vanish while the refresh is in flight')
-            .toContain('#1248');
+            .toContain('Market 1248');
 
         release();
         await domAct(async () => { await drain(); });
-        expect(container.textContent).toContain('#1248');
+        expect(container.textContent).toContain('Market 1248');
     });
 
     it('keeps the markets on screen when a refresh fails', async () => {
@@ -171,13 +173,13 @@ describe('BetFeedsList refresh', () => {
             () => Promise.reject(new Error('explorer unreachable')),
         ]);
         const { container } = await renderList(messaging);
-        expect(container.textContent).toContain('#1248');
+        expect(container.textContent).toContain('Market 1248');
 
         await tick(30_000);
 
         expect(container.textContent,
             'a failed refresh threw away markets that were still the best thing known')
-            .toContain('#1248');
+            .toContain('Market 1248');
         expect(container.textContent,
             'a momentary refresh failure is reported as if the screen had nothing')
             .not.toContain('explorer unreachable');
@@ -192,17 +194,17 @@ describe('BetFeedsList refresh', () => {
             [market(1300, 'open')],
         ]);
         const { container } = await renderList(messaging);
-        expect(container.textContent).toContain('#1248');
+        expect(container.textContent).toContain('Market 1248');
 
         await tick(30_000);
         await tick(30_000);
-        expect(container.textContent).toContain('#1300');
+        expect(container.textContent).toContain('Market 1300');
 
         releaseOlder({ data: [market(1252, 'open')] });
         await domAct(async () => { await drain(); });
 
-        expect(container.textContent).toContain('#1300');
-        expect(container.textContent).not.toContain('#1252');
+        expect(container.textContent).toContain('Market 1300');
+        expect(container.textContent).not.toContain('Market 1252');
     });
 
     // Campaign §10.1's negative, which cannot be driven in a browser on this
@@ -215,10 +217,10 @@ describe('BetFeedsList refresh', () => {
         messaging.getAddressesByChain = () => Promise.resolve({});
         const { container } = await renderList(messaging);
 
-        expect(container.textContent).toContain('No betting address');
+        expect(container.textContent).toContain('No prediction market address');
         expect(container.textContent,
             'the no-chain state reads as a chain with no markets on it')
-            .not.toContain('No markets are taking bets');
+            .not.toContain('No markets yet');
         expect(calls.length,
             'the list was fetched with no chain to fetch it for').toBe(0);
     });
@@ -239,7 +241,7 @@ describe('BetFeedsList refresh', () => {
             ));
             await drain();
         });
-        expect(utils.container.textContent).toContain('No betting address');
+        expect(utils.container.textContent).toContain('No prediction market address');
 
         await domAct(async () => {
             utils.rerender(React.createElement(
@@ -251,8 +253,8 @@ describe('BetFeedsList refresh', () => {
             ));
             await drain();
         });
-        expect(utils.container.textContent).not.toContain('No betting address');
-        expect(utils.container.textContent).toContain('#1248');
+        expect(utils.container.textContent).not.toContain('No prediction market address');
+        expect(utils.container.textContent).toContain('Market 1248');
     });
 
     it('stops refreshing once the screen is gone', async () => {

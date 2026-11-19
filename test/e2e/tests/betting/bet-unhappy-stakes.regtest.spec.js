@@ -46,11 +46,15 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { rateLimitDelayMs } from '../../fixtures/venueHealth.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -167,14 +171,14 @@ async function betsOnFeed(feedIndex) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(page.getByRole('main'));
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -182,13 +186,13 @@ async function fillPasswordIfPresent(scope) {
 async function useAddress(page, address) {
     await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
-    await page.getByRole('group', { name: 'Address actions' })
-        .getByRole('button', { name: 'Use' }).click();
+    await page.getByRole('list', { name: 'Actions', exact: true })
+        .getByRole('button', { name: 'Set active' }).click();
     // Use awaits the active-address write and only then returns to Home, and
-    // any route change closes the command palette. A palette opened before
+    // any route change closes the wallet menu. A palette opened before
     // that late navigation is unmounted under the next step, so leaving the
     // detail screen is what marks the switch as done.
-    await expect(page.getByRole('group', { name: 'Address actions' }),
+    await expect(page.getByRole('list', { name: 'Actions', exact: true }),
         'Use never completed, so the active-address write is still in flight')
         .toBeHidden({ timeout: 30_000 });
 }
@@ -199,7 +203,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address').inputValue();
+    return (await openFromAddress(main)).inputValue();
 }
 
 /**
@@ -225,7 +229,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
     const generated = (await listed()).filter((a) => !before.has(a));
     expect(generated.length, 'generating added exactly one address to the list').toBe(1);
@@ -287,21 +292,20 @@ test.describe('BET unhappy stakes', () => {
             const main = page.getByRole('main');
             await selectVenueChain(main);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Unhappy stakes ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
-            await main.getByLabel('Betting closes')
+            await fieldByLabel(main, 'Question').fill(`Unhappy stakes ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             const until = Date.now() + 180_000;
             let feed = null;
@@ -322,7 +326,7 @@ test.describe('BET unhappy stakes', () => {
 
         const openMarket = async () => {
             await gotoBettingHub(page);
-            const row = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+            const row = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             // 90s, not 30s. The market is already confirmed on chain by the step
             // above, so what is being waited on here is the HUB's own fetch, and
             // it re-runs from scratch every time `gotoBettingHub` switches the
@@ -336,7 +340,9 @@ test.describe('BET unhappy stakes', () => {
                 .toBeVisible({ timeout: 90_000 });
             await row.click();
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
+            // The outcome buttons are on the Bet tab.
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
+            await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
             return main;
         };
 
@@ -346,11 +352,14 @@ test.describe('BET unhappy stakes', () => {
 
         await test.step('a BLANK stake never reaches compose', async () => {
             const main = await openMarket();
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            // Tapping the outcome opens the Place Bet step with it preselected, where the stake is.
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Buy Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
             // The button stays enabled and answers a blank stake in words, so the
             // proof that it never reaches compose is the refusal plus no confirm
             // screen.
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
             await expect(page.getByRole('alert').filter({ hasText: /positive bet amount/ }),
                 'a blank stake was not refused in words')
                 .toBeVisible({ timeout: 30_000 });
@@ -361,11 +370,14 @@ test.describe('BET unhappy stakes', () => {
 
         await test.step('a ZERO stake is refused in words, and nothing is broadcast', async () => {
             const main = await openMarket();
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
-            await main.getByLabel(/^Stake/).fill('0');
+            // Tapping the outcome opens the Place Bet step with it preselected, where the stake is.
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Buy Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill('0');
             await fillPasswordIfPresent(main);
 
-            const review = main.getByRole('button', { name: 'Review bet', exact: true });
+            const review = main.locator('button[type="submit"]');
             await expect(review,
                 'a zero stake is blocked by the same disabled-button rule as a blank one, so this '
                 + 'case is not testing what it claims to (update the spec, not the wallet)')
@@ -388,10 +400,13 @@ test.describe('BET unhappy stakes', () => {
 
         await test.step('a stake larger than the balance is not called "Looks good"', async () => {
             const main = await openMarket();
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
-            await main.getByLabel(/^Stake/).fill(OVER_STAKE);
+            // Tapping the outcome opens the Place Bet step with it preselected, where the stake is.
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Buy Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(OVER_STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
 
             // Either outcome is defensible - refused at the form, or carried to
             // a confirm screen that says it will fail. What is NOT defensible is

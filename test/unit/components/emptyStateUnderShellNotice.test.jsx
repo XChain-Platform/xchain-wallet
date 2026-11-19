@@ -48,10 +48,17 @@ function pageMessages(container) {
 }
 
 describe('empty states under the shell reachability notice', () => {
-    it.each(['offline', 'degraded'])('drops a network list empty state while %s', (overall) => {
-        const { container } = mount(overall, 'governance-polls:1');
+    it('drops a network list empty state while offline', () => {
+        const { container } = mount('offline', 'governance-polls:1');
         expect(screen.getByText(/may be out of date/)).toBeInTheDocument();
         expect(screen.queryByText('No polls yet')).toBeNull();
+        expect(pageMessages(container)).toBe(1);
+    });
+
+    it('keeps a network list empty state while degraded', () => {
+        const { container } = mount('degraded', 'governance-polls:1');
+        expect(screen.queryByText(/may be out of date/)).toBeNull();
+        expect(screen.getByText('No polls yet')).toBeInTheDocument();
         expect(pageMessages(container)).toBe(1);
     });
 

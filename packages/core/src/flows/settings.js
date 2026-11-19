@@ -18,7 +18,7 @@
 //     replaced when the patch carries them.
 //   - Nested plain objects (privacy, notifications, grace, ads) merge;
 //     caller can flip a single sub-flag without restating the rest.
-//   - Chain-keyed records (sdkEndpoints, fees, ads.perChain) merge by
+//   - Chain-keyed records (sdkEndpoints, fees) merge by
 //     chainId; caller updating one chain's endpoint keeps the other
 //     chains untouched.
 //   - An empty object replaces the object at that path, which lets reset
@@ -31,7 +31,6 @@
 
 import {
     createDefaultSettings,
-    resolveAdsChainConfig,
     resolveFeeConfig,
     validateSettings,
 } from '../schemas/settings.js';
@@ -62,6 +61,12 @@ export async function updateSettings(vault, patch) {
     if (!vault) throw new Error('updateSettings: vault is required');
     if (patch === null || typeof patch !== 'object') {
         throw new Error('updateSettings: patch must be an object');
+    }
+    // Custom chains are written by the add and remove routes, which validate
+    // each descriptor, cap its size, and keep the live registry and endpoint
+    // overrides in step with the stored list. A patch would skip all of that.
+    if (patch.customChains !== undefined) {
+        throw new Error('updateSettings: customChains is written through addCustomChain and removeCustomChain');
     }
     // A patch is read, merged and written back. Two patches in flight would
     // both read the same record and the later write would drop the earlier
@@ -152,23 +157,6 @@ function normalizeChainScopedDefaults(settings) {
             fees[chainId] = next;
         }
     }
-    let perChain = settings.ads?.perChain;
-    for (const [chainId, state] of Object.entries(settings.ads?.perChain ?? {})) {
-        const descriptor = registry.get(chainId);
-        if (!descriptor || !state) continue;
-        const d = resolveAdsChainConfig(null, descriptor);
-        const next = { ...state };
-        if (next.perTxAmountSats != null && next.perTxAmountSats === d.perTxAmountSats) next.perTxAmountSats = null;
-        if (next.triggerAmountSats != null && next.triggerAmountSats === d.triggerAmountSats) next.triggerAmountSats = null;
-        if (next.perTxAmountSats !== state.perTxAmountSats || next.triggerAmountSats !== state.triggerAmountSats) {
-            if (perChain === settings.ads.perChain) perChain = { ...settings.ads.perChain };
-            perChain[chainId] = next;
-        }
-    }
-    if (fees === settings.fees && perChain === settings.ads?.perChain) return settings;
-    return {
-        ...settings,
-        fees,
-        ads: settings.ads ? { ...settings.ads, perChain } : settings.ads,
-    };
+    if (fees === settings.fees) return settings;
+    return { ...settings, fees };
 }

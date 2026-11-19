@@ -79,10 +79,36 @@ describe('<ListRow>', () => {
         const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 
         expect(css).toMatch(/min-height:\s*var\(--xc-control-h-lg,\s*24px\)/);
-        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-control-bg-hover\)/s);
+        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)/s);
+        expect(css).toMatch(/\.interactive:active:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)[^}]*box-shadow:\s*none/s);
+        expect(css).toMatch(/\.interactive:is\([^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
+        expect(css).toMatch(/\.interactive:is\([^}]*\):hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
         expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
         expect(css).toMatch(/\.interactive:disabled\s*\{[^}]*var\(--xc-control-disabled-bg\)/s);
-        expect(historyCss).toMatch(/\.rowSelected\s*\{[^}]*var\(--xc-control-selected\)/s);
+        expect(css).toMatch(/\.interactive\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-radius:\s*0;/s);
+        expect(historyCss).toMatch(/\.row\.row\[data-xc-split-row\]\[aria-current='true'\]\s*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
+        expect(historyCss).not.toContain('var(--xc-shadow-nav-indicator)');
         expect(css).not.toContain('var(--xc-page-gutter)');
+    });
+
+    // G21: an expandable row's chevron points right while closed and down while
+    // open. The slot shows only the middle third of a 32px box, so a down glyph
+    // drawn in it loses its arms; the open state turns the whole clipped box.
+    it('turns the standard chevron down on an open expandable row instead of drawing a down glyph in the slot', () => {
+        const css = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
+        expect(css).toMatch(/\.interactive\[aria-expanded='true'\]\s*>\s*\.chevron\s*\{[^}]*transform:\s*rotate\(90deg\)/s);
+        expect(css).toMatch(/\[dir='rtl'\]\)\s*\.interactive\[aria-expanded='true'\]\s*>\s*\.chevron\s*\{[^}]*transform:\s*rotate\(-90deg\)/s);
+
+        render(<ListRow title="Transaction 1" chevron aria-expanded onClick={() => {}} />);
+        const row = screen.getByRole('button', { name: 'Transaction 1' });
+        expect(row).toHaveAttribute('aria-expanded', 'true');
+        expect(row.querySelector('svg path')).toHaveAttribute('d', 'm9 18 6-6-6-6');
+
+        for (const file of [
+            'packages/core/src/shared/routes/BatchComposerForm.jsx',
+            'packages/core/src/shared/components/MultiSendRecipients.jsx',
+        ]) {
+            expect(readFileSync(file, 'utf8'), file).not.toMatch(/chevron=\{[^}]*ChevronDownIcon/);
+        }
     });
 });

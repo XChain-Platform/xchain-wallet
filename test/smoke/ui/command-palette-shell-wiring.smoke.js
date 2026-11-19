@@ -23,15 +23,15 @@
 //   - mounts <CommandPalette ... commands={...}> with the palette open/close
 //     state, so it actually renders
 //   - builds its command list via buildCommands(...) (the shared catalogue)
-// Plus visible triggers: web via AppHeader.onCommandPalette, desktop via
-// LeftNav.onCommandPalette. The extension popup has no shared header/nav, so
-// its palette is reachable by Cmd/Ctrl+K only (a visible popup trigger is a
-// tracked follow-up); its wiring is still pinned above.
+// Plus visible triggers: every shell's AppHeader menu button, and the popup's
+// Home search button. The side menu carries no Search row (U99,
+// operator 2026-11-18): it opened the wallet menu while looking like a text field.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WALLET_MENU_GROUPS } from '../../../packages/core/src/shared/walletMenu.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -92,9 +92,11 @@ for (const label of Object.keys(shells)) {
         /useCommandPalette\(\{\s*enabled:\s*status\.state === 'unlocked'/.test(src),
         `${label} App installs the Cmd/Ctrl+K listener gated on the unlocked state`,
     );
+    // A palette pick opens its page as a root of the one history (G06).
     assert.ok(
-        /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*setUnlockedView/.test(src),
-        `${label} App backs palette navigation with setUnlockedView`,
+        /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*openRootView/.test(src)
+            && /const openRootView = nav\.navigateRoot;/.test(src),
+        `${label} App backs palette navigation with the history's root navigation`,
     );
     // Command list assembled from the shared catalogue.
     assert.ok(/buildCommands\(/.test(src), `${label} App builds its command list via buildCommands`);
@@ -185,9 +187,16 @@ assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells['extensio
     'extension popup App wires the visible Home palette trigger');
 
 // The popup trigger renders from TotalBalanceHero (threaded Home -> HomeTabs).
+// Its label is the shared i18n key, whose English text is "Open the wallet
+// menu". The smoke runner's English-source loader shows the text in place of
+// the t() call, and a plain node run shows the call, so either form counts.
 const hero = read('packages/core/src/shared/components/TotalBalanceHero.jsx');
-assert.ok(/onCommandPalette\b/.test(hero) && /Open command palette/.test(hero),
-    'TotalBalanceHero renders the popup\'s "Open command palette" search button');
+const firstPaintStrings = read('packages/core/src/i18n/locales/en/firstPaint.js');
+const OPEN_MENU_LABEL = /Open the wallet menu|t\('components\.leftNav\.openCommandPalette'\)/;
+assert.ok(/'components\.leftNav\.openCommandPalette': 'Open the wallet menu'/.test(firstPaintStrings),
+    'the palette trigger key reads "Open the wallet menu"');
+assert.ok(/onCommandPalette\b/.test(hero) && OPEN_MENU_LABEL.test(hero),
+    'TotalBalanceHero renders the popup\'s "Open the wallet menu" search button');
 
 // --- §34.1 rebinding + §34.2 context shortcuts ----------------------------
 
@@ -217,18 +226,30 @@ for (const [route, key] of [
 // --- visible triggers ----------------------------------------------------
 
 const appHeader = read('packages/core/src/shared/components/AppHeader.jsx');
-assert.ok(/onCommandPalette\b/.test(appHeader) && /Open command palette/.test(appHeader),
-    'AppHeader renders an "Open command palette" search button (web + extension trigger)');
+const headerMenu = read('packages/core/src/shared/components/HeaderActionMenu.jsx');
+assert.ok(/<HeaderActionMenu onMenuToggle=\{onMenuToggle\} menuOpen=\{menuOpen\} \/>/.test(appHeader),
+    'AppHeader renders the wallet menu button (web, desktop and extension trigger)');
+assert.ok(/aria-haspopup="dialog"/.test(headerMenu) && /aria-expanded=\{menuOpen\}/.test(headerMenu)
+    && /onClick=\{onMenuToggle\}/.test(headerMenu) && /walletMenu\.openMenu/.test(headerMenu),
+    'the header menu button toggles the wallet menu and labels itself walletMenu.openMenu');
 
 const leftNav = read('packages/core/src/shared/components/LeftNav.jsx');
-assert.ok(/onCommandPalette\b/.test(leftNav) && /Open command palette/.test(leftNav),
-    'LeftNav renders an "Open command palette" search row (desktop trigger)');
+assert.ok(!/onCommandPalette\b/.test(leftNav) && !OPEN_MENU_LABEL.test(leftNav),
+    'LeftNav renders no search row: the wallet menu opens from the header button and Cmd/Ctrl+K');
 
-// web + extension pass the header trigger; desktop passes the nav trigger.
-assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.web)),
-    'web App wires the AppHeader palette trigger');
-assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.desktop)),
-    'desktop App wires the LeftNav palette trigger');
+// Every shell passes the header menu toggle and open state.
+for (const label of ['web', 'desktop', 'extension popup']) {
+    const src = read(shells[label]);
+    assert.ok(/onMenuToggle=\{palette\.togglePalette\}/.test(src) && /menuOpen=\{palette\.open\}/.test(src),
+        `${label} App wires the AppHeader wallet menu toggle`);
+    assert.ok(/<CommandPalette[\s\S]*?\bmenu=\{/.test(src), `${label} App mounts the palette with the wallet menu catalogue`);
+}
+for (const label of ['web', 'desktop']) {
+    const src = read(shells[label]);
+    const leftNavProps = src.slice(src.indexOf('<LeftNav'), src.indexOf('/>', src.indexOf('<LeftNav')));
+    assert.ok(src.includes('<LeftNav') && !/onCommandPalette=/.test(leftNavProps),
+        `${label} App passes LeftNav no palette trigger`);
+}
 
 // --- destination parity: every navigate command lands somewhere ----------
 //
@@ -254,17 +275,25 @@ const destinationExemptions = {
     // it has no `unlockedView === 'home'` branch anywhere by construction.
     home: 'the unmatched-view fallthrough in all three shells',
 };
+// Per-shell exemptions: the popup has no Alerts route, and its menu handler
+// sends the Alerts row to Home, the popup's existing wallet alerts surface.
+const shellDestinationExemptions = {
+    'extension popup': { alerts: 'the popup shows wallet alerts on Home' },
+};
 
-const paletteDestinations = [...new Set(
-    [...registrySrc.matchAll(/run:\s*go\(\s*'([a-z0-9-]+)'\s*\)/g)].map((m) => m[1]),
-)];
+// The catalogue rows reach the palette as go(row.id), so their destinations are the
+// wallet menu row ids; the remaining destinations are literal go('view') calls.
+const paletteDestinations = [...new Set([
+    ...WALLET_MENU_GROUPS.flatMap((group) => group.rows.map((row) => row.id)),
+    ...[...registrySrc.matchAll(/run:\s*go\(\s*'([a-z0-9-]+)'\s*\)/g)].map((m) => m[1]),
+])];
 assert.ok(paletteDestinations.length >= 40,
     `buildCommands' go() destinations were extracted (${paletteDestinations.length} found)`);
 
 for (const [label, paths] of Object.entries(shellRouteSources)) {
     const routeSrc = paths.map(read).join('\n');
     for (const dest of paletteDestinations) {
-        if (destinationExemptions[dest]) continue;
+        if (destinationExemptions[dest] || shellDestinationExemptions[label]?.[dest]) continue;
         assert.ok(
             routeSrc.includes(`unlockedView === '${dest}'`),
             `${label} routes the palette destination '${dest}' (an unrouted destination bounces the user to Home silently)`,

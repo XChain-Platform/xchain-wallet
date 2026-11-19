@@ -1,0 +1,164 @@
+/* A setting changed on its group page: the row reads like a drill-in row
+   (icon, title, one short line) with the control at the row end in place of
+   the chevron. */
+.row {
+    box-sizing: border-box;
+    display: flex;
+    /* The icon, the copy and the control share one line while they fit; only
+       the copy shrinks and wraps its own text. On a phone-width Settings page
+       the page clamp (Settings.module.css) lets a dropdown too wide to sit
+       beside its title move under the copy (see the end of this file). */
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-control-h-lg, 24px);
+    padding: var(--xc-space-2) var(--xc-space-3);
+}
+
+/* The icon (the row's first child, drawn by the caller) never shrinks. */
+.row > :first-child:not(.copy):not(.switch) {
+    flex: 0 0 auto;
+}
+
+/* The copy takes what the icon and control leave and wraps inside it. A zero
+   basis keeps a long title from pushing the icon or control onto a new line. */
+.copy {
+    flex: 1 1 0;
+    /* The title column keeps room for a short title and its help icon, so a
+       wide dropdown narrows (its value trims) instead of drawing over the
+       title on a 360px phone or at large text (2026-11-15 wall check). */
+    min-width: min(9rem, 45%);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.titleLine {
+    display: flex;
+    align-items: center;
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it (G116) */
+    min-width: 0;
+}
+
+/* The same type as a drill-in row's title (ListRow). */
+.title {
+    min-width: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+/* A dropdown row keeps its title on one line with the line below it
+   (operator ruling 2026-11-14); the dropdown keeps one width whatever is
+   picked, so a pick never pushes the title onto a second line. Only a row
+   too narrow for the title trims its end. */
+.row[data-settings-inline='select'] .title {
+    white-space: nowrap;
+    /* clip, not hidden: a scroll container reports no min-content width, and
+       the copy column needs the title's full width to know when to wrap. */
+    overflow: clip;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
+}
+
+/* The same type as a drill-in row's subtitle (ListRow). */
+.line {
+    display: block;
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 400;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+/* A switch row is the kit Switch filling the row, so a tap on the title or
+   line flips it, as a tap on the switch does. */
+/* The kit Switch root asks for flex: 1 1 100%, which on a wrapping row pushed
+   it under the icon; the row selector outranks it and gives a zero basis. */
+.row > .switch {
+    flex: 1 1 0;
+    min-width: 0;
+    align-self: stretch;
+}
+
+/* On a row that cannot wrap, a long choice yields to the copy. */
+.control {
+    flex: 0 1 auto;
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+    max-width: 55%;
+    margin-inline-start: auto;
+}
+
+/* A short choice sized to its value, as drawn ("Off", "1 minute",
+   "System default", "1,234.50000000"), never narrower than a short word
+   and never wider than about half a phone row. */
+.select {
+    width: max-content;
+    min-width: min(6rem, 100%);
+    max-width: min(14rem, 100%);
+}
+.value {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: end;
+}
+
+.error {
+    padding: 0 var(--xc-space-3) var(--xc-space-2);
+}
+
+/* A message slot whose notice has nothing to say takes no space. */
+.error:empty {
+    display: none;
+}
+
+/* Settings.module.css clamps every div on a phone-width page (min-width 0,
+   max-width 100%, wrap). These selectors outrank its width limits so the
+   title keeps its room: a dropdown too wide to sit beside it moves to its own
+   line under the copy instead of drawing over the title at 360px or at large
+   text (2026-11-15 wall check). The page clamp's wrap stays in force. */
+.row[data-settings-inline] > .copy {
+    min-width: min(9rem, 45%);
+}
+
+/* A wrapping column flexbox sizes its line to the widest line of text, so
+   the title would never trim and its help icon slid under the dropdown; the
+   copy column stays single-line (doubled class: the clamp's wrap is
+   !important at (0,2,1)). */
+.row.row[data-settings-inline] > .copy {
+    flex-wrap: nowrap !important;
+}
+
+.row[data-settings-inline] > .control {
+    max-width: 55%;
+}
+
+.row[data-settings-inline] .select {
+    min-width: min(6rem, 100%);
+    max-width: min(14rem, 100%);
+}
+
+/* A dropdown row never trims its title: the copy keeps the title's full
+   one-line width, so a control too wide to sit beside it wraps under the copy
+   instead of cutting the title off (360px phone, large text). */
+.row.row[data-settings-inline='select'] {
+    flex-wrap: wrap;
+}
+
+.row.row[data-settings-inline='select'] > .copy {
+    min-width: min-content;
+    max-width: 100%;
+}
+
+.row.row[data-settings-inline='select'] .title {
+    min-width: max-content;
+    max-width: 100%;
+}

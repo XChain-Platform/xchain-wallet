@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // A form carries one notice per state: its caution, its saved draft and the
-// shell's "Some balances may be out of date" share one box with a line each.
+// shell's "Some information may be out of date" share one box with a line each.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -21,7 +21,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ u
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { HideReachabilityNotice } from '../../../packages/core/src/shared/components/hideReachabilityNotice.js';
-import { FormNotice, FormPage, Screen, StatusMessage } from '../../../packages/core/src/ui/index.js';
+import { FormNotice, FormPage, PageNotice, PageNoticeHostContext, Screen, StatusMessage } from '../../../packages/core/src/ui/index.js';
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -48,6 +48,49 @@ function mountInShell(overall, form, refresh = () => {}, state = {}) {
 }
 
 describe('one notice box per form', () => {
+    it('portals a lifted form notice into the provided page host', () => {
+        function HostedForm() {
+            const [host, setHost] = useState(null);
+            return (
+                <>
+                    <div ref={setHost} data-testid="page-notice-host" />
+                    <PageNoticeHostContext.Provider value={host}>
+                        <section data-testid="settings-card">
+                            <FormPage status={<StatusMessage variant="error">Vault unavailable.</StatusMessage>}>
+                                <input aria-label="Password" />
+                            </FormPage>
+                        </section>
+                    </PageNoticeHostContext.Provider>
+                </>
+            );
+        }
+
+        const { getByTestId } = render(<HostedForm />);
+        expect(getByTestId('page-notice-host')).toHaveTextContent('Vault unavailable.');
+        expect(getByTestId('settings-card')).not.toHaveTextContent('Vault unavailable.');
+        expect(getByTestId('page-notice-host').querySelector('[data-form-status]')).not.toBeNull();
+    });
+
+    it('portals a nested page notice out of its card', () => {
+        function HostedNotice() {
+            const [host, setHost] = useState(null);
+            return (
+                <>
+                    <div ref={setHost} data-testid="page-notice-host" />
+                    <PageNoticeHostContext.Provider value={host}>
+                        <section data-testid="settings-card">
+                            <PageNotice text="Settings unavailable." tone="error" />
+                        </section>
+                    </PageNoticeHostContext.Provider>
+                </>
+            );
+        }
+
+        const { getByTestId } = render(<HostedNotice />);
+        expect(getByTestId('page-notice-host')).toHaveTextContent('Settings unavailable.');
+        expect(getByTestId('settings-card')).not.toHaveTextContent('Settings unavailable.');
+    });
+
     it('merges the form status and a notice raised from its body', () => {
         const restore = vi.fn();
         const { container } = render(
@@ -65,7 +108,8 @@ describe('one notice box per form', () => {
         expect(shown).toHaveLength(1);
         expect(shown[0]).toHaveAttribute('data-variant', 'warning');
         expect(shown[0]).toHaveTextContent('Your unfinished draft was saved.');
-        expect(shown[0]).toHaveTextContent('Destroy is irreversible. The burned amount cannot be recovered.');
+        expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
+        expect(shown[0]).toHaveTextContent('The burned amount cannot be recovered.');
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
         expect(restore).toHaveBeenCalledTimes(1);
     });
@@ -108,10 +152,10 @@ describe('one notice box per form', () => {
         ), refresh);
         const shown = boxes(container);
         expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some balances may be out of date');
+        expect(shown[0]).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
         expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(refresh).toHaveBeenCalledTimes(1);
     });
 
@@ -156,13 +200,12 @@ describe('one notice box per form', () => {
         expect(screen.queryByText(/may be out of date/)).toBeNull();
     });
 
-    it('leaves the shell notice in place over a form with no notice of its own', () => {
+    it('shows no shell notice over a form while degraded', () => {
         const { container } = mountInShell('degraded', (
             <FormPage><input aria-label="Amount" /></FormPage>
         ));
         const shown = boxes(container);
-        expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some balances may be out of date');
-        expect(shown[0].querySelector('[role="status"][aria-live="polite"]')).not.toBeNull();
+        expect(shown).toHaveLength(0);
+        expect(screen.queryByText(/may be out of date/)).toBeNull();
     });
 });

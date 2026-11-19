@@ -8,12 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useEffect, useId, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ClearFieldButton, clearControlValue } from './ClearFieldButton.jsx';
 import { EyeIcon, EyeOffIcon } from './icons/index.jsx';
+import { InfoTip } from './InfoTip.jsx';
 import styles from './Input.module.css';
-import { resolveFieldRequirement } from './fieldRequirement.js';
+import { fieldHelpName, resolveFieldRequirement } from './fieldRequirement.js';
+import { OptionalPill } from './OptionalPill.jsx';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
+import { useFormFieldError } from './formErrors.js';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 import { useProtectedScreen } from '../shared/utils/screenGuard.js';
 
 const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
@@ -83,23 +88,38 @@ export function inspectFieldPaste(value) {
  *
  * @typedef {object} InputOwnProps
  * @property {string} [label]
+ * @property {import('react').ReactNode} [help] contextual help shown from the label-row InfoTip.
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
  * @property {string} [compactPlaceholder] concise phone-width placeholder; long placeholders default to the field's accessible name.
+ * @property {import('react').ReactNode} [fieldAction] one small control drawn
+ *   inside the field at its trailing edge.
  * @property {boolean} [pasteGuard] guards address-style text fields; decimal and number fields are guarded automatically.
- * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
+ * @property {boolean} [optional]   shows the shared Optional pill and exposes the field as optional to assistive technology.
  * @property {'sm' | 'md' | 'lg'} [size] field size; defaults to 'md'.
  * @property {boolean} [revealable] password fields only: a show and hide button sits inside the field.
+ * @property {boolean} [clearable] draws a small X inside the field at its
+ *   trailing edge, shown only while the field has text, named "Clear <label>".
+ * @property {() => void} [onClear] what the X does; by default it empties the
+ *   field through an ordinary change event.
+ * @property {boolean} [hideCounter] with maxLength: the host shows the character count elsewhere (MemoSection's header), so the field draws none.
+ * @property {import('react').ReactNode} [counter] custom counter content shown
+ *   in the label-row counter slot instead of the `maxLength` character count.
  */
 export const Input = forwardRef(function Input(
     {
         label,
+        help,
         hint,
-        error,
-        errorKey,
+        counter: customCounter,
+        error: errorProp,
+        errorKey: errorKeyProp,
         id,
+        fieldAction,
+        clearable = false,
+        onClear,
         compactPlaceholder,
         optional = false,
         size = 'md',
@@ -109,6 +129,7 @@ export const Input = forwardRef(function Input(
         defaultValue,
         placeholder,
         maxLength,
+        hideCounter = false,
         className,
         onChange,
         autoCapitalize = 'off',
@@ -135,12 +156,20 @@ export const Input = forwardRef(function Input(
 ) {
     const autoId = useId();
     const inputId = id || autoId;
+    // A form on the form error standard (useFormErrors) hands its map to the
+    // page template; this field shows its own entry and drops it on change.
+    // An `error` the caller passes wins.
+    const formField = useFormFieldError(id);
+    const error = errorProp || formField.error;
+    const errorKey = errorProp ? errorKeyProp : formField.errorKey;
     const requirement = resolveFieldRequirement({
         label,
         optional,
         required,
         ariaRequired: externalRequired,
     });
+    const hasFieldAction = fieldAction != null && fieldAction !== false;
+    const hasHelp = Boolean(label && help);
     const [dismissedError, setDismissedError] = useState(null);
     const errorIsDismissed = dismissedError !== null && dismissedError.message === error
         && Object.is(dismissedError.key, errorKey);
@@ -151,10 +180,14 @@ export const Input = forwardRef(function Input(
     const visibleError = pasteError || dateError || callerError;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
+    const optionalPillId = requirement.isOptional ? `${inputId}-optional` : undefined;
     const capsLockId = `${inputId}-capslock`;
     const isDateTime = type === 'datetime-local';
     const zoneId = isDateTime ? `${inputId}-zone` : undefined;
-    const counterId = maxLength != null ? `${inputId}-counter` : undefined;
+    // A host that shows the count itself (MemoSection, in its section
+    // header) passes hideCounter, so the field draws none of its own.
+    const hasCustomCounter = customCounter != null && customCounter !== false;
+    const counterId = !hideCounter && (hasCustomCounter || maxLength != null) ? `${inputId}-counter` : undefined;
     const fullPlaceholder = typeof placeholder === 'string' ? placeholder : undefined;
     const fieldName = typeof externalLabel === 'string'
         ? externalLabel
@@ -212,6 +245,7 @@ export const Input = forwardRef(function Input(
 
     const describedBy = [
         externalDescribedBy,
+        optionalPillId,
         hintId,
         errorId,
         zoneId,
@@ -219,10 +253,27 @@ export const Input = forwardRef(function Input(
         showCapsLock ? capsLockId : undefined,
         placeholderDescriptionId,
     ].filter(Boolean).join(' ') || undefined;
+    // The clear X is one more trailing action, drawn only while there is text
+    // to clear and the field can be edited.
+    const innerRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const setRefs = useCallback((node) => {
+        innerRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) ref.current = node;
+    }, [ref]);
+    const showClear = clearable && characterCount > 0 && !rest.disabled && !rest.readOnly;
+    const actionCount = (hasFieldAction ? 1 : 0) + (showClear ? 1 : 0) + (canReveal ? 1 : 0);
+    const clearAction = showClear ? (
+        <ClearFieldButton
+            label={fieldName}
+            onClear={() => (onClear ? onClear() : clearControlValue(innerRef.current))}
+        />
+    ) : null;
     const inputClass = [
         styles.input,
         visibleError ? styles.invalid : '',
-        canReveal ? styles.revealableInput : '',
+        actionCount >= 1 ? styles.inputWithFieldAction : '',
+        actionCount >= 2 ? styles.inputWithTwoFieldActions : '',
         className,
     ]
         .filter(Boolean).join(' ');
@@ -262,6 +313,7 @@ export const Input = forwardRef(function Input(
         if (isDateOrTime) setDateError(null);
         setPasteError(null);
         if (error) setDismissedError({ message: error, key: errorKey });
+        formField.clear();
         onChange?.(event);
     };
     const handlePaste = (event) => {
@@ -313,17 +365,38 @@ export const Input = forwardRef(function Input(
         }
         onInvalid?.(event);
     };
+    const counter = counterId ? (
+        <div id={counterId} className={styles.counter} aria-live="polite">
+            {hasCustomCounter ? customCounter : <>{characterCount} / {maxLength}</>}
+        </div>
+    ) : null;
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
-            {label ? (
+            {label && (requirement.isOptional || hasHelp || counter) ? (
+                <div className={styles.labelRow}>
+                    <label htmlFor={inputId} className={styles.label}>
+                        {requirement.label}
+                    </label>
+                    {hasHelp ? (
+                        <InfoTip
+                            className={styles.labelHelp}
+                            label={help}
+                            aria={t('ui.field.about', { label: fieldHelpName(requirement.label, externalLabel) })}
+                        />
+                    ) : null}
+                    {/* The ? help comes first, then the Optional tag. */}
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
+                    {counter}
+                </div>
+            ) : label ? (
                 <label htmlFor={inputId} className={styles.label}>
                     {requirement.label}
                 </label>
             ) : null}
             <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
                 <input
-                    ref={ref}
+                    ref={setRefs}
                     id={inputId}
                     type={renderedType}
                     autoCapitalize={autoCapitalize}
@@ -351,18 +424,24 @@ export const Input = forwardRef(function Input(
                     onInvalid={handleInvalid}
                     {...rest}
                 />
-                {canReveal ? (
-                    <button
-                        type="button"
-                        className={styles.revealToggle}
-                        onClick={() => setRevealed((shown) => !shown)}
-                        aria-label={revealLabel}
-                        aria-pressed={revealed}
-                        aria-controls={inputId}
-                        title={revealLabel}
-                    >
-                        {revealed ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
+                {actionCount > 0 ? (
+                    <div className={styles.controlActions}>
+                        {hasFieldAction ? fieldAction : null}
+                        {clearAction}
+                        {canReveal ? (
+                            <button
+                                type="button"
+                                className={styles.revealToggle}
+                                onClick={() => setRevealed((shown) => !shown)}
+                                aria-label={revealLabel}
+                                aria-pressed={revealed}
+                                aria-controls={inputId}
+                                title={revealLabel}
+                            >
+                                {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                            </button>
+                        ) : null}
+                    </div>
                 ) : null}
             </div>
             {placeholderDescriptionId ? (
@@ -377,11 +456,7 @@ export const Input = forwardRef(function Input(
             {visibleError ? (
                 <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
             ) : null}
-            {maxLength != null ? (
-                <div id={counterId} className={styles.counter} aria-live="polite">
-                    {characterCount} / {maxLength}
-                </div>
-            ) : null}
+            {!label ? counter : null}
             {showCapsLock ? (
                 <div
                     id={capsLockId}

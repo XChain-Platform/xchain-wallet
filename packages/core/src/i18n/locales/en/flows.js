@@ -29,15 +29,15 @@ const messages = {
         "Couldn't confirm this address accepts your dispenser; the network will decide. If it refuses, the network fee is lost.",
 
     'flows.pairPartner.unavailableHelp':
-        'Pairing applies to Watcher and Signer wallets. Pick one of those modes first, then pair this wallet with its other half.',
-    'flows.pairPartner.pairSigner': 'Pair a signer',
-    'flows.pairPartner.pairWatcher': 'Pair a watcher',
+        'Pairing applies only to a wallet set up with another phone. Choose what this phone does first, then pair it with the other phone.',
+    'flows.pairPartner.pairSigner': 'Pair the Signer Phone',
+    'flows.pairPartner.pairWatcher': 'Pair the Other Phone',
     'flows.pairPartner.watcherHelp':
-        'This wallet watches your coins and builds unsigned transactions. Pair it with the offline wallet that holds the same recovery phrase and signs them.',
+        'This wallet shows your coins and builds unsigned transactions. Pair it with the other phone, which holds the same recovery phrase and signs them offline.',
     'flows.pairPartner.signerHelp':
-        'This wallet signs transactions offline. Pair it with the online wallet that holds the same recovery phrase and watches your coins.',
+        'This wallet signs transactions offline. Pair it with the other phone, which holds the same recovery phrase and shows your coins.',
     'flows.pairPartner.modeMismatch':
-        'This wallet is in {localMode} mode, so its partner must be in {partnerMode} mode. The wallet you scanned is in {scannedMode} mode.',
+        'Both phones were set up for the same job. One phone signs and the other builds transactions, so set up one of them again with the other job.',
     'flows.pairPartner.noSharedChains':
         'The two wallets have no network in common, so there is nothing to compare. Switch on at least one matching network in both wallets and try again.',
     'flows.pairPartner.seedMismatch':
@@ -58,13 +58,24 @@ const messages = {
         '{ticker} is the only way to pay a protocol fee on this network.',
     'flows.protocolFee.unverifiedNotice':
         "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
-    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
+    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker}',
+    'flows.protocolFee.toggleHelp': 'Picks which balance pays the protocol fee for this action: {ticker}, sent in this transaction, or your XCHAIN balance.',
+    'flows.feesCard.calculating': 'Calculating',
+    'flows.feesCard.free': 'Free',
+    'flows.feesCard.pricedAtReview': 'Priced at review',
+    'flows.feesCard.total': 'Total',
+    'flows.feesCard.title': 'Speed and Fees',
+    'flows.feesCard.networkFeeHelpLabel': 'Network fee help',
+    'flows.feesCard.networkFeeHelp':
+        'Paid to the miners who confirm this transaction. A faster speed pays more and confirms sooner.',
+    'flows.feesCard.protocolFeeLoading': 'Loading the protocol fee',
+    'flows.feesCard.protocolAtReview': 'protocol fee at review',
 
-    'flows.rbf.unsupportedBuild': "RBF replacement isn't supported by this build.",
+    'flows.rbf.unsupportedBuild': "Fee replacement isn't supported by this build.",
     'flows.rbf.noEntry': 'No entry to replace.',
     'flows.rbf.noHash': 'No transaction hash on this entry.',
     'flows.rbf.alreadyConfirmed': 'Already confirmed.',
-    'flows.rbf.actionUnsupported': "{action} actions aren't RBF-replaceable.",
+    'flows.rbf.actionUnsupported': "{action} actions can't have their fee raised.",
     'flows.rbf.notAllowed': 'This transaction did not allow fee replacement.',
     'flows.rbf.nothingToUndo': 'Nothing to undo.',
     'flows.rbf.cancelConfirmed': 'The cancellation already confirmed.',

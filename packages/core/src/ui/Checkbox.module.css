@@ -120,6 +120,24 @@ label.root {
     overflow-wrap: anywhere;
 }
 
+/* A label with a help tip: the tip follows the label text on its line. */
+.labelLine {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-label-help-gap);
+    min-width: 0;
+}
+
+.labelLine > .label {
+    min-width: 0;
+}
+
+.labelHelp {
+    flex: none;
+    /* The row gap spaces the tip; drop the tip's own start margin, as Input does. */
+    margin-inline-start: 0;
+}
+
 .description {
     margin-block-start: var(--xc-help-gap);
     color: var(--xc-text-muted);
@@ -134,6 +152,11 @@ label.root {
 
 .invalid .box {
     border-color: var(--xc-danger);
+}
+
+.invalid .label,
+.invalid .labelLine {
+    color: var(--xc-danger-fg);
 }
 
 .invalid .input:focus-visible + .box {

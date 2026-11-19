@@ -1,0 +1,171 @@
+/* The fill ring (wallet-orders-layout-1-ring): a conic arc over a track, a
+   surface-coloured hole with the share or a mark in it, and the status word
+   under it in small caps. The arc colour follows the tone. */
+.fillRing {
+    /* The ring sizes have no matching shared token: the approved layout draws
+       a 38px ring on a list row and a 68px ring on a detail header. */
+    --fill-ring-size: 38px;
+    --fill-ring-width: var(--xc-space-1);
+    --fill-ring-arc: var(--xc-accent-primary);
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-inline-size: 0;
+}
+
+/* On a list row the ring sits in one fixed-width status column, with ring and
+   word centred in it, so every row's ring sits the same distance from the
+   chevron whatever its word (operator 2026-11-13, narrowed 2026-11-14 when
+   Cancelled and Cancelling became Closed and Closing, and again 2026-11-15 to
+   the ring's own width plus a little air). The column never flexes with its
+   word. */
+.fillRing[data-column='status'] {
+    /* Ring width plus a little air for its word, so the ring sits close to
+       the chevron (operator 2026-11-15 on Obligations); a longer word clips. */
+    inline-size: calc(var(--fill-ring-size) + var(--xc-space-3));
+    min-inline-size: calc(var(--fill-ring-size) + var(--xc-space-3));
+    max-inline-size: calc(var(--fill-ring-size) + var(--xc-space-3));
+}
+
+/* My orders: the status word keeps its natural width and never truncates;
+   the row's title and meta shrink or wrap instead (operator 2026-11-15). */
+.fillRing[data-column='fit'] {
+    min-inline-size: calc(var(--fill-ring-size) + var(--xc-space-3));
+}
+
+.fillRing[data-column='fit'] .caption {
+    max-inline-size: none;
+    overflow: visible;
+    text-overflow: clip;
+    letter-spacing: 0;
+}
+
+.fillRing[data-size='lg'] {
+    --fill-ring-size: 68px;
+    --fill-ring-width: var(--xc-space-2);
+}
+
+.fillRing[data-tone='warning'] {
+    --fill-ring-arc: var(--xc-warning);
+}
+
+.fillRing[data-tone='success'] {
+    --fill-ring-arc: var(--xc-success);
+}
+
+.fillRing[data-tone='danger'] {
+    --fill-ring-arc: var(--xc-danger);
+}
+
+.fillRing[data-tone='muted'] {
+    --fill-ring-arc: var(--xc-text-muted);
+}
+
+.ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    inline-size: var(--fill-ring-size);
+    block-size: var(--fill-ring-size);
+    padding: var(--fill-ring-width);
+    border-radius: var(--xc-radius-pill);
+    background: conic-gradient(
+        var(--fill-ring-arc) 0 var(--fill-ring-share, 0%),
+        var(--xc-border) var(--fill-ring-share, 0%) 100%
+    );
+}
+
+.hole {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.fillRing[data-size='lg'] .hole {
+    font-size: var(--xc-text-lg);
+}
+
+.hole svg {
+    inline-size: var(--xc-icon-sm);
+    block-size: var(--xc-icon-sm);
+}
+
+.fillRing[data-size='lg'] .hole svg {
+    inline-size: var(--xc-icon-xl);
+    block-size: var(--xc-icon-xl);
+}
+
+.fillRing[data-mark='tick'] .hole {
+    color: var(--xc-success);
+}
+
+.fillRing[data-mark='cross'] .hole {
+    color: var(--xc-text-muted);
+}
+
+/* The Payments due ring: the clock takes the arc colour, and the time left
+   under it reads in plain case ("24m", "1h 5m"), amber with the arc when
+   the window is nearly gone. */
+.fillRing[data-mark='clock'] .hole {
+    color: var(--fill-ring-arc);
+}
+
+.fillRing[data-mark='clock'] .caption {
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.fillRing[data-mark='clock'][data-tone='success'] .caption {
+    color: var(--xc-success);
+}
+
+.fillRing[data-mark='clock'][data-tone='danger'] .caption {
+    color: var(--xc-danger-text, var(--xc-danger));
+}
+
+/* The status word under a row's ring: small caps, muted, one line. A word
+   longer than the fixed status column is clipped with an ellipsis, never
+   widened, so the ring (centred by .fillRing) stays in the same spot. */
+.caption {
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* In the narrow status column the word drops its tracking, so a seven-letter
+   word (SETTLED, CLOSING) fits whole instead of clipping (2026-11-15). */
+.fillRing[data-column='status'] .caption {
+    letter-spacing: 0;
+}
+
+/* A forced-colours theme may flatten the arc, so the ring keeps an outline. */
+@media (forced-colors: active) {
+    .ring {
+        border: 1px solid CanvasText;
+    }
+
+    .hole {
+        color: CanvasText;
+    }
+}

@@ -50,9 +50,9 @@ describe('change lines under a right-to-left page', () => {
             </MessagingProvider>,
         );
 
-        const line = await screen.findByLabelText(/7d change\. Decrease/);
+        const line = await screen.findByLabelText(/1W change\. Decrease/);
         const isolate = line.querySelector('bdi[dir="ltr"]');
         expect(isolate).not.toBeNull();
-        expect(isolate.textContent).toMatch(/-\d+\.\d\d%\) · 7d$/);
+        expect(isolate.textContent).toMatch(/-\d+\.\d\d%\) · 1W$/);
     });
 });

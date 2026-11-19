@@ -15,7 +15,7 @@ afterEach(() => {
     document.documentElement.classList.remove('xc-focus-visible-fallback');
 });
 
-function TrapHarness({ active }) {
+function TrapHarness({ active, includeCssHidden = false }) {
     const containerRef = useRef(null);
     useFocusTrap(containerRef, { active });
     return (
@@ -24,6 +24,9 @@ function TrapHarness({ active }) {
             <div ref={containerRef} data-testid="trap" tabIndex={-1}>
                 <button data-testid="first">first</button>
                 <button data-testid="last">last</button>
+                {includeCssHidden ? (
+                    <button data-testid="css-hidden" style={{ display: 'none' }}>hidden</button>
+                ) : null}
             </div>
         </div>
     );
@@ -58,6 +61,34 @@ describe('useFocusTrap', () => {
         last.focus();
         fireEvent.keyDown(screen.getByTestId('trap'), { key: 'Tab' });
         expect(document.activeElement).toBe(first);
+    });
+
+    it('skips display:none controls when checkVisibility is available', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'checkVisibility');
+        let visibilityChecks = 0;
+        Object.defineProperty(Element.prototype, 'checkVisibility', {
+            configurable: true,
+            value() {
+                visibilityChecks += 1;
+                return this.style.display !== 'none';
+            },
+        });
+
+        try {
+            render(<TrapHarness active includeCssHidden />);
+            const first = screen.getByTestId('first');
+            const last = screen.getByTestId('last');
+            last.focus();
+            fireEvent.keyDown(screen.getByTestId('trap'), { key: 'Tab' });
+            expect(document.activeElement).toBe(first);
+            expect(visibilityChecks).toBeGreaterThan(0);
+        } finally {
+            if (descriptor) {
+                Object.defineProperty(Element.prototype, 'checkVisibility', descriptor);
+            } else {
+                Reflect.deleteProperty(Element.prototype, 'checkVisibility');
+            }
+        }
     });
 
     it('Shift+Tab from the first wraps to the last', () => {
@@ -211,6 +242,15 @@ describe('useFocusTrap opener handling', () => {
         fireEvent.click(screen.getByTestId('inside'));
         await flush();
         expect(document.activeElement).toBe(opener);
+    });
+
+    it('keeps a focus move made inside the dialog before the deferred initial focus runs', async () => {
+        render(<TrapHarness active />);
+        // The initial focus waits a frame; a keyboard user who has already
+        // moved to another control in the dialog keeps that control.
+        screen.getByTestId('last').focus();
+        await flush();
+        expect(document.activeElement).toBe(screen.getByTestId('last'));
     });
 
     it('prefers the first meaningful control when the requested target is the dialog', async () => {

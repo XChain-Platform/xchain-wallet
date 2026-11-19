@@ -34,6 +34,7 @@
 import {
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -46,6 +47,7 @@ import {
     unlockAfterReload,
     warmPreflight,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'a11yconfirmpassword';
 const FUNDING_BTC = 1;
@@ -57,7 +59,8 @@ const ISSUE_PARAMS = `0|${ISSUE_TICK}|${ISSUE_SUPPLY}||0||${ISSUE_SUPPLY}`;
 const POPUP = { width: 360, height: 600 };
 
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    // The switch reads "Pay protocol fee in <coin>" (flows.protocolFee.toggleLabel).
+    const name = /^Pay protocol fee in \S+/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 
@@ -65,14 +68,16 @@ function feeToggle(scope) {
 async function composeIssue(page, { nativeFee }) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker').fill(ISSUE_TICK);
-    await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(ISSUE_TICK);
+    await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
+    // The fee switch sits in the Speed and Fees section, closed until opened.
+    await openIssueSection(main, 'Speed and Fees');
     const toggle = feeToggle(main);
     await expect(toggle).toBeVisible({ timeout: 30_000 });
     if (nativeFee !== (await toggle.isChecked())) await toggle.click();
     await expect(toggle).toBeChecked({ checked: nativeFee });
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 
@@ -128,7 +133,7 @@ async function warmIssue(source, expected, feeMode = 'xchain') {
 async function scanBothVerdicts(page, own, width) {
     await warmIssue(own, true, 'native');
     await composeIssue(page, { nativeFee: true });
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
@@ -140,7 +145,7 @@ async function scanBothVerdicts(page, own, width) {
     // most likely to be reading carefully. An unlabelled override control
     // here is a consent problem, not a lint finding.
     await composeIssue(page, { nativeFee: false });
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'fail');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toBeVisible();
     await scan(page, `Confirm surface (pre-flight fail, ${width})`);
 }

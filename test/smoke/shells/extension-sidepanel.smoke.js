@@ -82,9 +82,14 @@ const toggleSrc = read(togglePath);
 assert.ok(/LAYOUT_MODE_STORAGE_KEY/.test(toggleSrc)
     && /LAYOUT_MODE_STORAGE_KEY\s*=\s*'xchain\.layoutMode'/.test(read('packages/core/src/shared/utils/layoutModeStorageKey.js')),
     'toggle uses the same canonical storage key as the controller');
-assert.ok(/pick\('popup'\)/.test(toggleSrc) && /pick\('sidepanel'\)/.test(toggleSrc),
+// The Popup | Sidebar choice is the shared SegmentedControl view toggle, whose
+// change handler calls pick with the chosen mode.
+assert.ok(/<SegmentedControl\b/.test(toggleSrc)
+    && /id: 'popup'/.test(toggleSrc) && /id: 'sidepanel'/.test(toggleSrc)
+    && /onChange=\{\(next\) => pick\(/.test(toggleSrc),
     'toggle renders both modes');
-assert.ok(/aria-checked=/.test(toggleSrc),
+// SegmentedControl draws role="radiogroup" with aria-checked radios.
+assert.ok(/aria-checked=/.test(read('packages/core/src/ui/SegmentedControl.jsx')),
     'toggle is accessibly marked with aria-checked');
 
 console.log('OK: extension sidebar mode (Chrome Side Panel) smoke');

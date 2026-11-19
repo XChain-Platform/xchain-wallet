@@ -132,16 +132,15 @@ describe('Send Max quote agreement', () => {
         const quote = vi.fn().mockResolvedValue(quoteFor('99999000'));
         const messaging = mount({ quote });
         await enterDestination();
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).toBeEnabled());
         fireEvent.click(screen.getByLabelText('Coin control enabled'));
         fireEvent.click(screen.getByLabelText(/1 BTC/));
-        fireEvent.change(screen.getByLabelText('Change address'), {
-            target: { value: 'change-1' },
-        });
+        fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+        fireEvent.click(await screen.findByRole('button', { name: new RegExp(CHANGE) }));
 
         await useMax();
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
 
@@ -170,6 +169,26 @@ describe('Send Max quote agreement', () => {
         });
     });
 
+    it('composes Max with the economical inputs returned by its quote', async () => {
+        const retained = [{ ...UTXO, value: 75_000_000 }];
+        const quote = vi.fn().mockResolvedValue({
+            ...quoteFor('74999000'),
+            inputSats: '75000000',
+            leftBehindSats: '25000000',
+            utxos: retained,
+        });
+        const messaging = mount({ quote });
+        await enterDestination();
+
+        await useMax();
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.74999000'));
+        expect(screen.getByText(/Max leaves 0\.25 BTC/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+
+        expect(messaging.composeForConfirm.mock.calls[0][0].utxos).toEqual(retained);
+    });
+
     it.each([
         ['resolves null', () => vi.fn().mockResolvedValue(null)],
         ['throws', () => vi.fn(async () => { throw new Error('quote unavailable'); })],
@@ -181,7 +200,7 @@ describe('Send Max quote agreement', () => {
         await useMax();
 
         const amount = screen.getByLabelText(/^Amount \(/);
-        await waitFor(() => expect(amount).toHaveValue('0.999985'));
+        await waitFor(() => expect(amount).toHaveValue('0.99998500'));
         expect(amount).toBeEnabled();
         expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
     });
@@ -197,6 +216,8 @@ describe('Send Max quote agreement', () => {
         await useMax();
         await waitFor(() => expect(quote).toHaveBeenCalledTimes(1));
 
+        // The Fees section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });
@@ -205,13 +226,13 @@ describe('Send Max quote agreement', () => {
             fast.resolve(quoteFor('99998000'));
             await fast.promise;
         });
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998000'));
 
         await act(async () => {
             slow.resolve(quoteFor('99999000'));
             await slow.promise;
         });
-        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998');
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998000');
         expect(quote.mock.calls[0][0].feePerKb).toBe(6000);
         expect(quote.mock.calls[1][0].feePerKb).toBe(12000);
     });

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,8 +11,19 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { fact } from '../../helpers/detailFacts.js';
+import filterMenuStyles from '../../../packages/core/src/shared/components/HomeListFilterMenu.module.css';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+import {
+    EXPORT_ITEM,
+    MORE_ACTIONS,
+    REFRESH_ITEM,
+    chooseHistoryMenuItem,
+    historyMenuItem,
+    historyMoreButton,
+    openHistoryMoreMenu,
+} from './historyMoreMenu.js';
 
 const LTC = 'litecoin-regtest';
 const DOGE = 'dogecoin-regtest';
@@ -112,9 +123,23 @@ function rowKeys(view) {
         .map((node) => node.getAttribute('data-history-key'));
 }
 
+// Search, the network, the pickers, the dates and the view options sit in the
+// title-line filter menu; this opens it (and leaves it open) once.
+async function openFilters() {
+    const trigger = await screen.findByRole('button', { name: 'History filters' });
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+}
+
 function chooseOption(triggerName, optionName) {
     const trigger = screen.getByRole('button', { name: triggerName });
     fireEvent.click(trigger);
+    // The network filter opens the full-screen network list, whose rows are
+    // buttons named "Select <network>"; the other filters are listboxes.
+    const networkList = screen.queryByRole('dialog', { name: 'Network' });
+    if (networkList) {
+        fireEvent.click(within(networkList).getByRole('button', { name: `Select ${optionName}` }));
+        return;
+    }
     fireEvent.click(screen.getByRole('option', { name: optionName }));
     if (trigger.getAttribute('aria-expanded') === 'true') fireEvent.click(trigger);
 }
@@ -139,6 +164,69 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('keeps the title-bar filter unlit on the default 30-day window and lights it off the default (G04, G95)', async () => {
+        const { view } = mountHistory({
+            [LTC]: [historyRow({ actionIndex: 1, timestamp: secondsAt(0), tick: 'LTC', source: LTC_ADDRESS })],
+        });
+        const trigger = await screen.findByRole('button', { name: 'History filters' });
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+        expect(trigger).not.toHaveClass(filterMenuStyles.triggerActive);
+
+        await openFilters();
+        expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByRole('button', { name: '7 days' }));
+        expect(screen.getByRole('button', { name: 'History filters' })).toHaveClass(filterMenuStyles.triggerActive);
+    });
+
+    it('puts the filter then the ⋯ menu on the title line, with nothing between the header and the list', async () => {
+        const { view } = mountHistory({
+            [LTC]: [historyRow({ actionIndex: 1, timestamp: secondsAt(0), tick: 'LTC', source: LTC_ADDRESS })],
+        });
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+
+        // The title line holds two buttons: the filter, then ⋯.
+        const filter = screen.getByRole('button', { name: 'History filters' });
+        const more = historyMoreButton();
+        const tools = more.closest('[data-history-header-actions]');
+        expect(tools).not.toBeNull();
+        const titleLine = screen.getByRole('heading', { name: 'History', level: 1 }).closest('div');
+        expect(titleLine.contains(tools)).toBe(true);
+        expect([...tools.querySelectorAll('button')]).toEqual([filter, more]);
+        expect(more).toHaveAttribute('data-history-more');
+        expect(more).toHaveAttribute('aria-haspopup', 'menu');
+        expect(more).toHaveAttribute('aria-expanded', 'false');
+        expect(more.querySelector('svg')).toBeTruthy();
+        // No separate Refresh or Export button is left anywhere on the page.
+        expect(screen.queryByRole('button', { name: REFRESH_ITEM })).toBeNull();
+        expect(screen.queryByRole('button', { name: EXPORT_ITEM })).toBeNull();
+        expect(screen.queryByRole('menu')).toBeNull();
+
+        // ⋯ opens a menu of Export, then Refresh, each with its icon.
+        const menu = openHistoryMoreMenu();
+        expect(more).toHaveAttribute('aria-expanded', 'true');
+        expect(tools.contains(menu)).toBe(true);
+        const items = within(menu).getAllByRole('menuitem');
+        expect(items.map((item) => item.textContent.trim())).toEqual(['Export…', 'Refresh history']);
+        for (const item of items) {
+            expect(item).toBeEnabled();
+            expect(item.querySelector('svg')).toBeTruthy();
+        }
+        // Escape shuts it.
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).toBeNull();
+
+        // Nothing sits between the header and the list: no actions row, no
+        // "Updated ..." line; the list is the page's first block.
+        expect(document.querySelector('[data-xc-page-actions]')).toBeNull();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
+        const list = screen.getByRole('list', { name: 'History' });
+        expect(list.parentElement.firstElementChild).toBe(list);
+
+        // Choosing an item shuts the menu too.
+        chooseHistoryMenuItem(REFRESH_ITEM);
+        expect(screen.queryByRole('menu')).toBeNull();
+    });
+
     it('uses the same field names in the export dialog and transaction details', async () => {
         mountHistory({
             [LTC]: [
@@ -146,9 +234,9 @@ describe('History filters', () => {
             ],
         });
 
-        const exportButton = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(exportButton).toBeEnabled());
-        fireEvent.click(exportButton);
+        await screen.findByRole('button', { name: MORE_ACTIONS });
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+        chooseHistoryMenuItem(EXPORT_ITEM);
 
         const dialog = screen.getByRole('dialog', { name: 'Export history' });
         expect(dialog).toHaveTextContent('Action number');
@@ -168,12 +256,14 @@ describe('History filters', () => {
             })],
         }, { [LTC]: [{ address: LTC_ADDRESS }] });
 
+        await openFilters();
         const search = await screen.findByRole('searchbox', { name: 'Search history' });
         expect(search).toHaveAttribute('id');
         expect(screen.getByRole('button', { name: '7 days' }))
             .toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByRole('button', { name: 'Refresh history' }))
-            .toHaveAttribute('aria-busy', 'false');
+        // Refresh is a kit button inside the title line's ⋯ menu.
+        await waitFor(() => expect(historyMenuItem(REFRESH_ITEM)).toBeEnabled());
+        expect(historyMenuItem(REFRESH_ITEM)).toHaveAttribute('aria-busy', 'false');
     });
 
     it('searches txid prefixes, counterparties, contacts, tickers, and amounts within date filters', async () => {
@@ -207,11 +297,11 @@ describe('History filters', () => {
             entries: [{ chain: 'litecoin', address: clientAddress }],
         }]);
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
-        // The row keeps both ends of the counterparty on screen and the
-        // whole address in its title.
-        expect(screen.getByTitle(clientAddress)).toHaveTextContent('mClien…111111');
+        // The row shows no counterparty address; search still matches it.
+        expect(screen.queryByTitle(clientAddress)).toBeNull();
         expect(screen.queryByTitle(LTC_ADDRESS)).toBeNull();
 
+        await openFilters();
         const search = screen.getByLabelText('Search history');
         const expectToday = async (query) => {
             fireEvent.change(search, { target: { value: query } });
@@ -230,9 +320,9 @@ describe('History filters', () => {
 
         fireEvent.change(search, { target: { value: 'missing payment' } });
         expect(await screen.findByText('No results for "missing payment"')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Clear history search' }));
+        // The search has no clear button of its own now; emptying the field clears it.
+        fireEvent.change(search, { target: { value: '' } });
         expect(search).toHaveValue('');
-        expect(search).toHaveFocus();
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:40:${LTC_ADDRESS}`]));
     });
 
@@ -280,10 +370,10 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
 
         const today = isoLocal(FIXED_NOW);
+        await openFilters();
         fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'alpha' } });
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: today } });
         fireEvent.change(screen.getByLabelText('To date'), { target: { value: today } });
-        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
         chooseOption(/^All action types$/, 'Send');
         chooseOption(/^All statuses$/, 'Confirmed');
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:50:${LTC_ADDRESS}`]));
@@ -291,6 +381,8 @@ describe('History filters', () => {
         fireEvent.click(view.container.querySelector('button[data-history-row]'));
         fireEvent.click(screen.getByRole('button', { name: 'Back to history' }));
 
+        // The menu opens closed again; the filters it holds were restored.
+        await openFilters();
         expect(await screen.findByLabelText('Search history')).toHaveValue('alpha');
         expect(screen.getByLabelText('From date')).toHaveValue(today);
         expect(screen.getByLabelText('To date')).toHaveValue(today);
@@ -325,19 +417,29 @@ describe('History filters', () => {
         expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
         expect(screen.getByRole('button', { name: /^Receive Received at Client invoices/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Send mtkxEx/ })).toBeInTheDocument();
+        // The send row names no counterparty address: action, details, time and status only.
+        const sendRow = screen.getByRole('button', { name: /^Send/ });
+        expect(sendRow).toBeInTheDocument();
+        expect(sendRow).not.toHaveTextContent('mtkxEx');
     });
 
     it('offers one control to clear the search', async () => {
         mountHistory({
             [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: LTC_ADDRESS })],
         }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        await openFilters();
         const search = await screen.findByRole('searchbox', { name: 'Search history' });
         fireEvent.change(search, { target: { value: 'zzz' } });
-        expect(await screen.findByRole('button', { name: 'Clear history search' })).toBeInTheDocument();
-        // A type="search" field also draws the engine's own cancel mark
-        // inside it; with the Clear button beside it that made two.
-        expect(ruleBody(historyCss, '.searchInput::-webkit-search-cancel-button')).toMatch(/display:\s*none/);
+        // A search that matches nothing has one way out, Reset filters in the
+        // empty state; the search field carries no clear button of its own.
+        expect(await screen.findByText('No results for "zzz"')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Clear history search' })).toBeNull();
+        expect(screen.getAllByRole('button', { name: 'Reset Filters' })).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
+        expect(search).toHaveValue('');
+        // The box is the shared ListSearchField of every filter panel (G04),
+        // which keeps the browser's own clear mark; History's old rule hiding
+        // it styled a class nothing rendered and is gone.
     });
 
     it('leaves a generated address name off the row, since it only repeats the coin', async () => {
@@ -370,6 +472,7 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(6));
 
         const today = isoLocal(FIXED_NOW);
+        await openFilters();
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: today } });
         fireEvent.change(screen.getByLabelText('To date'), { target: { value: today } });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(5));
@@ -377,10 +480,9 @@ describe('History filters', () => {
         fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'alpha' } });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
 
-        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
         expect(screen.getByRole('button', { name: 'All action types' }))
             .toHaveAttribute('aria-pressed', 'false');
-        chooseOption(/^All networks$/, 'Litecoin');
+        chooseOption('Filter by network', 'Litecoin');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         chooseOption(/^All action types$/, 'Send');
@@ -397,7 +499,7 @@ describe('History filters', () => {
         await screen.findByRole('button', { name: 'Fiat: USD' });
 
         const callsBeforeRefresh = messaging.getAddressHistory.mock.calls.length;
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => {
             expect(messaging.getAddressHistory.mock.calls.length).toBe(callsBeforeRefresh + 2);
@@ -406,8 +508,8 @@ describe('History filters', () => {
         expect(screen.getByLabelText('Search history')).toHaveValue('alpha');
         expect(screen.getByLabelText('From date')).toHaveValue(today);
         expect(screen.getByLabelText('To date')).toHaveValue(today);
-        expect(screen.getByRole('button', { name: 'More filters' })).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('button', { name: 'Litecoin' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'History filters' })).toHaveAttribute('aria-expanded', 'true');
+        expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(LTC);
         expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument();
         expect(screen.getByRole('radio', { name: 'Flat' })).toHaveAttribute('aria-checked', 'true');
@@ -424,6 +526,7 @@ describe('History filters', () => {
         });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
 
+        await openFilters();
         const today = isoLocal(FIXED_NOW);
         const tomorrowDate = new Date(FIXED_NOW);
         tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -460,6 +563,7 @@ describe('History filters', () => {
         });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
+        await openFilters();
         expect(screen.getByText('Dates use local time.')).toBeInTheDocument();
         expect(screen.getByText('Date range: 09/14/2026 to 10/13/2026')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
@@ -480,7 +584,7 @@ describe('History filters', () => {
         expect(screen.queryByText(/^Date range:/)).not.toBeInTheDocument();
     });
 
-    it('renders pending, local calendar days, future dates, and missing dates in stable sections', async () => {
+    it('lists pending, local calendar days, future dates, and missing dates in one stable flat order', async () => {
         const { view } = mountHistory({
             [LTC]: [
                 historyRow({ actionIndex: 1, blockIndex: 0, timestamp: secondsAt(0), tick: 'PENDING', source: LTC_ADDRESS }),
@@ -490,18 +594,16 @@ describe('History filters', () => {
                 historyRow({ actionIndex: 5, timestamp: undefined, tick: 'UNDATED', source: LTC_ADDRESS }),
             ],
         }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        await openFilters();
         fireEvent.click(await screen.findByRole('button', { name: 'All dates' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(5));
 
-        const headings = [...view.container.querySelectorAll('[data-xc-section-header] h2')]
-            .map((heading) => heading.textContent);
-        expect(headings).toEqual([
-            'Pending activity',
-            expect.stringMatching(/Oct 14/),
-            'Today',
-            'Yesterday',
-            'Date unavailable',
-        ]);
+        // One flat list with no day headings, in the order the sections used
+        // to give: pending first, then the future date, today, yesterday, and
+        // the undated row last.
+        expect(view.container.querySelectorAll('[data-xc-section-header]')).toHaveLength(0);
+        expect(screen.getByRole('list', { name: 'History' }).querySelector('h2, h3')).toBeNull();
+        expect(rowKeys(view)).toEqual([1, 4, 2, 3, 5].map((index) => `${LTC}:${index}:${LTC_ADDRESS}`));
     });
 
     it('reports network and special-filter misses, and Reset filters resets and can undo them', async () => {
@@ -512,16 +614,15 @@ describe('History filters', () => {
         });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
-        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
+        await openFilters();
         chooseOption(/^No special filters$/, 'Cross-chain only');
-        chooseOption(/^All networks$/, 'Dogecoin');
+        chooseOption('Filter by network', 'Dogecoin');
 
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
-        expect(screen.getByRole('button', { name: 'All networks' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
         expect(screen.getByLabelText('From date')).toHaveValue('');
         expect(screen.getByLabelText('To date')).toHaveValue('');
@@ -529,17 +630,16 @@ describe('History filters', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Dogecoin' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cross-chain only' })).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
-        chooseOption(/^All networks$/, 'Dogecoin');
+        chooseOption('Filter by network', 'Dogecoin');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
         chooseOption(/^No special filters$/, 'Cross-chain only');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
@@ -565,31 +665,30 @@ describe('History filters', () => {
             const amount = view.container.querySelector('[data-history-amount]');
             expect(amount).toHaveTextContent(/100,000,000 LITECRED/);
 
-            const filterToggle = screen.getByRole('button', { name: 'Filters (1)' });
+            // One filter button on the title line holds every control; it is
+            // lit while the default last-30-days window is on.
+            const filterToggle = screen.getByRole('button', { name: 'History filters' });
             expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
-            expect(screen.getByRole('group', { name: 'History filters' })).toBeInTheDocument();
             fireEvent.click(filterToggle);
             expect(filterToggle).toHaveAttribute('aria-expanded', 'true');
             const search = screen.getByRole('searchbox', { name: 'Search history' });
             expect(search).toHaveAttribute('placeholder', 'Search history');
-            expect(search).toHaveAccessibleDescription('Search by action, address, token, transaction ID, or memo…');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
 
             fireEvent.click(screen.getByRole('button', { name: 'All dates' }));
-            expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'All dates' })).toHaveAttribute('aria-pressed', 'true');
 
             // Rows show the chain through the asset icon overlay, so the name starts at the action.
             fireEvent.click(screen.getByRole('button', { name: /(?:Send|Receive).*Confirmed/i }));
             expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-            expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
+            expect(fact('Amount')).toBeInTheDocument();
 
-            const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
-            expect(ruleBody(historyCss, '.phoneFilterToggle')).toMatch(/display:\s*none/);
-            expect(ruleBody(phone, '.phoneFilterToggle')).toMatch(/display:\s*flex/);
-            expect(ruleBody(phone, '.filterCard')).toMatch(/display:\s*none/);
-            expect(ruleBody(phone, '.filterCard.filterCardOpen')).toMatch(/display:\s*flex/);
+            // The filters live in the title-line menu at every width, so the
+            // phone-only toggle and the collapsing filter card are gone.
+            expect(ruleBody(historyCss, '.phoneFilterToggle')).toBe('');
+            expect(ruleBody(historyCss, '.filterCard')).toBe('');
 
             const narrow = mediaBlock(historyCss, 'not all and (min-width: 480px)');
             // The two date fields stack into one full-width column on phones.

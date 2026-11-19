@@ -25,9 +25,10 @@ const VIEWPORTS = [
     { width: 1280, height: 800 },
 ];
 
+// The read-only Private key field the simplified View Private Key page shows
+// once the password and I Understand are given.
 const privateKeyCode = (page) => page.getByRole('main')
-    .locator('code')
-    .filter({ hasText: /^[5KLc9]/ });
+    .getByRole('textbox', { name: 'Private key', exact: true });
 
 async function expectScreen(page, title, label, { atTop = false } = {}) {
     await expect(page.getByRole('heading', { name: title, level: 1 }), `${label}: missing heading`)
@@ -70,48 +71,26 @@ async function expectSameLineHeight(controls, label, { matchHeights = true } = {
         .toBeLessThanOrEqual(2);
 }
 
-async function expectGroupedControlHeights(group, label) {
-    const boxes = await group.getByRole('button').evaluateAll((buttons) => buttons
-        .filter((button) => {
-            const style = getComputedStyle(button);
-            const box = button.getBoundingClientRect();
-            return style.display !== 'none' && style.visibility !== 'hidden'
-                && box.width > 0 && box.height > 0;
-        })
-        .map((button) => {
-            const box = button.getBoundingClientRect();
-            return {
-                center: box.top + box.height / 2,
-                height: box.height,
-                name: button.textContent.trim(),
-            };
-        }));
-
-    const rows = [];
-    for (const box of boxes) {
-        const row = rows.find((candidate) => Math.abs(candidate[0].center - box.center) <= 2);
-        if (row) row.push(box);
-        else rows.push([box]);
-    }
-    const sharedRows = rows.filter((row) => row.length > 1);
-    expect(sharedRows.length, `${label}: no shared control row rendered`).toBeGreaterThan(0);
-    for (const row of sharedRows) {
-        const heights = row.map((box) => box.height);
-        const spread = Math.max(...heights) - Math.min(...heights);
-        expect(
-            spread,
-            `${label}: ${row.map((box) => box.name).join(', ')} differ in height`,
-        ).toBeLessThanOrEqual(2);
-    }
-}
-
 async function openPaletteRoute(page, route) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route);
     await palette.getByRole('option', { name: new RegExp(`^${route}\\b`) }).first().click();
     await expect(palette).toBeHidden();
+}
+
+// Settings groups its rows: the Wallets group page lists My Wallets and
+// My Accounts. Settings may reopen on the last sub-page, so step back to the
+// landing first.
+async function openWalletsGroup(page, size) {
+    await openSettings(page);
+    const landing = page.getByRole('heading', { level: 1, name: 'Settings', exact: true });
+    for (let i = 0; i < 5 && !(await landing.isVisible().catch(() => false)); i += 1) {
+        await page.getByRole('banner').getByRole('button', { name: /^Back\b/ }).first().click();
+    }
+    await expectScreen(page, 'Settings', `${size} settings`, { atTop: true });
+    await page.getByRole('main').getByRole('button', { name: /^Wallets\b/ }).click();
 }
 
 for (const viewport of VIEWPORTS) {
@@ -127,24 +106,17 @@ for (const viewport of VIEWPORTS) {
                 .toBe(true);
 
             await test.step('view details and rename the wallet', async () => {
-                await openSettings(page);
-                await expectScreen(page, 'Settings', `${size} settings`, { atTop: true });
+                await openWalletsGroup(page, size);
+                await page.getByRole('main').getByRole('button', { name: /^My Wallets\b/ }).click();
+                await expectScreen(page, /^My Wallets$/, `${size} wallet picker`, { atTop: true });
+                // The list page's create action is the title bar's plus (G95).
+                await expect(page.getByRole('banner').getByRole('button', { name: /^Add Wallet$/i })).toBeVisible();
 
-                await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).click();
-                await expectScreen(page, 'This wallet', `${size} this wallet`, { atTop: true });
-                await expect(page.getByRole('main').getByText(ORIGINAL_WALLET, { exact: true })).toBeVisible();
-
-                await page.getByRole('button', { name: 'Switch / rename…' }).click();
-                await expectScreen(page, 'Wallets', `${size} wallet picker`, { atTop: true });
-                await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Add wallet' }),
-                    page.getByRole('button', { name: 'Manage wallet' }),
-                ], `${size} wallet picker footer`);
-
-                await page.getByRole('button', {
-                    name: `Wallet details for ${ORIGINAL_WALLET}`,
-                }).click();
-                await expectScreen(page, 'Wallet details', `${size} wallet details`, { atTop: true });
+                // A wallet row opens that wallet's details page.
+                await page.getByRole('main').getByRole('list', { name: /Wallets$/ })
+                    .getByRole('button', { name: new RegExp(`^${ORIGINAL_WALLET}`) }).click();
+                await expectScreen(page, /^Wallet Details$/i, `${size} wallet details`, { atTop: true });
+                await page.getByRole('main').getByRole('tab', { name: 'Details' }).click();
                 const details = page.getByRole('main').locator('dl');
                 await expect(details, 'wallet details do not show the selected wallet name')
                     .toContainText(`Name${ORIGINAL_WALLET}`);
@@ -153,54 +125,43 @@ for (const viewport of VIEWPORTS) {
                 await expect(details, 'wallet details do not show the wallet origin')
                     .toContainText('OriginCreated for demo mode');
 
-                await page.getByRole('button', { name: 'Rename wallet' }).click();
-                await expectScreen(page, 'Rename wallet', `${size} rename wallet`, { atTop: true });
-                const walletName = page.getByLabel('Wallet name');
+                await page.getByRole('main').getByRole('tab', { name: 'Actions' }).click();
+                await page.getByRole('main').getByRole('button', { name: /^Edit wallet\b/ }).click();
+                await expectScreen(page, /^Edit Wallet$/i, `${size} edit wallet`, { atTop: true });
+                const walletName = page.getByLabel('Wallet name', { exact: true });
                 await expect(walletName).toHaveValue(ORIGINAL_WALLET);
-                // The page header holds only the title and Back; Save closes the form.
-                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
+                // The page header holds only the title and Back; the form's main
+                // action saves and closes the form.
+                const save = page.getByRole('main').getByRole('button', { name: 'Save Changes', exact: true });
+                await expect(save).toBeVisible();
                 await walletName.fill(RENAMED_WALLET);
-                await page.getByRole('button', { name: 'Save' }).click();
+                await save.click();
 
-                await expectScreen(page, 'Wallet details', `${size} renamed wallet details`, {
-                    atTop: true,
-                });
-                await expect(page.getByRole('main').locator('dl'))
-                    .toContainText(`Name${RENAMED_WALLET}`);
+                await expectScreen(page, /^Wallet Details$/i, `${size} renamed wallet details`);
+                await expect(page.getByRole('main').getByText(RENAMED_WALLET, { exact: true }).first()).toBeVisible();
             });
 
             await test.step('rename the active account', async () => {
-                await page.getByRole('button', { name: 'Back to previous screen' }).click();
-                await expectScreen(page, 'Wallets', `${size} wallet picker after rename`, {
-                    atTop: true,
-                });
+                await page.getByRole('banner').getByRole('button', { name: 'Back to previous screen' }).click();
+                await expectScreen(page, /^My Wallets$/, `${size} wallet picker after rename`);
                 await expect(page.getByRole('main').getByText(RENAMED_WALLET, { exact: true })).toBeVisible();
-                await page.getByRole('button', { name: 'Back to previous screen' }).click();
-                // The picker was opened from This wallet, so Back returns there first.
-                await expectScreen(page, 'This wallet', `${size} this wallet after rename`);
-                await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
-                await expectScreen(page, 'Settings', `${size} settings after wallet rename`, {
-                    atTop: true,
-                });
 
-                await page.getByRole('main').getByRole('button', { name: /^Accounts & addresses/ }).click();
-                await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
-                await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Add account' }),
-                    // The footer action reads "Manage" so the pair stays on one line.
-                    page.getByRole('button', { name: 'Manage', exact: true }),
-                ], `${size} account picker footer`);
+                await openWalletsGroup(page, size);
+                await page.getByRole('main').getByRole('button', { name: /^My Accounts\b/ }).click();
+                await expectScreen(page, /^(My )?Accounts$/, `${size} account picker`, { atTop: true });
+                // An account row opens its details, which offer Edit account.
+                await page.getByRole('main').getByRole('list').getByRole('button').first().click();
+                await expectScreen(page, /^Account Details$/i, `${size} account details`, { atTop: true });
+                await page.getByRole('main').getByRole('button', { name: /^Edit account\b/ }).click();
+                await expectScreen(page, /^Edit Account$/i, `${size} edit account`, { atTop: true });
+                const save = page.getByRole('main').getByRole('button', { name: 'Save Changes', exact: true });
+                await expect(save).toBeVisible();
+                // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+                await page.getByLabel('Account name', { exact: true }).fill(RENAMED_ACCOUNT);
+                await save.click();
 
-                await page.getByRole('button', { name: /^Rename / }).first().click();
-                await expectScreen(page, 'Rename account', `${size} rename account`, { atTop: true });
-                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
-                await page.getByLabel('Account name').fill(RENAMED_ACCOUNT);
-                await page.getByRole('button', { name: 'Save' }).click();
-
-                await expectScreen(page, 'Accounts', `${size} renamed account picker`, {
-                    atTop: true,
-                });
-                await expect(page.getByRole('main').getByText(RENAMED_ACCOUNT, { exact: true })).toBeVisible();
+                await expect(page.getByRole('heading', { level: 1, name: /^Edit Account$/i })).toBeHidden();
+                await expect(page.getByRole('main').getByText(RENAMED_ACCOUNT, { exact: true }).first()).toBeVisible();
             });
 
             await test.step('reveal a private key and clear it on leave', async () => {
@@ -217,84 +178,79 @@ for (const viewport of VIEWPORTS) {
 
                 await expectScreen(page, 'View address', `${size} address details`, { atTop: true });
                 await expect(page.getByRole('main')).toContainText(address);
-                const addressActions = page.getByRole('group', { name: 'Address actions' });
-                await expectGroupedControlHeights(addressActions, `${size} address actions`);
-                await addressActions.getByRole('button', { name: 'Secret' }).click();
+                // The actions are one ActionList (G101): a row per action, all
+                // one height.
+                const addressActions = page.getByRole('list', { name: 'Actions', exact: true });
+                const rowHeights = await addressActions.getByRole('button').evaluateAll((rows) => rows
+                    .map((row) => Math.round(row.getBoundingClientRect().height))
+                    .filter((height) => height > 0));
+                expect(rowHeights.length, `${size} address actions: no action rows`).toBeGreaterThan(1);
+                expect(Math.max(...rowHeights) - Math.min(...rowHeights), `${size} address action rows differ in height`)
+                    .toBeLessThanOrEqual(2);
+                await addressActions.getByRole('button', { name: /^Secret key\b/ }).click();
 
                 await expectScreen(page, 'Show private key', `${size} private key warning`, {
                     atTop: true,
                 });
-                await expect(page.getByRole('heading', { name: 'Before you continue' })).toBeVisible();
+                // One form: the address, the never-share notice, the wallet
+                // password and I Understand (operator ruling, simplified page).
+                await expect(page.getByRole('form', { name: 'Before you continue' })).toBeVisible();
+                await expect(page.getByRole('main'), 'the private key page has no never-share notice')
+                    .toContainText(/never share this private key/i);
                 await expect(privateKeyCode(page), 'a private key exists before password confirmation')
                     .toHaveCount(0);
-                await page.getByRole('button', { name: 'I understand, continue' }).click();
 
-                await expectScreen(page, 'Show private key', `${size} private key password`);
-                await expect(page.getByLabel('Wallet password')).toBeVisible();
-                await page.getByLabel('Wallet password').fill(password);
-                await page.getByRole('button', { name: 'Confirm password' }).click();
+                // The label carries a help tip button named after it (U57), so the
+                // field is found by its textbox role.
+                const passwordField = page.getByRole('textbox', { name: 'Wallet password', exact: true });
+                await expect(passwordField).toBeVisible();
+                await passwordField.fill(password);
+                await page.getByRole('button', { name: 'I Understand' }).click();
 
-                const reveal = page.getByRole('button', { name: 'Tap to reveal private key' });
-                await expect(reveal).toBeVisible();
-                await expect(privateKeyCode(page), 'password confirmation exposed the key without a reveal tap')
-                    .toHaveCount(0);
-                await expectSameLineHeight([
-                    reveal,
-                    page.getByRole('button', { name: 'Hide', exact: true }),
-                ], `${size} private key reveal row`);
-                await reveal.click();
+                // The key shows at once after the password; there is no
+                // second reveal tap, no Hide and no Done.
                 await expect(privateKeyCode(page), 'the requested private key did not render')
                     .toHaveCount(1);
                 await expectScreen(page, 'Show private key', `${size} revealed private key`);
-                await page.getByRole('button', { name: 'Done' }).click();
+                // The back arrow leaves the page and wipes the key; Back returns
+                // to the address the key was opened from (G06).
+                await page.getByRole('button', { name: 'Back to previous screen' }).click();
 
-                await expectScreen(page, 'Addresses', `${size} addresses after private key leave`, {
-                    atTop: true,
-                });
+                await expectScreen(page, 'View address', `${size} address after private key leave`);
                 await expect(privateKeyCode(page), 'private key remains in the DOM after leaving')
                     .toHaveCount(0);
 
-                await page.getByRole('button', { name: /^View address / }).first().click();
-                await page.getByRole('group', { name: 'Address actions' })
-                    .getByRole('button', { name: 'Secret' }).click();
+                await page.getByRole('list', { name: 'Actions', exact: true })
+                    .getByRole('button', { name: /^Secret key\b/ }).click();
                 await expectScreen(page, 'Show private key', `${size} reopened private key warning`, {
                     atTop: true,
                 });
-                await expect(page.getByRole('heading', { name: 'Before you continue' })).toBeVisible();
+                await expect(page.getByRole('form', { name: 'Before you continue' })).toBeVisible();
                 await expect(privateKeyCode(page), 'private key returns after reopening the screen')
                     .toHaveCount(0);
             });
 
-            await test.step('reach wallet removal confirmation without removing it', async () => {
-                await openSettings(page);
-                // Settings reopens on the sub-page it was last left on, which is
-                // This wallet after the rename above; open it from the list only
-                // when the list is what shows.
-                const title = page.getByRole('heading', { level: 1, name: /^(Settings|This wallet)$/ });
-                await expect(title).toBeVisible();
-                if ((await title.textContent())?.trim() === 'Settings') {
-                    await expectScreen(page, 'Settings', `${size} settings before removal`, { atTop: true });
-                    await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).click();
-                }
-                await expectScreen(page, 'This wallet', `${size} removal settings`, { atTop: true });
+            await test.step('reach the demo wipe confirmation without wiping', async () => {
+                // A demo wallet is removed by Exit demo & wipe on its details
+                // page; the confirmation names everything it destroys.
+                await openWalletsGroup(page, size);
+                await page.getByRole('main').getByRole('button', { name: /^My Wallets\b/ }).click();
+                await page.getByRole('main').getByRole('list', { name: /Wallets$/ })
+                    .getByRole('button', { name: new RegExp(`^${RENAMED_WALLET}`) }).click();
+                await expectScreen(page, /^Wallet Details$/i, `${size} wallet details before wipe`, { atTop: true });
 
-                await page.getByRole('button', { name: 'Remove…' }).click();
-                await expectScreen(page, 'This wallet', `${size} removal confirmation`);
-                const confirmation = page.getByRole('heading', {
-                    name: `Remove ${RENAMED_WALLET}?`,
-                });
-                await expect(confirmation, 'removal confirmation names the wrong wallet').toBeVisible();
-                const confirmName = page.getByLabel('Confirm wallet name');
-                await expect(confirmName).toHaveAttribute('placeholder', RENAMED_WALLET);
-                const remove = page.getByRole('button', { name: 'Remove wallet', exact: true });
-                await expect(remove).toBeDisabled();
-                await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Cancel', exact: true }),
-                    remove,
-                ], `${size} removal confirmation actions`);
-                await confirmName.fill(RENAMED_WALLET);
-                await expect(remove, 'exact wallet name did not arm removal').toBeEnabled();
-                await expectScreen(page, 'This wallet', `${size} armed removal confirmation`);
+                await page.getByRole('main').getByRole('button', { name: /^Exit demo & wipe\b/i }).click();
+                const dialog = page.getByRole('dialog', { name: /exit demo and delete its data/i });
+                await expect(dialog, 'the demo wipe confirmation did not open').toBeVisible();
+                await expect(dialog).toContainText(/permanently deletes the demo wallet/i);
+                await expect(dialog).toContainText(/cannot be undone/i);
+                const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
+                const wipe = dialog.getByRole('button', { name: /^Exit Demo & Wipe$/i });
+                await expectSameLineHeight([cancel, wipe], `${size} demo wipe actions`);
+                await cancel.click();
+                await expect(dialog).toBeHidden();
+                await expectScreen(page, /^Wallet Details$/i, `${size} wallet details after cancel`);
+                await expect(page.getByRole('main').getByText(RENAMED_WALLET, { exact: true }).first()).toBeVisible();
             });
         });
 }

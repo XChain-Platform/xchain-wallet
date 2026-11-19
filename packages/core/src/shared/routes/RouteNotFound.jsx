@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { EmptyState, ListPage, Screen } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { screenVariantFor, useMessaging } from '../useMessaging.js';
 
@@ -18,15 +18,15 @@ import { screenVariantFor, useMessaging } from '../useMessaging.js';
 export function RouteNotFound({ onHome }) {
     const { shell } = useMessaging();
     return (
-        <Screen variant={screenVariantFor(shell)}>
+        <Screen
+            variant={screenVariantFor(shell)}
+            header={<PageHeader onBack={onHome} title={t('routeNotFound.title')} />}
+        >
             <ListPage>
                 <EmptyState
                     showWhileUnavailable
-                    titleAs="h1"
-                    title={t('routeNotFound.title')}
+                    title={t('routeNotFound.emptyTitle')}
                     body={t('routeNotFound.body')}
-                    actionLabel={t('routeNotFound.backToHome')}
-                    onAction={onHome}
                 />
             </ListPage>
         </Screen>

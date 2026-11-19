@@ -14,7 +14,7 @@
 // The height reads that build the review stay ordinary.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
@@ -58,16 +58,19 @@ describe('SLEEP wake-block check reads the height fresh', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Lock address$/i }));
         expect(await screen.findByText(/until block 10017/)).toBeInTheDocument();
         const beforeSign = getIndexerWatermark.mock.calls.length;
         expect(getIndexerWatermark.mock.calls.every(([req]) => !req.fresh)).toBe(true);
 
         fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
-        expect(await screen.findByText('Wake block 10,017 has passed. Go back and choose a new duration.')).toBeInTheDocument();
+        expect(await screen.findByText('Wake block 10017 has passed. Go back and choose a new duration.')).toBeInTheDocument();
         expect(getIndexerWatermark.mock.calls.slice(beforeSign).map(([req]) => req))
             .toEqual([{ chainId: BITCOIN, fresh: true }]);
         expect(messaging.sleepAction).not.toHaveBeenCalled();

@@ -19,12 +19,8 @@
 //      decoder.decodeAction with action: "BROADCAST".
 //   4. Sign wires through messaging.broadcastAction (the new Step-20
 //      helper).
-//   5. Validation rejects the case where both feed name and text are
-//      empty (MESSAGE would be blank and the protocol validator would
-//      reject it).
-//   6. Params composer: MESSAGE comes from feedName when set, else text;
-//      text becomes MEMO when feedName is present; version flips to '1'
-//      when VALUE + FEE both present, '2' when only FEE, else '0'.
+//   5. Validation requires one message and measures its String.length.
+//   6. Params composer always emits format 0 with MESSAGE only.
 //   7. Core flow broadcastAction exists, is re-exported from
 //      @xchain-wallet/core flows, and guards required inputs.
 //   8. Decoder covers BROADCAST: v0 message, v1 oracle, v2 feed URL,
@@ -56,6 +52,10 @@ const formPath = join(sharedRoutes, 'BroadcastForm.jsx');
 assert.ok(existsSync(formPath), 'BroadcastForm.jsx exists');
 
 const src = readFileSync(formPath, 'utf8');
+const confirmModalSrc = readFileSync(
+    join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
+    'utf8',
+);
 
 // --- 1. Public surface + CSS reuse ------------------------------------
 
@@ -86,7 +86,11 @@ assert.ok(
     /decoderLib\.decodeAction/.test(src),
     'BroadcastForm invokes decoder.decodeAction',
 );
-assert.ok(src.includes('decoded.warnings'), 'BroadcastForm renders decoder warnings');
+assert.ok(/decoded=\{decoded\}/.test(src), 'BroadcastForm gives decoded warnings to the shared confirm screen');
+assert.ok(
+    /decodedWarnings: variant === 'action'[\s\S]*?formattedDecoded\?\.warnings/.test(confirmModalSrc),
+    'ConfirmActionModal puts decoded action warnings in the Confirm Standard warning slot',
+);
 
 // --- 4. Sign wires through messaging.broadcastAction ------------------
 
@@ -102,36 +106,27 @@ assert.ok(
 // --- 5. Validation ----------------------------------------------------
 
 assert.ok(
-    /Enter a feed name or a message/.test(src),
-    'BroadcastForm rejects empty feedName+text (MESSAGE required)',
+    /Message is required\./.test(src),
+    'BroadcastForm rejects an empty message',
 );
+assert.ok(/message\.length > MAX_BROADCAST_MESSAGE_LENGTH/.test(src),
+    'BroadcastForm measures the message with String.length');
+assert.ok(/<Textarea[\s\S]*?label="Message"[\s\S]*?required[\s\S]*?rows=\{4\}[\s\S]*?maxLength=\{MAX_BROADCAST_MESSAGE_LENGTH\}/.test(src),
+    'BroadcastForm renders the required multi-line Message field with the shared counter');
+for (const removed of ['What do you want to broadcast?', 'Signed transaction code', 'Prepend UTC timestamp', 'Feed name', 'Feed fee']) {
+    assert.ok(!src.includes(removed), `BroadcastForm removes ${removed}`);
+}
 
 // --- 6. Params composer -----------------------------------------------
 
 assert.ok(
-    /VERSION:\s*version/.test(src),
-    'BroadcastForm composes VERSION',
+    /\{ VERSION: '0', MESSAGE: message \}/.test(src),
+    'BroadcastForm composes format 0 with MESSAGE',
 );
-assert.ok(
-    /MESSAGE:\s*message/.test(src),
-    'BroadcastForm sets MESSAGE',
-);
-assert.ok(
-    /p\.VALUE\s*=\s*val|if \(val\) p\.VALUE/.test(src),
-    'BroadcastForm only sets VALUE when non-empty',
-);
-assert.ok(
-    /p\.FEE\s*=\s*fee|if \(fee\) p\.FEE/.test(src),
-    'BroadcastForm only sets FEE when non-empty',
-);
-assert.ok(
-    /p\.MEMO\s*=\s*memo|if \(memo\) p\.MEMO/.test(src),
-    'BroadcastForm only sets MEMO when non-empty',
-);
-assert.ok(
-    /toISOString/.test(src),
-    'BroadcastForm supports UTC timestamp injection into memo',
-);
+assert.ok(!/\.VALUE\s*=|\.FEE\s*=|\.MEMO\s*=|toISOString/.test(src),
+    'BroadcastForm does not compose feed, oracle, memo, or timestamp fields');
+assert.ok(/<FormAction\s+icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Announce\s*<\/FormAction>/.test(src),
+    'BroadcastForm uses the green Announce button and broadcast icon');
 
 // --- 7. Core flow -----------------------------------------------------
 
@@ -179,7 +174,7 @@ assert.ok(
         action: 'BROADCAST',
         params: { VERSION: '0', MESSAGE: 'hello world' },
     });
-    assert.ok(/Broadcast\s+"hello world"/.test(v0.summary), 'v0 summary quotes the message');
+    assert.ok(/Announce\s+"hello world"/.test(v0.summary), 'v0 summary quotes the message');
     assert.ok(v0.details.some((d) => d.label === 'Message'), 'v0 surfaces Message detail');
 
     // v0 empty message warns
@@ -271,7 +266,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx tracks the broadcast sub-route`,
     );
     assert.ok(
-        surfacesEntry(app, 'broadcast', 'Broadcast'),
+        surfacesEntry(app, 'broadcast', 'Announce'),
         `${shell} App.jsx registers the broadcast entry in buildActionEntries`,
     );
     assert.ok(

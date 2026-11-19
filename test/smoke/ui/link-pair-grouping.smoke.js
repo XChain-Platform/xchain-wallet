@@ -89,8 +89,10 @@ assert.ok(/isLinkPair\b/.test(hist),
     'GroupCard derives an isLinkPair branch');
 assert.ok(/function GroupCard[\s\S]*?<ActivityRow/.test(hist),
     'GroupCard renders the shared activity row');
-assert.ok(/context=\{isLinkPair \? 'Linked'/.test(hist),
-    'GroupCard labels the linked relationship without a chain chip');
+assert.ok(/subtitle=\{isLinkPair \? t\('history\.group\.linked'\)/.test(hist),
+    'GroupCard translates the linked relationship without a chain chip');
+assert.ok(!/'Linked'/.test(hist),
+    'History carries no literal Linked label');
 assert.ok(!/ChainBadge/.test(hist),
     'History does not render textual chain badges');
 

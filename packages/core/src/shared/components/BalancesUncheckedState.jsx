@@ -37,8 +37,9 @@ export function useBalancesUnchecked() {
  * @param {() => void} [props.onReceive]
  * @param {boolean} [props.plain]          default true; false inside a list area
  * @param {'h2' | 'h3' | 'p'} [props.titleAs]
+ * @param {string} [props.body]           a screen's own line in place of the balance one
  */
-export function BalancesUncheckedState({ onRetry, onReceive, plain = true, titleAs }) {
+export function BalancesUncheckedState({ onRetry, onReceive, plain = true, titleAs, body }) {
     useHideReachabilityNotice(true);
     return (
         <EmptyState
@@ -47,7 +48,7 @@ export function BalancesUncheckedState({ onRetry, onReceive, plain = true, title
             titleAs={titleAs}
             icon={<Icon.InfoIcon />}
             title={t('balances.unchecked.title')}
-            body={t('balances.unchecked.body')}
+            body={body ?? t('balances.unchecked.body')}
             actionLabel={t('common.tryAgain')}
             onAction={onRetry}
             actionIcon={<Icon.RefreshIcon />}

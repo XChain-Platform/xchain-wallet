@@ -1,38 +1,9 @@
+/* The offer and the active state are kit Notices (the Notice Standard); this
+   wrapper only gives the full-width strip its page gutters and stacks a
+   connect failure under the offer. */
 .banner {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-4);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--xc-accent-primary) 25%, transparent);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-}
-
-.label {
-    line-height: 1.4;
-}
-
-/* The connect failure takes a whole row under the text and buttons. */
-.banner.withMessage {
-    flex-wrap: wrap;
-}
-
-/* A zero basis keeps the text and buttons on their first line, shrinking the
-   text as they do without a message, so only the message row wraps. */
-.withMessage .label {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-.message {
-    flex: 1 0 100%;
-}
-
-.actions {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-4);
 }

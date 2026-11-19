@@ -21,6 +21,8 @@ import { filterCommands } from '../../../packages/core/src/shared/commandPalette
 import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
 import { SHORTCUTS } from '../../../packages/core/src/shared/keyboard/shortcuts.js';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
+import { Icon } from '../../../packages/core/src/ui/index.js';
 
 const findById = (list, id) => list.find((c) => c.id === id);
 
@@ -49,8 +51,16 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('send');
         findById(commands, 'nav-settings').run();
         expect(navigate).toHaveBeenCalledWith('settings');
+        expect(findById(commands, 'nav-settings')).toMatchObject({
+            title: 'Settings',
+            Icon: Icon.GearIcon,
+        });
         findById(commands, 'create-token').run();
         expect(navigate).toHaveBeenCalledWith('wizard');
+        findById(commands, 'create-issue').run();
+        expect(navigate).toHaveBeenLastCalledWith('wizard');
+        findById(commands, 'create-mint-settings').run();
+        expect(navigate).toHaveBeenLastCalledWith('mint-settings');
     });
 
     it('executes every command through a test router or its action handler', () => {
@@ -62,7 +72,6 @@ describe('buildCommands', () => {
         const actions = {
             lock: vi.fn(),
             refresh: vi.fn(),
-            scan: vi.fn(),
             switchWallet: vi.fn(),
             openHelp: vi.fn(),
         };
@@ -104,6 +113,29 @@ describe('buildCommands', () => {
             .toBeUndefined();
     });
 
+    it('makes every visible wallet menu row a matching Navigate command', () => {
+        const navigate = vi.fn();
+        const gates = {
+            hasDexSurface: true,
+            hasVmAddress: true,
+            hasBtcAddress: true,
+        };
+        const commands = buildCommands({ navigate, ...gates });
+        const expectedRows = visibleWalletMenu(gates).flatMap((group) => group.rows);
+
+        for (const row of expectedRows) {
+            const command = commands.find((candidate) => {
+                if (candidate.category !== 'Navigate') return false;
+                navigate.mockClear();
+                candidate.run();
+                return navigate.mock.calls[0]?.[0] === row.id;
+            });
+            expect(command, row.id).toBeDefined();
+            expect(command.title, row.id).toBe(row.label);
+            expect(command.Icon, row.id).toBe(Icon[row.icon]);
+        }
+    });
+
     it('ranks the direct destination first for common palette searches', () => {
         const commands = [
             ...buildCommands({ navigate() {} }),
@@ -111,13 +143,49 @@ describe('buildCommands', () => {
             ...helpToCommands({ openSettings() {} }),
         ];
         for (const [query, expectedId] of [
-            ['send', 'nav-send'],
-            ['receive', 'nav-receive'],
-            ['settings', 'nav-settings'],
+            ['rec', 'nav-receive'],
+            ['all', 'nav-actions'],
+            ['set', 'nav-settings'],
             ['backup', 'settings-backup'],
         ]) {
             expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
         }
+    });
+
+    it('returns exactly one Scan navigation destination row when searching for Scan', () => {
+        const commands = buildCommands({ navigate() {}, scan() {} });
+        const destinationRows = filterCommands(commands, 'scan')
+            .filter((command) => ['nav-scan', 'wallet-scan'].includes(command.id));
+
+        expect(destinationRows.map((command) => command.id)).toEqual(['nav-scan']);
+    });
+
+    it('offers no Cross chain templates destination row because that page is retired', () => {
+        const commands = buildCommands({ navigate() {} });
+        const destinationRows = filterCommands(commands, 'cross')
+            .filter((command) => ['nav-cross-chain-templates', 'trade-xchain-templates'].includes(command.id));
+
+        expect(destinationRows.map((command) => command.id)).toEqual([]);
+    });
+
+    it('marks integrated menu search sources without changing base categories', () => {
+        const commands = buildCommands({ navigate() {}, lock() {} });
+        expect(findById(commands, 'nav-settings')).toMatchObject({
+            category: 'Navigate',
+            searchGroup: 'Menu',
+            searchOnlyTitle: true,
+        });
+        expect(findById(commands, 'create-bridge-settings')).toMatchObject({
+            category: 'Create',
+            searchGroup: 'In All actions',
+            searchOnlyTitle: true,
+        });
+        expect(findById(commands, 'create-mint-settings').title).toBe('Mint settings');
+        expect(findById(commands, 'wallet-lock')).toMatchObject({
+            category: 'Wallet',
+            searchGroup: 'Menu',
+            searchOnlyTitle: true,
+        });
     });
 
     it('gates BTC-only and governance surfaces behind the context flags', () => {
@@ -129,6 +197,7 @@ describe('buildCommands', () => {
         const gated = buildCommands({
             navigate() {},
             hasBtcAddress: true,
+            hasVmAddress: true,
             hasGovernanceAddress: true,
         });
         expect(findById(gated, 'nav-contracts')).toBeDefined();
@@ -154,8 +223,6 @@ describe('buildCommands', () => {
         expect(findById(explicitNoVm, 'nav-staking')).toBeDefined();
     });
 
-    // The actions menu listed Create multisig and Multisig signing, but a
-    // palette search for "multisig" found nothing.
     it('finds both multisig surfaces for "multisig" behind the Bitcoin gate', () => {
         const navigate = vi.fn();
         const btc = buildCommands({ navigate, hasBtcAddress: true });
@@ -183,11 +250,9 @@ describe('buildCommands', () => {
         expect(findById(buildCommands({ navigate() {}, hasBtcAddress: true, isDemoWallet: true }), 'nav-cosigner-accounts')).toBeUndefined();
     });
 
-    // The betting views shipped with no palette entry at all, so the only route
-    // to them was More -> More actions -> Betting: two clicks deep in a
-    // catalogue, for a surface whose whole point is coming back to check a
-    // market. Every comparable destination (Governance, Staking, Dispensers, My
-    // orders) has an entry, and a returning user reaches for the palette.
+    // The betting views have direct palette entries for returning users who
+    // check a market. Comparable destinations such as Governance, Staking,
+    // Dispensers and My orders are also directly findable.
     it('routes the three betting views, ungated like the actions-menu entry', () => {
         const navigate = vi.fn();
         // No context flags: betting must be findable in a bare wallet, because
@@ -197,19 +262,34 @@ describe('buildCommands', () => {
 
         findById(commands, 'nav-betting').run();
         expect(navigate).toHaveBeenCalledWith('bet-markets');
+        // My predictions and My markets are Prediction markets tabs, not routes of their own:
+        // without a tab opener they land on the hub.
+        navigate.mockClear();
         findById(commands, 'nav-my-bets').run();
-        expect(navigate).toHaveBeenCalledWith('my-bets');
         findById(commands, 'nav-bet-oracle-console').run();
-        expect(navigate).toHaveBeenCalledWith('bet-oracle-console');
+        expect(navigate.mock.calls).toEqual([['bet-markets'], ['bet-markets']]);
+    });
+
+    it('opens Prediction markets on the My predictions and My markets tabs through the shell tab opener', () => {
+        const navigate = vi.fn();
+        const openBetTab = vi.fn();
+        const commands = buildCommands({ navigate, openBetTab });
+
+        findById(commands, 'nav-my-bets').run();
+        findById(commands, 'nav-bet-oracle-console').run();
+
+        expect(openBetTab.mock.calls).toEqual([['bets'], ['markets']]);
+        // The retired my-bets and bet-oracle-console routes are never navigated to.
+        expect(navigate).not.toHaveBeenCalled();
     });
 
     it('finds betting by the words users actually type', () => {
-        // The titles are "Betting" / "My bets" / "My markets", so a search for
-        // "wager", "odds" or "oracle" only lands via keywords. Those are the
+        // The titles are "Prediction markets" / "My predictions" / "My markets", so
+        // old and specialist vocabulary only lands via keywords. Those are the
         // words a Counterparty-era user brings with them.
         const commands = buildCommands({ navigate() {} });
         const hub = findById(commands, 'nav-betting');
-        for (const word of ['bet', 'wager', 'odds', 'oracle']) {
+        for (const word of ['bet', 'betting', 'odds', 'oracle']) {
             expect(hub.keywords, `"${word}" should find the betting hub`).toContain(word);
         }
         expect(findById(commands, 'nav-bet-oracle-console').keywords).toContain('resolve');
@@ -238,34 +318,46 @@ describe('buildCommands', () => {
         }
     });
 
-    it('uses sentence case for navigation menu items', () => {
+    it('uses the catalogue labels for navigation menu items', () => {
         const commands = buildCommands({ navigate() {} });
         expect(findById(commands, 'nav-my-tokens').title).toBe('My tokens');
-        expect(findById(commands, 'nav-lists').title).toBe('My lists');
+        expect(findById(commands, 'nav-lists').title).toBe('Lists');
+    });
+
+    it('matches side-menu destination labels in palette search', () => {
+        const commands = buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            hasGovernanceAddress: true,
+        });
+        expect(findById(commands, 'nav-my-tokens').searchTitle).toBe('My Tokens');
+        expect(findById(commands, 'nav-betting').searchTitle).toBe('Prediction markets');
+        expect(findById(commands, 'nav-governance').searchTitle).toBe('Governance');
+        expect(findById(commands, 'nav-staking').searchTitle).toBeUndefined();
     });
 
     it('omits verb commands whose handler the shell did not supply', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();
         expect(findById(bare, 'wallet-refresh')).toBeUndefined();
-        expect(findById(bare, 'wallet-scan')).toBeUndefined();
         expect(findById(bare, 'wallet-switch')).toBeUndefined();
     });
 
     it('wires verb commands to the supplied handlers', () => {
         const lock = vi.fn();
         const refresh = vi.fn();
-        const scan = vi.fn();
         const switchWallet = vi.fn();
-        const commands = buildCommands({ navigate() {}, lock, refresh, scan, switchWallet });
+        const commands = buildCommands({ navigate() {}, lock, refresh, switchWallet });
         findById(commands, 'wallet-lock').run();
         findById(commands, 'wallet-refresh').run();
-        findById(commands, 'wallet-scan').run();
         findById(commands, 'wallet-switch').run();
         expect(lock).toHaveBeenCalledOnce();
         expect(refresh).toHaveBeenCalledOnce();
-        expect(scan).toHaveBeenCalledOnce();
         expect(switchWallet).toHaveBeenCalledOnce();
+        expect(findById(commands, 'wallet-lock')).toMatchObject({
+            title: 'Lock wallet',
+            Icon: Icon.LockIcon,
+        });
     });
 
     it('hides private-key-only commands from watch-only wallets', () => {
@@ -297,7 +389,7 @@ describe('buildCommands', () => {
         expect(commands.filter((command) => ['Create', 'Trade'].includes(command.category))).toEqual([]);
         expect(ids).not.toEqual(expect.arrayContaining(['create-mint', 'trade-swap', 'trade-coinpay']));
         expect(ids).toEqual(expect.arrayContaining(['sign-message', 'sign-psbt', 'sign-verify', 'nav-home']));
-        expect(ids).not.toEqual(expect.arrayContaining(['nav-send']));
+        expect(ids).not.toEqual(expect.arrayContaining(['nav-send', 'nav-receive']));
     });
 
     it('keeps create and trade forms browsable for demo wallets but hides signing tools', () => {
@@ -322,13 +414,30 @@ describe('buildCommands', () => {
         expect(ids).toEqual(expect.arrayContaining([
             'nav-send',
             'nav-receive',
-            'wallet-scan',
+            'nav-scan',
             'nav-home',
             'nav-history',
             'nav-markets',
             'sign-verify',
             'nav-settings',
         ]));
+    });
+
+    it('opens Action queue from its renamed palette command', () => {
+        const navigate = vi.fn();
+        const command = findById(buildCommands({ navigate }), 'create-action-queue');
+
+        expect(command.title).toBe('Action queue');
+        command.run();
+        expect(navigate).toHaveBeenCalledWith('parallel-compose');
+    });
+
+    it('shows the Controller bind command with the link icon', () => {
+        const command = findById(buildCommands({ navigate() {} }), 'create-controller-bind');
+
+        expect(Icon.LinkIcon).toBeDefined();
+        expect(command.Icon).toBe(Icon.LinkIcon);
+        expect(command.Icon).not.toBe(Icon.LockIcon);
     });
 });
 

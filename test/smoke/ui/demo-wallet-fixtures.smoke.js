@@ -51,6 +51,10 @@ const historySrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'History.jsx'),
     'utf8',
 );
+const demoFixturesSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'flows', 'demoFixtures.js'),
+    'utf8',
+);
 const flowsIndex = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'flows', 'index.js'),
     'utf8',
@@ -153,13 +157,21 @@ assert.deepEqual(synthesizeDemoLinks(), []);
 
 // ─── 4. Home.jsx wiring ────────────────────────────────────────────────
 //
-// Home and the shells' command palettes read through loadDisplayBalances,
-// so the demo branch lives there once.
+// Demo mode only swaps the data source (U64): Home reads balances with the
+// standard call on its wallet source, and the demo source answers that call
+// from the fixtures. The shells' command palettes still read through
+// loadDisplayBalances, so the demo branch there stays.
 
 assert.match(
     homeSrc,
-    /loadDisplayBalances\(messaging, walletId, accountId\)/,
-    'Home reads balances through loadDisplayBalances',
+    /messaging\.getWalletBalances\(walletId, accountId\)/,
+    'Home reads balances through the wallet source',
+);
+assert.doesNotMatch(homeSrc, /isDemoWallet\(/, 'Home never branches on demo');
+assert.match(
+    demoFixturesSrc,
+    /getWalletBalances: async \(walletId, \.\.\.rest\) => synthesizeDemoBalances\(/,
+    'the demo source synthesizes balances from the wallet addresses',
 );
 assert.match(
     displayBalancesSrc,
@@ -173,21 +185,20 @@ assert.match(
 );
 
 // ─── 5. History.jsx wiring ─────────────────────────────────────────────
+//
+// History calls the standard history and link reads; the demo source answers
+// them with the synthesized rows.
 
+assert.doesNotMatch(historySrc, /isDemoWallet\(/, 'History never branches on demo');
 assert.match(
-    historySrc,
-    /const isDemo = flowsLib\.isDemoWallet\(walletId\)/,
-    'History tracks isDemo at the start of the fetch loop',
+    demoFixturesSrc,
+    /getAddressHistory: \(\{ chainId, address \} = \{\}\) => rows\(synthesizeDemoHistory\(chainId, address\)\)/,
+    'the demo source answers address history with synthesizeDemoHistory',
 );
 assert.match(
-    historySrc,
-    /flowsLib\.synthesizeDemoHistory\(cid, a\.address\)/,
-    'History uses synthesizeDemoHistory for demo wallet',
-);
-assert.match(
-    historySrc,
-    /flowsLib\.synthesizeDemoLinks\(\)/,
-    'History uses synthesizeDemoLinks for demo wallet',
+    demoFixturesSrc,
+    /getLinksForAddress: \(\) => rows\(synthesizeDemoLinks\(\)\)/,
+    'the demo source answers links with synthesizeDemoLinks',
 );
 
 console.log('demo-wallet-fixtures smoke OK');

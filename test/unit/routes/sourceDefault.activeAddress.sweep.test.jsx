@@ -28,16 +28,29 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
+import { openSection } from '../../helpers/openFormSections.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { ListForkRoute as ListForkForm } from '../../helpers/listFormRoutes.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
+
+// ProjectRosterForm adds tokens only through the token picker; this stand-in
+// picks the ticker typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+        </section>
+    ),
+}));
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
@@ -59,13 +72,14 @@ const NEWEST_PERSONAL = hd(3);
 const DELEGATED = hd(4, { role: 'dispenser' });
 const ADDRESSES = { [CHAIN]: [ACTIVE, NEWEST_PERSONAL, DELEGATED] };
 
-const byId = (id) => ADDRESSES[CHAIN].find((a) => a.id === id)?.address;
-
 function mount(Form, props, activeByChain, walletMode, issuer) {
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: walletMode || 'full' }], activeWalletId: 'w' });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue(activeByChain),
-        getSettings: vi.fn().mockResolvedValue({ walletMode }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: walletMode || 'full' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
         listActions: vi.fn().mockResolvedValue(['SEND', 'ISSUE']),
@@ -90,7 +104,7 @@ function mount(Form, props, activeByChain, walletMode, issuer) {
     return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 // The review stages render the address through AddressText, which carries
 // the full string on the span's title; the first such span is the From row.
@@ -103,28 +117,44 @@ async function reviewAddress() {
     return span.getAttribute('title');
 }
 
+// G127 renders the signing address once on the Confirm Standard source line.
+async function confirmSourceAddress() {
+    const source = await screen.findByTestId('confirm-source');
+    const span = source.querySelector('span[title]');
+    if (!span) throw new Error('confirm screen has no source address');
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    return span.getAttribute('title');
+}
+
 async function pickFile(label) {
     const input = await screen.findByLabelText(label);
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
     fireEvent.change(input, { target: { files: [file] } });
-    // The FileReader is asynchronous; the button relabels once bytes land.
-    await screen.findByText('Choose a different file');
+    // The FileReader is asynchronous; the file summary appears once bytes land.
+    await screen.findByText(/note\.txt/);
 }
 
 const submitFormOf = (el) => fireEvent.submit(el.closest('form'));
+
+// The standard From section starts closed; its address field is "From address".
+async function readFromAddress() {
+    await openSection('From');
+    return (await screen.findByLabelText('From address')).value;
+}
 
 const FORMS = [
     {
         name: 'BroadcastForm',
         Form: BroadcastForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'IssueTokenForm',
         Form: IssueTokenForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'ListCreateForm',
@@ -136,22 +166,22 @@ const FORMS = [
         name: 'AirdropForm',
         Form: AirdropForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'AdvancedActionsForm',
         Form: AdvancedActionsForm,
         props: {},
-        read: async () => (await screen.findByLabelText('From')).value,
+        read: readFromAddress,
     },
     {
         name: 'SignMessageForm',
         Form: SignMessageForm,
         props: {},
         read: async () => {
-            const select = await screen.findByLabelText('Address');
-            await waitFor(() => { if (!select.value) throw new Error('no default yet'); });
-            return byId(select.value);
+            const field = await screen.findByLabelText('Signing address');
+            await waitFor(() => { if (!field.value) throw new Error('no default yet'); });
+            return field.value;
         },
     },
     {
@@ -159,9 +189,9 @@ const FORMS = [
         Form: PsbtSignForm,
         props: {},
         read: async () => {
-            const select = await screen.findByLabelText('Signing address');
-            await waitFor(() => { if (!select.value) throw new Error('no default yet'); });
-            return byId(select.value);
+            const field = await screen.findByLabelText('Signing address');
+            await waitFor(() => { if (!field.value) throw new Error('no default yet'); });
+            return field.value;
         },
     },
     {
@@ -170,10 +200,10 @@ const FORMS = [
         props: { listRef: { chainId: CHAIN, actionIndex: '5', type: '1', items: ['AAA'] }, onDone() {} },
         walletMode: 'watcher',
         read: async () => {
-            const add = await screen.findByLabelText('Add tokens (one per line)');
+            const add = await screen.findByLabelText('Tokens');
             fireEvent.change(add, { target: { value: 'BBB' } });
             submitFormOf(add);
-            return reviewAddress();
+            return confirmSourceAddress();
         },
     },
     {
@@ -181,9 +211,12 @@ const FORMS = [
         Form: ProjectRosterForm,
         props: { chainId: CHAIN, tick: 'JDOG' },
         read: async () => {
-            const members = await screen.findByLabelText('Tokens (one per line)');
-            fireEvent.change(members, { target: { value: 'AAA' } });
-            submitFormOf(members);
+            // Tokens join the roster through the token picker (mocked above).
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+            fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+            fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'AAA' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
             return reviewAddress();
         },
     },
@@ -202,13 +235,7 @@ const FORMS = [
         Form: LinkForm,
         props: {},
         walletMode: 'watcher',
-        read: async () => {
-            const [a, b] = await screen.findAllByLabelText('Action to reference');
-            fireEvent.change(a, { target: { value: '11' } });
-            fireEvent.change(b, { target: { value: '22' } });
-            submitFormOf(a);
-            return reviewAddress();
-        },
+        read: async () => (await screen.findByLabelText('From')).value,
     },
     {
         name: 'PublishFileForm',
@@ -216,9 +243,11 @@ const FORMS = [
         props: {},
         walletMode: 'watcher',
         read: async () => {
-            await pickFile('Choose file to publish');
-            fireEvent.click(screen.getByRole('checkbox'));
-            submitFormOf(screen.getByLabelText('Choose file to publish'));
+            // The hidden file input is named by the shared FileField's input label.
+            await pickFile('File to publish');
+            // The form no longer asks for a permanence tick box before review.
+            expect(screen.queryByRole('checkbox')).toBeNull();
+            submitFormOf(screen.getByLabelText('File to publish'));
             return reviewAddress();
         },
     },

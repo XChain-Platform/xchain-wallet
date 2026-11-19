@@ -17,7 +17,9 @@ import {
     HIDDEN_ROUTE_IDS,
     ROUTE_NAV_GROUPS,
     ROUTE_REGISTRY,
+    TAB_BAR_DESTINATIONS,
 } from '../../packages/core/src/shared/routeRegistry.js';
+import { WALLET_TAB_BAR_IDS } from '../../packages/core/src/shared/walletMenu.js';
 
 afterEach(() => {
     cleanup();
@@ -89,12 +91,22 @@ describe('route registry consistency', () => {
         }
     });
 
+    it('titles the wizard route with the Issue Token page heading, never "Wizard"', () => {
+        expect(ROUTE_REGISTRY.wizard.title).toBe('Issue Token');
+    });
+
     it('does not leave grouped or hidden routes outside the registry', () => {
         const classified = [
             ...Object.values(ROUTE_NAV_GROUPS).flat(),
             ...HIDDEN_ROUTE_IDS,
         ].sort();
         expect(classified).toEqual(Object.keys(ROUTE_REGISTRY).sort());
+    });
+
+    it('uses the catalogue tab ids and excludes the menu route', () => {
+        expect(TAB_BAR_DESTINATIONS).toBe(WALLET_TAB_BAR_IDS);
+        expect(ROUTE_REGISTRY.menu).toBeUndefined();
+        expect(Object.values(ROUTE_NAV_GROUPS).flat()).not.toContain('menu');
     });
 });
 

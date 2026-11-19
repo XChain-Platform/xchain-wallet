@@ -9,12 +9,14 @@ test.use({ acceptLicense: false });
 
 const VIEWPORTS = [
     { width: 390, height: 844 },
-    { width: 412, height: 869 },
-    { width: 360, height: 600 },
+    { width: 834, height: 1194 },
     { width: 1280, height: 800 },
+    { width: 1920, height: 1080 },
 ];
 
 const PIXEL_TOLERANCE = 1;
+// Layouts this wide put the terms in a two-thirds card (U32).
+const TWO_THIRDS_MIN_WIDTH = 834;
 
 async function settleGate(form) {
     await form.evaluate(async (element) => {
@@ -30,11 +32,12 @@ async function measureGate(form) {
         const terms = element.querySelector('[aria-label="License terms"]');
         const checkbox = element.querySelector('input[type="checkbox"]');
         const acknowledgement = checkbox.closest('label');
-        // FormPage owns the brand and title in its header; the gate (terms plus
-        // acknowledgement) is the page body below it.
+        const controls = acknowledgement.parentElement;
+        // FormPage owns the brand and title in its header; the gate is the
+        // terms followed by the shared controls wrapper.
         const gate = terms.parentElement;
         const hero = element.querySelector('header');
-        const button = element.querySelector('button');
+        const button = [...element.querySelectorAll('button')].find((b) => /Accept and continue/i.test(b.textContent));
         const rect = (node) => {
             const box = node.getBoundingClientRect();
             return {
@@ -51,6 +54,7 @@ async function measureGate(form) {
             form: rect(element),
             hero: rect(hero),
             terms: rect(terms),
+            controls: rect(controls),
             acknowledgement: rect(acknowledgement),
             button: rect(button),
             gap: Number.parseFloat(getComputedStyle(gate).rowGap),
@@ -89,7 +93,7 @@ async function expectScrollGate(terms, acknowledgement) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`license gate fills ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`license gate keeps Accept under the terms at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize(viewport);
         await page.goto('/');
 
@@ -105,20 +109,33 @@ for (const viewport of VIEWPORTS) {
         const layout = await measureGate(form);
         const bottomGap = viewport.height - layout.button.bottom;
         expect(bottomGap).toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
-        expect(bottomGap).toBeLessThanOrEqual(24);
-
         expect(layout.terms.top - layout.hero.bottom)
             .toBeCloseTo(layout.formGap + layout.heroMarginBottom, 0);
-        expect(layout.acknowledgement.top - layout.terms.bottom)
+        // The shared controls wrapper sits directly under the card.
+        expect(layout.controls.top - layout.terms.bottom)
             .toBeCloseTo(layout.gap, 0);
         expect(layout.terms.height).toBeGreaterThan(0);
 
-        if (viewport.width === 1280) {
-            expect(layout.terms.width).toBeGreaterThan(560);
-            expect(Math.abs(layout.terms.left - layout.form.left))
+        if (viewport.width >= TWO_THIRDS_MIN_WIDTH) {
+            // The card takes two-thirds of the form. The controls share the
+            // next row, aligned to the card edges and vertically overlapping.
+            expect(Math.abs(layout.terms.width - (layout.form.width * 2) / 3))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
-            expect(Math.abs(layout.form.right - layout.terms.right))
+            expect(Math.abs((layout.terms.left - layout.form.left) - (layout.form.right - layout.terms.right)))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.acknowledgement.top).toBeLessThan(layout.button.bottom);
+            expect(layout.button.top).toBeLessThan(layout.acknowledgement.bottom);
+            expect(Math.abs(layout.acknowledgement.left - layout.terms.left))
+                .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(Math.abs(layout.button.right - layout.terms.right))
+                .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.controls.top - layout.terms.bottom)
+                .toBeLessThanOrEqual(24);
+        } else {
+            // Below 834px the existing stacked order remains unchanged.
+            expect(layout.button.top).toBeGreaterThan(layout.acknowledgement.bottom);
+            expect(layout.button.top - layout.acknowledgement.bottom)
+                .toBeLessThanOrEqual(layout.formGap + PIXEL_TOLERANCE);
         }
 
         await expectScrollGate(terms, acknowledgement);

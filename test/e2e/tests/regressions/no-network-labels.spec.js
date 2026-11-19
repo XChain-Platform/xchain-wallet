@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
+    backToSettingsList,
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openAutomaticDonations,
+    openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -34,18 +37,16 @@ const TOP_LEVEL_ROUTES = [
     { name: 'Settings' },
 ];
 
-const SETTINGS_SUBPAGES = [
-    'This wallet',
-    'Display',
-    'Keyboard',
-    'Privacy',
-    'Safety',
-    'Wallet mode',
-    'Backup',
-    'Fees',
-    'Connected sites',
-    'Automatic donation system',
+const SETTINGS_PAGES = [
     'About',
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy and Sites',
+    'Appearance',
+    'Notifications',
+    'Network and Fees',
+    'Advanced',
 ];
 
 const NETWORK_LABEL_RE = /\b(?:regtest|testnet)\b|Not mainnet/i;
@@ -64,23 +65,31 @@ async function settle(page) {
 
 async function gotoPaletteRoute(page, name) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', {
-        name: new RegExp(`^${escapeRegExp(name)}\\b`),
+        name: new RegExp(`^${escapeRegExp(name)}\\b(?! the )`),
     }).first().click();
     await expect(palette).toBeHidden();
 }
 
-async function expectNoNetworkLabels(page, label) {
-    const visibleText = await page.evaluate(() => {
+async function expectNoNetworkLabels(page, label, { allowDeveloperRows = false } = {}) {
+    const visibleText = await page.evaluate(({ allowDeveloperRows: allowRows }) => {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         const text = [];
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
             if (!node.textContent.trim()) continue;
             const parent = node.parentElement;
             if (!parent) continue;
+            // The Developer mode switch row and the Developer options row name
+            // the Regtest network as what they unlock, not as the active network.
+            const row = parent.closest('li, [role="listitem"], button');
+            if (allowRows && /^(?:Developer mode|Developer options)\b/.test(row?.textContent.trim() || '')) continue;
+            // A '?' help tip the pointer left open explains a field (Automatic
+            // Donations says test-network sends add nothing); it is help copy
+            // the user asked for, not a network state label in the shell.
+            if (parent.closest('[role="tooltip"]')) continue;
             const style = getComputedStyle(parent);
             if (style.display === 'none' || style.visibility === 'hidden') continue;
             const range = document.createRange();
@@ -94,7 +103,7 @@ async function expectNoNetworkLabels(page, label) {
             if (intersectsViewport) text.push(node.textContent.trim());
         }
         return text.join(' ');
-    });
+    }, { allowDeveloperRows });
     expect(visibleText, `${label}: visible text exposes a non-mainnet label`)
         .not.toMatch(NETWORK_LABEL_RE);
     await expect(
@@ -149,10 +158,10 @@ async function expectCompactSingleRowHeader(page, label) {
     }
 }
 
-async function expectCleanShell(page, label) {
+async function expectCleanShell(page, label, options) {
     await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
     await settle(page);
-    await expectNoNetworkLabels(page, label);
+    await expectNoNetworkLabels(page, label, options);
     await expectCompactSingleRowHeader(page, label);
 }
 
@@ -172,23 +181,29 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
             });
         }
 
-        for (const subpage of SETTINGS_SUBPAGES) {
+        for (const subpage of SETTINGS_PAGES) {
             const label = `Settings / ${subpage} at ${viewport.width}x${viewport.height}`;
             await test.step(label, async () => {
-                await gotoSection(page, 'Settings');
+                await openSettings(page);
                 const row = page.getByRole('main').getByRole('button', {
-                    name: new RegExp(`^${escapeRegExp(subpage)}\\b`),
+                    name: new RegExp(`^${escapeRegExp(subpage)}\\b(?! the )`),
                 });
-                // Phone layouts leave Keyboard out of Settings; wait for the
-                // list to render before deciding the row is absent.
-                await expect(page.getByRole('main').getByRole('button', { name: /^Display\b/ })).toBeVisible();
-                if (subpage === 'Keyboard' && await row.count() === 0) return;
                 await row.scrollIntoViewIfNeeded();
                 await row.click();
                 await expect(page.getByRole('heading', { level: 1, name: subpage, exact: true })).toBeVisible();
-                await expectCleanShell(page, label);
-                await page.getByRole('button', { name: 'Back to settings' }).click();
+                await expectCleanShell(page, label, {
+                    allowDeveloperRows: subpage === 'Advanced',
+                });
+                await backToSettingsList(page);
             });
         }
+
+        const donationsLabel = `Settings / Network and Fees / Automatic Donations at ${viewport.width}x${viewport.height}`;
+        await test.step(donationsLabel, async () => {
+            await openAutomaticDonations(page);
+            await expect(page.getByRole('heading', { level: 1, name: 'Automatic Donations', exact: true })).toBeVisible();
+            await expectCleanShell(page, donationsLabel);
+            await backToSettingsList(page);
+        });
     }
 });

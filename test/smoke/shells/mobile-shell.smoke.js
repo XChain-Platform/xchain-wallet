@@ -20,8 +20,8 @@
 //      Capacitor generates (gradlew, settings.gradle, manifest).
 //   2. capacitor.config.json: applicationId = D1, webDir = the staged copy of
 //      the web build, androidScheme = https. That last one is load-bearing:
-//      under `http` the WebView origin is not a secure context, and the
-//      wallet's KDF and AEAD are `crypto.subtle`, which simply is not there.
+//      it satisfies the wallet's origin policy and keeps camera, clipboard
+//      and hardware-signer APIs available.
 //   3. minSdkVersion = 26 (D2).
 //   4. versionCode/versionName come from the generated version.properties,
 //      never a literal and never a counter (§7).
@@ -93,7 +93,7 @@ assert.equal(capConfig.webDir, 'www', 'webDir is the staged copy of the web buil
 assert.equal(
     capConfig.server?.androidScheme,
     'https',
-    'androidScheme https: crypto.subtle needs a secure context',
+    'androidScheme https: the wallet and device APIs require a secure context',
 );
 assert.deepEqual(
     capConfig.server?.allowNavigation,
@@ -1338,9 +1338,14 @@ assert.deepEqual(
 const floorSrc = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'platform', 'webviewFloor.js'), 'utf8',
 );
-for (const primitive of ['crypto.subtle', 'crypto.getRandomValues', 'indexedDB']) {
+for (const primitive of ['isSecureContext', 'crypto.getRandomValues', 'indexedDB']) {
     assert.ok(floorSrc.includes(primitive), `the floor checks for ${primitive}`);
 }
+assert.doesNotMatch(
+    floorSrc,
+    /missing\.push\(['"]crypto\.subtle['"]\)/,
+    'the floor does not require SubtleCrypto',
+);
 const mainJsx = readFileSync(join(wsRoot, 'packages', 'web', 'src', 'main.jsx'), 'utf8');
 assert.ok(
     mainJsx.indexOf('checkWebViewFloor()') < mainJsx.indexOf('createRoot(container).render'),
@@ -1593,7 +1598,7 @@ assert.match(
 
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
-    + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
+    + ' webDir www; androidScheme https for wallet origin policy and device APIs; no mixed content;'
     + ' built-in SystemBars starts with splash-compatible contrast; native splash uses matching light/dark'
     + ' backgrounds, bounded artwork and platform-ready handoff; minSdkVersion 26 (D2);'
     + ' versionCode/versionName read from the'

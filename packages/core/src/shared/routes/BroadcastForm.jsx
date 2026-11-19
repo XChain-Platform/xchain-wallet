@@ -8,27 +8,40 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the standard
+// FromSection and FeeSection.
+import { Button, CopyButton, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Broadcast sits on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/routes.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { groupDecodedAmounts } from '../utils/amountFormat.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { useNativeFee } from '../hooks/useNativeFee.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -40,375 +53,30 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
-import { parseRawTx } from '../../signers/verifySignedTx.js';
-import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
-import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
-import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
-import { withAutoLockHold } from '../hooks/autoLockGuard.js';
-import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-// Separator between the parts the form packs into one MEMO slot (the optional
-// UTC timestamp and the message body).: this used to be ' | ', and '|'
-// is the protocol's own field delimiter - the SDK refuses a MEMO containing
-// one, so ticking the wallet's own timestamp box made the action unsendable
-// with an error naming a field the UI never shows. The separator is cosmetic;
-// the delimiter is not.
-const MEMO_PART_SEPARATOR = ' - ';
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // '|' separates fields and ';' separates actions on the wire, so neither can
 // appear in text the user typed. The form says so in its own words rather than
 // letting the compose call fail with the protocol's field names.
 const RESERVED_DELIMITERS = /[|;]/;
 
-// BROADCAST MESSAGE uses the same 250-byte ceiling as MEMO, but the
-// indexer validates it under its own field-specific setting.
+// BROADCAST MESSAGE is measured with JavaScript String.length by the indexer.
 const MAX_BROADCAST_MESSAGE_LENGTH = 250;
-const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
-const HEX_ONLY = /^[0-9a-fA-F]+$/;
-
-function normalizeRawTransaction(raw) {
-    // A 0x prefix is the usual way to write hex; it is not part of the bytes.
-    const compact = String(raw || '').replace(/\s+/g, '').replace(/^0x/i, '');
-    if (!compact) throw new Error('Paste a signed transaction first.');
-    if (!HEX_ONLY.test(compact)) throw new Error('Transaction code must contain only the digits 0 to 9 and the letters a to f.');
-    if (compact.length % 2 !== 0) throw new Error('Transaction code must contain complete bytes (two characters per byte).');
-    try {
-        return { txHex: compact.toLowerCase(), decoded: parseRawTx(compact) };
-    } catch {
-        throw new Error('This is not a complete signed transaction. Check the pasted data and try again.');
-    }
-}
-
-function scriptType(script) {
-    if (/^76a914[0-9a-f]{40}88ac$/.test(script)) return 'P2PKH';
-    if (/^a914[0-9a-f]{40}87$/.test(script)) return 'P2SH';
-    if (/^0014[0-9a-f]{40}$/.test(script)) return 'SegWit';
-    if (/^0020[0-9a-f]{64}$/.test(script)) return 'SegWit';
-    if (/^5120[0-9a-f]{64}$/.test(script)) return 'Taproot';
-    if (script.startsWith('6a')) return 'data';
-    return 'unknown script';
-}
-
-function rawTransactionMismatch(decoded, descriptor) {
-    if (!decoded || !descriptor) return null;
-    const types = new Set((descriptor.addressTypes || []).map(String));
-    const hasTaproot = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'Taproot');
-    if (hasTaproot && !types.has('p2tr')) {
-        return 'This transaction contains a Taproot output that the active network does not support. Pick the network that created the transaction.';
-    }
-    const hasSegwit = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'SegWit');
-    if (hasSegwit && !types.has('p2wpkh')) {
-        return 'This transaction contains a SegWit output that the active network does not support. Pick the network that created the transaction.';
-    }
-    return null;
-}
-
-function formatCoinAmount(valueSat, descriptor) {
-    return `${formatNativeBaseUnits(valueSat, descriptor)} ${tickerForDescriptor(descriptor)}`;
-}
-
-function rawBroadcastFailure(err) {
-    const raw = err && typeof err === 'object'
-        ? String(/** @type {any} */ (err).message || '')
-        : String(err || '');
-    const lower = raw.toLowerCase();
-    if (/missingorspent|missing or spent/.test(lower)) {
-        return 'The node rejected this transaction because an input is missing or already spent.';
-    }
-    if (/mempool-conflict|mempool conflict/.test(lower)) {
-        return 'The node rejected this transaction because it conflicts with another transaction in the mempool.';
-    }
-    if (/already known|already in (?:the )?mempool|txn-already/.test(lower)) {
-        return 'The node says this transaction is already in its mempool.';
-    }
-    if (/mandatory-script-verify|script verify|script verification/.test(lower)) {
-        return 'The node rejected this transaction because a signature or spending condition is invalid.';
-    }
-    if (/min relay fee|mempool min fee|insufficient fee|fee.*too low/.test(lower)) {
-        return 'The node rejected this transaction because its network fee is too low.';
-    }
-    return readFailureMessage(err, 'broadcast this transaction');
-}
-
-function BroadcastKindPicker({ value, onChange }) {
-    return (
-        <RadioGroup
-            legend="What do you want to broadcast?"
-            name="broadcast-kind"
-            value={value}
-            onChange={(nextValue) => onChange(nextValue)}
-            options={[
-                { value: 'message', label: 'Publish on-chain data' },
-                { value: 'transaction', label: 'Signed transaction' },
-            ]}
-        />
-    );
-}
-
-// A pasted transaction can hold thousands of outputs; drawing every one freezes the tab.
-const MAX_PREVIEW_OUTPUTS = 50;
-
-function RawTransactionBroadcast({
-    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
-}) {
-    const { settings } = useSettings();
-    const [raw, setRaw] = useState('');
-    const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
-    const [state, setState] = useState(/** @type {'form' | 'preview' | 'submitting' | 'done'} */ ('form'));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [result, setResult] = useState(/** @type {any | null} */ (null));
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const ticker = tickerForDescriptor(descriptor);
-    const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
-    const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
-    const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
-    // Two submits in one event turn both read state 'preview'; the ref closes that gap.
-    const sendingRef = useRef(false);
-
-    function review(event) {
-        event.preventDefault();
-        if (!chainId) {
-            setError('Pick the network that will receive this transaction.');
-            return;
-        }
-        try {
-            setPreview(normalizeRawTransaction(raw));
-            setError(null);
-            setState('preview');
-        } catch (err) {
-            setPreview(null);
-            setError(err instanceof Error ? err.message : 'This transaction could not be read.');
-        }
-    }
-
-    async function broadcast(event) {
-        event.preventDefault();
-        if (!preview || !chainId || mismatch || state === 'submitting' || sendingRef.current) return;
-        sendingRef.current = true;
-        setState('submitting');
-        onBusyChange(true);
-        setError(null);
-        try {
-            const response = await withAutoLockHold(() => messaging.broadcastSignedTxRequest({
-                walletId,
-                chainId,
-                txHex: preview.txHex,
-            }));
-            setResult(response);
-            setState('done');
-        } catch (err) {
-            setError(rawBroadcastFailure(err));
-            setState('preview');
-        } finally {
-            sendingRef.current = false;
-            onBusyChange(false);
-        }
-    }
-
-    if (state === 'done') {
-        const txid = result?.txid || result?.broadcast?.txid || '';
-        // A node that already holds these exact bytes answers with no new txid; that is not a queued send.
-        const alreadyOnNetwork = result?.alreadyOnNetwork === true;
-        // A relay that queued the transaction instead of broadcasting it is
-        // not a broadcast; say so before any success copy can render.
-        if (result?.queued) {
-            // Map the host's `persisted` reply to a definite boolean: this lane
-            // never goes through useConfirmAction, so the panel's handoff fallback
-            // would show another action's leftover warning, or none at all.
-            return (
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onDone}
-                    what="broadcast"
-                    unsaved={result?.persisted === false}
-                />
-            );
-        }
-        const explorerBase = descriptor?.explorer?.defaultUrl;
-        const explorerUrl = txid && explorerBase ? explorerPageUrl({
-            chainId,
-            kind: 'transaction',
-            value: txid,
-            settings,
-        }) : null;
-        return (
-            <div>
-                <div role="status" aria-live="polite" aria-atomic="true">
-                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : alreadyOnNetwork ? 'Already on the network' : 'Transaction queued'}</h2>
-                    {txid ? (
-                        <p className={styles.hint}>
-                            The transaction was broadcast but is not confirmed yet.
-                            Confirmation time depends on the selected network and fee.
-                        </p>
-                    ) : null}
-                </div>
-                {txid ? (
-                    <>
-                        <p className={styles.successLabel}>Transaction ID</p>
-                        <code className={styles.txid}>{txid}</code>
-                        <CopyButton value={txid} label="Copy transaction ID" />
-                        {explorerUrl ? (
-                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                                View on explorer <span aria-hidden="true">↗</span>
-                            </a>
-                        ) : null}
-                    </>
-                ) : (
-                    <p>
-                        {alreadyOnNetwork
-                            ? 'The network already has this transaction, so there is nothing more to send.'
-                            : 'The signed transaction is saved in the broadcast queue. Send it from there when the network is available.'}
-                    </p>
-                )}
-                <div className={styles.actions}>
-                    <Button type="button" onClick={() => {
-                        setRaw('');
-                        setPreview(null);
-                        setResult(null);
-                        setState('form');
-                    }}>
-                        Broadcast another
-                    </Button>
-                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
-                </div>
-            </div>
-        );
-    }
-
-    if (state === 'preview' || state === 'submitting') {
-        return (
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review signed transaction"
-                onSubmit={broadcast}
-                status={error || mismatch ? (
-                    <StatusMessage variant="error">{error || mismatch}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        {/* Keyed so the Back button and the form's Preview button are different nodes: they share a slot, and a reused node would turn Back into a submit mid-click. */}
-                        <Button
-                            key="back"
-                            type="button"
-                            variant="ghost"
-                            onClick={() => setState('form')}
-                            disabled={state === 'submitting'}
-                        >
-                            Back
-                        </Button>
-                        <Button key="broadcast" type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
-                            Broadcast transaction
-                        </Button>
-                    </>
-                )}
-            >
-                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
-                <p>
-                    This signed transaction spends {preview.decoded.inputs.length} input{preview.decoded.inputs.length === 1 ? '' : 's'}
-                    {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
-                </p>
-                <dl className={styles.detailsList}>
-                    {preview.decoded.outputs.slice(0, MAX_PREVIEW_OUTPUTS).map((output, index) => (
-                        <DetailRow
-                            key={`${output.scriptPubKeyHex}-${index}`}
-                            label={`Output ${index + 1}`}
-                            value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
-                        />
-                    ))}
-                    {preview.decoded.outputs.length > MAX_PREVIEW_OUTPUTS ? (
-                        <DetailRow
-                            label="More outputs"
-                            value={`${preview.decoded.outputs.length - MAX_PREVIEW_OUTPUTS} further outputs are not listed.`}
-                        />
-                    ) : null}
-                    <DetailRow
-                        label="Network fee"
-                        value="Cannot be calculated from raw transaction data because it does not include the amounts of the spent inputs."
-                    />
-                </dl>
-                <p className={styles.hint}>
-                    Raw transaction data does not identify its network. Confirm that the selected network is the one that created it.
-                </p>
-                {broadcastTime.showElapsed ? (
-                    <p role="status" className={styles.hint} data-testid="raw-broadcast-elapsed">
-                        Waiting for the relay for {broadcastTime.elapsedSeconds} seconds.
-                    </p>
-                ) : null}
-                {broadcastTime.timedOut ? (
-                    <FormNotice variant="error">
-                        The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
-                    </FormNotice>
-                ) : null}
-            </FormPage>
-        );
-    }
-
-    return (
-        <FormPage
-            demoGuard={demoGuard}
-            label="Broadcast signed transaction"
-            onSubmit={review}
-            status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-            actions={<Button key="preview" type="submit" variant="primary">Preview transaction</Button>}
-        >
-            <BroadcastKindPicker value="transaction" onChange={onKindChange} />
-            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
-            <Textarea
-                label="Signed transaction code"
-                hint="Spaces and line breaks are ignored. The code uses only the digits 0 to 9 and the letters a to f, two characters per byte."
-                value={raw}
-                onChange={(event) => {
-                    setRaw(event.target.value);
-                    if (error) setError(null);
-                }}
-                rows={8}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-        </FormPage>
-    );
-}
-
 /**
- * BROADCAST form (§40.6).
- *
- * Publishes an arbitrary text string, oracle value, or feed reference
- * on-chain, tied to the source address. Three UX lanes map onto the
- * four protocol format versions (BROADCAST.md):
- *
- *   - plain broadcast (v0): message only, no memo, no fee.
- *   - oracle (v1): feed name + value (+ optional fee, optional memo).
- *   - feed URL (v2): feed name (a URL) (+ optional fee, optional memo).
- *
- * v3 (feed results) is a resolve path from a prior feed's detail page
- * and not surfaced as a standalone authoring lane here.
- *
- * Field mapping: MESSAGE is the protocol's one-string payload; the
- * form presents "Feed name" and "Text" as separate inputs for clarity
- * (§40.6) and composes them:
- *
- *   - feedName non-empty → MESSAGE = feedName; text (if any) → MEMO.
- *   - feedName empty     → MESSAGE = text (validator still requires
- *                          at least one of them).
- *
- * Timestamp (auto) prepends the current UTC ISO time to MEMO so the
- * sign-screen sees what will land on-chain. Users can turn it off for
- * plain broadcasts where the tx's block time is enough context.
+ * Publishes a plain BROADCAST format 0 message tied to the source address.
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  * @param {() => void} [props.onDone]
  */
-export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
+export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
@@ -426,25 +94,30 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
-    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [feedName, setFeedName] = useState(initialTick ? initialTick.toUpperCase() : '');
-    const [text, setText] = useState('');
-    const [value, setValue] = useState('');
-    const [feedFee, setFeedFee] = useState('');
-    const [includeTimestamp, setIncludeTimestamp] = useState(false);
-    const [broadcastKind, setBroadcastKind] = useState('message');
-    const [rawBroadcastBusy, setRawBroadcastBusy] = useState(false);
+    const [message, setMessage] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // The standard sections' open state, held above the early
+    // returns so it survives the From picker. From closed, Message open,
+    // Network fee closed.
+    const formSections = useFormSections({ from: false, message: true, fee: false });
+    // Which section a Broadcast-attempt refusal belongs to, and a
+    // counter that changes on every attempt so that section reopens even
+    // after the user closed it.
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'message' | 'fee' | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The required-message refusal is a field error on Message, kept apart from
+    // formError so the form-level status never doubles it.
+    const [messageError, setMessageError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -470,24 +143,21 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before posting an announcement.',
                     );
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
                 // first key broadcast from the wallet's OLDEST chain forever.
-                // Open on the last-used chain instead, behind a caller-seeded
-                // one (a token context) and ahead of the first-key fallback,
-                // exactly as Send and Swap do.
-                if (!lockedToken) {
-                    setChainId((prev) => pickDefaultChainId(byChain, {
-                        explicitChainId: prev,
-                        settings,
-                    }));
-                }
+                // Open on the last-used chain behind a caller-seeded one and
+                // ahead of the first-key fallback, exactly as Send and Swap do.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings,
+                }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -517,25 +187,12 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
-    const tokenInfo = useTokenInfo({
-        chainId,
-        tick: initialTick,
-        skip: !lockedToken,
-    });
-    const issuerEligibility = tokenIssuerEligibility({
-        tokenInfo: lockedToken ? tokenInfo : { creator: fromAddress?.address },
-        addressesByChain,
-        chainId,
-        tick: initialTick,
-        sourceAddress: fromAddress?.address,
-    });
-
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = tickerForDescriptor(descriptor);
 
-    // PC-51: native-coin protocol fee (BROADCAST is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -560,48 +217,10 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    const actionParams = useMemo(() => {
-        const feed = feedName.trim();
-        const body = text.trim();
-        const val = String(value).trim();
-        const fee = String(feedFee).trim();
-
-        const message = feed || body;
-        const memoParts = [];
-        if (includeTimestamp) memoParts.push(new Date().toISOString());
-        if (feed && body) memoParts.push(body);
-        const memo = memoParts.join(MEMO_PART_SEPARATOR);
-
-        // The version has to follow the fields that are actually
-        // populated. Only v1/v2/v3 carry a MEMO slot (v0 is
-        // VERSION|MESSAGE|VALUE), so selecting on VALUE and FEE alone dropped a
-        // typed body on the floor - encoded, paid for, and reported as sent,
-        // with the confirm screen showing no trace of it either. FEE is
-        // optional on the wire (the indexer treats a null FEE as no usage fee),
-        // so a MEMO-carrying version is always reachable without inventing a
-        // fee: v1 when there is a value to publish, v2 otherwise. This is the
-        // same answer the SDK's own FormatSelector.select() reaches from these
-        // fields; the version stays explicit here so the confirm screen and the
-        // encoder read the identical wire shape.
-        let version = '0';
-        if (val && (fee || memo)) version = '1';
-        else if (fee || memo) version = '2';
-
-        /** @type {Record<string, string>} */
-        const p = { VERSION: version, MESSAGE: message };
-        if (val) p.VALUE = val;
-        if (fee) p.FEE = fee;
-        if (memo) p.MEMO = memo;
-        return p;
-    }, [feedName, text, value, feedFee, includeTimestamp]);
-
-    const messageBytes = utf8ByteLength(actionParams.MESSAGE);
-    const memoBytes = utf8ByteLength(actionParams.MEMO);
-    const messageLengthError = actionTextSafetyError(actionParams.MESSAGE, 'Message') || (messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
-        ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
+    const actionParams = useMemo(() => ({ VERSION: '0', MESSAGE: message }), [message]);
+    const messageLengthError = actionTextSafetyError(message, 'Message') || (message.length > MAX_BROADCAST_MESSAGE_LENGTH
+        ? `Message is ${message.length} characters; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} characters.`
         : null);
-    const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
-    const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
 
     // (§5.6 slice 2): software broadcasts go through the
     // single-encode confirm page; hardware + watcher keep the legacy
@@ -619,58 +238,50 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'BROADCAST',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionConfirm.open, actionParams, chainId]);
+    const legacyComposed = useMemo(() => ({
+        action: 'BROADCAST',
+        chainId,
+        decoded,
+        protocolFeeKnownFree: true,
+    }), [chainId, decoded]);
 
     function handleReview(event) {
         event.preventDefault();
+        // Each attempt bumps the counter; a refusal names its section.
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
+            setErrorSection('from');
             setFormError('Pick a source address first.');
             return;
         }
-        if (lockedToken && issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${initialTick}.`);
+        if (!message.trim()) {
+            setErrorSection('message');
+            setFormError(null);
+            setMessageError('Message is required.');
             return;
-        }
-        if (lockedToken && issuerEligibility.error) {
-            setFormError(issuerEligibility.error);
-            return;
-        }
-        if (!feedName.trim() && !text.trim()) {
-            setFormError('Enter a feed name or a message.');
-            return;
-        }
-        if (value.trim() && !DECIMAL_NUMBER.test(value.trim())) {
-            setFormError('Value must be a number.');
-            return;
-        }
-        if (feedFee.trim()) {
-            const fee = feedFee.trim();
-            if (!DECIMAL_NUMBER.test(fee) || fee.startsWith('-')) {
-                setFormError('Feed fee must be a non-negative number.');
-                return;
-            }
         }
         // Refuse text the indexer would reject before the form asks the host to compose it.
-        if (broadcastLengthError) {
-            setFormError(broadcastLengthError);
+        if (messageLengthError) {
+            setErrorSection('message');
+            setFormError(messageLengthError);
             return;
         }
-        // sibling case: a user-typed delimiter. The wallet no longer
-        // inserts one itself, but a pipe or semicolon in either text field is
-        // still unsendable, and the compose call reports that in protocol
-        // field names nobody outside this file recognises.
-        if (RESERVED_DELIMITERS.test(feedName) || RESERVED_DELIMITERS.test(text)) {
-            setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the broadcast.');
+        // Refuse protocol separators with a field-level explanation.
+        if (RESERVED_DELIMITERS.test(message)) {
+            setErrorSection('message');
+            setFormError('Remove any | or ; characters: the network reserves them as separators and will reject the announcement.');
             return;
         }
+        setErrorSection(null);
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -822,15 +433,16 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setMessage('');
         setStage('form');
     }
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
-            backDisabled={stage === 'submitting' || rawBroadcastBusy}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review broadcast'
-                    : (broadcastKind === 'transaction' ? 'Broadcast transaction' : 'Broadcast')}
+                ? 'Review Announcement'
+                : 'Announce'}
         />
     );
     const wrap = (children) => (
@@ -839,44 +451,33 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         </Screen>
     );
 
-    if (!lockedToken && broadcastKind === 'transaction') {
-        return wrap(
-            <RawTransactionBroadcast
-                walletId={walletId}
-                demoGuard={demoGuard}
-                chainId={chainId}
-                setChainId={setChainId}
-                messaging={messaging}
-                onKindChange={setBroadcastKind}
-                onBusyChange={setRawBroadcastBusy}
-                onDone={onDone || onBack}
-            />,
-        );
-    }
+    // The load error, the loading line and every result panel lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
     if (loadError) {
         return wrap(
-            <>
-                {!lockedToken ? (
-                    <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
-                ) : null}
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            <FormPage as="div" label="Announce" status={<StatusMessage variant="error">{loadError}</StatusMessage>} />,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(
+            <FormPage as="div" label="Announce">
+                <p className={styles.hint}>Loading…</p>
+            </FormPage>,
+        );
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onDone || onBack}
-                />,
+                <FormPage as="div" label="Announcement result">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onDone || onBack}
+                    />
+                </FormPage>,
             );
         }
         // Signed, but the broadcast leg never landed. The confirm
@@ -884,7 +485,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <FormPage as="div" label="Announcement result">
+                    <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="announcement" unsaved={result?.unsaved} />
+                </FormPage>,
             );
         }
         const explorerUrl = txid ? explorerPageUrl({
@@ -894,7 +497,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             settings,
         }) : null;
         return wrap(
-            <>
+            <FormPage as="div" label="Announcement result">
                 <div role="status" aria-live="polite" aria-atomic="true">
                     <h2 className={styles.successTitle}>Broadcast pending</h2>
                     <p className={styles.hint}>
@@ -906,7 +509,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
-                        <CopyButton value={txid} label="Copy transaction ID" />
+                        <CopyButton value={txid} label="Copy Transaction ID" />
                         {explorerUrl ? (
                             <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
                                 View on explorer <span aria-hidden="true">↗</span>
@@ -917,97 +520,66 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <p className={styles.hint}>The broadcast completed without a transaction ID.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
-                    <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
+                    <Button type="button" onClick={handleBuildAnother}>Announce Another</Button>
+                    <Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone || onBack}>Done</Button>
                 </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review broadcast"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        const broadcastText = neutralizeControlText(String(actionParams.MESSAGE || '').trim(), { maxLength: 80 });
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('routes.manageToken.broadcast'),
+                    ...(broadcastText ? { target: broadcastText } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The message itself, cut short; the full text is under Technical details.
+        const broadcastText = neutralizeControlText(String(actionParams.MESSAGE || '').trim(), { maxLength: 80 });
+        const broadcastSummary = {
+            verb: t('routes.manageToken.broadcast'),
+            ...(broadcastText ? { target: broadcastText } : {}),
+            direction: 'none',
+            chainId,
+            address: fromAddress?.address,
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={broadcastSummary}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1031,9 +603,10 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -1043,119 +616,95 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         );
     }
 
+    // A section holding the last refusal gets a key that changes on
+    // every attempt, so it reopens even after being closed.
+    const sectionErrorKey = (id) => (errorSection === id && (formError || messageError) ? reviewAttempt : 0);
+    const messageSummary = message.trim()
+        ? (message.trim().length > 40 ? `${message.trim().slice(0, 40)}...` : message.trim())
+        : null;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
-            label="Broadcast"
+            label="Announce"
             onSubmit={handleReview}
-            status={formError || (lockedToken && issuerEligibility.error) ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            status={formError ? (
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.BroadcastIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress
-                        || (lockedToken && (issuerEligibility.pending || !!issuerEligibility.error))
-                        || (!feedName.trim() && !text.trim())
-                        || !!broadcastLengthError
-                        || actionConfirm.composing}
+                    // G22: never disabled for a field; a press with no
+                    // address or an over-long message is refused with its reason.
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Broadcast' : 'Preview'}
-                </Button>
+                    Announce
+                </FormAction>
             )}
-        >
-            {!lockedToken ? (
-                <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
-            ) : null}
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={initialTick.toUpperCase()} />
-            ) : (
-                <>
-                    <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
-                </>
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            /* The standard order. From (closed) holds Network and the
+               From address; Message (open) is the form's own field; then the
+               Network fee row. */
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain where the message is recorded. Your From address and the network fee are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that signs and pays for this message. The message is recorded on-chain as coming from this address."
+                    revealKey={sectionErrorKey('from')}
+                    // The default source resolves in an effect after the
+                    // address list lands, so the notice (which opens From) is
+                    // passed only when this network truly has no funding address.
+                    missing={!(addressesByChain[chainId] || []).some((a) => a.role !== 'dispenser') ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
                 />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
             )}
-
-            <Input
-                label="Feed name (optional)"
-                hint={`${utf8ByteLength(feedName.trim())} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes. Stable label for an oracle or feed.`}
-                error={feedName.trim() ? messageLengthError || undefined : undefined}
-                value={feedName}
-                onChange={(e) => setFeedName(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-            <Input
-                label="Message (optional)"
-                hint={feedName.trim()
-                    ? `${memoBytes} / ${MAX_MEMO_LENGTH} on-chain memo bytes.`
-                    : `${messageBytes} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`}
-                error={(feedName.trim() ? broadcastMemoLengthError : messageLengthError) || undefined}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                label="Value (optional)"
-                hint="Numeric value published by this oracle."
-                inputMode="decimal"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                label="Feed fee (%) (optional)"
-                hint="Usage fee charged to dispensers that use this oracle. Leave blank for none."
-                inputMode="decimal"
-                value={feedFee}
-                onChange={(e) => setFeedFee(e.target.value)}
-                autoComplete="off"
-            />
-            <Switch
-                label="Prepend UTC timestamp to memo"
-                checked={includeTimestamp}
-                onChange={(e) => setIncludeTimestamp(e.target.checked)}
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
                 />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-        </FormPage>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
+            )}
+        >
+            <FormSection
+                id="message"
+                title="Message"
+                icon={Icon.BroadcastIcon}
+                {...formSections.bind('message')}
+                revealKey={sectionErrorKey('message')}
+                summary={messageSummary}
+            >
+            <Textarea
+                label="Message"
+                help="Plain text recorded on-chain with this transaction. Anyone can read it, and it cannot be edited or removed later."
+                required
+                rows={4}
+                maxLength={MAX_BROADCAST_MESSAGE_LENGTH}
+                error={messageError || messageLengthError || undefined}
+                value={message}
+                onChange={(e) => {
+                    setMessage(e.target.value);
+                    if (formError) setFormError(null);
+                    if (messageError) setMessageError(null);
+                }}
+                autoComplete="off"
+                autoCapitalize="sentences"
+            />
+            </FormSection>
+        </FormFrame>,
     );
 }

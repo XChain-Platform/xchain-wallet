@@ -1,3 +1,12 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 /**
  * Imported-WIF addresses carry `accountId: null` by design (§11.3.3): they
  * are scoped to the WALLET, through that wallet's `importedKeys` array, not
@@ -25,12 +34,27 @@ export async function importedAddressIdsFor(vault, walletId) {
     if (!vault?.wallets || typeof walletId !== 'string' || walletId.length === 0) {
         return new Set();
     }
-    let wallet;
     try {
-        wallet = await vault.wallets.get(walletId);
+        return await importedAddressIdsForStrict(vault, walletId);
     } catch {
         return new Set();
     }
+}
+
+/**
+ * Resolve imported address ids without hiding an unreadable wallet record.
+ * Callers that must not act on a partial inventory use this variant.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} walletId
+ * @returns {Promise<Set<string>>} address ids of this wallet's imported keys
+ */
+export async function importedAddressIdsForStrict(vault, walletId) {
+    if (typeof vault?.wallets?.get !== 'function') {
+        throw new Error('importedAddressIdsForStrict: wallet collection is unreadable');
+    }
+    if (typeof walletId !== 'string' || walletId.length === 0) return new Set();
+    const wallet = await vault.wallets.get(walletId);
     const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
     return new Set(
         keys

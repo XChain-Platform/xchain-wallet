@@ -15,28 +15,33 @@ const TIERS = {
 };
 
 describe('<FeeSelector> edge branches', () => {
-    it('suppresses unavailable and fallback notices when requested', () => {
+    it('renders no unavailable or fallback notice', () => {
+        const onChange = vi.fn();
         const { rerender } = render(
             <FeeSelector
+                chainId="bitcoin-mainnet"
                 tiers={null}
                 value={{ mode: 'normal' }}
-                onChange={() => {}}
-                showEstimateNotice={false}
+                onChange={onChange}
+                fiat={{ formatNativeFee: () => null }}
                 label="Fee"
             />,
         );
         expect(screen.queryByText(/Fee estimate unavailable/)).toBeNull();
         expect(screen.queryByRole('slider')).toBeNull();
+        expect(screen.getByLabelText('Custom fee rate (sat/vB)')).toBeInTheDocument();
+        expect(onChange).toHaveBeenCalledWith({ mode: 'custom', customRate: undefined });
 
         rerender(
             <FeeSelector
+                chainId="bitcoin-mainnet"
                 tiers={{
                     ...TIERS,
                     normal: { ...TIERS.normal, source: 'static-placeholder' },
                 }}
                 value={{ mode: 'normal' }}
                 onChange={() => {}}
-                showEstimateNotice={false}
+                fiat={{ formatNativeFee: () => null }}
             />,
         );
         expect(screen.queryByText(/Using safe default rates/)).toBeNull();

@@ -179,12 +179,13 @@ const EXPLANATION_CASES = [
     {
         name: 'backup pointer',
         input: 'xchain-backup:1?loc=https%3A%2F%2Fexample.com%2Fwallet&name=Cold',
-        message: /encrypted-backup code.*Import wallet.*Encrypted backup/i,
+        // The Backup tab takes the file a pointer names, not the pointer itself.
+        message: /encrypted-backup code.*Save the backup file.*Import wallet.*Backup.*pick that file/i,
     },
     {
         name: 'pairing code',
         input: 'XCW-PAIR:ZmFrZS1wYWlyaW5nLWNvZGU',
-        message: /wallet pairing code.*Pair a watcher or signer/i,
+        message: /wallet pairing code.*Use another phone as a signer/i,
     },
     {
         name: 'multi-frame QR chunk',
@@ -218,7 +219,7 @@ function submit(input, onClassified = vi.fn()) {
     fireEvent.change(screen.getByRole('textbox', { name: 'Or paste it here' }), {
         target: { value: input },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Pasted Text' }));
     return onClassified;
 }
 

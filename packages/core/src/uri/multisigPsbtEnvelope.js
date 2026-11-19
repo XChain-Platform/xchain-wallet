@@ -69,6 +69,8 @@ const isHexLength = (v, byteLen) =>
     typeof v === 'string' && HEX_RE.test(v.toLowerCase()) && v.length === byteLen * 2;
 const isEvenHex = (v) =>
     typeof v === 'string' && v.length > 0 && v.length % 2 === 0 && HEX_RE.test(v.toLowerCase());
+const isOptionalEvenHex = (v) =>
+    typeof v === 'string' && v.length % 2 === 0 && (v.length === 0 || HEX_RE.test(v.toLowerCase()));
 
 export class MultisigEnvelopeError extends Error {
     constructor(msg) {
@@ -97,6 +99,9 @@ export function fingerprintSessionRef(sessionRef) {
 
 function canonicalizeSessionRef(ref) {
     return {
+        ...(typeof ref.chainId === 'string' && ref.chainId.length > 0
+            ? { chainId: ref.chainId }
+            : {}),
         scheme: ref.scheme,
         threshold: ref.threshold,
         cosignerPubkeys: (ref.cosignerPubkeys || []).map((p) => String(p).toLowerCase()),
@@ -111,6 +116,10 @@ function assertSessionRef(ref) {
     }
     if (!['p2sh-multisig', 'p2wsh-multisig', 'taproot-musig2'].includes(ref.scheme)) {
         throw new MultisigEnvelopeError(`sessionRef.scheme "${ref.scheme}" is invalid`);
+    }
+    if (ref.chainId !== undefined
+        && (typeof ref.chainId !== 'string' || !/^bitcoin-(mainnet|testnet|regtest)$/.test(ref.chainId))) {
+        throw new MultisigEnvelopeError('sessionRef.chainId must be a supported Bitcoin chain');
     }
     if (!Number.isInteger(ref.threshold) || ref.threshold <= 0) {
         throw new MultisigEnvelopeError('sessionRef.threshold must be a positive integer');
@@ -127,8 +136,8 @@ function assertSessionRef(ref) {
     if (!isHexLength(ref.msgHash, 32)) {
         throw new MultisigEnvelopeError('sessionRef.msgHash must be 32-byte hex');
     }
-    if (!isEvenHex(ref.psbtHex)) {
-        throw new MultisigEnvelopeError('sessionRef.psbtHex must be non-empty, even-length hex');
+    if (!isOptionalEvenHex(ref.psbtHex)) {
+        throw new MultisigEnvelopeError('sessionRef.psbtHex must be even-length hex');
     }
 }
 

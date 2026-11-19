@@ -8,11 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign coverage map, "Settings sub-pages" -> the Wallet-Mode sub-page,
-// third of the four surfaces the 2026-08-03 re-scope found undriven.
+// Wallet mode is a property of each wallet: chosen once when the wallet is
+// paired, then shown read-only on Wallet Details. There is no Settings page
+// for it, and create no longer offers one, so this spec adds a Signer wallet
+// through the two-phone pairing page instead of switching a wallet after the
+// fact.
 //
-// THE CLAIM IS THE SCREEN'S OWN PROMISE, quoted from `WalletModeSection.jsx`:
-// picking Signer says "Sign transactions from a watcher wallet **without showing
+// THE CLAIM IS THE MODE'S OWN PROMISE, as the create form states it: Signer
+// says "Sign transactions from a watcher wallet **without showing
 // send or receive screens or broadcasting from this device.**" That
 // is not a description of a preference, it is a statement about what the wallet
 // will no longer do - the same shape as the Tor toggle in, which offered
@@ -42,7 +45,7 @@
 //   - step 3 FAILED: `LeftNav` had no wallet-mode gating at all, so **Send and
 //     Receive were still one click away** while the Wallet Mode screen told the
 //     user "Send / receive screens are hidden; this wallet does not broadcast."
-// The fix gates both nav surfaces, the command palette and the Send / Receive
+// The fix gates both nav surfaces, the wallet menu and the Send / Receive
 // routes themselves on `useWalletMode().isSignerMode`, so the `.fixme` is gone
 // and step 3 is now the regression guard on the promise. The assertions have
 // not been touched: they were the specification, and they were correct as
@@ -53,56 +56,62 @@
 //   cd test/e2e && npx playwright test \
 //       --config=playwright.regtest.config.js tests/settings/wallet-mode.regtest.spec.js
 
-import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
-import { unlockAfterReload } from '../../fixtures/regtest.js';
+import {
+    createWallet, expect, fillPairAnotherPhone, openSettings, openWalletPicker, switchToWallet, test,
+} from '../../fixtures/wallet.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const PASSWORD = 'regtestpassword123';
 
-/** Opens Settings and walks into the Wallet Mode sub-page. */
-async function openWalletMode(page) {
-    await openSettings(page);
-    // Scoped to `main`: the primary navigation is full of buttons and an
-    // unmatched or mis-matched click HANGS for the whole test budget rather
-    // than failing (Playwright has no default action timeout).
-    const row = page.getByRole('main').getByRole('button', { name: /^Wallet mode\b/ });
-    await expect(row, 'Settings has no Wallet Mode row').toBeVisible({ timeout: 30_000 });
-    await row.click();
-    await expect(page.getByRole('radio', { name: /^Signer/ }),
-        'the Wallet Mode sub-page did not open').toBeVisible({ timeout: 30_000 });
+/**
+ * The Signer wallet's phrase: a BIP39 test vector, so its checksum is valid and
+ * it is nobody's live phrase. It must differ from the device's own Normal
+ * wallet, because the app refuses a phrase it already holds ("This recovery
+ * phrase is already in this app as ..."), which is why this spec does not use
+ * `createWallet({ walletMode })`: that mirrors the Normal wallet's phrase.
+ */
+const SIGNER_MNEMONIC =
+    'legal winner thank year wave sausage worth useful legal winner thank yellow';
+
+/**
+ * Makes the Signer wallet the way a user does since create stopped offering a
+ * mode (2026-11-15): an unlocked device adds the phrase through Settings,
+ * Advanced, "Use another phone as a signer", picking the signer role. The page
+ * fixes the mode when it adds the wallet, before any code exchange, so this
+ * leaves once this phone's pairing code is shown and switches to the wallet.
+ */
+async function createSignerWallet(page, walletName) {
+    // A Normal wallet first: the pairing page needs an open vault. Its Home
+    // waits on no balance, since the venue's mainnet default is unreachable.
+    await createWallet(page, { password: PASSWORD, name: 'Device Wallet', waitForBalances: false });
+    await fillPairAnotherPhone(page, {
+        words: SIGNER_MNEMONIC, name: walletName, password: PASSWORD, walletMode: 'signer',
+    });
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Copy Pairing Code' }),
+        `the pairing page did not add "${walletName}" in signer mode`)
+        .toBeVisible({ timeout: kdfStepTimeout() });
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+    await switchToWallet(page, walletName);
 }
 
-test.describe('Settings: wallet mode', () => {
+test.describe('Wallet mode', () => {
     test.setTimeout(300_000);
 
-    test('choosing Signer persists AND is applied - the send/receive promise is kept',
+    test('a wallet created as Signer is applied - the send/receive promise is kept',
         async ({ page }) => {
-            await createWallet(page, { password: PASSWORD });
+            const walletName = 'Signer Wallet';
+            await createSignerWallet(page, walletName);
 
-            await test.step('Signer can be chosen and the choice sticks', async () => {
-                await openWalletMode(page);
-                // `.check()` cannot be used, for the reason the regtest fixture
-                // already records about the Developer Mode switch: the input is
-                // controlled by PERSISTED settings, so `checked` does not flip
-                // until the vault write resolves, and check()'s post-click
-                // assertion is synchronous ("Clicking the checkbox did not
-                // change its state"). Click, then wait for the state the write
-                // produces.
-                await page.getByRole('radio', { name: /^Signer/ }).click();
-                await expect(page.getByRole('radio', { name: /^Signer/ }),
-                    'the Signer radio did not take the selection').toBeChecked({ timeout: 30_000 });
+            await test.step('Settings no longer offers a wallet-mode page', async () => {
+                await openSettings(page);
+                await expect(page.getByRole('main').getByRole('button', { name: /^Wallet mode\b/ }),
+                    'Settings still carries a Wallet Mode row, so the mode is not a per-wallet property')
+                    .toHaveCount(0);
+            });
 
-                // The radio shows the PENDING choice; nothing is written until
-                // the mode change is confirmed, so the reload below would
-                // otherwise test a choice the wallet was never asked to keep.
-                // The dialog closes only once the write resolves, which is what
-                // makes it safe to reload after it.
-                const ask = page.getByRole('dialog', { name: /^Switch to Signer\b.* mode\?$/ });
-                await expect(ask, 'choosing Signer asked for no confirmation')
-                    .toBeVisible({ timeout: 30_000 });
-                await ask.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
-                await expect(ask, 'the mode-change confirmation never closed, so the write did not finish')
-                    .toBeHidden({ timeout: 30_000 });
-
+            await test.step('the choice survives a reload', async () => {
                 // A RELOAD, not a re-render: the whole point is to separate a
                 // value the component is holding from one the vault kept.
                 //
@@ -116,16 +125,25 @@ test.describe('Settings: wallet mode', () => {
                 await page.reload();
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 await unlock.waitFor({ state: 'visible', timeout: 60_000 });
-                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+                await fieldByLabel(page, 'Password').fill(PASSWORD);
                 await unlock.click();
                 await expect(page.getByRole('button', { name: 'Sign a transaction' }),
                     'the wallet did not come back unlocked into the signer surface')
                     .toBeVisible({ timeout: 90_000 });
 
-                await openWalletMode(page);
-                await expect(page.getByRole('radio', { name: /^Signer/ }),
-                    'the wallet mode did not survive a reload, so it was never persisted')
-                    .toBeChecked({ timeout: 30_000 });
+                // Wallet Details shows the mode read-only: a row, no radio.
+                // A picker row opens that wallet's page; the facts sit on its
+                // Details tab.
+                await openWalletPicker(page);
+                await page.getByRole('main').getByRole('list', { name: /Wallets$/ })
+                    .getByRole('button').filter({ hasText: walletName }).click();
+                await page.getByRole('main').getByRole('tab', { name: 'Details', exact: true }).click();
+                await expect(page.getByRole('main').locator('dl'),
+                    'Wallet Details does not show the mode the wallet was created with, so it was never persisted')
+                    .toContainText('Wallet modeSigner for another phone', { timeout: 30_000 });
+                await expect(page.getByRole('radio', { name: /^Signer for another phone/ }),
+                    'Wallet Details offers a mode switch, but a wallet\'s mode is final once chosen')
+                    .toHaveCount(0);
             });
 
             await test.step('Home becomes the signer surface', async () => {

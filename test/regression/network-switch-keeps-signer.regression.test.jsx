@@ -146,7 +146,9 @@ describe('network switch signer regression', () => {
 
         expect(await screen.findByDisplayValue(`${DESTINATION_CHAIN}-receive-0`))
             .toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Generate new address' }));
+        // Generate new address opens the Add Addresses page, seeded with this chain.
+        fireEvent.click(screen.getByRole('button', { name: /^Generate new address/ }));
+        fireEvent.click(await screen.findByTestId('add-address-generate'));
 
         expect(await screen.findByDisplayValue(`${DESTINATION_CHAIN}-receive-1`))
             .toBeInTheDocument();

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useContext, useEffect, useId } from 'react';
+import { useCallback, useContext, useEffect, useId, useRef } from 'react';
 import { StatusMessage } from './StatusMessage.jsx';
 import { FormNotices } from './formNoticeSlot.js';
 
@@ -20,22 +20,33 @@ import { FormNotices } from './formNoticeSlot.js';
  * The text is a plain string so the form can hold it by value. A message of
  * several lines (one per decoder warning or per reason) passes them as
  * `lines`, an array of strings, and stays one box with a paragraph per line.
- * A bold lead-in sentence ("Destroy is irreversible.") passes as `lead`, also
- * a plain string; it opens the text, or the first line, in bold.
+ * A notice title ("Destroy is irreversible.") passes as `title`, also a plain
+ * string, and sits on its own line above the body. `lead` remains a legacy
+ * alias and uses the same block title slot.
  * Outside a FormPage, or with anything other than strings, the notice renders
  * in place.
  *
  * @param {object} props
- * @param {'status' | 'info' | 'warning' | 'error' | 'success'} [props.variant]   default 'warning'
+ * @param {'info' | 'danger' | 'success'} [props.tone]                          the Notice Standard tone; wins over `variant`
+ * @param {'status' | 'info' | 'warning' | 'error' | 'success'} [props.variant]   older name for the tone, default 'warning' (danger paint)
  * @param {'alert' | 'status' | 'note' | null} [props.role]                       as StatusMessage
- * @param {string} [props.lead]                                                   bold sentence that opens the notice
+ * @param {string} [props.lead]                                                   legacy alias for `title`
+ * @param {string} [props.title]                                                  bold title on its own line above the text (the Notice Standard title), never run together with it
  * @param {string} [props.testId]                                                 data-testid on the notice box
- * @param {readonly string[] | null} [props.lines]                                one paragraph per entry, in place of children
+ * @param {() => void} [props.onDismiss]                                           makes the notice dismissible (close button in its top end corner)
+ * @param {readonly string[] | null} [props.lines]                               one paragraph per entry, in place of children
  * @param {string | null | undefined} [props.children]
  */
-export function FormNotice({ variant = 'warning', role, lead, testId, lines, children }) {
+export function FormNotice({ tone, variant: variantProp = 'warning', role, lead, title, testId, lines, children, onDismiss }) {
+    const variant = tone || variantProp;
     const notices = useContext(FormNotices);
     const id = useId();
+    // The slot holds the entry by value, so the dismiss handler is read through
+    // a ref and the entry carries one stable function.
+    const onDismissRef = useRef(onDismiss);
+    onDismissRef.current = onDismiss;
+    const dismissible = typeof onDismiss === 'function';
+    const dismiss = useCallback(() => onDismissRef.current?.(), []);
     const list = Array.isArray(lines) ? lines : null;
     const allText = list ? list.length > 0 && list.every((line) => typeof line === 'string' && line !== '') : false;
     // The joined lines are the notice's value, so an equal list re-rendered is
@@ -45,33 +56,29 @@ export function FormNotice({ variant = 'warning', role, lead, testId, lines, chi
         : (typeof children === 'string' && children !== '' ? children : null);
     const multiline = !!list;
     const shownLead = typeof lead === 'string' && lead !== '' ? lead : undefined;
+    const shownTitle = typeof title === 'string' && title !== '' ? title : shownLead;
     useEffect(() => {
         if (!notices) return undefined;
-        notices.report(id, text ? { text, variant, role, lead: shownLead, testId, lines: multiline ? text.split('\n') : undefined } : null);
+        notices.report(id, text ? { text, variant, role, title: shownTitle, testId, lines: multiline ? text.split('\n') : undefined, onDismiss: dismissible ? dismiss : undefined } : null);
         return () => notices.report(id, null);
-    }, [notices, id, text, variant, role, shownLead, testId, multiline]);
+    }, [notices, id, text, variant, role, shownTitle, testId, multiline, dismissible, dismiss]);
     if (list ? list.length === 0 : !children) return null;
     if (notices && text) return null;
     return (
-        <StatusMessage variant={variant} role={role} lead={list ? undefined : shownLead} testId={testId}>
-            {list ? <NoticeLines lead={shownLead} lines={list} /> : children}
+        <StatusMessage variant={variant} role={role} title={shownTitle} testId={testId} onDismiss={dismissible ? dismiss : undefined}>
+            {list ? <NoticeLines lines={list} /> : children}
         </StatusMessage>
     );
 }
 
 /**
- * The paragraphs of a notice of several lines, the bold lead-in opening the
- * first one.
+ * The paragraphs of a notice of several lines.
  *
  * @param {object} props
- * @param {string} [props.lead]
  * @param {readonly import('react').ReactNode[]} props.lines
  */
-export function NoticeLines({ lead, lines }) {
+export function NoticeLines({ lines }) {
     return lines.map((line, i) => (
-        <p key={i}>
-            {i === 0 && lead ? <><strong>{lead}</strong>{' '}</> : null}
-            {line}
-        </p>
+        <p key={i}>{line}</p>
     ));
 }

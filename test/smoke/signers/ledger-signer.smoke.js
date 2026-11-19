@@ -23,8 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
 
-// deriveLedgerDeviceIdentifier uses crypto.subtle.digest. Node 18
-// exposes WebCrypto only on globalThis.crypto, matching setup.js.
+// Device identifiers use noble sha256. Other imported wallet crypto expects
+// random bytes on globalThis.crypto, which Node 18 exposes through WebCrypto.
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
 }
@@ -315,7 +315,8 @@ assert.equal(capturedCreateArgs.segwit, true, 'p2wpkh → segwit');
 assert.deepEqual(capturedCreateArgs.additionals, ['bech32'], 'native segwit → bech32 additional');
 assert.equal(capturedCreateArgs.associatedKeysets[0], "m/84'/0'/0'/0/5");
 assert.equal(capturedSplitCalls.length, 1, 'one input → one splitTransaction call');
-assert.match(capturedSplitCalls[0].rawTxHex, /^01000000/, 'synthesized prev tx starts with version=1 LE');
+assert.match(capturedSplitCalls[0].rawTxHex, /^01000000/,
+    'segwit lane passes the supplied nonWitnessUtxoHex (version=1 LE)');
 
 // Legacy lane: p2pkh input uses nonWitnessUtxoHex directly.
 const legacyDecomposed = {
@@ -439,8 +440,16 @@ await assert.rejects(
 assert.equal(modelFromLedgerTransport({ id: 'nanoS' }), 'nanoS');
 assert.equal(modelFromLedgerTransport({ id: 'nanoX' }), 'nanoX');
 assert.equal(modelFromLedgerTransport({ id: 'stax' }), 'stax');
-assert.equal(modelFromLedgerTransport(null), 'nanoX', 'falls back to nanoX');
-assert.equal(modelFromLedgerTransport({ id: 'unknown' }), 'nanoX', 'unknown → nanoX fallback');
+// Each known model keeps its own code (the Flex reports either id and stores
+// europa); an absent or unrecognised id stores the neutral 'unknown' code,
+// never another model's code.
+assert.equal(modelFromLedgerTransport({ id: 'nanoSP' }), 'nanoSP');
+assert.equal(modelFromLedgerTransport({ id: 'europa' }), 'europa');
+assert.equal(modelFromLedgerTransport({ id: 'flex' }), 'europa', 'the Flex stores europa');
+assert.equal(modelFromLedgerTransport({ id: 'apex' }), 'apex');
+assert.equal(modelFromLedgerTransport(null), 'unknown', 'no device model stores unknown');
+assert.equal(modelFromLedgerTransport({}), 'unknown', 'no id string stores unknown');
+assert.equal(modelFromLedgerTransport({ id: 'unknown' }), 'unknown', 'an unrecognised id stores unknown, never nanoX');
 
 // --- 9. schemas.SIGNER_KINDS includes 'ledger' ------------------------
 

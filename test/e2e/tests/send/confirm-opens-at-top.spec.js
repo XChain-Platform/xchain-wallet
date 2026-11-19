@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'confirm-top-password';
 const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -17,14 +18,8 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1024, height: 700 },
 ];
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(palette).toBeVisible({ timeout: 15_000 });
-    await palette.getByRole('combobox').first().fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(palette).toBeHidden({ timeout: 15_000 });
-}
+// The shared wallet-menu fixture, which follows the palette's current search.
+const gotoPalette = (page, title) => openPaletteCommand(page, title);
 
 async function scrollFormToBottom(page) {
     const main = page.getByRole('main');
@@ -44,7 +39,7 @@ async function expectConfirmAtTop(page) {
         'the confirm scroll container must start at the top')
         .toBe(0);
 
-    const summary = confirm.getByTestId('action-intent')
+    const summary = confirm.getByTestId('confirm-sentence')
         .or(confirm.getByText(VALID_BTC, { exact: false }))
         .or(confirm.getByText('Review action', { exact: true }))
         .first();
@@ -57,21 +52,33 @@ async function openSendConfirm(page) {
     const main = page.getByRole('main');
     await main.getByLabel('To', { exact: true }).fill(VALID_BTC);
     await main.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
-    await main.locator('summary', { hasText: 'Advanced' }).click();
+    // Advanced is a form section now, not a <details> summary, and the fees
+    // sit in their own Speed and Fees section. Opening both makes the form
+    // long enough to scroll at every width.
+    for (const name of [/^Advanced\b/, /^Speed and Fees\b/]) {
+        const section = main.getByRole('button', { name }).first();
+        await expect(section).toBeVisible();
+        if (await section.getAttribute('aria-expanded') !== 'true') await section.click();
+    }
     await scrollFormToBottom(page);
     await main.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 async function openIssueConfirm(page) {
+    // Issue token opens the one-page Issue Token form, its template a
+    // picker inside the Token section, which starts open and holds Ticker
+    // and Max supply. Each field's 'About ...' help tip (U57) carries its
+    // label too, so fields are found through the shared field lookup.
     await gotoPalette(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible();
-    await main.getByLabel('Ticker').fill('TOPVIEW');
-    await main.getByLabel('Supply', { exact: true }).fill('100');
+    const ticker = fieldByLabel(main, 'Ticker');
+    await expect(ticker).toBeVisible();
+    await ticker.fill('TOPVIEW');
+    await fieldByLabel(main, 'Max supply').fill('100');
     // The availability lookup starts after a 350 ms debounce.
     await page.waitForTimeout(500);
     await scrollFormToBottom(page);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 }
 
 async function openDispenserConfirm(page) {
@@ -79,15 +86,19 @@ async function openDispenserConfirm(page) {
     let main = page.getByRole('main');
     await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible();
     await main.getByRole('button', { name: /^Token:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('RAREPEPE');
+    await searchTokenPicker(page, 'RAREPEPE');
+    // On a narrow screen the open filter panel floats over the results, so close it.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
     await page.getByRole('button', { name: /^Select Rare Pepe/ }).click();
 
     main = page.getByRole('main');
-    await main.getByLabel('Give amount per fill').fill('1');
-    await main.getByLabel('Escrow amount').fill('2');
-    await main.getByLabel(/^Trigger price/).fill('0.004');
+    await main.getByRole('textbox', { name: /^Give amount per fill/ }).fill('1');
+    await main.getByRole('textbox', { name: /^Escrow amount/ }).fill('2');
+    await main.getByRole('textbox', { name: /^Trigger price/ }).fill('0.004');
     await scrollFormToBottom(page);
-    await main.getByRole('button', { name: 'Create', exact: true }).click();
+    // The main action names what it does (U63).
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
 }
 
 const FLOWS = [

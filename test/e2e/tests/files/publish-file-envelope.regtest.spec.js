@@ -18,7 +18,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -30,7 +30,10 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { formatBytes } from '../../../../packages/core/src/shared/utils/formatBytes.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 // Well over the legacy 8,192-byte compiled ceiling of a plain data carrier.
@@ -62,22 +65,26 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
         const main = page.getByRole('main');
         await test.step('fill Publish file with a file the legacy cap refuses', async () => {
             await openPaletteCommand(page, 'Publish file');
-            await expect(main.getByRole('radiogroup', { name: 'Publish mode' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: /Public/ }).check();
+            // Publish as is the themed dropdown (G119): open it, pick Public.
+            const publishAs = main.getByRole('button', { name: /^Publish as: / });
+            await expect(publishAs).toBeVisible({ timeout: 30_000 });
+            await publishAs.click();
+            await main.getByRole('option', { name: /^Public/ }).click();
             await selectVenueChain(main, 'Network');
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 
-            await main.getByLabel('Choose file to publish').setInputFiles({
+            await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: randomBytes(FILE_BYTES),
             });
-            await expect(main).toContainText(`${FILE_BYTES.toLocaleString('en-US')} bytes`);
-            await main.getByLabel('Title (optional)').fill(TITLE);
-            await main.getByLabel('Memo (optional)').fill(MEMO);
-            await main.getByRole('checkbox', { name: /on-chain forever/ }).check();
-            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
+            await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
+            await fieldByLabel(main, 'Title').fill(TITLE);
+            // Memo is an optional section, closed until opened.
+            await openFormSection(main, 'Memo');
+            await fieldByLabel(main, 'Memo').fill(MEMO);
+            await main.getByRole('button', { name: 'Publish File', exact: true }).click();
         });
 
         let revealTxid;
@@ -86,8 +93,9 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 180_000 });
             await expect(modal.getByTestId('confirm-envelope-commit')).toContainText(/Commit transaction: .*fee [\d.]+ BTC/);
             await expect(modal.getByTestId('confirm-envelope-reveal')).toContainText(/Reveal transaction: .*fee [\d.]+ BTC/);
-            await expect(modal.getByTestId('confirm-fee')).toContainText('both transactions');
-            await page.getByTestId('confirm-approve').click();
+            await expect(modal.getByTestId('confirm-fee-network')).toContainText(/BTC/);
+            await expect(modal.getByText('Network fee, both transactions', { exact: true })).toBeVisible();
+            await approveConfirm(page);
 
             await expect(main.getByRole('heading', { name: 'File published' }),
                 'Approve did not end on the published screen')

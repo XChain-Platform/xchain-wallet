@@ -46,36 +46,45 @@ for (const size of SIZES) {
         });
 
         test('a sub-page hands focus back to its row on Escape', async ({ page }) => {
-            const row = await openSubpage(page, 'Fees');
+            const row = await openSubpage(page, 'Network and Fees');
             await page.keyboard.press('Escape');
             await expect(page.getByRole('heading', { level: 1, name: 'Settings', exact: true })).toBeVisible();
             await expect(row).toBeFocused();
         });
 
-        for (const [title, opener, field] of [
-            ['This wallet', 'Change…', 'Current wallet password'],
-            ['Backup', 'Show…', 'Wallet password'],
-            ['Backup', 'Test…', 'Recovery phrase to test'],
+        // These pages open straight on their form (no intro button, no
+        // Cancel); the row on the group page opens them and Back leaves.
+        for (const [title, rowName, field] of [
+            ['Security', 'Wallet password', 'Current wallet password'],
+            ['Backup and Recovery', 'Recovery phrase', 'Wallet password'],
+            ['Backup and Recovery', 'Test backup', 'Recovery phrase to test'],
         ]) {
-            test(`${title} ${opener} opens on its first field and Escape closes it back to the button`, async ({ page }) => {
+            test(`${title} ${rowName} opens on its first field and Escape returns to the group row`, async ({ page }) => {
                 await openSubpage(page, title);
-                const button = page.getByRole('main').getByRole('button', { name: opener }).first();
+                const button = page.getByRole('main').getByRole('button', { name: new RegExp(`^${rowName}\\b`) }).first();
                 await button.focus();
                 await page.keyboard.press('Enter');
-                await expect(page.getByLabel(field), 'focus is in the form').toBeFocused();
+                // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+                await expect(page.getByLabel(field, { exact: true }), 'focus is in the form').toBeFocused();
                 await page.keyboard.press('Escape');
-                await expect(page.getByRole('heading', { level: 1, name: title, exact: true }), 'the sub-page stays open').toBeVisible();
-                await expect(page.getByRole('main').getByRole('button', { name: opener }).first()).toBeFocused();
+                await expect(page.getByRole('heading', { level: 1, name: title, exact: true }), 'the group page is back').toBeVisible();
+                await expect(page.getByRole('main').getByRole('button', { name: new RegExp(`^${rowName}\\b`) }).first()).toBeFocused();
             });
         }
 
-        test('panic mode confirmation takes focus on Cancel and Escape returns to Activate', async ({ page }) => {
-            await openSubpage(page, 'Safety');
-            await page.getByRole('main').getByRole('button', { name: 'Activate' }).focus();
+        // The freeze confirmation is its own page: a notice and one Confirm
+        // button, no Cancel; Back or Escape leaves it.
+        test('panic mode confirmation is one page and Escape returns to its row', async ({ page }) => {
+            await openSubpage(page, 'Security');
+            const row = page.getByRole('main').getByRole('button', { name: /^Panic mode\b/ }).first();
+            await row.focus();
             await page.keyboard.press('Enter');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Cancel' })).toBeFocused();
+            await expect(page.getByRole('heading', { level: 1, name: 'Panic Mode', exact: true })).toBeVisible();
+            await expect(page.getByRole('main').getByRole('button', { name: 'Confirm 24-Hour Freeze' })).toBeVisible();
+            await expect(page.getByRole('main').getByRole('button', { name: 'Cancel' })).toHaveCount(0);
             await page.keyboard.press('Escape');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Activate' })).toBeFocused();
+            await expect(page.getByRole('heading', { level: 1, name: 'Security', exact: true })).toBeVisible();
+            await expect(row).toBeFocused();
         });
     });
 }
@@ -84,7 +93,9 @@ test.describe('Keyboard settings at 1440x900', () => {
     test('Escape cancels a rebind in progress without closing the sub-page', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        await openSubpage(page, 'Keyboard');
+        await openSubpage(page, 'Advanced');
+        await page.getByRole('main').getByRole('button', { name: /^Keyboard shortcuts\b/ }).click();
+        await expect(page.getByRole('heading', { level: 1, name: 'Keyboard', exact: true })).toBeVisible();
         const rebind = page.getByRole('button', { name: 'Rebind' }).first();
         await rebind.focus();
         await page.keyboard.press('Enter');

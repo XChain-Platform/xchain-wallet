@@ -28,5 +28,8 @@ assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultS
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /const action = isDeposit \? 'DEPOSIT' : 'WITHDRAW';/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /<ConfirmActionModal\b[\s\S]+?credentials=\{<p className=\{styles\.hint\}>\{t\('common\.watcherBuildsUnsigned'\)\}<\/p>\}/,
+    'watcher review explains that approval builds an unsigned transaction');
+assert.match(formSrc, /result\?\.psbtHex[\s\S]+?<ResultScreen/,
+    'watcher result exposes the unsigned PSBT export screen');
 console.log('contract-funds-watcher-mode smoke OK');

@@ -4,7 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { forwardRef, useCallback, useId } from 'react';
+import { InfoTip } from './InfoTip.jsx';
+import { fieldHelpName } from './fieldRequirement.js';
 import styles from './Checkbox.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * A native checkbox with a token-styled box and a label-wide touch target.
@@ -12,6 +16,7 @@ import styles from './Checkbox.module.css';
  * @param {object} props
  * @param {import('react').ReactNode} props.label
  * @param {import('react').ReactNode} [props.description]
+ * @param {import('react').ReactNode} [props.help] help for this choice on this form, shown from an InfoTip beside the label text
  * @param {import('react').ReactNode} [props.error]
  * @param {boolean} [props.indeterminate]
  * @param {string} [props.className]
@@ -20,6 +25,7 @@ export const Checkbox = forwardRef(function Checkbox(
     {
         label,
         description,
+        help,
         error,
         indeterminate = false,
         className,
@@ -37,6 +43,7 @@ export const Checkbox = forwardRef(function Checkbox(
     const labelId = `${inputId}-label`;
     const descriptionId = description ? `${inputId}-description` : undefined;
     const errorId = error ? `${inputId}-error` : undefined;
+    const hasHelp = Boolean(label && help);
     const describedBy = [externalDescribedBy, descriptionId, errorId]
         .filter(Boolean).join(' ') || undefined;
     const invalid = Boolean(error) || externalInvalid === true || externalInvalid === 'true';
@@ -69,7 +76,21 @@ export const Checkbox = forwardRef(function Checkbox(
             />
             <span className={styles.box} aria-hidden="true" />
             <span className={styles.content}>
-                <span id={labelId} className={styles.label}>{label}</span>
+                {hasHelp ? (
+                    // The tip sits outside the labelled span, so the checkbox's name
+                    // stays the label text; a click on the tip button does not
+                    // toggle the box, since a label ignores clicks on interactive content.
+                    <span className={styles.labelLine}>
+                        <span id={labelId} className={styles.label}>{label}</span>
+                        <InfoTip
+                            className={styles.labelHelp}
+                            label={help}
+                            aria={t('ui.field.about', { label: fieldHelpName(label, inputProps['aria-label']) })}
+                        />
+                    </span>
+                ) : (
+                    <span id={labelId} className={styles.label}>{label}</span>
+                )}
                 {description ? (
                     <span id={descriptionId} className={styles.description}>{description}</span>
                 ) : null}

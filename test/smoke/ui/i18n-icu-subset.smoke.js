@@ -16,8 +16,9 @@
 // would slip past a regex.
 //
 // The interpreter is NOT a hand-rolled ICU subset any more. `format()`
-// renders through `IntlMessageFormat` (see the corrected header at
-// packages/core/src/i18n/locales/en/index.js:21-28), and the old subset
+// renders through `IntlMessageFormat` (see the header in
+// packages/core/src/i18n/locales/en/index.js that opens "Plural / select
+// handling uses ICU MessageFormat-compatible syntax"), and the old subset
 // survives only as `legacyFormat()`, reached on exactly two routes: a
 // coercing arg (plural / number / date) the caller omitted, and a
 // template formatjs refuses to parse. Item 9 below pins the first of

@@ -164,7 +164,7 @@ describe('happy path', () => {
         expect(String(call.coinAmount)).toBe('500000');
         expect(call.signer).toEqual({ id: 'signer-1' });
         expect(call.from.address).toBe('addr-payer');
-        expect(call.actionSummary).toContain('Auto-paid match #900');
+        expect(call.actionSummary).toContain('Auto paid match #900');
 
         const consent = vault.autopayStore.get('bitcoin-regtest::aa');
         expect(consent.payments).toHaveLength(1);
@@ -172,7 +172,7 @@ describe('happy path', () => {
 
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             kind: 'coinpay-autopaid',
-            title: 'Auto-pay complete',
+            title: 'Auto pay complete',
             body: 'Paid 0.005 BTC for order #500.',
         }));
         // Broadcast alone never releases the hold.
@@ -391,8 +391,8 @@ describe('signing fallbacks', () => {
         expect(ledger.reserve).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             kind: 'coinpay-autopay-manual',
-            title: 'Auto-pay is disarmed',
-            body: '0.005 BTC is due for order #500. Unlock to use auto-pay, or open Payments due.',
+            title: 'Auto pay is paused',
+            body: '0.005 BTC is due for order #500. Unlock to resume auto pay, or open Payments due.',
             data: expect.objectContaining({ reason: 'locked', urgency: 'high' }),
         }));
         expect(watcher.statusSnapshot()).toMatchObject({ payer: true, armed: 1, unsignable: ['w1'] });
@@ -464,7 +464,7 @@ describe('duplicate and failure defenses', () => {
         expect(ledger.reserve).toHaveBeenCalledTimes(1);
         expect(ledger.release).toHaveBeenCalledTimes(1); // nothing left the wallet
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-            title: 'Not enough BTC for auto-pay',
+            title: 'Not enough BTC for auto pay',
             body: 'Order #500 needs 0.005 BTC. Fund its address or open Payments due.',
             data: expect.objectContaining({ reason: 'balance-short' }),
         }));
@@ -531,6 +531,11 @@ describe('pendingTxReferencesMatch', () => {
             { action: 'COINPAY', actionSummary: 'Pay COINPAY: 1 (base units) for ORDER_MATCH #900' }, '900')).toBe(true);
         expect(pendingTxReferencesMatch(
             { action: 'COINPAY', actionSummary: 'Auto-paid match #900 for order #500' }, '900')).toBe(true);
+        // Today's "Auto pay" wording; the hyphenated one above is what older vault rows hold.
+        expect(pendingTxReferencesMatch(
+            { action: 'COINPAY', actionSummary: 'Auto paid match #900 for order #500' }, '900')).toBe(true);
+        expect(pendingTxReferencesMatch(
+            { action: 'COINPAY', actionSummary: 'Auto paid match #9001 for order #500' }, '900')).toBe(false);
         expect(pendingTxReferencesMatch(
             { action: 'COINPAY', actionSummary: 'Auto-paid match #9001 for order #500' }, '900')).toBe(false);
         expect(pendingTxReferencesMatch(

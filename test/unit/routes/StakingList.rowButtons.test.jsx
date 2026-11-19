@@ -5,7 +5,11 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingList, stakeRowLabel } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import {
+    StakingList,
+    stakeRowLabel,
+    stakingStatusLabel,
+} from '../../../packages/core/src/shared/routes/StakingList.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -14,14 +18,14 @@ const TWO = 'bc1qtwotwotwotwotwotwotwotwotwotwotwotwo';
 
 afterEach(cleanup);
 
-function renderList(onOpenStake = vi.fn()) {
+function renderList(onOpenStake = vi.fn(), firstStatus = 'active') {
     const read = (map) => vi.fn(async ({ address }) => map[address] || []);
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'a1', address: ONE }, { id: 'a2', address: TWO }],
         }),
         getStakesForAddress: read({
-            [ONE]: [{ stake_id: 's1', amount: '10', status: 'active', block_index: 9 }],
+            [ONE]: [{ stake_id: 's1', amount: '10', status: firstStatus, block_index: 9 }],
             [TWO]: [{ stake_id: 's2', amount: '20', status: 'active', block_index: 8 }],
         }),
         getDelegationsForAddress: read({}),
@@ -68,6 +72,18 @@ describe('StakingList stake rows', () => {
             .toBe('Open Validator stake, 10 XCHAIN, bc1qon…eone');
         expect(stakeRowLabel({ name: 'Contract stake', subtitle: '5 XCHAIN', subtitle2: null }))
             .toBe('Open Contract stake, 5 XCHAIN');
+    });
+
+    it('shows plain labels for known and unexpected status keys', async () => {
+        renderList(vi.fn(), 'paused-by-governance');
+
+        expect(await screen.findByText('Unknown')).toBeTruthy();
+        expect(screen.getByText('Active')).toBeTruthy();
+        expect(screen.queryByText('paused-by-governance')).toBeNull();
+        expect(stakingStatusLabel('cooldown')).toBe('Releasing');
+        expect(stakingStatusLabel('locked')).toBe('Locked');
+        expect(stakingStatusLabel('pending')).toBe('Pending');
+        expect(stakingStatusLabel('constructor')).toBe('Unknown');
     });
 
     it('activates a focused row with Enter and with Space', async () => {

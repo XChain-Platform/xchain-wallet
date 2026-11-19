@@ -84,13 +84,14 @@ describe('regression/back-closes-popovers', () => {
                 onTokenQueryChange={() => {}}
             />,
         );
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
         fireEvent.click(trigger);
-        expect(screen.getByRole('listbox', { name: 'Networks' })).toBeInTheDocument();
+        // The filter opens the full-screen network list (operator ruling 2026-11-13).
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
 
         act(() => nativeBack({ canGoBack: false }));
 
-        expect.soft(screen.queryByRole('listbox', { name: 'Networks' })).toBeNull();
+        expect.soft(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect.soft(navigateAway).not.toHaveBeenCalled();
         expect.soft(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
