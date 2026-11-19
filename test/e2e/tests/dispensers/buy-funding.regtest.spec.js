@@ -264,7 +264,7 @@ async function waitForDispenser(source, giveTick, timeoutMs = 420_000) {
  */
 async function withBuyForm(page, sellerAddress, index, check) {
     return openDispenserForBuy(page, { seller: sellerAddress, tick: GIVE_TICK, index }, async (main) => {
-        await expect(main.getByText('Buy from this dispenser')).toBeVisible({ timeout: 60_000 });
+        await expect(main.getByRole('heading', { name: 'Buy from this dispenser' })).toBeVisible({ timeout: 60_000 });
         return check(main.getByTestId('dispenser-buy-form'));
     });
 }
