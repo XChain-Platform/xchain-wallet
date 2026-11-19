@@ -111,22 +111,23 @@
   ${endIf}
 !macroend
 
-; --- Uninstall removes the URL handlers the app registered -------------
+; --- Uninstall removes the URL handlers this install registered --------
 ;
 ; The app claims xchain: (and, when the user opts in, bitcoin:, litecoin:
 ; and dogecoin:) at runtime with setAsDefaultProtocolClient
-; (main/protocol.js), under HKCU\Software\Classes. Nothing removed them, so
+; (main/protocol.js), under HKCU\Software\Classes; Electron writes the
+; handler as shell\open\command = `"<exe>" "%1"`. Nothing removed it, so
 ; after an uninstall xchain: still pointed at an exe that no longer
-; existed. Both test VMs also held bitcoin, litecoin and dogecoin keys with
-; no handler in them, only `URL Protocol` and `SharedHostApplication` ("!")
-; values. Where those came from is not established: a v0.343.0 launch and
-; a v0.343.1 candidate launch on a VM without them did not create them, so
-; they predate this build (an older build, or Windows itself).
+; existed.
 ;
-; A key goes only when it is ours: its open command starts with this
-; install's own folder, or it is an empty shell that registers no handler
-; at all (no command, no default value, no subkey, and no value but those
-; two). A handler another wallet registered is left exactly as it is.
+; A scheme key goes ONLY when its open command starts with this install's
+; own folder. A key with no command is never touched, whatever it holds.
+; On a Parallels VM, Shared Applications registers each of the Mac's URL
+; schemes in the guest as a key with no command and only `URL Protocol`
+; and `SharedHostApplication` ("!") in it: over two hundred of them on the
+; test VMs (bitcoin, bitcoincash, addressbook, apple-otpauth and so on),
+; and the wallet writes SharedHostApplication nowhere. Those keys, and a
+; handler another wallet registered, are left exactly as they are.
 ;
 ; Skipped when ${isUpdated}: the installer runs the previous version's
 ; uninstaller with --updated on every update and every reinstall
@@ -144,34 +145,6 @@
       DeleteRegKey HKCU "$R1"
       DetailPrint `Removed the ${SCHEME}: handler this install registered`
     ${endIf}
-  ${else}
-    ; No command. An empty shell has no subkey, no default value, and no
-    ; value but `URL Protocol` and `SharedHostApplication`, the two the
-    ; handler-less keys on the test VMs carried (see above). Any other
-    ; value or a subkey means someone else's data.
-    ClearErrors
-    EnumRegKey $R3 HKCU "$R1" 0
-    ${ifNot} ${Errors}
-    ${andIf} $R3 == ""
-      ReadRegStr $R2 HKCU "$R1" ""
-      ${if} $R2 == ""
-        StrCpy $R4 "empty"
-        StrCpy $R5 0
-        ${Do}
-          EnumRegValue $R3 HKCU "$R1" $R5
-          ${if} $R3 != ""
-          ${andIf} $R3 != "URL Protocol"
-          ${andIf} $R3 != "SharedHostApplication"
-            StrCpy $R4 "foreign"
-          ${endIf}
-          IntOp $R5 $R5 + 1
-        ${LoopUntil} $R5 > 31
-        ${if} $R4 == "empty"
-          DeleteRegKey HKCU "$R1"
-          DetailPrint `Removed the empty ${SCHEME}: key the app left`
-        ${endIf}
-      ${endIf}
-    ${endIf}
   ${endIf}
   ClearErrors
 !macroend
@@ -182,12 +155,10 @@
     Push $R2
     Push $R3
     Push $R4
-    Push $R5
     !insertmacro xcRemoveOwnUrlHandler "xchain"
     !insertmacro xcRemoveOwnUrlHandler "bitcoin"
     !insertmacro xcRemoveOwnUrlHandler "litecoin"
     !insertmacro xcRemoveOwnUrlHandler "dogecoin"
-    Pop $R5
     Pop $R4
     Pop $R3
     Pop $R2

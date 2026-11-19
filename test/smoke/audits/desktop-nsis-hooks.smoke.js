@@ -22,7 +22,9 @@
 //     multiUser.nsh picks $PROGRAMFILES64 only under APP_64.
 //     customUnInstallCheck moves a fresh one to Program Files.
 //   - Uninstall left HKCU\Software\Classes\xchain pointing at a deleted exe.
-//     customUnInstall removes the handlers this install registered.
+//     customUnInstall removes the handlers this install registered: a
+//     scheme key whose open command starts with the install folder, and
+//     never a key with no command.
 //
 // Plus the Publisher column (package.json author) the uninstall entry reads.
 //
@@ -114,21 +116,20 @@ for (const scheme of ['xchain', 'bitcoin', 'litecoin', 'dogecoin']) {
 const handler = macroBody('xcRemoveOwnUrlHandler');
 assert.ok(handler.includes('ReadRegStr $R2 HKCU "$R1\\shell\\open\\command" ""'),
     'the handler check reads the open command under HKCU\\Software\\Classes');
-assert.ok(handler.includes('${if} $R3 == "$\\"$INSTDIR\\"'),
-    'a commanded key goes only when its command starts with this install folder');
-// A key with no command goes only when it registers nothing: no subkey, no
-// default value, and no value outside the two the empty shells carry.
-assert.match(handler, /EnumRegKey \$R3 HKCU "\$R1" 0\s*\$\{ifNot\} \$\{Errors\}\s*\$\{andIf\} \$R3 == ""/,
-    'an empty shell has no subkey (and a missing key is not "removed")');
-assert.ok(handler.includes('ReadRegStr $R2 HKCU "$R1" ""') && handler.includes('${if} $R2 == ""'),
-    'an empty shell has no default value');
 assert.match(handler,
-    /EnumRegValue \$R3 HKCU "\$R1" \$R5\s*\$\{if\} \$R3 != ""\s*\$\{andIf\} \$R3 != "URL Protocol"\s*\$\{andIf\} \$R3 != "SharedHostApplication"\s*StrCpy \$R4 "foreign"/,
-    'any value other than URL Protocol or SharedHostApplication marks the key as someone else\'s');
-assert.ok(/\$\{if\} \$R4 == "empty"\s*DeleteRegKey HKCU "\$R1"/.test(handler),
-    'an empty shell is deleted only when no foreign value was seen');
-assert.equal((handler.match(/DeleteRegKey HKCU "\$R1"/g) ?? []).length, 2,
-    'the handler deletes only the scheme key it checked');
+    /\$\{if\} \$R2 != ""\s*[\s\S]*?\$\{if\} \$R3 == "\$\\"\$INSTDIR\\"\s*DeleteRegKey HKCU "\$R1"/,
+    'a scheme key goes only when it has an open command that starts with this install folder');
+// A key with no command is never touched. Parallels Shared Applications
+// fills a VM with command-less scheme keys (bitcoin among them) holding
+// URL Protocol and SharedHostApplication; an earlier draft deleted those.
+assert.equal((handler.match(/DeleteRegKey/g) ?? []).length, 1,
+    'the handler has exactly one delete, the one behind the install-folder match');
+assert.ok(!/\$\{else\}/.test(handler),
+    'the handler has no branch for a key without a command');
+for (const probe of ['EnumRegKey', 'EnumRegValue', 'SharedHostApplication', 'URL Protocol']) {
+    assert.ok(!handler.includes(probe),
+        `the handler does not judge a command-less key by its contents (${probe})`);
+}
 assert.ok(!/DeleteRegKey\s+HKLM/.test(code), 'installer.nsh never deletes under HKLM');
 
 // --- 5. The publisher ----------------------------------------------------
