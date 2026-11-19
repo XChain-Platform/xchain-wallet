@@ -12,7 +12,7 @@
 // stands, with no hand step, and declares its export-compliance answer.
 //
 // WHAT THIS IS DEFENDING. The v0.343.0 store build needed two hand steps
-// (/Users/jdog/xchain-release-artifacts/v0.343.0/mas/MAS-RESULT.txt):
+// (recorded in that release's Mac App Store build notes):
 //
 //   - tiny-secp256k1/build, an arm64-only secp256k1.node a Mac install
 //     compiles, was moved aside, because @electron/universal refuses an
