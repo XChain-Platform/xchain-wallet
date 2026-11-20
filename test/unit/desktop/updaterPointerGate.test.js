@@ -430,9 +430,8 @@ describe('fail closed', () => {
 
 // --- the release shape every desktop cut actually has -------------------
 //
-// windows is NOT-SHIPPED in shipped-lanes.txt, so a desktop release is
-// signed `--lane mac,linux` and its manifest carries `# lanes: mac linux`.
-// These cases drive that manifest through the real download path, so
+// Older desktop releases could be signed `--lane mac,linux` and carry
+// `# lanes: mac linux`. These cases drive that manifest through the real download path, so
 // they fail if the install's lane stops reaching the gate - which a full
 // manifest can never show, because it is covered whatever the lane says.
 const PARTIAL_MANIFEST = Buffer.from(

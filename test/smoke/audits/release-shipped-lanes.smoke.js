@@ -323,6 +323,25 @@ try {
             && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
     }
 
+    // 12. Windows has shipped too. Removing its four artifacts from an
+    // otherwise complete release must fail by lane name and both globs.
+    {
+        const dir = mkdtempSync(join(work, 'without-windows-'));
+        const completeWithoutWindows = [
+            ...DESKTOP.filter((name) => !/\.exe$|-win\.zip$/.test(name)),
+            ANDROID_AAB,
+            ANDROID_APK,
+            `xchain-wallet-v${V}-full.apk`,
+        ];
+        for (const name of completeWithoutWindows) {
+            writeFileSync(join(dir, name), `pretend ${name}\n`);
+        }
+        const r = gate(dir);
+        check('the committed file demands Windows artifacts from every full release',
+            !r.ok && /LANE-REGRESSION\s+lane 'windows'/.test(r.out)
+            && /\*\.exe/.test(r.out) && /\*win\*\.zip/.test(r.out), r.out);
+    }
+
     // 8. THE FEED COLUMN (operator answer to dq-11 2026-08-11).
     //
     //    publish.sh waives the channel-pointer assertion and the §7.5
@@ -400,6 +419,9 @@ try {
                 new RegExp(`^${lane}\\s+(SHIPPED|NOT-SHIPPED)\\s+updater\\s`, 'm').test(committed),
                 committed);
         }
+        check('the committed file declares Windows SHIPPED after its first published release',
+            /^windows\s+SHIPPED\s+updater\s+\*\.exe\s+\*win\*\.zip\s*$/m.test(committed),
+            committed);
         for (const lane of ['android', 'ios', 'mas', 'msstore', 'snap', 'extension']) {
             check(`the committed file declares '${lane}' as store-only`,
                 new RegExp(`^${lane}\\s+(SHIPPED|NOT-SHIPPED)\\s+store-only\\s`, 'm').test(committed),

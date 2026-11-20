@@ -50,6 +50,14 @@ supportedArchitectures:
 # an uncapped `>=4.0.6` permits a future 5.x major to be pulled in
 # silently, which is the opposite of what a pin is for.
 overrides:
+  # @electron/asar 3.4.1 promisifies glob's callback API. Keep that subtree on
+  # the final callback-compatible major while retaining the patched global
+  # lines. minimatch 3.1.5 and brace-expansion 1.1.21 carry the fixes for the
+  # advisories affecting their respective legacy lines.
+  '@electron/asar>glob': ^7.2.3
+  '@electron/asar>minimatch': ^3.1.5
+  'glob@7>minimatch': ^3.1.5
+  'minimatch@3>brace-expansion': ^1.1.21
   minimatch: ^11.0.9
   glob: ^14.0.6
   'xcode>uuid': ^11.1.1
