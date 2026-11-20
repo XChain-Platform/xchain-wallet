@@ -18,6 +18,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -75,7 +76,7 @@ describe.each([
     ['ListCreateForm', <ListCreateForm walletId="w" chainId={CHAIN} initialType="2" onBack={() => {}} />, 'Free'],
 ])('%s empty', (_name, element, expected) => {
     it(`reads ${expected}, never Priced at review`, async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         mount(element);
         await settle();
         const text = protocolFeeRow();

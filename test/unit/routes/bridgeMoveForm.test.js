@@ -20,6 +20,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 
@@ -75,17 +76,6 @@ const LTC_ADDRESS = {
 // outrun it (the debounced balance read and every async mount settle inside it).
 // Loaded CI venues need well over 4 s for the wallet list to fill Receive at.
 const WAIT = { timeout: slowTimeout(15000) };
-
-// Fakes only the timeout and interval clocks. A default vi.useFakeTimers() also
-// fakes performance, Date and setImmediate, and React's scheduler reads
-// performance.now() to order its queued work. Work it queues while that clock
-// reads epoch milliseconds is stamped far ahead of the real clock that returns
-// afterEach, so later mounts in the file never flush their passive effects:
-// the form shows Bitcoin but never fills Receive at or the balance, and every
-// wait runs out its full timeout. Only the debounce timers need to be driven.
-function useFakeTimeouts() {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
-}
 
 /**
  * @param {object} [opts]

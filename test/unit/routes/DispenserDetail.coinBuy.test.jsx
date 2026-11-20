@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -80,7 +81,7 @@ async function mount(dispenser, {
 } = {}) {
     // The wallet's mode is read from the wallet list, not from settings.
     publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
-    vi.useFakeTimers();
+    useFakeTimeouts();
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: addresses }),
@@ -246,7 +247,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     it('shows the dispenser destination notice on the shared Confirm screen', async () => {
         const messaging = await mount(COIN_PAID, { destinationRows: [COIN_PAID] });
         await screen.findByText(/10 DOGE available/);
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.click(screen.getByRole('button', { name: /^Buy \d+ Dispenses?$/ }));
         await settleDestinationLookup();
 

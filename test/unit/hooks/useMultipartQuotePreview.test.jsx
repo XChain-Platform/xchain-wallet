@@ -138,7 +138,6 @@ describe('inactive preview inputs', () => {
     it.each([
         ['null bytes', { bytes: null }],
         ['empty bytes', { bytes: new Uint8Array() }],
-        ['null rate', { rate: null }],
         ['empty methods', { methods: [] }],
     ])('does not call preview for %s', (_label, override) => {
         const preview = vi.fn();
@@ -149,6 +148,18 @@ describe('inactive preview inputs', () => {
 });
 
 describe('preview failures', () => {
+    it('fails without calling preview when the fee-rate source answers with no rate', async () => {
+        const preview = vi.fn();
+        const { result } = mount(props({ rate: null, preview }));
+        await waitFor(() => expect(result.current.error?.code).toBe('MULTIPART_QUOTE_RATE_UNAVAILABLE'));
+        expect(result.current).toEqual({
+            loading: false,
+            options: null,
+            error: expect.objectContaining({ code: 'MULTIPART_QUOTE_RATE_UNAVAILABLE' }),
+        });
+        expect(preview).not.toHaveBeenCalled();
+    });
+
     it('keeps a rejected error and its code without options', async () => {
         const failure = Object.assign(new Error('preview failed'), { code: 'PREVIEW_FAILED' });
         const { result } = mount(props({ preview: vi.fn().mockRejectedValue(failure) }));
@@ -192,6 +203,13 @@ describe('unmounted preview results', () => {
 });
 
 describe('preview loading state', () => {
+    it('keeps working without calling preview while the fee rate is still being fetched', () => {
+        const preview = vi.fn();
+        const { result } = mount(props({ rate: undefined, preview }));
+        expect(result.current).toEqual({ loading: true, options: null, error: null });
+        expect(preview).not.toHaveBeenCalled();
+    });
+
     it('stays loading from the call until it settles', async () => {
         const pending = deferred();
         const { result } = mount(props({ preview: vi.fn().mockReturnValue(pending.promise) }));

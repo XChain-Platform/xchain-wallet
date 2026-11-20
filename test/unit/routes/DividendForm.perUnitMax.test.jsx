@@ -26,6 +26,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
@@ -157,7 +158,7 @@ const expectText = async (re) => {
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    useFakeTimeouts();
 });
 
 afterEach(() => {

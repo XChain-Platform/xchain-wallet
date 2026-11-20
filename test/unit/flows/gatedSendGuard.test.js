@@ -542,18 +542,18 @@ describe('PC-29 unlock-threshold lane', () => {
         expect(plan.warnings).toEqual([]);
     });
 
-    it('treats an unreadable destination balance as all-required', async () => {
+    it('refuses the send when the destination balance cannot be read (18909)', async () => {
+        const down = new Error('explorer down');
         const sdk = thresholdSdk({
             getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '100')]),
-            getBalances: vi.fn(async () => { throw new Error('explorer down'); }),
+            getBalances: vi.fn(async () => { throw down; }),
         });
         const vault = makeVault();
         seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
-        // Attaching anyway always composes a VALID send; guessing "below"
-        // could compose a plain SEND the indexer rejects.
-        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
-        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
-        expect(plan.warnings).toEqual([]);
+        // Attaching anyway would hand a below-threshold recipient the key for
+        // good; guessing "below" could compose a plain SEND the indexer rejects.
+        await expect(prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }))).rejects.toBe(down);
+        expect(sdk.messaging.eciesEncryptBytes).not.toHaveBeenCalled();
     });
 
     it('no balance row = zero balance; threshold boundary is inclusive', async () => {

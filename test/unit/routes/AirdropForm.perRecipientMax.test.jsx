@@ -23,6 +23,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { selectOption } from '../../helpers/selectOption.js';
@@ -166,7 +167,7 @@ const expectText = async (re) => {
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    useFakeTimeouts();
 });
 
 afterEach(() => {

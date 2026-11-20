@@ -51,25 +51,19 @@ import {
 } from '../../../flows/diagnosticDump.js';
 import { t } from '../../../i18n/index.js';
 import { formatRelativeTime } from '../../utils/dateTime.js';
+import {
+    UPDATE_CHANNELS,
+    UPDATE_FEED_MAX_BYTES,
+    cleanVersion,
+    isNewerVersion,
+    parseReleaseFeed,
+} from '../../releaseFeed.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
 
+export { parseReleaseFeed } from '../../releaseFeed.js';
+
 const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
-const UPDATE_FEED_MAX_BYTES = 4096;
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const UPDATE_CHANNELS = Object.freeze([
-    'web',
-    'chrome',
-    'firefox',
-    'edge',
-    'ios',
-    'macos-appstore',
-    'android-play',
-    'android-direct',
-    'windows-store',
-    'desktop-direct',
-    'snap',
-]);
 const STORE_NAMES = Object.freeze({
     chrome: 'Chrome Web Store',
     firefox: 'Firefox Add-ons',
@@ -80,20 +74,6 @@ const STORE_NAMES = Object.freeze({
     'windows-store': 'Microsoft Store',
     snap: 'Snap Store',
 });
-const UPDATE_HOSTS = Object.freeze({
-    web: ['wallet.xchain.io'],
-    chrome: ['chromewebstore.google.com'],
-    firefox: ['addons.mozilla.org'],
-    edge: ['microsoftedge.microsoft.com'],
-    ios: ['apps.apple.com'],
-    'macos-appstore': ['apps.apple.com'],
-    'android-play': ['play.google.com'],
-    'android-direct': ['downloads.xchain.io'],
-    'windows-store': ['apps.microsoft.com', 'www.microsoft.com'],
-    'desktop-direct': ['downloads.xchain.io'],
-    snap: ['snapcraft.io'],
-});
-
 const LIST_SURFACE = { border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)' };
 
 /**
@@ -499,39 +479,6 @@ async function fetchReleaseFeed(env) {
     return parseReleaseFeed(JSON.parse(text));
 }
 
-export function parseReleaseFeed(body) {
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        throw new Error('invalid update feed');
-    }
-    const latest = cleanVersion(body.latest);
-    if (!SEMVER.test(latest) || !body.channels || typeof body.channels !== 'object' || Array.isArray(body.channels)) {
-        throw new Error('invalid update feed');
-    }
-    const channels = {};
-    for (const channel of UPDATE_CHANNELS) {
-        if (!Object.hasOwn(body.channels, channel)) continue;
-        const entry = body.channels[channel];
-        const version = cleanVersion(entry?.version);
-        if (!SEMVER.test(version) || isNewerVersion(version, latest)) {
-            throw new Error('invalid update channel');
-        }
-        const url = validUpdateUrl(channel, entry?.url);
-        if (!url) throw new Error('invalid update target');
-        channels[channel] = { version, url };
-    }
-    return { latest, channels };
-}
-
-function validUpdateUrl(channel, value) {
-    try {
-        const url = new URL(value);
-        if (url.protocol !== 'https:' || !UPDATE_HOSTS[channel]?.includes(url.hostname)) return null;
-        return url.href;
-    } catch (_error) {
-        return null;
-    }
-}
-
 function updateActionFor(channel, url, env) {
     if (channel === 'desktop-direct') {
         return () => {
@@ -546,21 +493,6 @@ function updateActionFor(channel, url, env) {
 
 function openExternal(url, env) {
     return env.open?.(url, '_blank', 'noopener,noreferrer');
-}
-
-function cleanVersion(version) {
-    return String(version ?? '').replace(/^v/, '');
-}
-
-function isNewerVersion(candidate, current) {
-    const next = SEMVER.exec(cleanVersion(candidate));
-    const installed = SEMVER.exec(cleanVersion(current));
-    if (!next || !installed) return false;
-    for (let index = 1; index <= 3; index += 1) {
-        const difference = Number(next[index]) - Number(installed[index]);
-        if (difference !== 0) return difference > 0;
-    }
-    return false;
 }
 
 /** One titled group of facts: a small section title over its card or list (G08). */

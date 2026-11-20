@@ -28,6 +28,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CoinpayObligationsProvider } from '../../../packages/core/src/shared/hooks/useCoinpayObligations.js';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
+import { useFakeTimeoutsAndDate } from '../../helpers/fakeTimeouts.js';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const CHAIN = 'litecoin-regtest';
@@ -99,7 +100,7 @@ describe('Home renders its coinpay resume cards from the shared scan', () => {
         // Every timer is faked: the balance beat is what has to fire, and the
         // shared hook's own cadence (60 s) must NOT, so the two intervals have
         // to be driven apart rather than waited on.
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = makeMessaging();
         // No provider and no header: Home runs no coinpay scan of its own (the
         // header's hook owns it), so a coinpay read riding the balance beat

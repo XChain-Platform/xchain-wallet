@@ -18,6 +18,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 // The form's TICKER_LOOKUP_TIMEOUT_MS. The route module exports only its
 // component, so the bound is restated here.
@@ -91,7 +92,7 @@ async function fillAndSubmit() {
 
 describe('IssueTokenForm submit held by the ticker check', () => {
     it('replays a held submit once a missing tick resolves', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         mountForm(() => Promise.resolve({}));
         await fillAndSubmit();
         expect(screen.queryByText(WAIT_ERROR)).toBeNull();
@@ -104,7 +105,7 @@ describe('IssueTokenForm submit held by the ticker check', () => {
     });
 
     it('holds a submit for a lookup that never settles, then proceeds as unknown', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         mountForm(() => new Promise(() => {}));
         await fillAndSubmit();
 
@@ -119,7 +120,7 @@ describe('IssueTokenForm submit held by the ticker check', () => {
     });
 
     it('shows the taken error for a held submit when the tick is found', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         mountForm(() => Promise.resolve({ creator: 'bc1qcreator', totalSupply: '1000' }));
         await fillAndSubmit();
 

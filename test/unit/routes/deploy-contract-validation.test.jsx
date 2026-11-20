@@ -11,6 +11,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
@@ -77,7 +78,7 @@ async function pauseTyping(ms = 500) {
 }
 
 async function renderAndType(messaging, source = SOURCE) {
-    vi.useFakeTimers();
+    useFakeTimeouts();
     let utils;
     await domAct(async () => {
         utils = render(

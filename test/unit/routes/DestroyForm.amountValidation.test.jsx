@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DestroyForm } from '../../../packages/core/src/shared/routes/DestroyForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -132,7 +133,7 @@ describe('DestroyForm amount validation', () => {
     });
 
     it('names the available balance and refuses an over-burn', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const composeForConfirm = mountDestroy();
         await advanceBalanceLookup(0);
         await advanceBalanceLookup(399);

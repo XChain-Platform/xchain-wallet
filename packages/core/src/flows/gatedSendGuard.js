@@ -189,7 +189,7 @@ function decimalToScaled(s) {
  * `amount` at human scale (3000 means 3000 whole tokens whatever the decimals);
  * only a row that carries `quantity` holds raw atomic units at its `divisibility`.
  * An absent row is a zero balance; a row that cannot be read throws, so the caller
- * keeps every group required instead of under-reading the recipient.
+ * refuses the send instead of guessing the recipient's balance.
  *
  * @param {any} row
  * @returns {bigint}
@@ -234,10 +234,11 @@ export function gatedGroupThreshold(group) {
  * Split a tick's gated groups into the packs whose key handoff the send
  * MUST carry and the packs the destination's post-send balance does not
  * qualify for. Groups without a recorded threshold return as required
- * with zero network calls. An unreadable destination balance treats
- * every pack as required - that direction always composes a VALID send
- * (an extra handoff never invalidates one), whereas guessing "below
- * threshold" could compose a plain SEND the indexer rejects.
+ * with zero network calls. If the send amount or the destination balance
+ * cannot be read exactly, this throws (the explorer's own error for a failed
+ * read) rather than guess: "all required" would hand every key to a recipient
+ * who may sit below the threshold, and "below" could compose a plain SEND the
+ * indexer rejects.
  *
  * @param {{
  *   sdk: object,
@@ -254,19 +255,23 @@ export async function splitGroupsByThreshold({ sdk, to, tick, amount, groups }) 
     if (!thresholds.some((t) => t !== null)) return allRequired;
 
     const amountScaled = decimalToScaled(String(amount));
-    if (amountScaled === null) return allRequired;
+    if (amountScaled === null) throw new Error('splitGroupsByThreshold: send amount is not a plain decimal');
 
-    let postSendScaled = null;
+    // A failed read propagates as the explorer's own error, so the submit
+    // path shows the existing "nothing was signed or sent" explorer copy.
+    const resp = await sdk.getBalances(to);
+    const rows = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.data) ? resp.data : []);
+    const tickUpper = String(tick).toUpperCase();
+    const row = rows.find((r) => String(r?.tick || '').toUpperCase() === tickUpper);
+    // No row = zero balance (a first-time recipient), which is a real
+    // answer, not a failure.
+    let postSendScaled;
     try {
-        const resp = await sdk.getBalances(to);
-        const rows = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.data) ? resp.data : []);
-        const tickUpper = String(tick).toUpperCase();
-        const row = rows.find((r) => String(r?.tick || '').toUpperCase() === tickUpper);
-        // No row = zero balance (a first-time recipient), which is a real
-        // answer, not a failure.
         postSendScaled = heldScaled(row) + amountScaled;
     } catch (_e) {
-        return allRequired;
+        // BigInt's SyntaxError included: one plain Error, which the submit
+        // path maps to its generic line.
+        throw new Error('splitGroupsByThreshold: recipient balance row is unreadable');
     }
 
     const requiredGroups = [];
@@ -407,7 +412,8 @@ export async function prepareGatedSend({
     // does not qualify for are dropped from the handoff set (their key
     // deliberately stays with the sender). If NO pack qualifies, the
     // whole send goes out as a plain SEND through the protocol's
-    // below-threshold lane.
+    // below-threshold lane. A balance or amount it cannot read refuses
+    // the send here, before any key is resolved.
     const { requiredGroups: groups, belowThresholdKeyHashes } = await splitGroupsByThreshold({
         sdkRegistry, chainId, sdk, to, tick: resolvedTick, amount, groups: allGroups,
         heights: _activationHeights,
@@ -548,12 +554,20 @@ export async function gatedSendReadiness({
     let groups = allGroups;
     let belowThresholdCount = 0;
     if (to && amount != null && String(amount).trim() !== '') {
-        const split = await splitGroupsByThreshold({
-            sdkRegistry, chainId, sdk, to, tick: resolvedTick, amount, groups: allGroups,
-            heights: _activationHeights,
-        });
-        groups = split.requiredGroups;
-        belowThresholdCount = split.belowThresholdKeyHashes.length;
+        // A split that cannot read the balance or a half-typed amount keeps
+        // every pack for display only; compose refuses that send on its own.
+        // Throwing here would surface the Send form's key-recovery failure line.
+        try {
+            const split = await splitGroupsByThreshold({
+                sdkRegistry, chainId, sdk, to, tick: resolvedTick, amount, groups: allGroups,
+                heights: _activationHeights,
+            });
+            groups = split.requiredGroups;
+            belowThresholdCount = split.belowThresholdKeyHashes.length;
+        } catch (_e) {
+            groups = allGroups;
+            belowThresholdCount = 0;
+        }
         if (groups.length === 0) return { ...ungated, belowThresholdCount };
     }
 

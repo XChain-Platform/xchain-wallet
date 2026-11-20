@@ -5,6 +5,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -94,7 +95,7 @@ describe('ComposeMessage recipient state', () => {
     });
 
     it('handles a rejected lookup from the prior recipient after switching', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const lookupA = deferred();
         const lookupB = deferred();
         const messaging = messagingFor({

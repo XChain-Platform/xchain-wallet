@@ -81,8 +81,12 @@ assert.ok(guard.split('splitGroupsByThreshold({').length >= 3,
 assert.match(guard, /if \(groups\.length === 0\) return null;/,
     'all-below-threshold composes a plain SEND');
 assert.match(guard, /GATED_SEND_BELOW_THRESHOLD/, 'dropped packs surface as a warning, not silence');
-assert.match(guard, /return allRequired;\s*\n\s*\}\s*\n\n\s*const requiredGroups/,
-    'unreadable destination balance degrades to all-required (valid-send direction)');
+// 18909: all-required on a failed read attached every key to a recipient
+// who may sit below the threshold; the split now refuses the send instead.
+assert.doesNotMatch(guard, /return allRequired;\s*\n\s*\}\s*\n\n\s*const requiredGroups/,
+    'unreadable destination balance must not degrade to all-required');
+assert.match(guard, /if \(amountScaled === null\) throw new Error\(/,
+    'an unreadable send amount refuses the send');
 
 // ---- 2d. Readiness plumbing: Send.jsx -> messaging -> host -------------
 const send = read('packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');

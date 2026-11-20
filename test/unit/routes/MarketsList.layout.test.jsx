@@ -14,6 +14,7 @@ import { userEvent } from '../../helpers/userEvent.js';
 import marketsStyles from '../../../packages/core/src/shared/routes/MarketsList.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { readFileSync } from 'node:fs';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 afterEach(() => {
     cleanup();
@@ -263,7 +264,7 @@ describe('MarketsList narrow layout', () => {
     });
 
     it('times out a stalled market request onto the plain empty state (G91)', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const getMarkets = vi.fn()
             .mockImplementationOnce(() => new Promise(() => {}))
             .mockResolvedValueOnce([{ tick1: 'BTC', tick2: 'PEPE', depth: 9 }]);
