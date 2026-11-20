@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -87,7 +88,7 @@ async function flushTimers() {
     }
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm after the recipient list is broadcast', () => {

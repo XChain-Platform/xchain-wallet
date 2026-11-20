@@ -34,6 +34,12 @@ function previewOptions(result) {
     }]));
 }
 
+function unavailableRateError() {
+    const error = new Error('Multipart quote fee rate is unavailable.');
+    error.code = 'MULTIPART_QUOTE_RATE_UNAVAILABLE';
+    return error;
+}
+
 export function useMultipartQuotePreview({
     bytes,
     size = null,
@@ -57,9 +63,16 @@ export function useMultipartQuotePreview({
         // A large file is held by reference: its size alone prices it.
         const hasBytes = context.bytes != null && context.bytes.length > 0;
         const hasSize = Number.isSafeInteger(context.size) && context.size > 0;
-        if ((!hasBytes && !hasSize)
-            || context.rate === null || context.methods.length === 0) {
+        if ((!hasBytes && !hasSize) || context.methods.length === 0) {
             setState({ loading: false, options: null, error: null });
+            return () => { active = false; };
+        }
+        if (context.rate === undefined) {
+            setState({ loading: true, options: null, error: null });
+            return () => { active = false; };
+        }
+        if (context.rate === null) {
+            setState({ loading: false, options: null, error: unavailableRateError() });
             return () => { active = false; };
         }
         setState({ loading: true, options: null, error: null });

@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
@@ -72,7 +73,7 @@ async function pick(fieldLabel, tick) {
     fireEvent.click(row);
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('DividendForm holder read for a replaced holder-of token', () => {

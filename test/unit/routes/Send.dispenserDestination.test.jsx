@@ -20,6 +20,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
@@ -105,7 +106,7 @@ async function flushTimers() {
 }
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    useFakeTimeouts();
 });
 
 afterEach(() => {

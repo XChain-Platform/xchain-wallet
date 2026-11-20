@@ -30,6 +30,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -598,7 +599,7 @@ describe('ListCreateForm checks token items before publishing', () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(tick === 'SWAPTEST' ? KNOWN : UNKNOWN));
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith({ getTokenInfo }));
         const input = await screen.findByLabelText('Tokens');
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(input, {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
         });

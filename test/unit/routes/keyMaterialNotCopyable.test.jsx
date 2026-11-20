@@ -10,6 +10,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const clipboard = vi.hoisted(() => ({
     copyText: vi.fn(async () => ({ ok: true, native: true, marked: true })),
@@ -162,7 +163,7 @@ describe('private-key reveal security', () => {
 
     // The key page has no Hide: the timeout wipes the key and returns to the form.
     it('shows the key at once and wipes it after 30 seconds', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         draw();
         await confirmPassword();
 

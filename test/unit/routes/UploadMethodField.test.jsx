@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { customFeeEstimate, estimateNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 vi.mock('../../../packages/core/src/flows/uploadMethod.js', async (importOriginal) => {
     const actual = await importOriginal();
@@ -147,7 +148,7 @@ describe('useUploadMethod', () => {
     });
 
     it('estimates once per input change and never per keystroke', () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const { rerender } = renderHook((props) => useUploadMethod(props), { initialProps: baseArgs() });
         expect(estimateCalls()).toBe(1);
 
@@ -188,7 +189,7 @@ describe('useUploadMethod', () => {
     });
 
     it('re-estimates a typed Custom rate once typing pauses, not per digit', () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const custom = (rate) => customFeeEstimate({ chainId: 'bitcoin-mainnet', chainRegistry: registry, rate });
         const { result, rerender } = renderHook((props) => useUploadMethod(props), { initialProps: baseArgs() });
         expect(estimateCalls()).toBe(1);
