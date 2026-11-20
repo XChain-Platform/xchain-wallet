@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
@@ -95,7 +96,7 @@ async function openBuy() {
     await settle();
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('dispenser buy re-reads the dispenser before composing', () => {

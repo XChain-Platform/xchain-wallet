@@ -17,6 +17,7 @@ import { act, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const TICK = 'JDOG';
@@ -83,7 +84,7 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
     });
 
     it('shows one read sentence with no explorer URL for an explorer 502', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const holders = mountDividend(async () => {
             throw explorerError(`Explorer returned HTTP 502 for /RBTC/api/holders/${TICK}`);
         });
@@ -100,7 +101,7 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
     });
 
     it('keeps a plain person-written reason after a single opener', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const holders = mountDividend(async () => { throw new Error('the token has no holders yet'); });
 
         await advanceHolderLookup(400);

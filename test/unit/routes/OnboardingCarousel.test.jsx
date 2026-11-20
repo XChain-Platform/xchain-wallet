@@ -28,6 +28,7 @@ import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import * as branding from '../../../packages/core/src/branding/branding.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const carouselCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/OnboardingCarousel.module.css'),
@@ -271,7 +272,7 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
     });
 
     it('auto-advances when enabled, then stops the moment the user interacts', () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         stubMatchMedia(false);
         try {
             render(React.createElement(OnboardingCarousel, {
@@ -298,7 +299,7 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
 
 describe('OnboardingCarousel: reduced motion', () => {
     it('stacks every frame without starting auto-advance', () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         stubMatchMedia(true);
         const intervalSpy = vi.spyOn(globalThis, 'setInterval');
         const onDone = vi.fn();

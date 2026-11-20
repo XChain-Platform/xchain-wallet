@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
@@ -60,7 +61,7 @@ async function pauseTyping() {
     await drain();
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('publish tool failures', () => {

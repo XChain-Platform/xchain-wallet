@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { selectOption, selectOptionLabels } from '../../helpers/selectOption.js';
 
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
@@ -112,7 +113,7 @@ function expectInsideTemplate(node) {
     expect(template, `"${node.textContent.slice(0, 60)}" renders outside ListPage and FormPage`).not.toBeNull();
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); resetWalletModes(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm page templates', () => {
