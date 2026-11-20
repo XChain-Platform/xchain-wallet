@@ -26,6 +26,17 @@ import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvi
 import { MultisigCreate } from '../../packages/core/src/shared/routes/MultisigCreate.jsx';
 import { selectOption } from '../helpers/selectOption.js';
 
+vi.mock('../../packages/core/src/shared/components/formStandard/index.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        // This test observes the form's row count and ceiling controls, not the
+        // contents of each expanded editor. Avoid reconciling 16 copies of the
+        // editor after every addition.
+        FormSection: ({ id }) => <section data-form-section={id} />,
+    };
+});
+
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 
 function cosigners(count) {
@@ -107,13 +118,14 @@ describe('regression/multisig-cosigner-ceiling', () => {
             );
         });
         const add = await screen.findByRole('button', { name: /Add Cosigner/ });
-        for (let i = 0; i < 20; i += 1) {
-            await act(async () => { fireEvent.click(add); });
-        }
         // The form opens on SegWit with 2 rows.
-        // Each cosigner is a Form Standard section now, not a fieldset.
+        await act(async () => {
+            for (let i = 2; i < 16; i += 1) add.click();
+        });
         expect(document.querySelectorAll('section[data-form-section^="cosigner-"]')).toHaveLength(16);
         expect(add.disabled).toBe(true);
+        fireEvent.click(add);
+        expect(document.querySelectorAll('section[data-form-section^="cosigner-"]')).toHaveLength(16);
 
         // Taproot allows more rows; switching back to SegWit names the limit.
         selectOption(screen.getByLabelText('Type'), 'taproot-musig2');

@@ -312,6 +312,31 @@ describe('broadcast.queue.broadcast removes by identity after the network await'
         }
     });
 
+    it('ignores a retry deadline inflated by a backward clock correction', async () => {
+        const broadcastTx = vi.fn(async () => ({ txid: 'tx-A' }));
+        const h = makeHost({
+            entries: [entry('A', { retryAttempt: 1, nextRetryAt: Date.now() + 3_600_000 })],
+            broadcastTx,
+        });
+
+        const result = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(result.ok, JSON.stringify(result.error ?? {})).toBe(true);
+        expect(broadcastTx).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a legitimate in-cap retry pause', async () => {
+        const broadcastTx = vi.fn();
+        const h = makeHost({
+            entries: [entry('A', { retryAttempt: 7, nextRetryAt: Date.now() + 30_000 })],
+            broadcastTx,
+        });
+
+        const result = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatchObject({ name: 'BroadcastFailedTransientError' });
+        expect(broadcastTx).not.toHaveBeenCalled();
+    });
+
     it('a second broadcast of the same entry fails before it reaches the network', async () => {
         const gate = deferred();
         const broadcastTx = vi.fn(() => gate.promise);

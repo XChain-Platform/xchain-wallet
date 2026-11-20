@@ -116,6 +116,13 @@ const messages = {
     'send.destination.placeholder': 'Enter an address or name…',
     'send.destination.help':
         'The address or contact that receives this payment. Check the address carefully; a sent payment is final.',
+    'send.destination.bridgeWarning':
+        "This address is only for moving tokens between networks. A regular Send here can't be recovered and doesn't create tokens on the other network. Go back and use Move across chains instead.",
+    'send.destination.burnWarning':
+        "This is the network's burn address. Anything sent here is destroyed and can't be recovered.",
+    'send.destination.recipientWarning': 'Recipient {number}: {warning}',
+    'send.dispenser.belowFiatFill':
+        "At the current rate, this payment is worth about {payment} {fiat}, below the {price} {fiat} needed for one fill. The price can move before the payment lands; if it's still too low, you receive nothing and the payment isn't returned.",
     'send.amount.help':
         'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
     'send.paste.checkLabel': 'Check pasted recipient',

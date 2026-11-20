@@ -16,12 +16,17 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import {
     createUndoSendController,
+    createUndoHoldId,
     createUndoSendRequest,
     isUndoSendCancellation,
 } from '../../../packages/core/src/flows/undoSend.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 describe('createUndoSendRequest', () => {
+    it('mints attempt-specific hold ids in the shared format', () => {
+        expect(createUndoHoldId(() => 'attempt-2')).toBe('undo-send:attempt-2');
+    });
+
     it('returns no host hold when undo send is not opted in', () => {
         const createId = vi.fn(() => 'id-1');
         expect(createUndoSendRequest(createDefaultSettings(), createId)).toBeNull();
@@ -284,12 +289,14 @@ describe('Send route undo-send countdown toast', () => {
         });
         const { messaging } = await mountAndApprove({ sendToken });
         await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+        const firstHoldId = messaging.sendToken.mock.calls[0][0].holdId;
         await waitFor(() => expect(screen.queryByText(/Sending in \d+ s/)).toBeNull());
         expect(messaging.sendHoldCancel).not.toHaveBeenCalled();
 
         await approveAgain();
 
         await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(2));
+        expect(messaging.sendToken.mock.calls[1][0].holdId).not.toBe(firstHoldId);
         expect(await screen.findByText('Sending in 10 s')).toBeInTheDocument();
         expect(screen.queryByText(/Couldn't send/)).toBeNull();
     });

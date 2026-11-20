@@ -13,12 +13,22 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveActiveAddresses, setActiveAddress } from '../../../packages/core/src/flows/activeAddress.js';
+import { Vault } from '../../../packages/core/src/storage/Vault.js';
+import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+import { createAddress } from '../../../packages/core/src/schemas/address.js';
 
 function memCollection(initial = []) {
     const m = new Map(initial.map((r) => [r.id, JSON.parse(JSON.stringify(r))]));
     return {
         get: async (id) => (m.has(id) ? JSON.parse(JSON.stringify(m.get(id))) : null),
         put: async (rec) => { m.set(rec.id, JSON.parse(JSON.stringify(rec))); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? JSON.parse(JSON.stringify(m.get(id))) : null);
+            if (next == null) return false;
+            m.set(id, JSON.parse(JSON.stringify(next)));
+            return true;
+        },
         list: async () => Array.from(m.values()).map((r) => JSON.parse(JSON.stringify(r))),
         delete: async (id) => m.delete(id),
         findBy: async (field, value) =>
@@ -53,7 +63,7 @@ function mkAddr(id, idx, over = {}) {
 
 function makeVault({ account, addresses, wallets }) {
     return {
-        accounts: memCollection([account]),
+        accounts: memCollection(account ? [account] : []),
         addresses: memCollection(addresses),
         ...(wallets ? { wallets: memCollection(wallets) } : {}),
     };
@@ -238,5 +248,115 @@ describe('resolveActiveAddresses with imported keys', () => {
         });
         const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
         expect(out['bitcoin-regtest'].id).toBe('a0');
+    });
+});
+
+describe('zero-account key-only wallet', () => {
+    const importedKeys = [
+        { addressId: 'wif-first' },
+        { addressId: 'wif-second' },
+    ];
+
+    it('defaults by importedKeys order and honors a live wallet override', async () => {
+        const wallet = { id: 'w1', importedKeys, activeAddressByChainId: {} };
+        const vault = makeVault({
+            addresses: [mkImported('wif-second'), mkImported('wif-first')],
+            wallets: [wallet],
+        });
+        const first = await resolveActiveAddresses({ vault, walletId: 'w1', chainRegistry });
+        expect(first['bitcoin-regtest'].id).toBe('wif-first');
+
+        await vault.wallets.put({
+            ...wallet,
+            activeAddressByChainId: { 'bitcoin-regtest': 'wif-second' },
+        });
+        const selected = await resolveActiveAddresses({ vault, walletId: 'w1', chainRegistry });
+        expect(selected['bitcoin-regtest'].id).toBe('wif-second');
+    });
+
+    it('falls back from a stale override and excludes another wallet key', async () => {
+        const vault = makeVault({
+            addresses: [mkImported('wif-first'), mkImported('foreign')],
+            wallets: [
+                { id: 'w1', importedKeys, activeAddressByChainId: { 'bitcoin-regtest': 'gone' } },
+                { id: 'w2', importedKeys: [{ addressId: 'foreign' }] },
+            ],
+        });
+        const out = await resolveActiveAddresses({ vault, walletId: 'w1', chainRegistry });
+        expect(out['bitcoin-regtest']).toEqual({ id: 'wif-first', address: 'addr_wif-first' });
+    });
+
+    it('stores an override on the wallet and resolves it', async () => {
+        const vault = makeVault({
+            addresses: [mkImported('wif-first'), mkImported('wif-second')],
+            wallets: [{ id: 'w1', importedKeys }],
+        });
+        await setActiveAddress({
+            vault, walletId: 'w1', chainId: 'bitcoin-regtest', addressId: 'wif-second',
+        });
+        expect((await vault.wallets.get('w1')).activeAddressByChainId['bitcoin-regtest'])
+            .toBe('wif-second');
+        const out = await resolveActiveAddresses({ vault, walletId: 'w1', chainRegistry });
+        expect(out['bitcoin-regtest'].id).toBe('wif-second');
+    });
+
+    it('rejects a foreign key, wrong chain, missing wallet, and wallets with accounts', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkImported('foreign'), mkImported('wrong', { network: 'mainnet' })],
+            wallets: [
+                { id: 'w1', importedKeys: [] },
+                { id: 'w2', importedKeys: [{ addressId: 'foreign' }, { addressId: 'wrong' }] },
+                { id: 'w3', importedKeys: [] },
+            ],
+        });
+        const activate = (walletId, addressId) => setActiveAddress({
+            vault, walletId, chainId: 'bitcoin-regtest', addressId,
+        });
+        await expect(activate('w1', 'foreign')).rejects.toThrow(/accountId is required/);
+        await expect(activate('w3', 'foreign')).rejects.toThrow(/does not belong/);
+        await expect(activate('w2', 'foreign')).resolves.toEqual({ ok: true });
+        await expect(activate('w2', 'wrong')).rejects.toThrow(/chain/);
+        await expect(activate('missing', 'foreign')).rejects.toThrow(/wallet/);
+    });
+
+    it('keeps a second key imported while the wallet override is being written', async () => {
+        const vault = new Vault({ backend: new InMemoryBackend(), masterKey: new Uint8Array(32).fill(7) });
+        await vault.open();
+        const keyAddress = (address) => createAddress({
+            accountId: null, chain: 'bitcoin', network: 'regtest', source: 'imported-wif',
+            addressType: 'p2wpkh', derivationPath: null, address, publicKey: `02${'ab'.repeat(32)}`, label: 'k',
+        });
+        const first = keyAddress('bcrt1qfirstkey');
+        const second = keyAddress('bcrt1qsecondkey');
+        const wallet = {
+            ...createWallet({
+                name: 'Key', origin: 'imported-wif', format: 'wif-only', passphraseEnabled: false,
+                encryptedSeed: '',
+                kdfParams: { algorithm: 'argon2id', salt: 'c2FsdHZhbHVl', iterations: 3, memory: 65536, parallelism: 1 },
+            }),
+            importedKeys: [{ addressId: first.id, encryptedWif: 'd2lmMQ==', importedAt: '2026-01-01T00:00:00.000Z' }],
+        };
+        await vault.putMany([{ store: vault.wallets, record: wallet }, { store: vault.addresses, record: first }]);
+
+        const activating = setActiveAddress({
+            vault, walletId: wallet.id, chainId: 'bitcoin-regtest', addressId: first.id, chainRegistry,
+        });
+        // The same guarded write importWif uses to append a key.
+        const importing = vault.putManyGuarded((document) => {
+            const current = document.wallets.find((record) => record.id === wallet.id);
+            const importedKeys = [...current.importedKeys, {
+                addressId: second.id, encryptedWif: 'd2lmMg==', importedAt: '2026-01-02T00:00:00.000Z',
+            }];
+            return [
+                { store: vault.addresses, record: second },
+                { store: vault.wallets, record: { ...current, importedKeys } },
+            ];
+        });
+        await Promise.all([activating, importing]);
+
+        const stored = await vault.wallets.get(wallet.id);
+        expect(stored.importedKeys.map((k) => k.encryptedWif)).toEqual(['d2lmMQ==', 'd2lmMg==']);
+        expect(stored.activeAddressByChainId).toEqual({ 'bitcoin-regtest': first.id });
     });
 });

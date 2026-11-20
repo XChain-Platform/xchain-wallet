@@ -223,6 +223,54 @@ describe('desktop launch auto-lock gate', { timeout: FILESYSTEM_FIXTURE_TIMEOUT 
         expect(res).toEqual({ locked: false, reason: 'no-session' });
     });
 
+    it('fails closed when the cached-key read rejects at launch', async () => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: MINUTE, lastActivity: now - 2 * MINUTE });
+        vi.spyOn(runtime.sessionBackend, 'load').mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+
+        const res = await enforceLaunchAutoLock(runtime, now);
+
+        expect(res).toEqual({ locked: true, reason: 'idle-window-elapsed' });
+        expect(existsSync(sessionFile())).toBe(false);
+        expect(await runtime.sessionBackend.load()).toBeNull();
+    });
+
+    it('fails closed when the keychain is unavailable but ciphertext exists', async () => {
+        const runtime = await runtimeWithCachedKey();
+        const availability = vi.spyOn(fakeSafeStorage, 'isEncryptionAvailable').mockReturnValue(false);
+        await runtime.autoLockStore.save({ armed: true, idleMs: MINUTE, lastActivity: 1 });
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+        availability.mockReturnValue(true);
+
+        expect(res).toEqual({ locked: true, reason: 'idle-window-elapsed' });
+        expect(existsSync(sessionFile())).toBe(false);
+        expect(await runtime.sessionBackend.load()).toBeNull();
+    });
+
+    it('fails closed when persisted ciphertext cannot be decrypted', async () => {
+        const runtime = await runtimeWithCachedKey();
+        vi.spyOn(fakeSafeStorage, 'decryptString').mockImplementation(() => { throw new Error('key unavailable'); });
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
+    it('keeps unreadable ciphertext when the recorded window still holds', async () => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: now - MINUTE });
+        vi.spyOn(runtime.sessionBackend, 'load').mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+
+        const res = await enforceLaunchAutoLock(runtime, now);
+
+        expect(res).toEqual({ locked: false, reason: 'within-window' });
+        expect(existsSync(sessionFile())).toBe(true);
+    });
+
     it('is inert for a runtime built without the store, so older callers are unchanged', async () => {
         const runtime = await runtimeWithCachedKey({ withAutoLockStore: false });
 

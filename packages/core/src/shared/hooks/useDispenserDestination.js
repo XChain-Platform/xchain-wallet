@@ -21,7 +21,9 @@ import {
     listMembers,
     ownerOffAllowList,
 } from '../../flows/allowListSelfCheck.js';
-import { multiplyAmounts, subtractAmounts } from '../../market/orderMath.js';
+import { compareAmounts, multiplyAmounts, subtractAmounts } from '../../market/orderMath.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/send.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import {
     DISPENSER_PRICE_STALE_MESSAGE,
@@ -128,6 +130,7 @@ export function useDispenserDestinations({ messaging, chainId, payments, enabled
  * @property {string[] | null} allowMembers
  * @property {string[] | null} blockMembers
  * @property {'live' | 'dark' | null} oracle  null when not oracle-priced or unreadable
+ * @property {string | null} oraclePrice      live fiat price of one dispensed token
  */
 
 /**
@@ -191,20 +194,31 @@ async function assessDispenser(messaging, chainId, row) {
         readList(live.blockList),
         readsOracle ? tryCall(messaging, 'oracleFeeds', { chainId, address: oracleAddress }) : null,
     ]);
-    return { row: merged, allowMembers, blockMembers, oracle: oracleState(merged, feeds, readsOracle) };
+    const oracle = oracleReading(merged, feeds, readsOracle);
+    return {
+        row: merged,
+        allowMembers,
+        blockMembers,
+        oracle: oracle.state,
+        oraclePrice: oracle.price,
+    };
 }
 
 // Settlement prices a Mode B fill from the live feed matching its own tick
 // and fiat; with no such feed the dispense is refused ("no matching oracle
 // price"). A maturing (pending) quote prices nothing yet, so only `live` counts.
-function oracleState(row, feeds, readsOracle) {
-    if (!readsOracle || !Array.isArray(feeds)) return null;
+function oracleReading(row, feeds, readsOracle) {
+    if (!readsOracle || !Array.isArray(feeds)) return { state: null, price: null };
     const tick = String(row.give_tick || '').toUpperCase();
+    const coin = String(row.get_coin || '').toUpperCase();
     const fiat = String(row.fiat_code || '').toUpperCase();
     const match = feeds.find((f) => f
         && String(f.tick || '').toUpperCase() === tick
+        && (!coin || !f.coin || String(f.coin).toUpperCase() === coin)
         && (!fiat || String(f.fiat || '').toUpperCase() === fiat));
-    return match?.live?.value ? 'live' : 'dark';
+    return match?.live?.value
+        ? { state: 'live', price: String(match.live.value) }
+        : { state: 'dark', price: null };
 }
 
 // floor(a / b) for plain decimal strings, exact at any scale (float division
@@ -264,7 +278,33 @@ function receiveText(d, amount) {
         + (kept ? `; the other ${safeText(kept)} ${priceTick} buys no whole fill and is not refunded` : '');
 }
 
-function refusalWarnings(d, payer) {
+function fiatFillPrice(d) {
+    const row = d.row;
+    if (Number(row.get_amount) > 0) return null;
+    if (row.fiat_amount != null && String(row.fiat_amount).trim() !== '') {
+        return String(row.fiat_amount).trim();
+    }
+    if (!d.oraclePrice) return null;
+    return row.give_amount
+        ? multiplyAmounts(d.oraclePrice, String(row.give_amount))
+        : String(d.oraclePrice);
+}
+
+function fiatUnderpaymentWarning(d, amount, fiatRateFor) {
+    if (typeof fiatRateFor !== 'function') return null;
+    const fiat = String(d.row.fiat_code || '').trim().toUpperCase();
+    const fillPrice = fiatFillPrice(d);
+    const coinRate = fiat ? fiatRateFor(fiat) : null;
+    const paymentValue = multiplyAmounts(String(amount || '').trim(), String(coinRate ?? ''));
+    if (!fillPrice || !paymentValue || compareAmounts(paymentValue, fillPrice) !== -1) return null;
+    return t('send.dispenser.belowFiatFill', {
+        payment: safeText(paymentValue),
+        price: safeText(fillPrice),
+        fiat: safeText(fiat),
+    });
+}
+
+function refusalWarnings(d, payer, amount, fiatRateFor) {
     const out = [];
     const payTo = String(d.row.address || d.row.source || '').trim();
     // The network checks the dispenser's own pay-to address against its
@@ -277,11 +317,17 @@ function refusalWarnings(d, payer) {
         out.push('The address you are sending from is not allowed to buy from this dispenser by its '
             + 'allow or block list. This payment would be refused and the coin is not returned.');
     }
-    if (isDispenserPriceStale(d.row)) {
+    const stale = isDispenserPriceStale(d.row);
+    const oracleDark = d.row.price_stale !== false && d.oracle === 'dark';
+    if (stale) {
         out.push(`${DISPENSER_PRICE_STALE_MESSAGE}. A payment made now would be refused and kept.`);
-    } else if (d.row.price_stale !== false && d.oracle === 'dark') {
+    } else if (oracleDark) {
         out.push('This dispenser\'s oracle has no current price. A payment made now is refused and '
             + 'the coin is not returned.');
+    }
+    if (!stale && !oracleDark) {
+        const belowFill = fiatUnderpaymentWarning(d, amount, fiatRateFor);
+        if (belowFill) out.push(belowFill);
     }
     return out;
 }
@@ -290,16 +336,17 @@ function refusalWarnings(d, payer) {
  * The review-screen copy for a Send whose destination runs open dispensers,
  * or null when it runs none.
  *
- * @param {{ dispensers: DispenserAtDestination[], payer?: string | null, amount: string }} params
+ * @param {{ dispensers: DispenserAtDestination[], payer?: string | null, amount: string,
+ *   fiatRateFor?: (fiatCode: string) => string | number | null }} params
  * @returns {{ summary: string, warnings: string[] } | null}
  */
-export function dispenserDestinationNotice({ dispensers, payer, amount }) {
+export function dispenserDestinationNotice({ dispensers, payer, amount, fiatRateFor }) {
     if (!Array.isArray(dispensers) || dispensers.length === 0) return null;
     const ids = dispensers.map((d) => `#${safeText(d.row.action_index)}`);
     if (dispensers.length === 1) {
         return {
             summary: `This pays dispenser ${ids[0]}: ${receiveText(dispensers[0], amount)}.`,
-            warnings: refusalWarnings(dispensers[0], payer),
+            warnings: refusalWarnings(dispensers[0], payer, amount, fiatRateFor),
         };
     }
     // One payment can fill several dispensers behind the same address, and
@@ -307,7 +354,8 @@ export function dispenserDestinationNotice({ dispensers, payer, amount }) {
     return {
         summary: `This pays the ${dispensers.length} open dispensers at this address (${ids.join(', ')}). `
             + 'One payment can fill more than one of them, so the wallet does not estimate what you would receive.',
-        warnings: dispensers.flatMap((d, i) => refusalWarnings(d, payer).map((w) => `Dispenser ${ids[i]}: ${w}`)),
+        warnings: dispensers.flatMap((d, i) => refusalWarnings(d, payer, amount, fiatRateFor)
+            .map((w) => `Dispenser ${ids[i]}: ${w}`)),
     };
 }
 
@@ -317,14 +365,16 @@ export function dispenserDestinationNotice({ dispensers, payer, amount }) {
  * number; null when none does.
  *
  * @param {{ dispensersByRecipient: DispenserAtDestination[][], payer?: string | null,
- *   amounts: string[] }} params
+ *   amounts: string[], fiatRateFor?: (fiatCode: string) => string | number | null }} params
  * @returns {{ summary: string, summaries: string[], warnings: string[] } | null}
  */
-export function multiDispenserDestinationNotice({ dispensersByRecipient, payer, amounts }) {
+export function multiDispenserDestinationNotice({ dispensersByRecipient, payer, amounts, fiatRateFor }) {
     const summaries = [];
     const warnings = [];
     (Array.isArray(dispensersByRecipient) ? dispensersByRecipient : []).forEach((dispensers, i) => {
-        const notice = dispenserDestinationNotice({ dispensers, payer, amount: String(amounts?.[i] ?? '') });
+        const notice = dispenserDestinationNotice({
+            dispensers, payer, amount: String(amounts?.[i] ?? ''), fiatRateFor,
+        });
         if (!notice) return;
         const label = `Recipient ${i + 1}`;
         summaries.push(`${label}: ${notice.summary}`);

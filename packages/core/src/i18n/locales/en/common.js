@@ -32,6 +32,11 @@ const messages = {
     'common.hidePassphrase': 'Hide passphrase',
     'common.confirm': 'Confirm',
     'common.typedConfirmationHint': 'Type {word} exactly in capitals with no spaces.',
+    // Shared security warnings, including copy embedded in backup templates.
+    'common.recoveryPhraseWarning': 'Never share your recovery phrase. Anyone with it can spend your funds.',
+    'common.privateKeyWarning': 'Never share this private key. Anyone with it can spend funds from this address.',
+    'common.contractCallWarning':
+        'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.',
     // A typed DESTROY, SWEEP or LOCK uses the plain hint above: what the
     // action does is said once, in the confirm screen's warnings card
     // (i18n/locales/en/actionWarnings.js).

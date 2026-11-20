@@ -465,7 +465,7 @@ function spendFor(chainId, { withPrevTx = true } = {}) {
     });
     if (withPrevTx) {
         for (const inp of decomposed.inputs) {
-            inp.prevTxInfo = { hash: inp.prevTxHash, version: 2, lock_time: 0, inputs: [], bin_outputs: [] };
+            inp.prevTxInfo = { hash: inp.prevTxHash, version: 2, locktime: 0, inputs: [], bin_outputs: [] };
             // Ledger splits the full previous transaction; the fake's split is a stub.
             inp.nonWitnessUtxoHex = 'aa';
         }

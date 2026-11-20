@@ -24,6 +24,20 @@ import { AboutSection } from '../../../packages/core/src/shared/components/setti
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { setDirectUpdateProvider } from '../../../packages/core/src/flows/directUpdate.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import { checkForDirectUpdate } from '../../../packages/web/src/update/directUpdateCheck.js';
+import {
+    __setNativeShellForTests,
+    __setNativeVaultForTests,
+} from '../../../packages/web/src/storage/nativeVault.js';
+
+function memStorage() {
+    const values = new Map();
+    return {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => { values.set(key, String(value)); },
+        removeItem: (key) => { values.delete(key); },
+    };
+}
 
 function lane({ notice = null, version = '9.9.9', enabled = true, onEnable = () => {} } = {}) {
     const check = vi.fn(async () => (notice ? { version, notice } : null));
@@ -136,6 +150,26 @@ describe('UpdateNoticeBanner', () => {
         const { container } = render(<UpdateNoticeBanner />);
         await waitFor(() => expect(check).toHaveBeenCalled());
         expect(container.firstChild).toBeNull();
+    });
+
+    it('reuses the real client result across a remount without another request', async () => {
+        const storage = memStorage();
+        const fetchImpl = vi.fn(async () => ({ ok: true, text: async () => '{"version":"0.334.0"}' }));
+        __setNativeShellForTests(false);
+        __setNativeVaultForTests(null);
+        setDirectUpdateProvider({
+            check: () => checkForDirectUpdate({ currentVersion: '0.333.1', fetchImpl, storage }),
+            isEnabled: () => true,
+            setEnabled: () => {},
+        });
+
+        const view = render(<UpdateNoticeBanner />);
+        expect(await screen.findByText(/0\.334\.0/)).toBeTruthy();
+        view.unmount();
+        render(<UpdateNoticeBanner />);
+
+        expect(await screen.findByText(/0\.334\.0/)).toBeTruthy();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 });
 

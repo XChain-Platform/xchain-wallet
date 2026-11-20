@@ -22,6 +22,7 @@
 import {
     enablesRelativeLock, isDeviceTxVersion, isValidSequence,
 } from '../../core/src/signers/verifySignedTx.js';
+import { toTrezorRefTx } from './trezorRefTx.js';
 
 /**
  * Convert a BIP32 path string into Trezor's `address_n` integer
@@ -292,15 +293,15 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
     // that backend cannot see the team regtest rail and has no Litecoin
     // testnet; Connect 10 throws when any is missing. A partial set is not
     // sent: under either version it leaves an input unanswered, while omitting
-    // it keeps the earlier backend fetch on mainnet.
+    // it keeps the earlier backend fetch on mainnet. toTrezorRefTx maps each.
     const allCarryPrevTx = decomposed.inputs.every((inp) => Boolean(inp.prevTxInfo));
     const refTxs = [];
     const seenRefs = new Set();
-    for (const inp of decomposed.inputs) {
+    for (const [inputIndex, inp] of decomposed.inputs.entries()) {
         if (allCarryPrevTx && inp.prevTxInfo) {
             if (seenRefs.has(inp.prevTxInfo.hash)) continue;
             seenRefs.add(inp.prevTxInfo.hash);
-            refTxs.push(inp.prevTxInfo);
+            refTxs.push(toTrezorRefTx(inp.prevTxInfo, inputIndex));
         }
     }
 

@@ -69,7 +69,8 @@ describe('Addresses: Use records the last-used chain', () => {
         const onBack = vi.fn();
         await pressUse(messaging, onBack);
 
-        await waitFor(() => expect(messaging.setActiveAddress).toHaveBeenCalledWith(ACCOUNT.id, CHAIN, 'addr-1'));
+        await waitFor(() => expect(messaging.setActiveAddress)
+            .toHaveBeenCalledWith(ACCOUNT.id, CHAIN, 'addr-1', WALLET.id));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             lastUsedChain: { regtest: CHAIN },
         }));

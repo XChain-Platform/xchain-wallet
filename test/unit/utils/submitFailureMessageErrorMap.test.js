@@ -177,8 +177,9 @@ describe('submitFailureMessage oracle pre-flight refusals', () => {
         const message = submitFailureMessage(
             refusal('invalid: ORACLE_ADDRESS (no effective oracle price)'), { coinTicker: 'BTC' },
         );
-        expect(message).toMatch(/no price in effect yet/);
+        expect(message).toMatch(/no price in effect right now/);
         expect(message).toMatch(/24 hours/);
+        expect(message).toMatch(/wait for a pending price or publish a new one/);
         expect(message).not.toMatch(/temporarily unavailable|try again in a moment|ORACLE_ADDRESS|pre-flight/i);
     });
 

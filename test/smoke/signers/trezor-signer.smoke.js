@@ -463,6 +463,8 @@ assert.equal(legacyCaptured.inputs[0].script_type, 'SPENDADDRESS');
 assert.ok(Array.isArray(legacyCaptured.refTxs), 'legacy inputs emit refTxs');
 assert.equal(legacyCaptured.refTxs.length, 1);
 assert.equal(legacyCaptured.refTxs[0].hash, 'aa'.repeat(32));
+assert.equal(legacyCaptured.refTxs[0].lock_time, 0);
+assert.equal('locktime' in legacyCaptured.refTxs[0], false);
 
 // 6d. Connect failure surfaces as SignerStatusError.
 const failSignConnect = makeMockConnect({

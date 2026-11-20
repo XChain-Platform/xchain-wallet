@@ -167,6 +167,8 @@ const messages = {
     'components.confirmSummary.verbDelegateSigningKey': 'Delegate Signing Key',
     'components.confirmSummary.verbDelegateVotes': 'Delegate Votes',
     'components.confirmSummary.verbDeployContract': 'Deploy Contract',
+    'components.deployContractForm.gasLimitHelp':
+        "Maximum gas the deployment (constructor) may use. Method calls run up to the network's per-call ceiling.",
     'components.confirmSummary.verbEditDispenser': 'Edit Dispenser',
     'components.confirmSummary.verbEditList': 'Edit List',
     'components.confirmSummary.verbEditMarket': 'Edit Market',

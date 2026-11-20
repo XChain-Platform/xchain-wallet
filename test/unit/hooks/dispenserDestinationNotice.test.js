@@ -96,6 +96,47 @@ describe('dispenserDestinationNotice', () => {
         expect(n.summary).not.toMatch(/\b0 BTC\b/);
     });
 
+    it('warns when a payment is below one validator-priced fiat fill at the current coin rate', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({
+                get_amount: '0', fiat_code: 'USD', fiat_amount: '0.2', oracle_address: null,
+            })],
+            payer: PAYER,
+            amount: '2.5',
+            fiatRateFor: (fiat) => (fiat === 'USD' ? '0.058' : null),
+        });
+        expect(n.warnings).toEqual([expect.stringMatching(
+            /worth about 0\.145 USD, below the 0\.2 USD needed for one fill.*payment isn't returned/,
+        )]);
+    });
+
+    it('warns from the newest live oracle price when a payment is below one oracle-priced fill', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({
+                get_amount: '0', give_amount: '2', fiat_code: 'USD', fiat_amount: null,
+                oracle_address: 'bc1qoracleoracleoracleoracleoracleoracle01',
+            }, { oracle: 'live', oraclePrice: '0.1' })],
+            payer: PAYER,
+            amount: '2.5',
+            fiatRateFor: () => '0.058',
+        });
+        expect(n.warnings).toEqual([expect.stringMatching(
+            /worth about 0\.145 USD, below the 0\.2 USD needed for one fill.*price can move/,
+        )]);
+    });
+
+    it('does not warn when the current estimate reaches one fiat-priced fill', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({
+                get_amount: '0', fiat_code: 'USD', fiat_amount: '0.2', oracle_address: null,
+            })],
+            payer: PAYER,
+            amount: '2',
+            fiatRateFor: () => '0.1',
+        });
+        expect(n.warnings).toEqual([]);
+    });
+
     it('warns when the payer is off the allow list, and when the oracle is dark', () => {
         const n = dispenserDestinationNotice({
             dispensers: [entry({ get_amount: '0', fiat_code: 'USD' }, {

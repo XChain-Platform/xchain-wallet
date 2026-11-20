@@ -218,10 +218,9 @@ describe('desktop runtime auto-lock guard branches', () => {
             autoLockStore: { load: vi.fn(), clear: vi.fn() },
         });
 
-        await expect(enforceLaunchAutoLock(runtime)).resolves.toEqual({
-            locked: false,
-            reason: 'no-session',
-        });
-        expect(runtime.autoLockStore.load).not.toHaveBeenCalled();
+        await expect(enforceLaunchAutoLock(runtime)).resolves.toEqual({ locked: true, reason: 'no-record' });
+        expect(runtime.autoLockStore.load).toHaveBeenCalledOnce();
+        expect(input.sessionBackend.clear).toHaveBeenCalledOnce();
+        expect(runtime.autoLockStore.clear).toHaveBeenCalledOnce();
     });
 });

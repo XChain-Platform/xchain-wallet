@@ -31,7 +31,6 @@ import { registry as registryLib, crypto as cryptoLib, flows as flowsLib } from 
 // Every note on these steps is a warning card line, never a loose paragraph:
 // body size, start-aligned, with the lines that protect funds as red callouts.
 import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
-import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 import migrateStyles from './MigrateToBip39.module.css';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
@@ -410,7 +409,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         <WarningLine>{t('migration.backupRestore')}</WarningLine>
                     </WarningCard>,
                     // The same red line Create wallet shows.
-                    <Notice key="backup-warning" tone="danger" role="note">{RECOVERY_PHRASE_WARNING}</Notice>,
+                    <Notice key="backup-warning" tone="danger" role="note">
+                        {t('common.recoveryPhraseWarning')}
+                    </Notice>,
                 ]}
                 // Nothing to confirm until the phrase has been shown.
                 actions={phraseShown ? (

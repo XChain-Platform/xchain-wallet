@@ -16,12 +16,9 @@
 // existing HD wallet. Here the whole wallet is WIF-only (no mnemonic,
 // no HD derivation).
 //
-// Signing-from-imported-WIF (sendToken / sweepToken on a wif-only
-// wallet) is NOT wired by this flow. The current SoftwareSigner.signPsbt
-// resolves keys via HD paths only; routing to an importedKey entry is
-// a separate gap that affects HD+imported wallets too. For now, a
-// wif-only wallet supports: persist, unlock (password validation),
-// receive-to, export the WIF. Spending requires that separate gap fix.
+// Signing from a wif-only wallet uses the Address record id. Send and sweep
+// pass that id to SoftwareSigner, which resolves the matching imported WIF
+// from the unlocked wallet record.
 //
 // Backup implications (§15.5.3) apply doubled: there is NO seed; the
 // encrypted backup file (§19.4) is the ONLY recovery path beyond the

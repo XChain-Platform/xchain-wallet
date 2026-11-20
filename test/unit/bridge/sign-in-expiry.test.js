@@ -160,6 +160,26 @@ describe('bridge.signIn refuses an expiry window that cannot yield a valid chall
     });
 });
 
+describe('bridge.signIn refuses an invalid appId before prompting', () => {
+    it.each([
+        ['absent', undefined],
+        ['null', null],
+        ['empty', ''],
+        ['number', 5],
+        ['boolean', true],
+        ['object', {}],
+        ['array', []],
+    ])('%s appId is refused', async (_label, appId) => {
+        const signIn = approve();
+        const host = signInHost(signIn);
+        const resp = await call(host, { appId });
+        expect(resp.ok).toBe(false);
+        expect(resp.error.code).toBe('INVALID_PARAMS');
+        expect(signIn).not.toHaveBeenCalled();
+        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+    });
+});
+
 describe('bridge.signIn signs only challenges the published parser accepts', () => {
     it('an absent window signs with the published default', async () => {
         const host = signInHost(approve());

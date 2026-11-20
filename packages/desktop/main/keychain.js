@@ -137,6 +137,26 @@ export class KeychainSessionBackend {
     }
 
     /**
+     * Report whether encrypted session material may still be on disk without
+     * trying to decrypt it. The launch gate uses this to distinguish an absent
+     * session from one that is present but temporarily unreadable.
+     *
+     * @returns {Promise<boolean>}
+     */
+    async hasPersistedCiphertext() {
+        if (this._revoked) return false;
+        for (const path of [this._filePath, this._tmpPath]) {
+            try {
+                await fs.stat(path);
+                return true;
+            } catch (err) {
+                if (!err || err.code !== 'ENOENT') return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Cache the master key. Always populates the in-memory slot so the
      * current process can round-trip load/save without a keychain. When
      * the keychain IS available, also encrypts + persists to disk so a

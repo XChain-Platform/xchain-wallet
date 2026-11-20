@@ -248,11 +248,16 @@ export function ContractDetail({
     const contractAddress = contractAddressFor(chainId, contractActionIndex);
     const deployBlock = contract?.block_index || contract?.BLOCK_INDEX || '?';
     const gasLimit = contract?.gas_limit || contract?.GAS_LIMIT
+        || deployAction?.gas_limit || deployAction?.GAS_LIMIT
         || deployAction?.params?.GAS_LIMIT || '?';
     const status = String(contract?.status || contract?.STATUS || 'Active');
     const codeHash = contract?.code_hash || contract?.CODE_HASH
+        || deployAction?.code_hash || deployAction?.CODE_HASH
         || deployAction?.params?.CODE_HASH || '?';
-    const constructorParams = deployAction?.params?.CONSTRUCTOR_PARAMS ?? null;
+    const constructorParams = deployAction?.constructor_params
+        ?? deployAction?.CONSTRUCTOR_PARAMS
+        ?? deployAction?.params?.CONSTRUCTOR_PARAMS
+        ?? null;
     // Contract-staking metadata (DEPLOY v1+): null on non-stakeable contracts
     const cooldownBlocks = contract?.cooldown_blocks ?? contract?.COOLDOWN_BLOCKS ?? null;
     const slashDestinationAddr = contract?.slash_destination ?? contract?.SLASH_DESTINATION

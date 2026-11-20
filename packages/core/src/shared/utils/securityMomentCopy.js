@@ -8,14 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-export const RECOVERY_PHRASE_WARNING =
-    'Never share your recovery phrase. Anyone with it can spend your funds.';
+import { t } from '../../i18n/index.js';
 
-export const PRIVATE_KEY_WARNING =
-    'Never share this private key. Anyone with it can spend funds from this address.';
-
-export const CONNECT_SITE_WARNING =
-    'Only connect if you recognize and trust this site. It can view the accounts and networks you select.';
-
-export const CONTRACT_CALL_WARNING =
-    'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.';
+export function privateKeyWarning() {
+    return t('common.privateKeyWarning');
+}

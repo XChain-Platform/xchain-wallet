@@ -44,7 +44,8 @@
 //     resizeLabel, resizeHint, listLabel, detailLabel, searchPlaceholder,
 //     disabledReason, fallbackMessage, payBalance, amountLabel, give, get,
 //     clearLabel, inputLabel, chooseLabel, pickLabel, viewLabel, winnerLabel,
-//     chartRegionLabel, tabsLabel, infoLabel (the USER_FACING_ATTRS set below
+//     chartRegionLabel, tabsLabel, infoLabel, getNote, valueText, statusText,
+//     subLeft, subRight, badgeTitle (the USER_FACING_ATTRS set below
 //     is the authority; keep this list in step with it). The names from `heading` on are component props
 //     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
@@ -410,6 +411,16 @@ const USER_FACING_ATTRS = new Set([
     'chartRegionLabel',
     'tabsLabel',
     'infoLabel',
+    // Visible copy forwarded through component-specific props. SwapTicket
+    // turns getNote into balanceText, ListField renders valueText as text and
+    // title, DispenserHero renders the three status props in spans, and
+    // DispensersList forwards badgeTitle to a DOM title.
+    'getNote',
+    'valueText',
+    'statusText',
+    'subLeft',
+    'subRight',
+    'badgeTitle',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

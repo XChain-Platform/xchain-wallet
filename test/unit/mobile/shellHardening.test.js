@@ -291,12 +291,52 @@ describe('checkForDirectUpdate', () => {
         const storage = memStorage();
         const fetchImpl = vi.fn(async () => ({ ok: true, text: async () => '{"version":"0.334.0"}' }));
         const t0 = 1_700_000_000_000;
-        expect(await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 })).not.toBeNull();
-        expect(await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 + 1000 })).toBeNull();
+        const first = await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 });
+        expect(first).not.toBeNull();
+        expect(await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 + 1000 })).toEqual(first);
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         const later = t0 + UPDATE_CHECK_INTERVAL_MS + 1;
         expect(await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: later })).not.toBeNull();
         expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops reporting the retained version after the installed version catches up', async () => {
+        const storage = memStorage();
+        const fetchImpl = vi.fn(async () => ({ ok: true, text: async () => '{"version":"0.334.0"}' }));
+        const t0 = 1_700_000_000_000;
+        await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 });
+
+        const result = await checkForDirectUpdate({
+            currentVersion: '0.334.0', fetchImpl, storage, now: t0 + 1000,
+        });
+
+        expect(result).toBeNull();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a validated notice when a later daily refresh fails', async () => {
+        const storage = memStorage();
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce({ ok: true, text: async () => '{"version":"0.334.0"}' })
+            .mockRejectedValueOnce(new Error('offline'));
+        const t0 = 1_700_000_000_000;
+        const first = await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: t0 });
+        const later = t0 + UPDATE_CHECK_INTERVAL_MS + 1;
+
+        expect(await checkForDirectUpdate({ currentVersion, fetchImpl, storage, now: later })).toEqual(first);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not undo an opt-out made while the request is in flight', async () => {
+        const storage = memStorage();
+        let finish;
+        const fetchImpl = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+        const checking = checkForDirectUpdate({ currentVersion, fetchImpl, storage });
+        setUpdateCheckEnabled(false, storage);
+        finish({ ok: true, text: async () => '{"version":"0.334.0"}' });
+
+        await checking;
+        expect(isUpdateCheckEnabled(storage)).toBe(false);
     });
 
     it('does not retry a failing feed on every launch', async () => {

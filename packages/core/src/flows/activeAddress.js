@@ -10,14 +10,13 @@
 
 // activeAddress (§11.3.2). The single active (operating) address per chain
 // for an account: the one Home shows the balance for and that actions (Send)
-// run against. The override lives on `account.activeAddressByChainId` (a
-// sparse chainId -> addressId map). Absence means "use the default" = the
-// lowest-index software HD receive address for that chain, or the
-// lowest-index hardware receive address when no software address exists.
+// run against. Account-backed wallets store overrides on the account. A
+// key-only wallet stores them on the wallet and defaults to its first imported
+// key per chain. Account-backed defaults remain the lowest-index receive key.
 
 import { recordLastUsedChain } from '../shared/chainSelection.js';
 import { defaultRegistry } from '../registry/index.js';
-import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { importedAddressIdsFor, importedAddressIdsOfWallet } from './_importedAddressIds.js';
 import { updateSettings } from './settings.js';
 import { isDerivedAddressSource } from '../schemas/constants.js';
 
@@ -76,6 +75,37 @@ async function resolveAccount(vault, walletId, accountId) {
     return null;
 }
 
+async function resolveWalletActiveAddresses(vault, walletId, chainRegistry) {
+    let wallet;
+    try {
+        wallet = await vault.wallets.get(walletId);
+    } catch {
+        return {};
+    }
+    if (!wallet) return {};
+    const importedIds = importedAddressIdsOfWallet(wallet);
+    const all = await vault.addresses.list();
+    const byId = new Map(all
+        .filter((a) => a.accountId == null && importedIds.has(a.id))
+        .map((a) => [a.id, a]));
+    const byChain = new Map();
+    for (const key of Array.isArray(wallet.importedKeys) ? wallet.importedKeys : []) {
+        const address = byId.get(key?.addressId);
+        if (!address) continue;
+        const chainId = chainRegistry.chainIdFor(address.chain, address.network);
+        if (!chainId) continue;
+        if (!byChain.has(chainId)) byChain.set(chainId, []);
+        byChain.get(chainId).push(address);
+    }
+    const overrides = wallet.activeAddressByChainId || {};
+    const out = {};
+    for (const [chainId, addresses] of byChain) {
+        const chosen = addresses.find((a) => a.id === overrides[chainId]) || addresses[0];
+        out[chainId] = { id: chosen.id, address: chosen.address };
+    }
+    return out;
+}
+
 /**
  * Resolve the active address per chain for one account: the stored override
  * when it still points at a live address, otherwise the default.
@@ -92,7 +122,11 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     if (!chainRegistry) throw new Error('resolveActiveAddresses: chainRegistry is required');
 
     const account = await resolveAccount(vault, walletId, accountId);
-    if (!account) return {};
+    if (!account) {
+        if (typeof accountId === 'string' && accountId.length > 0) return {};
+        if (typeof walletId !== 'string' || walletId.length === 0) return {};
+        return resolveWalletActiveAddresses(vault, walletId, chainRegistry);
+    }
     const overrides = (account && account.activeAddressByChainId) || {};
     const accId = account?.id;
 
@@ -145,8 +179,7 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
  * it is scoped to the WALLET, through that wallet's `importedKeys`, not
  * to any one account. "Belongs to this account" therefore has to mean
  * "belongs to this account's wallet" for those addresses. Without this,
- * an imported key can never be made active - and since Send spends the
- * ACTIVE address and offers no source picker, it could never be spent.
+ * an imported key can never be made active through the Addresses screen.
  * Fails closed: an unreadable wallet record denies the activation.
  *
  * @param {import('../storage/Vault.js').Vault} vault
@@ -166,25 +199,62 @@ async function isImportedKeyOfAccount(vault, account, addr) {
     }
 }
 
+async function setWalletActiveAddress({ vault, walletId, chainId, addressId, chainRegistry }) {
+    const wallet = await vault.wallets.get(walletId);
+    if (!wallet) throw new Error(`setActiveAddress: wallet "${walletId}" not found`);
+    const accounts = await vault.accounts.findBy('walletId', walletId);
+    if (accounts.length > 0) throw new Error('setActiveAddress: accountId is required');
+    const addr = await vault.addresses.get(addressId);
+    if (!addr) throw new Error(`setActiveAddress: address "${addressId}" not found`);
+    if (chainRegistry.chainIdFor(addr.chain, addr.network) !== chainId) {
+        throw new Error('setActiveAddress: address does not belong to this chain');
+    }
+    if (!importedAddressIdsOfWallet(wallet).has(addressId) || addr.accountId != null) {
+        throw new Error('setActiveAddress: address does not belong to this wallet');
+    }
+    // The wallet record also holds the imported key ciphertexts, which a key
+    // import or a password change may rewrite while the reads above await.
+    // Decide from the record in the write slot and change only the override.
+    await vault.wallets.update(walletId, (current) => {
+        if (!current) throw new Error(`setActiveAddress: wallet "${walletId}" not found`);
+        if (!importedAddressIdsOfWallet(current).has(addressId)) {
+            throw new Error('setActiveAddress: address does not belong to this wallet');
+        }
+        const map = { ...(current.activeAddressByChainId || {}), [chainId]: addressId };
+        return { ...current, activeAddressByChainId: map };
+    });
+    await recordLastUsedChain({
+        updateSettings: (patch) => updateSettings(vault, patch),
+    }, chainId);
+    return { ok: true };
+}
+
 /**
  * Set the active address for one (account, chain). Validates the address
  * exists and belongs to the account; writes the override on the account.
  *
  * @param {Object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
- * @param {string} opts.accountId
+ * @param {string} [opts.accountId]
+ * @param {string} [opts.walletId]
  * @param {string} opts.chainId
  * @param {string} opts.addressId
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {Promise<{ ok: true }>}
  */
 export async function setActiveAddress({
-    vault, accountId, chainId, addressId, chainRegistry = defaultRegistry(),
+    vault, accountId, walletId, chainId, addressId, chainRegistry = defaultRegistry(),
 }) {
     if (!vault) throw new Error('setActiveAddress: vault is required');
-    if (typeof accountId !== 'string' || !accountId) throw new Error('setActiveAddress: accountId is required');
     if (typeof chainId !== 'string' || !chainId) throw new Error('setActiveAddress: chainId is required');
     if (typeof addressId !== 'string' || !addressId) throw new Error('setActiveAddress: addressId is required');
+
+    if (typeof accountId !== 'string' || !accountId) {
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('setActiveAddress: accountId is required');
+        }
+        return setWalletActiveAddress({ vault, walletId, chainId, addressId, chainRegistry });
+    }
 
     const account = await vault.accounts.get(accountId);
     if (!account) throw new Error(`setActiveAddress: account "${accountId}" not found`);

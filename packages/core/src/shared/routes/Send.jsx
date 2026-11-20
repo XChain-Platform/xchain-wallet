@@ -93,7 +93,7 @@ import {
     resolvePreflightPrivacy,
     resolveTestSendFiat,
 } from '../../schemas/settings.js';
-import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
+import { createUndoHoldId, createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -253,6 +253,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
+import { usePriceAlertPrices } from '../hooks/usePriceAlertPrices.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { useToast } from '../components/ToastHost.jsx';
@@ -294,6 +295,7 @@ import {
 } from '../utils/amountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import { encoderFieldError } from '../../sdk/encoderFieldErrors.js';
+import { protocolDestinationFindings } from '../utils/protocolDestination.js';
 // Ahead of this file's own sheet, so the shared button base loads first and
 // the hero's rules follow it; a CSS-file composes would inline a second copy
 // of Button.module.css.
@@ -2196,13 +2198,48 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         })) : [],
         enabled: !isDemo && isMultiSend,
     });
+    const dispenserFiatAlerts = useMemo(() => {
+        const codes = new Set();
+        const groups = isMultiSend ? dispensersByRecipient : [dispensersAtDestination];
+        for (const group of groups) {
+            for (const dispenser of group || []) {
+                const code = String(dispenser?.row?.fiat_code || '').trim().toUpperCase();
+                if (code) codes.add(code);
+            }
+        }
+        return [...codes].sort().map((fiatCurrency) => ({ chainId, fiatCurrency }));
+    }, [chainId, isMultiSend, dispensersByRecipient, dispensersAtDestination]);
+    const dispenserFiatPriceFor = usePriceAlertPrices({
+        alerts: dispenserFiatAlerts,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
+    const dispenserFiatRateFor = useCallback((fiatCurrency) => dispenserFiatPriceFor({
+        chainId,
+        fiatCurrency,
+    }), [chainId, dispenserFiatPriceFor]);
     const dispenserNotice = useMemo(() => (isMultiSend
         ? multiDispenserDestinationNotice({
             dispensersByRecipient, payer: fromAddress?.address, amounts: sendLegs.map((leg) => leg.amount),
+            fiatRateFor: dispenserFiatRateFor,
         })
         : dispenserDestinationNotice({
             dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
-        })), [isMultiSend, dispensersByRecipient, sendLegs, dispensersAtDestination, fromAddress?.address, amount]);
+            fiatRateFor: dispenserFiatRateFor,
+        })), [
+        isMultiSend, dispensersByRecipient, sendLegs, dispensersAtDestination,
+        fromAddress?.address, amount, dispenserFiatRateFor,
+    ]);
+    const protocolDestinationWarnings = useMemo(() => {
+        const destinations = isMultiSend ? sendLegs.map((leg) => leg.to) : [toAddress];
+        return protocolDestinationFindings(destinations, chainId).map(({ index, kind }) => {
+            const warning = t(kind === 'bridge'
+                ? 'send.destination.bridgeWarning'
+                : 'send.destination.burnWarning');
+            return isMultiSend
+                ? t('send.destination.recipientWarning', { number: index + 1, warning })
+                : warning;
+        });
+    }, [isMultiSend, sendLegs, toAddress, chainId]);
     const dispenserNoticeBlock = dispenserNotice ? (
         <div data-testid="send-dispenser-notice">
             <StatusMessage variant="status">
@@ -3310,17 +3347,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
                     const holding = Boolean(sendBase.holdId && sendBase.undoSeconds);
+                    const attempt = holding ? { ...sendBase, holdId: createUndoHoldId() } : sendBase;
                     if (holding) {
-                        undoHoldIdRef.current = sendBase.holdId;
+                        undoHoldIdRef.current = attempt.holdId;
                         setUndoHoldActive(true);
                         startUndoSend(sendBase.undoSeconds);
                     }
                     const dispatched = isHwSource
                         ? messaging.sendAssetHw({
-                            ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
+                            ...attempt, signerId: fromAddress.signerId, prebuiltPsbt,
                         })
                         : messaging.sendToken({
-                            ...sendBase, password: passwordValueRef.current, prebuiltPsbt,
+                            ...attempt, password: passwordValueRef.current, prebuiltPsbt,
                         });
                     // A rejected attempt (wrong password, device retry) leaves the confirm
                     // open for another Approve. Its countdown ends here, or the retry
@@ -3867,9 +3905,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 hwRequireExplicitConfirmReason={signRisk.reason}
                 extraWarnings={[
                     ...unusualSendWarnings,
+                    ...protocolDestinationWarnings,
                     ...(dispenserNotice?.warnings || []),
                 ]}
-                warningTestId={unusualSendWarnings.length > 0 ? 'send-unusual-warnings' : undefined}
+                warningTestId={unusualSendWarnings.length > 0 || protocolDestinationWarnings.length > 0
+                    ? 'send-unusual-warnings'
+                    : undefined}
                 extraCredentials={(
                     <>
                         {dispenserNoticeBlock}

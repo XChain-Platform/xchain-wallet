@@ -258,6 +258,10 @@ describe('provider interface conformance', () => {
             await expect(provider.signIn({ appId: 'example', expiresInMs }))
                 .resolves.toEqual({ ok: false, error: 'INVALID_PARAMS' });
         }
+        for (const appId of [undefined, null, '', 5, true, {}, []]) {
+            await expect(provider.signIn({ appId }))
+                .resolves.toEqual({ ok: false, error: 'INVALID_PARAMS' });
+        }
     });
 });
 

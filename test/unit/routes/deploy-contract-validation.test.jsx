@@ -470,6 +470,14 @@ describe('DeployContractForm automatic gas', () => {
         });
     }
 
+    it('explains that the limit applies to deployment, not later method calls', async () => {
+        const utils = await renderAndType(gasMessaging().messaging);
+
+        expect(utils.getByText(
+            "Maximum gas the deployment (constructor) may use. Method calls run up to the network's per-call ceiling.",
+        )).toBeInTheDocument();
+    });
+
     it('fills an empty gas field with the suggestion once the code is valid, and says applied', async () => {
         const utils = await renderAndType(gasMessaging().messaging);
         expect(utils.getByLabelText('Gas limit')).toHaveValue('');

@@ -11,7 +11,7 @@
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 import { IntlMessageFormat } from 'intl-messageformat';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     formatOrList,
@@ -27,16 +27,8 @@ import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 const traverse = _traverse.default || _traverse;
 const TEST_LOCALE = 'unit-partial';
 const TRANSLATION_KEY = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
+const TRANSLATION_LITERAL = /['"`][a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+['"`]/;
 const URL_HOST = /^(?:[a-z0-9-]+\.)+(?:com|io|org)$/i;
-const sharedSources = import.meta.glob(
-    '../../packages/core/src/shared/**/*.{js,jsx}',
-    { query: '?raw', import: 'default', eager: true },
-);
-const uriSources = import.meta.glob(
-    '../../packages/core/src/uri/**/*.{js,jsx}',
-    { query: '?raw', import: 'default', eager: true },
-);
-const packageSources = { ...sharedSources, ...uriSources };
 const packageKeySources = import.meta.glob(
     [
         '../../packages/**/*.{js,jsx}',
@@ -52,28 +44,51 @@ const packageKeySources = import.meta.glob(
     ],
     { query: '?raw', import: 'default', eager: true },
 );
+const SHARED_SOURCE_PREFIX = '../../packages/core/src/shared/';
+const URI_SOURCE_PREFIX = '../../packages/core/src/uri/';
+const packageSources = Object.fromEntries(Object.entries(packageKeySources).filter(([file]) => (
+    file.startsWith(SHARED_SOURCE_PREFIX) || file.startsWith(URI_SOURCE_PREFIX)
+)));
+const sharedSourceFiles = new Set(Object.keys(packageKeySources).filter(
+    (file) => file.startsWith(SHARED_SOURCE_PREFIX),
+));
 
 function translationUsage(source, acceptsInjectedTranslator = false) {
+    // Most package files cannot contain a translation key or import t. Avoid
+    // paying for a Babel parse until the raw source can contribute to either.
+    if (!TRANSLATION_LITERAL.test(source) && !source.includes('/i18n/index.js')) {
+        return { importsT: false, keys: new Set() };
+    }
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
     let importsT = false;
     const keys = new Set();
 
-    traverse(ast, {
-        ImportDeclaration(path) {
-            if (!path.node.source.value.endsWith('/i18n/index.js')) return;
-            importsT = path.node.specifiers.some((specifier) => (
+    // A scoped Babel traversal is needed by the placeholder audit below, but
+    // this scan only visits imports and literals. Walking child nodes directly
+    // avoids constructing bindings for every package file.
+    const pending = [ast.program];
+    while (pending.length > 0) {
+        const node = pending.pop();
+        if (node.type === 'ImportDeclaration' && node.source.value.endsWith('/i18n/index.js')) {
+            importsT ||= node.specifiers.some((specifier) => (
                 specifier.type === 'ImportSpecifier' && specifier.imported.name === 't'
             ));
-        },
-        StringLiteral(path) {
-            if (TRANSLATION_KEY.test(path.node.value) && !URL_HOST.test(path.node.value)) keys.add(path.node.value);
-        },
-        TemplateLiteral(path) {
-            if (path.node.expressions.length !== 0) return;
-            const value = path.node.quasis[0]?.value.cooked;
+        } else if (node.type === 'StringLiteral') {
+            if (TRANSLATION_KEY.test(node.value) && !URL_HOST.test(node.value)) keys.add(node.value);
+        } else if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+            const value = node.quasis[0]?.value.cooked;
             if (value && TRANSLATION_KEY.test(value) && !URL_HOST.test(value)) keys.add(value);
-        },
-    });
+        }
+        for (const value of Object.values(node)) {
+            if (Array.isArray(value)) {
+                for (const child of value) {
+                    if (child && typeof child.type === 'string') pending.push(child);
+                }
+            } else if (value && typeof value.type === 'string') {
+                pending.push(value);
+            }
+        }
+    }
 
     return {
         importsT,
@@ -225,6 +240,14 @@ function unbalancedBrace(message) {
     }
     return depth === 0 ? null : message.length;
 }
+
+let packageTranslationUsage;
+
+beforeAll(() => {
+    packageTranslationUsage = new Map(Object.entries(packageKeySources).map(([file, source]) => (
+        [file, translationUsage(source, true)]
+    )));
+});
 
 beforeEach(async () => {
     if (getLocale() !== 'en') await setLocale('en');
@@ -795,8 +818,8 @@ describe('translations', () => {
         const translatedFiles = [];
         const usedKeys = new Set();
 
-        for (const [file, source] of Object.entries(sharedSources)) {
-            const usage = translationUsage(source);
+        for (const [file, usage] of packageTranslationUsage) {
+            if (!sharedSourceFiles.has(file)) continue;
             if (!usage.importsT) continue;
             translatedFiles.push(file);
             for (const key of usage.keys) usedKeys.add(key);
@@ -811,8 +834,7 @@ describe('translations', () => {
         expect(missingTranslationKeys(usedKeys, en)).toEqual([]);
 
         const referencedKeys = new Set(usedKeys);
-        for (const source of Object.values(packageKeySources)) {
-            const usage = translationUsage(source, true);
+        for (const usage of packageTranslationUsage.values()) {
             for (const key of usage.keys) referencedKeys.add(key);
         }
 

@@ -1190,7 +1190,7 @@ export function AddressList({
             if (!selected.record?.id || detailAction || typeof messaging.setActiveAddress !== 'function') return;
             setDetailAction('use');
             try {
-                await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
+                await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id, walletId);
                 // Choosing an address is choosing its chain: the action forms
                 // open here next. Best-effort, and before the navigation so
                 // the write is in flight before the next screen mounts.

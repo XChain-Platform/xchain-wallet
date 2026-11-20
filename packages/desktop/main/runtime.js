@@ -294,16 +294,27 @@ function newBroadcastQueueStore(storage, prunedLedger) {
 export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     const store = runtime?.autoLockStore;
     if (!store) return { locked: false, reason: 'no-store' };
-    // Nothing persisted means nothing to enforce: a shell with no cached
-    // key already lands on the unlock screen, and clearing an empty
-    // session backend would only churn the disk.
+    // Only a provably absent key skips the gate. A key that is present but
+    // unreadable, or a probe that throws, still has an auto-lock deadline to
+    // enforce and therefore follows the record checks below.
     let hasPersistedKey = false;
+    let sessionProbeFailed = false;
     try {
         hasPersistedKey = await hasSessionKey(runtime.sessionBackend);
     } catch {
-        hasPersistedKey = false;
+        sessionProbeFailed = true;
     }
-    if (!hasPersistedKey) return { locked: false, reason: 'no-session' };
+    if (!hasPersistedKey && !sessionProbeFailed) {
+        const presenceProbe = runtime.sessionBackend?.hasPersistedCiphertext;
+        if (typeof presenceProbe !== 'function') {
+            return { locked: false, reason: 'no-session' };
+        }
+        try {
+            if (!await presenceProbe.call(runtime.sessionBackend)) {
+                return { locked: false, reason: 'no-session' };
+            }
+        } catch { /* unknown presence follows the fail-closed record path */ }
+    }
 
     let state = null;
     try { state = await store.load(); } catch { state = null; }

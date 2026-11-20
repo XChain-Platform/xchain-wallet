@@ -76,6 +76,7 @@ const messages = {
     'market.trade.flipToSell': 'Flip to sell',
     'market.trade.flipToBuy': 'Flip to buy',
     'market.trade.balance': 'Balance {amount}',
+    'market.trade.priceEach': 'at {price} each',
 };
 
 addEnglish(messages);

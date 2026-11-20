@@ -329,9 +329,11 @@ export function getActiveAddresses(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.active', { walletId, accountId }));
 }
 
-/** Set the active address for one (account, chain). @param {string} accountId @param {string} chainId @param {string} addressId */
-export function setActiveAddress(accountId, chainId, addressId) {
-    return /** @type {any} */ (sendMessage('addresses.setActive', { accountId, chainId, addressId }));
+/** Set the active address for one account or key-only wallet. */
+export function setActiveAddress(accountId, chainId, addressId, walletId) {
+    return /** @type {any} */ (sendMessage('addresses.setActive', {
+        accountId, chainId, addressId, walletId,
+    }));
 }
 
 /** @param {object} opts */

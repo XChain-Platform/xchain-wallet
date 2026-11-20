@@ -87,6 +87,33 @@ async function expandState(utils) {
     await clickAndDrain(row);
 }
 
+describe('Contract publication facts read the explorer action fields', () => {
+    // The action endpoint returns DEPLOY fields at the top level in snake case,
+    // not under a params object. This fixture keeps them out of the contract row
+    // so falling back to the publication action is the only way to show them.
+    it('shows top-level deployment fields instead of placeholders', async () => {
+        const { messaging } = harness({
+            getActionByIndex: () => Promise.resolve({
+                data: {
+                    gas_limit: '50000',
+                    code_hash: 'feedcafe',
+                    constructor_params: 'alpha|beta',
+                },
+            }),
+        });
+        const utils = await mountOn(messaging, 'Details');
+        const gasLabel = within(utils.container).getByText('Gas limit');
+
+        expect(gasLabel.nextElementSibling).toHaveTextContent('50000');
+        expect(gasLabel.nextElementSibling).not.toHaveTextContent('?');
+
+        await clickAndDrain(within(utils.container).getByRole('tab', { name: 'Actions' }));
+        await clickAndDrain(within(utils.container).getByRole('button', { name: /^View code/ }));
+        expect(utils.container).toHaveTextContent('feedcafe');
+        expect(utils.container).toHaveTextContent('alpha|beta');
+    });
+});
+
 describe('State table reads the explorer\'s real field names', () => {
     it('renders state_key/state_value rows, decoding a JSON-encoded scalar', async () => {
         const { messaging } = harness({

@@ -34,6 +34,9 @@ const args = (n) => Array.from({ length: n }, (_, i) => String(i).padStart(44, '
 
 function mount({ single }) {
     const composeForConfirm = vi.fn().mockResolvedValue(null);
+    const planDeploy = vi.fn().mockResolvedValue(single
+        ? { single: true, totalChunks: 0, codeHash: 'ab' }
+        : { single: false, totalChunks: 3, codeHash: 'ab' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -42,9 +45,7 @@ function mount({ single }) {
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
         listPendingDeploys: () => Promise.resolve([]),
-        planDeploy: () => Promise.resolve(single
-            ? { single: true, totalChunks: 0, codeHash: 'ab' }
-            : { single: false, totalChunks: 3, codeHash: 'ab' }),
+        planDeploy,
         getContractExportedMeta: () => Promise.resolve(null),
         composeForConfirm,
     };
@@ -53,7 +54,7 @@ function mount({ single }) {
             return property in object ? object[property] : () => Promise.resolve({});
         },
     });
-    return { messaging, composeForConfirm };
+    return { messaging, composeForConfirm, planDeploy };
 }
 
 async function drain(rounds = 16) {
@@ -112,6 +113,29 @@ describe('DeployContractForm refuses constructor arguments too large to verify, 
         const utils = await fillAndPublish({ messaging, source: bigSource, constructorParams: '' });
 
         expect(utils.container.textContent).not.toMatch(/one action holds/);
+    });
+});
+
+describe('DeployContractForm plans the action shape it will send', () => {
+    it('replans with normalized staking fields', async () => {
+        const { messaging, planDeploy } = mount({ single: true });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+            fireEvent.change(utils.getByLabelText('Cooldown blocks'), { target: { value: '144' } });
+            await drain();
+        });
+        expect(planDeploy).toHaveBeenLastCalledWith(expect.objectContaining({
+            cooldownBlocks: '144', slashDestination: 'BURN',
+        }));
     });
 });
 

@@ -356,9 +356,34 @@ describe('toTrezorSignTransaction', () => {
 
     it('includes refTxs only for p2pkh inputs with prevTxInfo', () => {
         const d = makeDecomposed('p2pkh');
-        d.inputs[0].prevTxInfo = { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 1, locktime: 0 };
+        d.inputs[0].prevTxInfo = {
+            hash: 'a'.repeat(64),
+            inputs: [{ prev_hash: 'b'.repeat(64), prev_index: 1, script_sig: '00', sequence: 2 }],
+            bin_outputs: [{ amount: '9007199254740993', script_pubkey: '51' }],
+            version: 1,
+            locktime: 500000,
+        };
         const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths });
         expect(payload.refTxs).toHaveLength(1);
+        expect(Object.keys(payload.refTxs[0]).sort()).toEqual([
+            'bin_outputs', 'hash', 'inputs', 'lock_time', 'version',
+        ]);
+        expect(payload.refTxs[0].lock_time).toBe(500000);
+        expect(payload.refTxs[0]).not.toHaveProperty('locktime');
+        expect(Object.keys(payload.refTxs[0].inputs[0]).sort()).toEqual([
+            'prev_hash', 'prev_index', 'script_sig', 'sequence',
+        ]);
+        expect(Object.keys(payload.refTxs[0].bin_outputs[0]).sort()).toEqual(['amount', 'script_pubkey']);
+        expect(payload.refTxs[0].bin_outputs[0].amount).toBe('9007199254740993');
+    });
+
+    it.each([undefined, 1.5, -1, 0x100000000])('refuses invalid previous transaction locktime %s', (locktime) => {
+        const d = makeDecomposed('p2pkh');
+        d.inputs[0].prevTxInfo = {
+            hash: 'a'.repeat(64), inputs: [], bin_outputs: [], version: 1, locktime,
+        };
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/input 0 previous transaction has invalid locktime/);
     });
 
     it('no refTxs for p2wpkh (segwit) inputs', () => {
@@ -368,7 +393,7 @@ describe('toTrezorSignTransaction', () => {
 
     it('deduplicates refTxs by hash', () => {
         const d = makeDecomposed('p2pkh');
-        const prevTxInfo = { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 1, locktime: 0 };
+        const prevTxInfo = { hash: 'a'.repeat(64), inputs: [], bin_outputs: [], version: 1, locktime: 0 };
         d.inputs = [
             { ...d.inputs[0], prevTxInfo },
             { ...d.inputs[0], prevTxIndex: 1, prevTxInfo },
@@ -385,7 +410,7 @@ describe('toTrezorSignTransaction', () => {
     // so when the PSBT carries every one, every one goes along.
     it('forwards segwit refTxs when every input carries its previous transaction', () => {
         const d = makeDecomposed('p2wpkh');
-        d.inputs[0].prevTxInfo = { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 2, locktime: 0 };
+        d.inputs[0].prevTxInfo = { hash: 'a'.repeat(64), inputs: [], bin_outputs: [], version: 2, locktime: 0 };
         const payload = toTrezorSignTransaction({ decomposed: d, coin: 'regtest', signingPaths });
         expect(payload.refTxs).toHaveLength(1);
     });
@@ -393,7 +418,7 @@ describe('toTrezorSignTransaction', () => {
     it('omits a partial segwit refTxs set, which Connect would refuse', () => {
         const d = makeDecomposed('p2wpkh');
         d.inputs = [
-            { ...d.inputs[0], prevTxInfo: { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 2, locktime: 0 } },
+            { ...d.inputs[0], prevTxInfo: { hash: 'a'.repeat(64), inputs: [], bin_outputs: [], version: 2, locktime: 0 } },
             { ...d.inputs[0], prevTxHash: 'b'.repeat(64), prevTxInfo: null },
         ];
         const paths = [

@@ -32,7 +32,7 @@ assert.ok(/messaging\.getActiveAddresses\(walletId, accountId\)/.test(al),
 const detail = read('packages/core/src/shared/routes/AddressDetail.jsx');
 assert.ok(/onSetActive=\{hasRecord && !isActiveRow\(selected\) \? setAsActive : undefined\}/.test(al)
     && /onClick=\{onSetActive\}/.test(detail)
-    && /messaging\.setActiveAddress\(accountId, selected\.chainId, selected\.record\.id\)/.test(al),
+    && /messaging\.setActiveAddress\(accountId, selected\.chainId, selected\.record\.id, walletId\)/.test(al),
     'the detail "Set active" action makes the address active via messaging.setActiveAddress');
 
 // --- Home / BalanceList: balance scoped to the active address ------------

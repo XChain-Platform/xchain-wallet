@@ -866,6 +866,9 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
+        if (typeof req.appId !== 'string' || req.appId.length === 0) {
+            throw bridgeError('INVALID_PARAMS', 'appId must be a non-empty string');
+        }
         // Reject a separator-poisoned appId/nonce BEFORE prompting. Both arrive
         // from the page, and " | " is the challenge's reserved field delimiter,
         // so an injected pipe would smuggle pseudo-fields ahead of the

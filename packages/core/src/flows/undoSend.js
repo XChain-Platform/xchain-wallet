@@ -11,10 +11,14 @@
 import { resolveUndoSendWindowSeconds } from '../schemas/settings.js';
 import { randomUUID } from '../util/uuid.js';
 
+export function createUndoHoldId(createId = randomUUID) {
+    return `undo-send:${createId()}`;
+}
+
 export function createUndoSendRequest(settings, createId = randomUUID) {
     const seconds = resolveUndoSendWindowSeconds(settings);
     if (seconds === 0) return null;
-    return { holdId: `undo-send:${createId()}`, undoSeconds: seconds };
+    return { holdId: createUndoHoldId(createId), undoSeconds: seconds };
 }
 
 export function isUndoSendCancellation(error) {
