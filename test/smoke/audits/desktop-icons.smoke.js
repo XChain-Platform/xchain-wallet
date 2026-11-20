@@ -64,7 +64,8 @@ const config = requireCjs(join(desktop, 'electron-builder.config.cjs'));
 for (const [platform, expected] of [
     ['mac', 'build/icon.icns'],
     ['win', 'build/icon.ico'],
-    ['linux', 'build/icon.png'],
+    // Linux takes a directory of NxN.png sizes (desktop-linux-integration.smoke.js).
+    ['linux', 'build/icons'],
 ]) {
     assert.equal(
         config[platform].icon,

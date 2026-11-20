@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.343.1] - 2026-11-19
+
+### Fixed
+- Windows desktop, Start menu and taskbar shortcuts show the wallet icon again.
+- Updating on Windows repairs shortcuts that a previous install left without an icon.
+- The Windows uninstall entry names Dankest, LLC as the publisher.
+- Installing for all users on Windows on Arm puts the wallet in Program Files.
+- Uninstalling on Windows removes the wallet's xchain: link handler.
+- Linux menus and docks show the wallet icon at every size and pair the open window with its launcher.
+- Linux lists the wallet under Office and Finance in the application menu.
+- The Mac App Store build is produced straight from the repository and declares its encryption use.
+
 ## [0.343.0] - 2026-11-18
 
 ### Added
