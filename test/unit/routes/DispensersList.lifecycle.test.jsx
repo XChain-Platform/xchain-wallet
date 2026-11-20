@@ -20,6 +20,7 @@ import { render, screen, cleanup, within, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
+import { useFakeTimeouts, useFakeTimeoutsAndDate } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-testnet';
 const OWNER = 'tb1qownerownerownerownerownerownerownerow';
@@ -38,6 +39,10 @@ const ROWS = [
         status: 'valid', current_status: 'cancelled', escrow_remaining: '0', dispense_count: 24,
     },
 ];
+
+async function flushFakeTimers() {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+}
 
 function mount({ rows = ROWS, lifecycle, tipRead, getDispensersForSource } = {}) {
     const messaging = {
@@ -83,7 +88,7 @@ describe('DispensersList lifecycle badges', () => {
     });
 
     it('refreshes a mounted list so an indexed close updates the status', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const closing = { ...ROWS[0], current_status: 'cancelling' };
         const getDispensersForSource = vi.fn()
             .mockResolvedValueOnce({ data: [ROWS[0]] })
@@ -110,18 +115,19 @@ describe('DispensersList closing badge', () => {
     afterEach(() => { vi.useRealTimers(); });
 
     it('reads "Closing" with a countdown from one cancels read per address', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
+        useFakeTimeoutsAndDate();
         vi.setSystemTime((CANCEL_AT + 37 * 60) * 1000);
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         mount({ rows: [CLOSING_ROW, ROWS[1]], lifecycle });
-        expect(await screen.findByText('Closing, ~23 min')).toBeInTheDocument();
+        await flushFakeTimers();
+        expect(screen.getByText('Closing, ~23 min')).toBeInTheDocument();
         expect(lifecycle).toHaveBeenCalledTimes(1);
         expect(lifecycle).toHaveBeenCalledWith({ chainId: CHAIN, kind: 'cancels', query: OWNER, type: 'address' });
         expect(screen.queryByText('cancelling')).not.toBeInTheDocument();
     });
 
     it('counts down on the chain\'s protocol time, read once per chain, not per row', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
+        useFakeTimeoutsAndDate();
         // The wall clock reads the window's end; the chain trails it by 29 minutes.
         vi.setSystemTime((CANCEL_AT + 3600) * 1000);
         const second = { ...CLOSING_ROW, action_index: '21' };
@@ -130,27 +136,30 @@ describe('DispensersList closing badge', () => {
         });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: null, protocolTime: CANCEL_AT + 3600 - 29 * 60 });
         mount({ rows: [CLOSING_ROW, second], lifecycle, tipRead });
-        expect(await screen.findAllByText('Closing, ~29 min')).toHaveLength(2);
+        await flushFakeTimers();
+        expect(screen.getAllByText('Closing, ~29 min')).toHaveLength(2);
         expect(tipRead).toHaveBeenCalledTimes(1);
         expect(tipRead).toHaveBeenCalledWith({ chainId: CHAIN, withProtocolTime: true });
     });
 
     it('reads "Closing, next block" once the chain has passed the window', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
+        useFakeTimeoutsAndDate();
         vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: null, protocolTime: CANCEL_AT + 3601 });
         mount({ rows: [CLOSING_ROW], lifecycle, tipRead });
-        expect(await screen.findByText('Closing, next block')).toBeInTheDocument();
+        await flushFakeTimers();
+        expect(screen.getByText('Closing, next block')).toBeInTheDocument();
     });
 
     it('keeps the wall-clock countdown when the chain read has no protocol time', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
+        useFakeTimeoutsAndDate();
         vi.setSystemTime((CANCEL_AT + 37 * 60) * 1000);
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: 1790460068, protocolTime: null });
         mount({ rows: [CLOSING_ROW], lifecycle, tipRead });
-        expect(await screen.findByText('Closing, ~23 min')).toBeInTheDocument();
+        await flushFakeTimers();
+        expect(screen.getByText('Closing, ~23 min')).toBeInTheDocument();
     });
 
     it('reads "Closing" alone when the cancel time is not available', async () => {

@@ -31,6 +31,7 @@ import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { formatBytes } from '../utils/formatBytes.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/uploadMethod.js';
+import '../../i18n/locales/en/publishFile.js';
 
 /** How long typed metadata must sit still before the fee estimates follow it. */
 export const UPLOAD_METADATA_SETTLE_MS = 400;
@@ -199,6 +200,9 @@ function optionCopy(upload, value) {
     const multipart = upload.multipart?.options?.[value] ?? null;
     const reason = reasonText(upload.reasons[value], upload.standardCap, multipart?.cap);
     if (reason) return { description: reason, feeLine: singleFeeLine(upload, value) };
+    if (upload.multipart?.error) {
+        return { description: t('publishFile.quote.failed'), feeLine: null };
+    }
     if (multipart?.pending) {
         return { description: t('uploadMethod.multipartPending'), feeLine: null };
     }

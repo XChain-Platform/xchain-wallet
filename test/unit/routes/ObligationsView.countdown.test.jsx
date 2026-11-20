@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { useFakeTimeoutsAndDate } from '../../helpers/fakeTimeouts.js';
 
 const hookState = vi.hoisted(() => ({ obligations: [] }));
 
@@ -81,7 +82,7 @@ describe('ObligationsView countdown', () => {
     });
 
     it('drops the row when its window closes and stops its interval at zero', () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         vi.setSystemTime(new Date('2026-07-08T14:00:00Z'));
         hookState.obligations = [{
             chainId: 'litecoin-testnet',

@@ -11,6 +11,7 @@ import { publishWalletModes, resetWalletModes } from '../../../packages/core/src
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { fakeHoldersFor } from '../../../packages/web/src/devFakeBalances.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
@@ -78,7 +79,7 @@ async function fillDividend() {
     await flushTimers();
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => {
     cleanup();
     resetWalletModes();

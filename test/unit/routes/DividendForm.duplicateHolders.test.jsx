@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
@@ -66,7 +67,7 @@ async function flushTimers() {
     }
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();

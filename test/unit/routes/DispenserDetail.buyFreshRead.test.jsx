@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
@@ -52,7 +53,7 @@ const COMPOSED = {
 };
 
 async function mount() {
-    vi.useFakeTimers();
+    useFakeTimeouts();
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(DISPENSER),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [buyerAddress] }),
