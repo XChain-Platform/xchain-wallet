@@ -64,8 +64,8 @@
     "devDependencies": {
         "@babel/parser": "^7.29.2",
         "@babel/traverse": "^7.29.0",
-        "@stryker-mutator/core": "^9.6.1",
-        "@stryker-mutator/vitest-runner": "^9.6.1",
+        "@stryker-mutator/core": "^10.1.1",
+        "@stryker-mutator/vitest-runner": "^10.1.1",
         "@testing-library/dom": "^10.4.0",
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/react": "^16.0.1",
