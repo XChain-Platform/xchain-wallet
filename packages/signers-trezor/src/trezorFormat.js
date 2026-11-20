@@ -284,10 +284,9 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         };
     });
 
-    // Previous transactions. p2pkh inputs always need theirs. Segwit inputs
-    // carry theirs only when the PSBT holds the full previous transaction (the
-    // hardware send path asks the encoder for it with attachPrevTx). When EVERY
-    // input does, all of them go along. Connect 9 (the hosted /9/ the shells
+    // Previous transactions are sent only when the PSBT carries one for every
+    // input (the hardware send path asks the encoder for them with attachPrevTx).
+    // Connect 9 (the hosted /9/ the shells
     // load; read at connect-9.7.4 signTransaction.ts) uses a given refTxs list
     // as is and fetches from Trezor's own backend only when it is absent, and
     // that backend cannot see the team regtest rail and has no Litecoin
@@ -298,7 +297,7 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
     const refTxs = [];
     const seenRefs = new Set();
     for (const inp of decomposed.inputs) {
-        if (inp.prevTxInfo && (inp.scriptType === 'p2pkh' || allCarryPrevTx)) {
+        if (allCarryPrevTx && inp.prevTxInfo) {
             if (seenRefs.has(inp.prevTxInfo.hash)) continue;
             seenRefs.add(inp.prevTxInfo.hash);
             refTxs.push(inp.prevTxInfo);

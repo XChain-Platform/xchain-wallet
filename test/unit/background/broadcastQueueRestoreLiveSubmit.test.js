@@ -106,4 +106,39 @@ describe('the vault restore of records a live submit cannot own', () => {
         expect(q[0]).toMatchObject({ pendingTxId: 'p1', signedTxHex: 'hex-phase1' });
         expect(q[0].resumedClaim).toBeUndefined();
     });
+
+    it('retries a failed interrupted-claim scan without duplicating queued records', async () => {
+        const { engine } = await boot();
+        const records = [
+            {
+                id: 'p-q', status: 'queued', chain: 'bitcoin', network: 'regtest', fromAddress: ADDR,
+                actionSummary: 'Queued', txHex: 'hex-queued', createdAt: BEFORE_BOOT,
+            },
+            {
+                id: 'p-b', status: 'broadcasting', chain: 'bitcoin', network: 'regtest', fromAddress: ADDR,
+                actionSummary: 'Interrupted', txHex: 'hex-broadcasting', createdAt: BEFORE_BOOT,
+            },
+        ];
+        let broadcastingReads = 0;
+        const vault = {
+            pendingTxs: {
+                findBy: async (_key, status) => {
+                    if (status === 'broadcasting' && broadcastingReads++ === 0) throw new Error('temporary read failure');
+                    return records.filter((record) => record.status === status);
+                },
+            },
+            accounts: { findBy: async () => [{ id: 'acct-1', walletId: W }] },
+            addresses: { list: async () => [{ id: 'addr-1', accountId: 'acct-1', address: ADDR }] },
+        };
+
+        await engine.restoreQueueFromVault(vault, chainRegistry, W);
+        expect(engine.getQueue(W).map((entry) => entry.pendingTxId)).toEqual(['p-q']);
+
+        await engine.restoreQueueFromVault(vault, chainRegistry, W);
+        expect(engine.getQueue(W).map((entry) => entry.pendingTxId).sort()).toEqual(['p-b', 'p-q']);
+        expect(engine.getQueue(W).find((entry) => entry.pendingTxId === 'p-b')?.resumedClaim).toBe(true);
+
+        await engine.restoreQueueFromVault(vault, chainRegistry, W);
+        expect(broadcastingReads).toBe(2);
+    });
 });

@@ -691,6 +691,10 @@ async function loadAddressForHwSigning(vault, req, chainRegistry) {
         const addr = await vault.addresses.get(fromAddressId);
         if (addr) {
             await assertAddressInWallet(vault, addr, walletId);
+            if (!addressOnRequestChain(addr, req, chainRegistry)) {
+                throw new Error('action.*.hw: source address is not on the request chain');
+            }
+            assertRequestMatchesStoredSource(req, addr);
             return addr;
         }
     }
@@ -707,7 +711,10 @@ async function loadAddressForHwSigning(vault, req, chainRegistry) {
             if (!addressOnRequestChain(a, req, chainRegistry)) continue;
             matches.push(a);
         }
-        if (matches.length === 1) return matches[0];
+        if (matches.length === 1) {
+            assertRequestMatchesStoredSource(req, matches[0]);
+            return matches[0];
+        }
         if (matches.length > 1) {
             throw new Error('action.*.hw: more than one address in this wallet matches; pick the address by id');
         }
@@ -734,6 +741,25 @@ function addressOnRequestChain(address, req, chainRegistry) {
     const chainId = req?.broadcastChainId || req?.chainId;
     if (typeof chainId !== 'string' || chainId.length === 0) return true;
     return chainRegistry.chainIdFor(address.chain, address.network) === chainId;
+}
+
+function assertRequestMatchesStoredSource(req, record) {
+    const from = req?.from;
+    if (!from || typeof from !== 'object') return;
+    if (typeof from.addressId === 'string' && typeof from.id === 'string'
+        && from.addressId !== from.id) {
+        throw new Error('signing request names two different source address ids');
+    }
+    for (const field of ['address', 'publicKey']) {
+        if (from[field] != null && from[field] !== record[field]) {
+            throw new Error(`signing request's from.${field} does not match stored address "${record.id}"`);
+        }
+    }
+    const requestedPath = from.derivationPath == null || from.derivationPath === '' ? '' : from.derivationPath;
+    const storedPath = record.derivationPath == null || record.derivationPath === '' ? '' : record.derivationPath;
+    if (requestedPath !== storedPath && Object.prototype.hasOwnProperty.call(from, 'derivationPath')) {
+        throw new Error(`signing request's from.derivationPath does not match stored address "${record.id}"`);
+    }
 }
 
 /**
@@ -878,10 +904,23 @@ const SPENDING_ROUTES_OUTSIDE_ACTIONS = ['messaging.handshake', 'wallet.publishL
  * @returns {Promise<any | null>} null when nothing stored matches
  */
 async function storedRecordForSigning(req, vault) {
-    const named = req?.from?.addressId ?? req?.addressId;
+    const named = req?.from?.addressId ?? req?.from?.id ?? req?.addressId;
     if (typeof named === 'string' && named.length > 0) {
         const byId = await vault.addresses.get(named);
-        if (byId) return byId;
+        if (byId) {
+            if (byId.source !== 'watch-only') {
+                const walletId = req?.walletId;
+                // Count an imported key through the wallet's importedKeys (it has no account).
+                const inWallet = byId.accountId
+                    ? await addressInWallet(vault, byId, walletId)
+                    : (await importedAddressIdsFor(vault, walletId)).has(byId.id);
+                if (!inWallet) {
+                    throw new Error('signing request source address is not in this wallet');
+                }
+            }
+            assertRequestMatchesStoredSource(req, byId);
+            return byId;
+        }
     }
     const walletId = req?.walletId;
     const text = req?.from?.address;
@@ -892,7 +931,9 @@ async function storedRecordForSigning(req, vault) {
         if (a.address === text && (await addressInWallet(vault, a, walletId))) matches.push(a);
     }
     if (matches.every((m) => m.source === matches[0].source && m.signerId === matches[0].signerId)) {
-        return matches[0] ?? null;
+        const record = matches[0] ?? null;
+        if (record) assertRequestMatchesStoredSource(req, record);
+        return record;
     }
     throw new Error(`address "${text}" matches stored addresses of different kinds in this wallet; pick it by id`);
 }
@@ -4580,6 +4621,21 @@ export function createBackgroundHost(deps) {
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
     }
+    async function ownsSignedTxAds(vault, pending) {
+        if (typeof pending?.txid !== 'string' || typeof vault.pendingTxs.findBy !== 'function') return true;
+        try {
+            const matches = await vault.pendingTxs.findBy('txid', pending.txid);
+            const live = matches.filter((record) => (
+                record && record.status !== 'failed'
+            )).sort((left, right) => {
+                const byTime = String(left.createdAt || '').localeCompare(String(right.createdAt || ''));
+                return byTime || String(left.id).localeCompare(String(right.id));
+            });
+            return live[0]?.id === pending.id;
+        } catch {
+            return true;
+        }
+    }
     // Write a patch to a PendingTx this route stamped, owing it through the journal when the vault refuses.
     async function settleOrJournalPatch(vault, walletId, pendingTxId, patch) {
         if (await settleQueuedPendingTx(vault, { pendingTxId }, patch) === 'unreachable') {
@@ -4601,33 +4657,17 @@ export function createBackgroundHost(deps) {
     // mainnet chain. Accounting is non-critical: a settings-write failure must
     // not turn a landed broadcast into an error for the caller.
     async function bookLandedAds(vault, chainRegistry, entry, { accrue }) {
-        const verdict = entry?.adsCommit;
-        try {
-            if (verdict && accrue) {
-                const descriptor = chainRegistry?.get?.(verdict.chainId ?? entry.chainId) ?? null;
-                const { booking } = await flows.commitAdsStepWithBooking({
-                    vault,
-                    donationIncluded: verdict.donationIncluded,
-                    donatedFiat: verdict.donatedFiat ?? null,
-                    currency: verdict.currency ?? null,
-                    mainnet: verdict.mainnet !== false && descriptor?.networkKind === 'mainnet',
-                    reservationId: verdict.reservationId ?? null,
-                });
-                if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-                    await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
-                }
-            } else {
-                const reservationId = adsClaimOf(entry);
-                if (reservationId) {
-                    const { booking } = await flows.settleAdsReservationWithBooking({ vault, reservationId });
-                    if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-                        await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
-        }
+        await flows.bookQueuedDelivery({
+            vault,
+            chainRegistry,
+            pendingTxId: entry?.pendingTxId ?? null,
+            adsCommit: entry?.adsCommit ?? null,
+            accrue,
+            stampBooking: notifications.stampPendingTxAdsBooking,
+            onError: (e) => console.warn(
+                'broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e),
+            ),
+        });
     }
     // Let a queued entry's claim go: its bytes were refused for good or
     // discarded, so they never pay the donation.
@@ -5138,13 +5178,34 @@ export function createBackgroundHost(deps) {
         if (!knownTxid) {
             try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
         }
+        let counted = false;
+        try {
+            counted = flows.isAdsCountedSend({
+                settings: await vault.settings.get(), descriptor,
+            });
+        } catch { /* a settings failure cannot block the broadcast */ }
+        let adsCommit = {
+            chainId,
+            donationIncluded: false,
+            donatedFiat: null,
+            currency: null,
+            mainnet: counted,
+            reservationId: null,
+            bookingKey: knownTxid ?? pending.id,
+        };
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
+            adsCommit,
             ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
+        if (!(await ownsSignedTxAds(vault, pending))) {
+            adsCommit = null;
+            pending = { ...pending, adsCommit: null };
+            await vault.pendingTxs.put(pending);
+        }
 
         let result;
         try {
@@ -5162,6 +5223,9 @@ export function createBackgroundHost(deps) {
                     recordOwedSettlement(walletId, pending.id, 'patch', deliveredPatch);
                 }
                 await flushOwedSettlements(vault);
+                await bookLandedAds(vault, chainRegistry, {
+                    chainId, pendingTxId: pending.id, adsCommit,
+                }, { accrue: true });
                 return { txid: pending.txid, alreadyOnNetwork: true };
             }
             if (flows.classifyBroadcastFailure(err) === 'permanent') {
@@ -5184,6 +5248,7 @@ export function createBackgroundHost(deps) {
                 summary: 'Signed transaction waiting to broadcast',
                 txid: pending.txid,
                 pendingTxId: pending.id,
+                adsCommit,
             });
             await flushOwedSettlements(vault);
             return {
@@ -5212,6 +5277,7 @@ export function createBackgroundHost(deps) {
                 txid: pending.txid,
                 pendingTxId: pending.id,
                 resumedClaim: true,
+                adsCommit,
             });
             await flushOwedSettlements(vault);
             return {
@@ -5233,6 +5299,11 @@ export function createBackgroundHost(deps) {
             recordOwedSettlement(walletId, pending.id, 'patch', landedPatch);
         }
         await flushOwedSettlements(vault);
+        await bookLandedAds(vault, chainRegistry, {
+            chainId,
+            pendingTxId: pending.id,
+            adsCommit: adsCommit ? { ...adsCommit, bookingKey: txid } : null,
+        }, { accrue: true });
         return { txid };
     });
 
@@ -5480,14 +5551,25 @@ export function createBackgroundHost(deps) {
             const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
+            const canonical = {
+                ...rest,
+                from: {
+                    ...(rest.from || {}),
+                    addressId: address.id,
+                    address: address.address,
+                    publicKey: address.publicKey,
+                    derivationPath: address.derivationPath ?? undefined,
+                    source: address.source,
+                },
+            };
             // Auto-enqueue on broadcast failure for HW lanes too.
             const onBroadcastFailure = enqueueOnBroadcastFailure(req?.walletId);
             // reservationLedger rides along for flows with post-broadcast
             // cleanup (sweepToken's PC-34 force-close leg); other flows
             // ignore the extra option.
             // A send claims its coins inside sendWithHold; every other action claims them here.
-            if (flow === sendWithHold) return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
-            return withSpendClaim(rest, deps, (claimDeps) => flow({ ...rest, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
+            if (flow === sendWithHold) return flow({ ...canonical, ...deps, reservationLedger, signer, onBroadcastFailure });
+            return withSpendClaim(canonical, deps, (claimDeps) => flow({ ...canonical, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
         });
     }
 
@@ -6461,8 +6543,8 @@ export function createBackgroundHost(deps) {
         return aggregateMultisigSession({ ...req, vault, sdkRegistry });
     });
 
-    host.register('multisigSign.finalize', async (req, { vault, sdkRegistry }) => {
-        return finalizeMultisigSigningSession({ ...req, vault, sdkRegistry });
+    host.register('multisigSign.finalize', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return finalizeMultisigSigningSession({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // §22.3 + §42.9 local-cosigner contribution (Step 21). Unlocks

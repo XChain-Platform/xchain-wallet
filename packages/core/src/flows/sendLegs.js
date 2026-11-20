@@ -70,11 +70,35 @@ export class MultiSendUnsupportedError extends Error {
     }
 }
 
+function significantDigits(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+    const mantissa = String(value).split(/[eE]/)[0].replace('-', '').replace('.', '');
+    return mantissa.replace(/^0+/, '').replace(/0+$/, '').length;
+}
+
+/** Whether a JavaScript number may already have lost decimal precision. */
+export function unsafeNumericAmount(value) {
+    return typeof value === 'number'
+        && (!Number.isFinite(value)
+            || (Number.isInteger(value) && !Number.isSafeInteger(value))
+            || significantDigits(value) > 15);
+}
+
+function assertSafeNumericAmount(value, fnName) {
+    if (!unsafeNumericAmount(value)) return;
+    const error = new Error(
+        `${fnName}: amount was supplied as a JS number too large or precise to hold exactly; `
+        + 'send it as a decimal string',
+    );
+    error.code = 'UNSAFE_JS_NUMBER';
+    throw error;
+}
+
 /**
  * @typedef {Object} SendLeg
  * @property {string} to        DESTINATION
  * @property {string} tick      TICK (or `^<id>`)
- * @property {string} amount    AMOUNT, plain decimal string
+ * @property {string} amount    AMOUNT, normalized to a plain decimal string
  * @property {string} [memo]    per-leg MEMO (v3); omitted when the leg has none
  */
 
@@ -144,6 +168,7 @@ function singleLeg(leg, fnName) {
     if (leg.amount === undefined || leg.amount === null || String(leg.amount).trim() === '') {
         throw new Error(`${fnName}: amount is required`);
     }
+    assertSafeNumericAmount(leg.amount, fnName);
     /** @type {SendLeg} */
     const out = {
         to: String(leg.to).trim(),

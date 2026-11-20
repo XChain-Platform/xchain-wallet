@@ -191,16 +191,20 @@ export async function projectBetPayout({
     if (typeof sdk?.betting?.projectPayout !== 'function') {
         throw new Error('projectBetPayout: sdk.betting.projectPayout is unavailable');
     }
-    // With no declared outcome count, size the list to at least reach the outcome
-    // being backed: an unbacked outcome is a normal thing to project on, and the
-    // caller has not given us anything to range-check it against.
+    // With no declared outcome count, preserve every valid pool and then pad only
+    // as far as the selected outcome. The 16-outcome consensus bound still caps
+    // dense input, while a declared count remains authoritative below.
     const index = Number(outcome);
     const declared = Number(outcomeCount);
-    const floor = Number.isInteger(declared) && declared > 0 && declared <= 16
-        ? declared
-        : (Number.isInteger(index) && index >= 0 ? Math.min(index + 1, 16) : 0);
+    const declaredSize = Number.isInteger(declared) && declared > 0 && declared <= 16
+        ? declared : null;
+    const normalizedPools = betPoolAmounts(pools, declaredSize ?? undefined).slice(0, 16);
+    if (declaredSize === null && Number.isInteger(index) && index >= 0) {
+        const minimumSize = Math.min(index + 1, 16);
+        while (normalizedPools.length < minimumSize) normalizedPools.push('0');
+    }
     return sdk.betting.projectPayout({
-        pools: betPoolAmounts(pools, floor),
+        pools: normalizedPools,
         outcome,
         stake,
         ...(feePct !== undefined && feePct !== null && { feePct }),

@@ -115,6 +115,7 @@
 
 import { BUNDLED_DESCRIPTORS } from '../../packages/core/src/registry/descriptors/index.js';
 import { explorerCoinCode } from '../../packages/core/src/registry/coinTicker.js';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 // registry/remote.js is the only import here that reaches node_modules
 // (@noble/curves, for the registry signature), and it is loaded dynamically
@@ -1127,6 +1128,6 @@ async function main() {
     return outcome.exit;
 }
 
-if (process.argv[1] && process.argv[1].endsWith('verify-demo-endpoints.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     process.exitCode = await main();
 }

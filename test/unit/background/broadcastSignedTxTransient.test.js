@@ -42,7 +42,7 @@ function memCollection() {
     };
 }
 
-function makeHost(broadcastTx) {
+function makeHost(broadcastTx, { networkKind = 'regtest', activeNetwork = 'regtest' } = {}) {
     const pendingTxs = memCollection();
     const snapshots = [];
     const storage = {
@@ -51,6 +51,14 @@ function makeHost(broadcastTx) {
         clear: async () => {},
     };
     const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    let settings = {
+        activeNetwork,
+        fiatCurrency: 'USD',
+        ads: {
+            perTransaction: '0.05', sendAt: '5', recipient: 'protocol', currency: 'USD',
+            queued: '0', donated: '0', donationCount: 0,
+        },
+    };
     const sdk = {
         encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
         wallet: { getBitcoinNetwork: () => networks.regtest },
@@ -59,10 +67,13 @@ function makeHost(broadcastTx) {
         vault: {
             pendingTxs,
             wallets: { list: async () => [{ id: WALLET, name: 'Hardware wallet' }] },
-            settings: { get: async () => null, put: async () => {} },
+            settings: {
+                get: async () => structuredClone(settings),
+                put: async (next) => { settings = structuredClone(next); },
+            },
         },
         chainRegistry: {
-            get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }),
+            get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind }),
             list: () => [],
             chainIdFor: () => CHAIN,
         },
@@ -84,10 +95,37 @@ function makeHost(broadcastTx) {
         fromAddress: 'bcrt1qhardware',
     });
     const listQueue = () => call('broadcast.queue.list', { walletId: WALLET });
-    return { broadcast, call, listQueue, pendingTxs, snapshots };
+    return { broadcast, call, listQueue, pendingTxs, snapshots, ads: () => settings.ads };
 }
 
 describe('broadcast.signedTx transient handoff', () => {
+    it('accrues a mainnet txid once across repeated direct broadcasts', async () => {
+        const h = makeHost(vi.fn(async () => ({ txid: TXID })), {
+            networkKind: 'mainnet', activeNetwork: 'mainnet',
+        });
+        await h.broadcast();
+        await h.broadcast();
+        expect(h.ads().queued).toBe('0.05');
+        expect(h.ads().bookedKeys.queuedDelivery).toEqual([TXID]);
+    });
+
+    it('carries mainnet accrual through a transient queue handoff', async () => {
+        const broadcastTx = vi.fn()
+            .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+            .mockResolvedValueOnce({ txid: TXID });
+        const h = makeHost(broadcastTx, { networkKind: 'mainnet', activeNetwork: 'mainnet' });
+        const first = await h.broadcast();
+        expect(h.ads().queued).toBe('0');
+        const [record] = await h.pendingTxs.list();
+        expect(record.adsCommit).toMatchObject({ mainnet: true, bookingKey: TXID });
+        expect(h.snapshots.at(-1)[WALLET][0].adsCommit).toMatchObject({ bookingKey: TXID });
+        await h.call('broadcast.queue.broadcast', {
+            walletId: WALLET,
+            id: first.result.queueId,
+        });
+        expect(h.ads().queued).toBe('0.05');
+    });
+
     it('keeps signed bytes queued and retryable after a transient node failure', async () => {
         const broadcastTx = vi.fn()
             .mockRejectedValueOnce(new Error('ECONNREFUSED'))

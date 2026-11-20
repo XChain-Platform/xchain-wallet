@@ -63,6 +63,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename } from 'node:path';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 /**
  * Which release set each status token belongs to (§7.5).
@@ -466,8 +467,7 @@ export function run(dir, expectedPath, releaseSet = 'release') {
     return 0;
 }
 
-const invokedDirectly = process.argv[1]
-    && process.argv[1].endsWith('verify-signatures.mjs');
+const invokedDirectly = isInvokedDirectly(import.meta.url);
 
 const USAGE = `verify-signatures.mjs - does each staged artifact actually carry the OS
 code signature its row in expected-artifacts.txt declares? (§12.)

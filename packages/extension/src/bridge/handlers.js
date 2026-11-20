@@ -72,6 +72,7 @@ const {
     passiveCoSignForAccount,
     findCoSignerAccountByAddress,
     filterChainIdsByActiveNetwork,
+    unsafeNumericAmount,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
@@ -1310,6 +1311,14 @@ function assertSingleSendAmount(actionName, params) {
     if (actionName !== 'SEND') return;
     if (isSet(params?.amount) && isSet(params?.amountRaw)) {
         throw bridgeError('INVALID_PARAMS', 'SEND takes amountRaw or amount, not both');
+    }
+    for (const [name, value] of [['amount', params?.amount], ['amountRaw', params?.amountRaw]]) {
+        if (unsafeNumericAmount(value)) {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                `SEND ${name} must be a decimal string when it exceeds safe JS number precision`,
+            );
+        }
     }
 }
 

@@ -93,7 +93,7 @@ function syncEntryToCommitLandedRecord(entry, record) {
  * these bytes hold, which their broadcast settles and their discard releases.
  *
  * @param {unknown} verdict
- * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null}
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string, bookingKey?: string } | null}
  */
 export function cleanAdsCommit(verdict) {
     if (!verdict || typeof verdict !== 'object') return null;
@@ -106,6 +106,7 @@ export function cleanAdsCommit(verdict) {
         ...(typeof v.currency === 'string' && v.currency ? { currency: v.currency } : {}),
         ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
         ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
+        ...(typeof v.bookingKey === 'string' && v.bookingKey ? { bookingKey: v.bookingKey } : {}),
     };
 }
 
@@ -726,6 +727,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         let owned;
         let queued;
         let claimed = [];
+        let claimScanOk = true;
         try {
             owned = await ownedAddressesFor(vault, walletId);
             if (owned.size === 0) return;
@@ -740,13 +742,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         } catch (_e) {
             // The interrupted-claim half is additive. A vault that answers the
             // 'queued' read and refuses this one still gets its never-sent
-            // records back rather than losing both halves to one refusal.
+            // records back rather than losing both halves to one refusal. Keep
+            // recovery un-latched so a later call retries this half; queued
+            // entries restored now are held by id and skipped on that retry.
             claimed = [];
+            claimScanOk = false;
         }
         // Removal can land during either vault read. Do not recreate its live
         // queue after the prune has completed.
         if (isWalletRemoved(walletId)) return;
-        recoveredWallets.add(walletId);
+        if (claimScanOk) recoveredWallets.add(walletId);
         const candidates = [
             ...(Array.isArray(queued) ? queued.map((record) => ({ record, resumedClaim: false })) : []),
             ...(Array.isArray(claimed) ? claimed.map((record) => ({ record, resumedClaim: true })) : []),

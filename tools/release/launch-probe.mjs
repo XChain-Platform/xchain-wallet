@@ -71,6 +71,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 /**
  * How an artifact can be launched, and by which host.
@@ -869,7 +870,7 @@ export async function run(dir, { releaseSet = 'release', timeoutMs = 8000, expec
     return 0;
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith('launch-probe.mjs');
+const invokedDirectly = isInvokedDirectly(import.meta.url);
 
 const USAGE = `launch-probe.mjs - does the packaged app actually START? (row 144.)
 

@@ -46,15 +46,28 @@ const FINALIZED = {
     updatedAt: '2026-10-27T00:00:00.000Z',
 };
 
-function memoryVault(record) {
+function memoryVault(record, withAds = false) {
     const records = new Map([[record.id, structuredClone(record)]]);
+    let settings = {
+        activeNetwork: 'mainnet',
+        fiatCurrency: 'USD',
+        ads: {
+            perTransaction: '0.05', sendAt: '5', recipient: 'protocol', currency: 'USD',
+            queued: '0', donated: '0', donationCount: 0,
+        },
+    };
     return {
         records,
+        ads: () => settings.ads,
         vault: {
             multisigSigningSessions: {
                 get: async (id) => structuredClone(records.get(id) || null),
                 put: async (next) => { records.set(next.id, structuredClone(next)); },
             },
+            ...(withAds ? { settings: {
+                get: async () => structuredClone(settings),
+                put: async (next) => { settings = structuredClone(next); },
+            } } : {}),
         },
     };
 }
@@ -70,11 +83,20 @@ const sdkWith = (broadcastTx) => ({
     get: () => ({ encoder: { broadcastTx }, wallet: { decomposePsbt: () => ({ inputs: SIGNED.prevouts }) } }),
 });
 
-const broadcast = (vault, sdkRegistry) => finalizeMultisigSigningSession({
-    vault, sdkRegistry, sessionId: FINALIZED.id, broadcast: true,
+const broadcast = (vault, sdkRegistry, chainRegistry) => finalizeMultisigSigningSession({
+    vault, sdkRegistry, chainRegistry, sessionId: FINALIZED.id, broadcast: true,
 });
 
 describe('multisig broadcast after a lost reply', () => {
+    it('accrues a mainnet session once after terminal persistence', async () => {
+        const h = memoryVault(FINALIZED, true);
+        const sdkRegistry = sdkWith(vi.fn(async () => ({ txid: FINALIZED.txid })));
+        const chainRegistry = { get: () => ({ networkKind: 'mainnet' }) };
+        await broadcast(h.vault, sdkRegistry, chainRegistry);
+        await broadcast(h.vault, sdkRegistry, chainRegistry);
+        expect(h.ads().queued).toBe('0.05');
+    });
+
     it.each([
         ['txn-already-in-mempool', rpcError('txn-already-in-mempool', { reason: 'NODE_REJECTED', node_code: -27 })],
         ['txn-already-known', rpcError('txn-already-known')],

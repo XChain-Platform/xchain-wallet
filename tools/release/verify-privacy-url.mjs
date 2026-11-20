@@ -137,6 +137,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));  // tools/release
 
@@ -704,6 +705,6 @@ async function main() {
     return code;
 }
 
-if (process.argv[1] && process.argv[1].endsWith('verify-privacy-url.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     process.exitCode = await main();
 }

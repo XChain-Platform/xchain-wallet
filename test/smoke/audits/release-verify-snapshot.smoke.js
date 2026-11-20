@@ -82,6 +82,7 @@ try {
         `printf '%s' "$man" > "${seen}/manifest-path"`,
         `cat "$man" > "${seen}/manifest-bytes"`,
         `cat "$sig" > "${seen}/sig-bytes"`,
+        `echo "[GNUPG:] GOODSIG ${fpr.slice(-16)} Test key" >&3`,
         `echo "[GNUPG:] VALIDSIG ${fpr} 2026-01-01 0 4 0 22 8 00 ${fpr}" >&3`,
         '',
     ].join('\n'));

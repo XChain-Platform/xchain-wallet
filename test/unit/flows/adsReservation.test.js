@@ -23,6 +23,7 @@ import {
     forgetInFlightAdsReservation,
     isAdsCountedSend,
     reconcileAdsReservation,
+    releaseAdsBookingScopes,
     releaseAdsReservation,
     reserveAdsPayout,
     settleAdsReservation,
@@ -167,6 +168,34 @@ describe('reserveAdsPayout', () => {
     });
 });
 
+describe('durable ADS booking keys', () => {
+    it('books one queue step for a repeated scope and key', async () => {
+        const w = wallet({ queued: '0', sendAt: '5' });
+        const args = {
+            vault: w.vault, mainnet: true, bookingScope: 'upload:a', bookingKey: 'tx-a',
+        };
+        await commitAdsStepWithBooking(args);
+        await commitAdsStepWithBooking(args);
+        expect(w.ads()).toMatchObject({ queued: '0.05', bookedKeys: { 'upload:a': ['tx-a'] } });
+        expect(validateSettings(w.settings()).ok).toBe(true);
+        const stored = inflateSettings(deflateSettings(w.settings()));
+        expect(stored.ads.bookedKeys).toEqual({ 'upload:a': ['tx-a'] });
+        expect(await releaseAdsBookingScopes({ vault: w.vault, prefix: 'upload:' })).toBe(true);
+        expect(w.ads().bookedKeys).toBeUndefined();
+    });
+
+    it('bounds retained idempotence keys per scope', async () => {
+        const w = wallet({ queued: '0', sendAt: '100' });
+        for (let index = 0; index < 513; index += 1) {
+            await commitAdsStepWithBooking({
+                vault: w.vault, mainnet: true, bookingScope: 'signed', bookingKey: `tx-${index}`,
+            });
+        }
+        expect(w.ads().bookedKeys.signed).toHaveLength(512);
+        expect(w.ads().bookedKeys.signed[0]).toBe('tx-1');
+    });
+});
+
 describe('settling and releasing', () => {
     it('reports a booking only when this call credits the held payout', async () => {
         const w = wallet({ queued: '30.05', reserved: claim() });
@@ -295,6 +324,45 @@ describe('the core queued-broadcast lane settles and releases the claim', () => 
         expect(out.broadcast).toBe(true);
         expect(w.ads()).toMatchObject({ queued: '0', donated: '30', donationCount: 1 });
         expect(w.ads().reserved).toBeUndefined();
+    });
+
+    it('a drained verdict settles the payout and accrues the delivered transaction', async () => {
+        const record = {
+            ...queued(),
+            adsCommit: {
+                chainId: 'bitcoin-mainnet', donationIncluded: true, donatedFiat: '30',
+                currency: 'USD', mainnet: true, reservationId: 'tx-a',
+            },
+        };
+        const w = wallet({ reserved: claim() }, [record]);
+        const out = await drainQueuedBroadcast({
+            vault: w.vault,
+            sdkRegistry: sdkWith(async () => ({ txid: 't' })),
+            chainRegistry,
+            pendingTxId: 'tx-a',
+        });
+        expect(out.broadcast).toBe(true);
+        expect(w.ads()).toMatchObject({ queued: '0.05', donated: '30', donationCount: 1 });
+        expect(w.ads().reserved).toBeUndefined();
+    });
+
+    it('an already-known queued verdict accrues the delivered transaction', async () => {
+        const record = {
+            ...queued(),
+            adsCommit: {
+                chainId: 'bitcoin-mainnet', donationIncluded: false,
+                mainnet: true, reservationId: null,
+            },
+        };
+        const w = wallet({ queued: '0', sendAt: '5' }, [record]);
+        const out = await drainQueuedBroadcast({
+            vault: w.vault,
+            sdkRegistry: sdkWith(async () => { throw new Error('txn-already-known'); }),
+            chainRegistry,
+            pendingTxId: 'tx-a',
+        });
+        expect(out.alreadyOnNetwork).toBe(true);
+        expect(w.ads().queued).toBe('0.05');
     });
 
     it('a drained send refused for good releases it', async () => {

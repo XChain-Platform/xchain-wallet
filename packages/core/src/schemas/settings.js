@@ -319,6 +319,7 @@ export function lookalikeWarningsEnabled(settings) {
  * @property {string} queued           fiat waiting to be donated
  * @property {string} donated          fiat donated so far
  * @property {number} donationCount    donations sent so far
+ * @property {Record<string, string[]>} [bookedKeys]   idempotence keys for resumable broadcast flows
  * @property {{ id: string, fiat: string, currency: string, chainId: string, pendingTxId: string|null, at: number, review?: true }} [reserved]   present only while one pending send (or one open confirm screen, `review`) carries the payout; no other send carries it until that one settles or is released
  */
 
@@ -537,6 +538,12 @@ const isAdsSettings = (v) =>
     typeof v.queued === 'string' && DECIMAL_RE.test(v.queued) &&
     typeof v.donated === 'string' && DECIMAL_RE.test(v.donated) &&
     isNonNegativeInteger(v.donationCount) &&
+    (v.bookedKeys == null || (
+        isPlainObject(v.bookedKeys)
+        && Object.values(v.bookedKeys).every((keys) => (
+            isArray(keys) && keys.every(isNonEmptyString)
+        ))
+    )) &&
     (v.reserved == null || isAdsReservationShape(v.reserved));
 
 // The claim one pending send holds on the due queue (flows/ads.js

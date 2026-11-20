@@ -86,6 +86,7 @@ export const ADS_RESERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const ADS_RESERVATION_REVIEW_GRACE_MS = RESERVATION_TTL_MS;
 
 const DECIMAL_RE = /^\d+(\.\d+)?$/;
+const ADS_BOOKING_KEYS_PER_SCOPE_MAX = 512;
 
 // Claims held by a submit running in this process right now. Such a claim is
 // live whatever its record says, so a reconcile never takes it mid-send.
@@ -153,6 +154,14 @@ export function adsSettingsOf(settings) {
         if (typeof merged[key] !== 'string' || !DECIMAL_RE.test(merged[key])) {
             merged[key] = createDefaultAdsSettings()[key];
         }
+    }
+    if ('bookedKeys' in merged) {
+        const scopes = merged.bookedKeys;
+        const valid = scopes && typeof scopes === 'object' && !Array.isArray(scopes)
+            && Object.values(scopes).every((keys) => (
+                Array.isArray(keys) && keys.every((key) => typeof key === 'string' && key.length > 0)
+            ));
+        if (!valid) delete merged.bookedKeys;
     }
     if ('reserved' in merged && !isAdsReservation(merged.reserved)) delete merged.reserved;
     return merged;
@@ -507,13 +516,16 @@ export function stepAdsQueue(settings, {
  * @param {string | null} [opts.currency]
  * @param {boolean} [opts.mainnet]              false for a testnet or regtest send: nothing accrues
  * @param {string | null} [opts.reservationId]  the claim these bytes took, settled here
+ * @param {string | null} [opts.bookingScope]   durable idempotence namespace
+ * @param {string | null} [opts.bookingKey]     durable idempotence key within the namespace
  * @returns {Promise<any>}
  */
 export async function commitAdsStep({
     vault, donationIncluded = false, donatedFiat = null, currency = null, mainnet = true, reservationId = null,
+    bookingScope = null, bookingKey = null,
 }) {
     return (await commitAdsStepWithBooking({
-        vault, donationIncluded, donatedFiat, currency, mainnet, reservationId,
+        vault, donationIncluded, donatedFiat, currency, mainnet, reservationId, bookingScope, bookingKey,
     })).settings;
 }
 
@@ -527,6 +539,7 @@ export async function commitAdsStep({
  */
 export async function commitAdsStepWithBooking({
     vault, donationIncluded = false, donatedFiat = null, currency = null, mainnet = true, reservationId = null,
+    bookingScope = null, bookingKey = null,
 }) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
     try {
@@ -534,6 +547,11 @@ export async function commitAdsStepWithBooking({
             const settings = await vault.settings.get();
             if (!settings) return { settings: null, booking: null };
             const ads = adsSettingsOf(settings);
+            const keyed = typeof bookingScope === 'string' && bookingScope
+                && typeof bookingKey === 'string' && bookingKey;
+            if (keyed && ads.bookedKeys?.[bookingScope]?.includes(bookingKey)) {
+                return { settings, booking: null };
+            }
             const held = adsReservationOf(settings);
             let paidFiat = null;
             if (donationIncluded && reservationId && held?.id === reservationId && held.currency === ads.currency) {
@@ -543,7 +561,15 @@ export async function commitAdsStepWithBooking({
                 && (currency == null || currency === ads.currency)) {
                 paidFiat = donatedFiat;
             }
-            const next = stepAdsQueue(settings, { donationIncluded, donatedFiat, currency, mainnet, reservationId });
+            let next = stepAdsQueue(settings, { donationIncluded, donatedFiat, currency, mainnet, reservationId });
+            if (keyed) {
+                const nextAds = adsSettingsOf(next);
+                const bookedKeys = { ...(nextAds.bookedKeys ?? {}) };
+                bookedKeys[bookingScope] = [
+                    ...(bookedKeys[bookingScope] ?? []), bookingKey,
+                ].slice(-ADS_BOOKING_KEYS_PER_SCOPE_MAX);
+                next = { ...next, ads: { ...nextAds, bookedKeys } };
+            }
             if (next !== settings) await vault.settings.put(next);
             return {
                 settings: next,
@@ -553,6 +579,24 @@ export async function commitAdsStepWithBooking({
     } finally {
         if (reservationId) inFlightReservations.delete(reservationId);
     }
+}
+
+/** Remove completed idempotence namespaces without disturbing later scopes. */
+export async function releaseAdsBookingScopes({ vault, prefix }) {
+    if (!adsWritable(vault) || typeof prefix !== 'string' || !prefix) return false;
+    return serializeSettingsWrites(vault, async () => {
+        const settings = await vault.settings.get();
+        if (!settings) return false;
+        const ads = adsSettingsOf(settings);
+        const entries = Object.entries(ads.bookedKeys ?? {})
+            .filter(([scope]) => !scope.startsWith(prefix));
+        if (entries.length === Object.keys(ads.bookedKeys ?? {}).length) return false;
+        const nextAds = { ...ads };
+        if (entries.length > 0) nextAds.bookedKeys = Object.fromEntries(entries);
+        else delete nextAds.bookedKeys;
+        await vault.settings.put({ ...settings, ads: nextAds });
+        return true;
+    });
 }
 
 /**

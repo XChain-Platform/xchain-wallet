@@ -274,6 +274,16 @@ function balanceScopeMatches(subject, scope) {
     return true;
 }
 
+function tokenScopeFor({ address, descriptor, nativeTicker }) {
+    return {
+        address,
+        coin: descriptor?.coin,
+        coinAliases: [nativeTicker, explorerCoinCode(descriptor)],
+        network: descriptor?.networkKind,
+        networkAliases: [descriptor?.id],
+    };
+}
+
 function isExactNonnegativeInteger(value) {
     if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0;
     if (typeof value === 'bigint') return value >= 0n;
@@ -500,9 +510,13 @@ async function fetchAddressShape({ sdk, address, nativeTicker, descriptor, opts 
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
+    const scope = tokenScopeFor({ address, descriptor, nativeTicker });
     const fullBalResp = balResp instanceof Error
         ? balResp
-        : await completeBalancePages({ sdk, address, first: balResp, opts });
+        : await completeBalancePages({
+            sdk, address, first: balResp, opts,
+            acceptsPage: (body) => balanceScopeMatches(body, scope),
+        });
     return shapeFromReads({ balResp: fullBalResp, addrResp, nativeTicker, descriptor, address });
 }
 
@@ -542,13 +556,7 @@ export function shapeFromReads({ balResp, addrResp, nativeTicker, descriptor, ad
     // projecting the coin from zero. A confirmed amount that is not a
     // non-negative decimal (text, a negative, an object) is the same
     // "could not read": the number is unknown, not zero.
-    const tokenScope = {
-        address,
-        coin: descriptor?.coin,
-        coinAliases: [nativeTicker, explorerCoinCode(descriptor)],
-        network: descriptor?.networkKind,
-        networkAliases: [descriptor?.id],
-    };
+    const tokenScope = tokenScopeFor({ address, descriptor, nativeTicker });
     const tokenResult = balOk
         ? tokenRowsFromBalances(balResp, tokenScope)
         : { rows: [], invalid: false, truncated: false };
@@ -1065,9 +1073,13 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, descriptor, opts })
         try {
             // A batch slot holds one page of the ledger; only a slot whose total
             // outruns its page costs a per-address read for the rest.
+            const scope = tokenScopeFor({ address: addr.address, descriptor, nativeTicker });
             const full = balResp instanceof Error
                 ? balResp
-                : await completeBalancePages({ sdk, address: addr.address, first: balResp, opts });
+                : await completeBalancePages({
+                    sdk, address: addr.address, first: balResp, opts,
+                    acceptsPage: (body) => balanceScopeMatches(body, scope),
+                });
             base.balances = shapeFromReads({
                 balResp: full, addrResp, nativeTicker, descriptor, address: addr.address,
             });

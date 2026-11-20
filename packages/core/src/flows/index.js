@@ -61,6 +61,7 @@ export {
     buildSendParams,
     assertMultiSendSupported,
     assertNoGatedLegs,
+    unsafeNumericAmount,
     summarizeSendLegs,
     totalsByTick,
 } from './sendLegs.js';
@@ -608,6 +609,7 @@ export {
     stepAdsQueue,
     commitAdsStep,
     commitAdsStepWithBooking,
+    releaseAdsBookingScopes,
     reverseAdsBooking,
     reverseAdsBookingInVault,
     isAdsCountedSend,
@@ -621,6 +623,7 @@ export {
     ADS_RECIPIENT_ROLE,
 } from './ads.js';
 export { checkReachability } from './reachability.js';
+export { bookQueuedDelivery } from './adsDelivery.js';
 export {
     emptyLockoutState,
     delayForAttempts,

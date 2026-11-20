@@ -129,4 +129,37 @@ describe('the reference mock enforces the chain grant', () => {
             await provider.disconnect();
         }
     });
+
+    it('refuses every signing surface outside the grant before throttling', async () => {
+        const addresses = {
+            [FIRST]: [{ id: 'ltc', chain: 'litecoin', network: 'regtest', address: 'rltc1qexample' }],
+            [GRANTED]: [{ id: 'btc', chain: 'bitcoin', network: 'regtest', address: 'bcrt1qexample' }],
+        };
+        const provider = new MockXChainProvider({
+            supportedChains: Object.values(descriptors), activeChains: [FIRST, GRANTED],
+            addresses, throttle: { retryAfterMs: 1000 },
+        });
+        await provider.connect({ requestedChains: [GRANTED] });
+        const unsupported = { ok: false, error: 'CHAIN_NOT_SUPPORTED' };
+        await expect(provider.signMessage({ chainId: FIRST, address: 'rltc1qexample', message: 'm' }))
+            .resolves.toMatchObject(unsupported);
+        await expect(provider.signAction({ chainId: FIRST, action: 'SEND', params: {} }))
+            .resolves.toMatchObject(unsupported);
+        await expect(provider.signPsbt({ chainId: FIRST, psbtHex: '00', signingPaths: [] }))
+            .resolves.toMatchObject(unsupported);
+        await expect(provider.coSign({ chainId: FIRST, aggregateAddress: 'a', psbtHex: '00' }))
+            .resolves.toMatchObject(unsupported);
+        const batchProvider = new MockXChainProvider({
+            supportedChains: Object.values(descriptors), activeChains: [FIRST, GRANTED], addresses,
+        });
+        await batchProvider.connect({ requestedChains: [GRANTED] });
+        await expect(batchProvider.signIn({ appId: 'app', chainId: FIRST }))
+            .resolves.toMatchObject({ ok: false, error: 'ADDRESS_NOT_AUTHORIZED' });
+        const results = await batchProvider.parallel([
+            { chainId: FIRST, action: 'SEND', params: {} },
+            { chainId: GRANTED, action: 'SEND', params: {} },
+        ]);
+        expect(results[0]).toMatchObject(unsupported);
+        expect(results[1]).toMatchObject({ ok: true, chainId: GRANTED });
+    });
 });

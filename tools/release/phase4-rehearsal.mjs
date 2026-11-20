@@ -626,40 +626,45 @@ export function ancestry(root, a, b) {
     return r.status === 1 ? 'not-ancestor' : 'unknown';
 }
 
-export function drift({ pinFile = PIN_PATH } = {}) {
+export function classifyHistory(movedCount, pinInHead, headInPin) {
+    return {
+        behind: movedCount > 0 && pinInHead === 'not-ancestor' && headInPin === 'ancestor',
+        diverged: movedCount > 0 && pinInHead === 'not-ancestor' && headInPin === 'not-ancestor',
+    };
+}
+
+export function drift({ pinFile = PIN_PATH, root = WALLET_ROOT } = {}) {
     if (!existsSync(pinFile)) return { ok: false, missing: true, moved: [] };
     const pin = JSON.parse(readFileSync(pinFile, 'utf8'));
     const files = pinPathFiles(pin);
-    const now = contentHashes(WALLET_ROOT, files.script);
+    const now = contentHashes(root, files.script);
     const moved = [];
     for (const p of files.script) {
         const then = pin.scriptPath?.[p] ?? null;
         if (then !== now[p]) moved.push({ path: p, pinned: then, now: now[p] });
     }
 
-    // A tree that does not CONTAIN the pinned commit is behind it (or on an
-    // unrelated branch), so its differing bytes are the old ones rather than
-    // new ones. Reported as `behind` and not as drift. When the pinned ref
-    // cannot be resolved at all - a shallow clone, or a pin from a commit that
-    // never landed - we cannot tell the directions apart, and the honest
-    // answer is the conservative one: report drift rather than assume behind,
-    // because assuming behind is the reading that hides a real staleness.
+    // Only a HEAD that is an ancestor of the pin is strictly behind. Split
+    // histories are drift because either branch can carry signing changes the
+    // rehearsal never saw. An unresolvable ref is drift for the same reason:
+    // its direction cannot be established safely.
     const resolvable = pin.scriptRef
-        && spawnSync('git', ['-C', WALLET_ROOT, 'cat-file', '-e', `${pin.scriptRef}^{commit}`],
+        && spawnSync('git', ['-C', root, 'cat-file', '-e', `${pin.scriptRef}^{commit}`],
             { stdio: 'ignore' }).status === 0;
-    const behind = moved.length > 0 && resolvable
-        && ancestry(WALLET_ROOT, pin.scriptRef, 'HEAD') === 'not-ancestor';
+    const pinInHead = resolvable ? ancestry(root, pin.scriptRef, 'HEAD') : 'unknown';
+    const headInPin = resolvable ? ancestry(root, 'HEAD', pin.scriptRef) : 'unknown';
+    const { behind, diverged } = classifyHistory(moved.length, pinInHead, headInPin);
 
     return {
-        ok: moved.length === 0 || behind, missing: false, moved, behind,
-        repoDiverged: repoDivergence(pin), pin, files,
+        ok: moved.length === 0 || behind, missing: false, moved, behind, diverged,
+        repoDiverged: repoDivergence(pin, root), pin, files,
     };
 }
 
 /** Repo-side files whose copy in this checkout differs from the tag tree the rehearsal read. */
-export function repoDivergence(pin) {
+export function repoDivergence(pin, root = WALLET_ROOT) {
     const { repo } = pinPathFiles(pin);
-    const now = contentHashes(WALLET_ROOT, repo);
+    const now = contentHashes(root, repo);
     return repo
         .map((p) => ({ path: p, pinned: pin.repoPath?.[p] ?? null, now: now[p] }))
         .filter((m) => m.pinned !== m.now);
@@ -728,6 +733,10 @@ function cmdCheck(argv) {
     }
     console.error(`[phase4-rehearsal] STALE: the signing path has moved since the rehearsal pinned at `
         + `${String(d.pin.scriptRef).slice(0, 8)}:`);
+    if (d.diverged) {
+        console.error('  HEAD and the pinned commit have split histories; neither contains the other, '
+            + 'so the differing bytes may be unrehearsed changes.');
+    }
     for (const m of d.moved) console.error(`  ${m.path}`);
     reportRepoSide(d);
     reportUncovered(d.pin);
