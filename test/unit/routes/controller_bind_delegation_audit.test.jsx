@@ -13,6 +13,8 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 // The staking-delegate and staking-revoke routes: the one Staking form on the network.
 import { NetworkDelegationRoute as DelegationActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
@@ -105,9 +107,23 @@ function mountDelegation(options) {
     return messaging;
 }
 
-afterEach(() => { cleanup(); resetWalletModes(); });
+afterEach(() => { cleanup(); __clearTokenInfoCache(); resetWalletModes(); });
 
 describe('controller binding and signing-key delegation disclosures', () => {
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'RETRY'), null);
+        const messaging = mountController({ tick: 'RETRY' });
+        fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
+        const submit = screen.getByRole('button', { name: 'Bind Token' });
+        fireEvent.click(submit);
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Wait for the wallet to verify the current owner of RETRY.',
+        );
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledTimes(1));
+        fireEvent.click(submit);
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
     it('refuses at submit when the explorer names no issuer', async () => {
         // Its own tick: the token lookup caches per chain and tick across tests.
         const messaging = mountController({ tick: 'NOISSUER', tokenInfo: { creator: null } });

@@ -201,9 +201,11 @@ extension NOT-SHIPPED  store-only  xchain-wallet-extension-v*.zip
 # whole point of the flip: those users now have an update feed pointing at
 # them, and a lane left behind is no longer a smaller release.
 #
-# windows stays NOT-SHIPPED: its signing identity does not exist (rails row
-# 13, deferred by operator priority 2026-08-11), and nothing here demands
-# anything of a NOT-SHIPPED lane.
+# windows SHIPPED in v0.341.2, published 2026-10-07 with signed x64 and arm64
+# installers and portable zips. The direct update feed has served the lane
+# since that release, so every later full release must carry all four Windows
+# artifacts and satisfy their payload, Authenticode, pointer, and rehearsal
+# gates.
 mac       SHIPPED      updater     *.dmg *mac*.zip
 linux     SHIPPED      updater     *.AppImage *.deb
-windows   NOT-SHIPPED  updater     *.exe *win*.zip
+windows   SHIPPED      updater     *.exe *win*.zip

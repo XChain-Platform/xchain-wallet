@@ -20,6 +20,7 @@ import {
     callbackTermsError,
 } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -156,6 +157,28 @@ describe('callback field validation', () => {
 });
 
 describe('CallbackForm review safety', () => {
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'CALLABLE'), null);
+        const getTokenInfo = vi.fn(async ({ tick }) => (
+            tick === 'CALLABLE' ? { ...TERMS } : { tick: 'PAY', divisibility: 2 }
+        ));
+        mount({ getTokenInfo });
+        const submit = await screen.findByRole('button', { name: /^Recall tokens$/i });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(
+            'Wait for the wallet to verify the current owner of CALLABLE.',
+        ).length).toBeGreaterThan(0));
+        await waitFor(() => expect(getTokenInfo.mock.calls.filter(([args]) => (
+            args.tick === 'CALLABLE'
+        ))).toHaveLength(1));
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PAY' })));
+        fireEvent.click(submit);
+        expect(await screen.findByText(
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        )).toBeInTheDocument();
+    });
+
     it('names the watcher action and explains the offline signing handoff', async () => {
         mount();
 

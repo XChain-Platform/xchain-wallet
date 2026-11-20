@@ -46,6 +46,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { controllerBindValidationError } from '../../flows/controllerBind.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { MAX_MEMO_LENGTH } from '../utils/memoLimit.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/unbindForm.js';
@@ -129,6 +130,7 @@ export function UnbindForm({
     const [walletChainIds, setWalletChainIds] = useState(/** @type {string[] | null} */ (null));
     const [sourceError, setSourceError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const defaultFromIdRef = useRef(/** @type {string | null} */ (null));
     const [target, setTarget] = useState(
         /** @type {'token' | 'address'} */ (initialTarget || (tick ? 'token' : 'address')),
     );
@@ -203,7 +205,9 @@ export function UnbindForm({
                     return;
                 }
                 setSourceError(null);
-                setFromAddressId(preferredSourceId(addrs, active?.[cid]) || addrs[0].id);
+                const picked = preferredSourceId(addrs, active?.[cid]) || addrs[0].id;
+                defaultFromIdRef.current = picked;
+                setFromAddressId(picked);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(userFacingMessage(err, t('unbindForm.loadFailed')));
@@ -262,8 +266,12 @@ export function UnbindForm({
     // ownership lands after the token target was chosen.
     useEffect(() => {
         if (target !== 'token' || !selectedTick || !ownedTokens) return;
+        if (fromAddressId && fromAddressId !== defaultFromIdRef.current) return;
         const token = ownedTokens.find((row) => row.tick === selectedTick);
-        if (token && token.ownerAddressId !== fromAddressId) setFromAddressId(token.ownerAddressId);
+        if (token && token.ownerAddressId !== fromAddressId) {
+            defaultFromIdRef.current = null;
+            setFromAddressId(token.ownerAddressId);
+        }
     }, [fromAddressId, ownedTokens, selectedTick, target]);
 
     useEffect(() => {
@@ -456,6 +464,9 @@ export function UnbindForm({
         if (feeStop) { refuse(feeStop.formError, 'fee'); return; }
         if (!fromAddress) { refuse(t('unbindForm.noSourceSelected'), 'from'); return; }
         if (target === 'token' && issuerEligibility.pending) {
+            // A tick read before it was issued can sit cached as unknown, so
+            // the refused tap asks again.
+            invalidateTokenInfo(chainId, selectedTick);
             refuse(t('unbindForm.ownerPending', { tick: selectedTick }), 'controller');
             return;
         }

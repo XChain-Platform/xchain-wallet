@@ -27,6 +27,7 @@ import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { colorMixFallback } from './cssFallbacks.js';
+import { deterministicCssModuleOrderPlugin } from './cssDeterminism.js';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { metaContentSecurityPolicyFor, profileAllowsTrezorConnect } from './src/csp.js';
@@ -518,6 +519,7 @@ export default defineConfig({
         headers: { 'Content-Security-Policy': "frame-ancestors 'none'" },
     },
     plugins: [
+        deterministicCssModuleOrderPlugin(),
         polyfillShimResolver,
         i18nNamespacePlugin,
         initialBundleSizePlugin,

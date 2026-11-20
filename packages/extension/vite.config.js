@@ -33,6 +33,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { deterministicCssModuleOrderPlugin } from '../web/cssDeterminism.js';
 // The web shell's mechanism, imported rather than reimplemented: a second
 // copy of "what does this profile stamp say" is how the two shells would
 // come to disagree about what a `store` build even is.
@@ -364,6 +365,7 @@ export default defineConfig({
     // manifest.json at the package root is copied via the plugin below.
     publicDir: false,
     plugins: [
+        deterministicCssModuleOrderPlugin(),
         polyfillShimResolver,
         startupThemePlugin(),
         stampBuildProfilePlugin(),

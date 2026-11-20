@@ -421,11 +421,9 @@ describe('verifyDownloadedUpdate', () => {
     });
 
     it('accepts a PARTIAL manifest that names this install\'s lane', async () => {
-        // The shape every desktop release now has: windows is NOT-SHIPPED
-        // in shipped-lanes.txt, so a cut covering mac and linux is signed
-        // `--lane mac,linux` and carries `# lanes: mac linux`. Refusing it
-        // for being partial refused every update these installs can be
-        // offered.
+        // Older desktop releases could cover only mac and linux. A partial
+        // manifest remains valid for an install whose own lane it names,
+        // even though current full releases also require Windows.
         const partial = manifestFor({ lanes: 'mac linux' });
         const result = await verifyDownloadedUpdate(await good({
             manifestBytes: partial,

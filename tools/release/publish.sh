@@ -890,35 +890,21 @@ fi
 # never re-tested is the failure mode a rollback discovers at the worst
 # moment, and a purge costs one request.
 #
-# THE TOKEN IS FED ON STDIN, NEVER AS AN ARGUMENT. `curl -H "Authorization:
-# Bearer $TOKEN"` puts a live credential in the process table, where every
-# local user can read it out of `ps` for the life of the call. `--config -`
-# takes the same header from stdin.
-if [[ ${#YMLS[@]} -gt 0 && -n "${CLOUDFLARE_ZONE_ID:-}" && -n "${CLOUDFLARE_PURGE_TOKEN:-}" ]]; then
-    purge_urls=""
-    for rel in "${YMLS[@]}"; do
-        name="${rel#./}"
-        purge_urls="$purge_urls${purge_urls:+,}\"$PUBLIC_BASE/desktop/$(url_encode "$name")\""
-    done
+# THE TOKEN STAYS IN THE ENVIRONMENT, NEVER AN ARGUMENT. The Node helper uses
+# the same request implementation as android-pointer.mjs, which is the path
+# proven against this zone and token. Only non-secret URLs are arguments.
+PURGE_URLS=()
+for rel in "${YMLS[@]}"; do
+    name="${rel#./}"
+    PURGE_URLS+=("$PUBLIC_BASE/desktop/$(url_encode "$name")")
+done
+for feed in "${DIRECT_POINTERS[@]}"; do
+    PURGE_URLS+=("$PUBLIC_BASE/$feed")
+done
 
-    echo "publish.sh: purging ${#YMLS[@]} pointer path(s) from the edge ..." >&2
-    purge_response="$(curl -sS --max-time 30 --config - <<EOF
-url = "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache"
-request = "POST"
-header = "Authorization: Bearer $CLOUDFLARE_PURGE_TOKEN"
-header = "Content-Type: application/json"
-data = "{\"files\": [$purge_urls]}"
-EOF
-    )" || purge_response=''
-
-    if node -e '
-        try {
-            const body = require("node:fs").readFileSync(0, "utf8");
-            process.exit(JSON.parse(body).success === true ? 0 : 1);
-        } catch {
-            process.exit(1);
-        }
-    ' <<< "$purge_response"; then
+if [[ ${#PURGE_URLS[@]} -gt 0 && -n "${CLOUDFLARE_ZONE_ID:-}" && -n "${CLOUDFLARE_PURGE_TOKEN:-}" ]]; then
+    echo "publish.sh: purging ${#PURGE_URLS[@]} pointer path(s) from the edge ..." >&2
+    if node "$HERE/cloudflare-purge.mjs" "${PURGE_URLS[@]}"; then
         echo "publish.sh: edge cache purged" >&2
     else
         # Not fatal: the release is published and correct. But it is not
@@ -928,12 +914,12 @@ EOF
         echo "  The release IS published; clients may not see the new pointer" >&2
         echo "  until the edge TTL expires. Purge by hand and confirm." >&2
     fi
-elif [[ ${#YMLS[@]} -gt 0 ]]; then
+elif [[ ${#PURGE_URLS[@]} -gt 0 ]]; then
     echo >&2
     echo "publish.sh: NOT purging - CLOUDFLARE_ZONE_ID / CLOUDFLARE_PURGE_TOKEN unset." >&2
     echo "  Purge these paths by hand before treating the release as live:" >&2
-    for rel in "${YMLS[@]}"; do
-        echo "    ${PUBLIC_BASE:-<public base>}/desktop/${rel#./}" >&2
+    for url in "${PURGE_URLS[@]}"; do
+        echo "    ${url:-<public base>}" >&2
     done
 fi
 

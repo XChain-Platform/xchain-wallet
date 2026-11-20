@@ -66,6 +66,12 @@ function parseTopLevelMap(text, topKey) {
  * copied out of the pin it is meant to check would agree with anything.
  */
 const ADVISORY_FLOORS = {
+    // The final fix among the three February 2026 minimatch ReDoS advisories
+    // landed on the legacy line in 3.1.5.
+    '@electron/asar>minimatch': { floor: '3.1.5', advisories: ['GHSA-3ppc-4f35-3m26', 'GHSA-7r86-cg39-jmmj', 'GHSA-23c5-xmqv-rm74'] },
+    // GHSA-q2hr-2g5m-vwhr is the last 1.x brace-expansion fix, after the
+    // recursion and unbounded-array fixes on the same line.
+    'minimatch@3>brace-expansion': { floor: '1.1.21', advisories: ['GHSA-q2hr-2g5m-vwhr'] },
     // GHSA-3jxr-9vmj-r5cp / CVE-2026-13149 (exponential-time {} expansion),
     // superseded by GHSA-rgw5-rvv9-x895 / CVE-2026-69152.
     'brace-expansion@5': { floor: '5.0.9', advisories: ['GHSA-rgw5-rvv9-x895', 'GHSA-3jxr-9vmj-r5cp'] },
@@ -99,9 +105,12 @@ function compare(a, b) {
  * a scope is not a major separator.
  */
 function splitKey(key) {
-    const at = key.lastIndexOf('@');
-    if (at > 0 && /^\d+$/.test(key.slice(at + 1))) return [key.slice(0, at), key.slice(at + 1)];
-    return [key, null];
+    const target = key.includes('>') ? key.slice(key.lastIndexOf('>') + 1) : key;
+    const at = target.lastIndexOf('@');
+    if (at > 0 && /^\d+$/.test(target.slice(at + 1))) {
+        return [target.slice(0, at), target.slice(at + 1)];
+    }
+    return [target, null];
 }
 
 /** The lowest version a `^x.y.z` / `>=x.y.z` / `x.y.z` spec admits. */
@@ -167,12 +176,14 @@ for (const [key, { floor, advisories }] of Object.entries(ADVISORY_FLOORS)) {
         `"${name}" is pinned by override "${key}" but appears nowhere in the lockfile. Either the pin `
         + 'is dead weight, or the lockfile predates it and no install has ever resolved it.');
 
-    const inScope = major === null ? found : found.filter((v) => v.split('.')[0] === major);
+    const effectiveMajor = major ?? (key.includes('>') ? floor.split('.')[0] : null);
+    const inScope = effectiveMajor === null
+        ? found : found.filter((v) => v.split('.')[0] === effectiveMajor);
 
     // A major-scoped pin that matches nothing is not a pass: the whole point of
     // scoping by major is that this line is resident in the tree.
     assert.ok(inScope.length,
-        `override "${key}" scopes to the ${major}.x line of "${name}", and the lockfile holds `
+        `override "${key}" scopes to the ${effectiveMajor}.x line of "${name}", and the lockfile holds `
         + `none: ${JSON.stringify(found)}. Retire the pin or fix its scope.`);
 
     for (const version of inScope) {
@@ -189,12 +200,23 @@ for (const [key, { floor, advisories }] of Object.entries(ADVISORY_FLOORS)) {
 // a package is pinned, an installed tree that sits below the pin means the
 // lockfile is stale.
 
+const descendantScopes = Object.entries(overrides)
+    .filter(([key]) => key.includes('>'))
+    .map(([key, spec]) => {
+        const [name] = splitKey(key);
+        return { name, major: lowestAdmitted(spec).split('.')[0] };
+    });
+
 for (const [key, spec] of Object.entries(overrides)) {
     const pinned = lowestAdmitted(spec);
     const [name, major] = splitKey(key);
+    const effectiveMajor = major ?? (key.includes('>') ? pinned.split('.')[0] : null);
 
     for (const version of installed[name] ?? []) {
-        if (major !== null && version.split('.')[0] !== major) continue;
+        if (effectiveMajor !== null && version.split('.')[0] !== effectiveMajor) continue;
+        const shadowed = !key.includes('>') && descendantScopes.some((scope) =>
+            scope.name === name && scope.major === version.split('.')[0]);
+        if (shadowed) continue;
         assert.ok(compare(version, pinned) >= 0,
             `override "${key}" is "${spec}" but the lockfile resolved ${name}@${version}, below it. `
             + 'The pin was raised without regenerating pnpm-lock.yaml, so nothing that installs from '

@@ -76,6 +76,7 @@ import { addressLockStateError } from '../utils/addressLockState.js';
 import {
     TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
 } from '../utils/tokenRecordDrift.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NO_ACKNOWLEDGMENTS = new Set();
@@ -126,6 +127,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         chainId,
         setChainId,
         fromAddress,
+        fromAddressId,
         setFromAddressId,
         chainsWithAddresses,
         descriptor,
@@ -186,6 +188,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });
+    const ownerAddress = assetInfo?.creator || null;
     const issuerEligibility = tokenIssuerEligibility({
         tokenInfo: isTick ? assetInfo : { creator: fromAddress?.address },
         addressesByChain,
@@ -193,6 +196,19 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         tick: ticker,
         sourceAddress: fromAddress?.address,
     });
+    // An owner read can answer after the shared hook chose its default source.
+    // Move that untouched default to the owner, but preserve a user's pick.
+    const defaultFromIdRef = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (!addressesByChain || !fromAddressId) return;
+        if (!defaultFromIdRef.current) defaultFromIdRef.current = fromAddressId;
+        if (fromAddressId !== defaultFromIdRef.current || !ownerAddress) return;
+        const match = (addressesByChain[chainId] || []).find((address) => address.address === ownerAddress);
+        if (match && match.id !== fromAddressId) {
+            defaultFromIdRef.current = null;
+            setFromAddressId(match.id);
+        }
+    }, [addressesByChain, chainId, fromAddressId, ownerAddress, setFromAddressId]);
     const sleepLocked = isTick && !!assetInfo?.locks?.sleep;
 
     // Current chain height (future-block validation + date estimate + state).
@@ -562,6 +578,9 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 if (lockError) { setFormError(lockError); return; }
             }
             if (isTick && issuerEligibility.pending) {
+                // A tick read before it was issued can sit cached as unknown, so
+                // the refused tap asks again.
+                invalidateTokenInfo(chainId, ticker);
                 setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
                 return;
             }

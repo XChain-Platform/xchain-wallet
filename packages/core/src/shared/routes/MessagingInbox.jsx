@@ -46,6 +46,7 @@ import { parseMessageContent } from '../utils/messageContent.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
+import dispenserStyles from './DispenserExplorer.module.css';
 import local from './MessagingInbox.module.css';
 import notificationStyles from './AlertsRoute.module.css';
 import { t } from '../../i18n/index.js';
@@ -1178,7 +1179,9 @@ function ConversationAvatar({ contact, context }) {
     if (contact) return <ContactAvatar contact={contact} context={context} />;
     return (
         <span
-            className={context === 'header' ? `${local.unknownAvatar} ${local.unknownAvatarHeader}` : local.unknownAvatar}
+            className={context === 'header'
+                ? `${local.unknownAvatar} ${dispenserStyles.sellerAvatar} ${local.unknownAvatarHeader}`
+                : `${local.unknownAvatar} ${dispenserStyles.sellerAvatar}`}
             data-unknown-avatar=""
             aria-hidden="true"
         >

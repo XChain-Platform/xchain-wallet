@@ -55,6 +55,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isInvokedDirectly } from './is-invoked-directly.mjs';
+import { purgeCloudflareFiles } from './cloudflare-purge.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FEED_REL = 'android/latest.json';
@@ -220,18 +221,8 @@ async function purge(publicBase) {
         return;
     }
     // The token stays in this process: it is never an argument to anything.
-    let ok = false;
-    try {
-        const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(zone)}/purge_cache`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ files: [url] }),
-        });
-        ok = (await res.json())?.success === true;
-    } catch {
-        ok = false;
-    }
-    if (ok) say('edge cache purged for android/latest.json');
+    const result = await purgeCloudflareFiles([url], { zone, token });
+    if (result.ok) say('edge cache purged for android/latest.json');
     else say('WARNING - the purge did not report success. The pointer IS written; confirm it through the edge.');
 }
 
