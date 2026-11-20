@@ -155,6 +155,9 @@ describe('style guide catalog', () => {
         document.documentElement.setAttribute('data-xc-theme', theme);
         const { container } = render(<StyleGuidePage />);
 
-        await expectNoSeriousAxeViolations(container, { iframes: false });
+        await expectNoSeriousAxeViolations(container, {
+            iframes: false,
+            resultTypes: ['violations'],
+        });
     });
 });
