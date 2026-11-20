@@ -61,6 +61,37 @@ function harness() {
     };
 }
 
+function mainnetHarness(withDonation = false) {
+    const h = harness();
+    let settings = {
+        activeNetwork: 'mainnet',
+        fiatCurrency: 'USD',
+        ads: {
+            perTransaction: '0.05', sendAt: '5', recipient: 'protocol', currency: 'USD',
+            queued: withDonation ? '30' : '0', donated: '0', donationCount: 0,
+            ...(withDonation ? { reserved: {
+                id: 'review-1', fiat: '30', currency: 'USD', chainId: 'bitcoin-mainnet',
+                pendingTxId: null, at: 1, review: true,
+            } } : {}),
+        },
+    };
+    h.args.chainId = 'bitcoin-mainnet';
+    h.args.chainRegistry = { get: () => ({ coin: 'bitcoin', networkKind: 'mainnet' }) };
+    if (withDonation) {
+        h.args.prebuiltPsbt = {
+            psbtHex: 'aa',
+            adsDonation: {
+                included: true, fiat: '30', currency: 'USD', reservationId: 'review-1',
+            },
+        };
+    }
+    h.args.vault.settings = {
+        get: async () => structuredClone(settings),
+        put: async (next) => { settings = structuredClone(next); },
+    };
+    return { ...h, ads: () => settings.ads };
+}
+
 function failure(phase, reason) {
     return new BroadcastFailedError({
         cause: new Error(reason), signedTxHex: 'beef', txid: 'later-txid',
@@ -113,6 +144,22 @@ describe('submitAction failed stamp', () => {
         const [row] = await h.pendingTxs.list();
         expect(row.status).toBe('broadcast');
         expect(row.txid).toBe('reveal-txid');
+    });
+
+    it('books the landed send before rethrowing an indexer wait failure', async () => {
+        const h = mainnetHarness(true);
+        const timeout = new Error('indexer timeout');
+        submitWithSignerMock.mockImplementation(async ({ onProgress }) => {
+            await onProgress('broadcasting', { txid: 'landed-txid' });
+            await onProgress('waiting', { txid: 'landed-txid' });
+            throw timeout;
+        });
+        await expect(submitAction(h.args)).rejects.toBe(timeout);
+        expect(h.ads().queued).toBe('0.05');
+        expect(h.ads()).toMatchObject({ donated: '30', donationCount: 1 });
+        expect(h.ads().reserved).toBeUndefined();
+        const [row] = await h.pendingTxs.list();
+        expect(row.status).toBe('broadcast');
     });
 });
 

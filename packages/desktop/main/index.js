@@ -127,6 +127,7 @@ import {
     createUpdateCheckMenuItem,
 } from './desktopPresentation.js';
 import {
+    closeHostAndClearSession,
     createRuntime,
     enforceIdleAutoLock,
     enforceLaunchAutoLock,
@@ -831,8 +832,7 @@ function runWindowlessIdleGate(action, logAction) {
             // Cannot decide, so it costs a password prompt rather than an unlock.
             reportMainFailure(`auto-lock check before ${logAction}`, err);
             if (runtime) {
-                tearDownHost(runtime);
-                try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
+                try { await closeHostAndClearSession(runtime); } catch { /* logged by the check */ }
             }
         }
         runMainCallback(() => { action(); }, `${logAction} window`);

@@ -378,6 +378,8 @@ export async function submitAction({
 
     // Set once phase 1 is on the network: submitWithSigner emits these phases only after it lands.
     let phase1Landed = false;
+    // `waiting` is emitted only after the final broadcast leg lands.
+    let broadcastComplete = false;
     // Set the moment the signer is about to be handed bytes; a failure before it signed nothing.
     let signingStarted = false;
     // The landed commit's txid, kept apart from the record's txid, which a queued reveal overwrites.
@@ -388,6 +390,7 @@ export async function submitAction({
     const composedOnProgress = async (phase, data) => {
         // Record the landing before any await: most progress calls are not awaited.
         if (phase === 'signing') signingStarted = true;
+        if (phase === 'waiting') broadcastComplete = true;
         if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
             phase1Landed = true;
         }
@@ -434,6 +437,8 @@ export async function submitAction({
             });
         }
     };
+
+    let postBroadcastBooked = false;
 
     // When the caller supplies a pre-built signer (e.g., a RemoteSigner
     // forwarding to a renderer-hosted HW signer), skip unlockWallet
@@ -789,7 +794,9 @@ export async function submitAction({
             // broadcast (a wrong password, a hardware retry, a refusal) hands a
             // taken-over claim back to its confirm screen instead, which may
             // approve the same bytes again.
-            if (!adsHandedOff) {
+            if (broadcastComplete && !(err instanceof BroadcastFailedError)) {
+                await afterBroadcastLanded();
+            } else if (!adsHandedOff) {
                 await releaseAdsClaim({ toReview: !(err instanceof BroadcastFailedError) && !phase1Landed });
             }
             throw err;
@@ -801,38 +808,37 @@ export async function submitAction({
         forgetInFlightAdsReservation(adsClaimId);
     }
 
-    // The broadcast landed, so any cached metadata for the ticks this
-    // action names now describes the token as it was BEFORE the action. Drop
-    // those records here rather than at each call site: every issuer action
-    // (ISSUE, and so ownership transfer, description and mint settings; MINT;
-    // LOCK; DESTROY; CALLBACK) funnels through this one flow. Left cached, the
-    // Manage Token page keeps naming the previous owner and hides every issuer
-    // action from the new one, recoverable only by a full page reload.
-    invalidateTokenInfoForAction(chainId, actionData);
-
-    // §36: the broadcast landed, so book it in the donation queue: this send's
-    // per-transaction amount, and the donated amount when these bytes carried
-    // the donation. Never before the broadcast.
-    try {
-        const { booking } = await commitAdsStepWithBooking({ vault, ...adsVerdict() });
-        if (pending && booking) {
-            await writePending({
-                adsBooking: { id: pending.id, ...booking, paid: true, booked: true },
-            });
-        }
-    } catch (e) {
-        // ADS accounting is non-critical; don't let a write failure
-        // here obscure the successful broadcast from the caller.
-        // Surface via onProgress for observability.
-        if (onProgress) {
-            try {
-                onProgress('ads-commit-failed', {
-                    chainId,
-                    error: e && e.message ? String(e.message) : String(e),
+    // The broadcast landed: drop cached token metadata for the ticks this
+    // action names (it describes the token BEFORE the action), and book the
+    // send in the donation queue (§36), never before the broadcast. ADS
+    // accounting is non-critical, so a write failure only surfaces through
+    // onProgress and never obscures the successful broadcast.
+    async function afterBroadcastLanded() {
+        if (postBroadcastBooked) return;
+        postBroadcastBooked = true;
+        try { invalidateTokenInfoForAction(chainId, actionData); } catch { /* cache invalidation is best effort */ }
+        try {
+            const { booking } = await commitAdsStepWithBooking({ vault, ...adsVerdict() });
+            if (pending && booking) {
+                await writePending({
+                    adsBooking: { id: pending.id, ...booking, paid: true, booked: true },
                 });
-            } catch { /* swallow */ }
+            }
+        } catch (e) {
+            if (onProgress) {
+                try {
+                    onProgress('ads-commit-failed', {
+                        chainId,
+                        error: e && e.message ? String(e.message) : String(e),
+                    });
+                } catch { /* swallow */ }
+            }
         }
     }
+
+    // Cache invalidation and ADS booking are run once after the final leg lands,
+    // including when only the optional indexer wait fails afterward.
+    await afterBroadcastLanded();
 
     // Settle: ensure the final txid and status reach the record even if
     // no wait callback was supplied. Without waitForTxid, status ends at
