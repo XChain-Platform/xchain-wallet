@@ -802,10 +802,11 @@ xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 # The gate above reads NAMES. This one opens the bytes, because on
 # 2026-08-06 snapcraft was shown packing x86-64 libraries into a snap whose
 # own metadata declared `architectures: [arm64]`, exit 0, no warning.
-# Name, metadata and contents all have to agree before a
-# signature says they do: an artifact signed under the wrong arch installs,
-# verifies against this manifest, and cannot start.
-xr_check_payload_arches "$INPUT_DIR"
+# Name, metadata and contents all have to agree before a signature says they
+# do. The second argument disables the retired native-addon check: the Ledger
+# 12 graph has no packaged native dependency, while architecture checks still
+# apply to every Linux container.
+xr_check_payload_arches "$INPUT_DIR" 0
 # Guarded expansion: an empty array under set -u aborts on bash 3.2.
 PAYLOAD_UNCHECKED=""
 if [[ ${#XR_PAYLOAD_UNCHECKED[@]} -gt 0 ]]; then

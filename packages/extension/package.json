@@ -13,7 +13,7 @@
         "audit:remote-code": "node scripts/remote-code-audit.mjs dist"
     },
     "dependencies": {
-        "@ledgerhq/hw-app-btc": "^10.21.0",
+        "@ledgerhq/hw-app-btc": "^12.3.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
         "@xchain-wallet/core": "workspace:*",
         "bitcoinjs-lib": "6.1.8",

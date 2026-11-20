@@ -1296,7 +1296,7 @@ XR_PAYLOAD_UNCHECKED=()
 XR_PAYLOAD_UNCHECKED_REPORT=""
 
 xr_check_payload_arches() {
-    local dir="$1" name arch problems=0 native=0 n report
+    local dir="$1" require_native="${2:-1}" name arch problems=0 native=0 n report
     local arch_unchecked native_unchecked line
     report="$(mktemp "${TMPDIR:-/tmp}/xr-payload-unchecked.XXXXXX")"
     XR_PAYLOAD_UNCHECKED_REPORT="$report"
@@ -1318,8 +1318,10 @@ xr_check_payload_arches() {
         # its arch suffix passed BOTH payload gates without a word - the
         # artifact shape most likely to have been renamed or hand-assembled,
         # checked least. Nobody chose that; it fell out of the ordering.
-        n="$(xr_check_payload_native "$dir" "$name")"
-        native=$((native + n))
+        if [[ "$require_native" == "1" ]]; then
+            n="$(xr_check_payload_native "$dir" "$name")"
+            native=$((native + n))
+        fi
         arch="$(xr_artifact_arch "$name")"
         # An unattributable name is xr_check_expected's finding to report,
         # not this one's; reporting it twice would double-count one defect.
@@ -1343,7 +1345,9 @@ xr_check_payload_arches() {
     rm -f "$report"
     XR_PAYLOAD_UNCHECKED_REPORT=""
     xr_report_payload_completion architecture "$arch_unchecked"
-    xr_report_payload_completion native "$native_unchecked"
+    if [[ "$require_native" == "1" ]]; then
+        xr_report_payload_completion native "$native_unchecked"
+    fi
 }
 
 # Check one declared row's per-architecture coverage.

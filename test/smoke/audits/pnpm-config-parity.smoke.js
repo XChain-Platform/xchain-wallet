@@ -186,7 +186,6 @@ const npmrc = parseNpmrc(read('.npmrc'));
         'electron-winstaller',
         'esbuild',
         'sharp',
-        'tiny-secp256k1',
     ], 'the allowlist is exactly the packages that need to fetch or build a binary');
 }
 

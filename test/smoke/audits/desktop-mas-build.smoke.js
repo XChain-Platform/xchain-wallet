@@ -11,17 +11,8 @@
 // Smoke for: the Mac App Store universal build runs from the repo as it
 // stands, with no hand step, and declares its export-compliance answer.
 //
-// WHAT THIS IS DEFENDING. The v0.343.0 store build needed two hand steps
-// (recorded in that release's Mac App Store build notes):
-//
-//   - tiny-secp256k1/build, an arm64-only secp256k1.node a Mac install
-//     compiles, was moved aside, because @electron/universal refuses an
-//     arm64 Mach-O in the x64 half of a universal app. The package's
-//     index.js falls back to its pure-JS implementation when the binding is
-//     absent, which is what the store build ships. mas.files now leaves the
-//     build directory out, for the store build only: the Linux packages
-//     still ship the binding their install compiles.
-//   - -c.mas.mergeASARs=false was passed by hand after glob 14 made
+// WHAT THIS IS DEFENDING. The v0.343.0 store build needed a hand-set
+// -c.mas.mergeASARs=false after glob 14 made
 //     @electron/asar 3.4.1's promisified callback call never settle. The
 //     ASAR subtree now stays on patched glob 7 and minimatch 3 lines. Keeping
 //     the merge off remains a separate release configuration decision.
@@ -37,8 +28,7 @@
 //   2. mas.mergeASARs is false.
 //   3. @electron/asar resolves callback-compatible glob and minimatch lines,
 //      and its real crawl completes.
-//   4. mas.files excludes tiny-secp256k1/build, matched with the same
-//      minimatch app-builder-lib uses; no other platform excludes it.
+//   4. No stale native-binding exclusion remains after the Ledger upgrade.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
@@ -131,33 +121,15 @@ if (asarDir) {
         '@electron/asar crawl resolves and finds the desktop build fixture');
 }
 
-// --- 4. The native binding stays out of the store build ------------------
+// --- 4. The retired native binding has no packaging exception ------------
 
-const TINY_NODE = 'node_modules/tiny-secp256k1/build/Release/secp256k1.node';
-const masFiles = Array.isArray(config.mas.files) ? config.mas.files : [];
-const exclusions = masFiles.filter((p) => typeof p === 'string' && p.startsWith('!'));
-assert.ok(exclusions.some((p) => p.includes('tiny-secp256k1/build')),
-    'mas.files excludes tiny-secp256k1/build');
-if (requireFromLib) {
-    const { minimatch } = requireFromLib('minimatch');
-    for (const rel of [TINY_NODE, 'node_modules/tiny-secp256k1/build',
-        'node_modules/tiny-secp256k1/build/Makefile']) {
-        assert.ok(exclusions.some((p) => minimatch(rel, p.slice(1), { dot: true })),
-            `a mas.files exclusion matches ${rel}`);
-    }
-    for (const rel of ['node_modules/tiny-secp256k1/index.js', 'node_modules/tiny-secp256k1/js.js',
-        'node_modules/tiny-secp256k1/package.json']) {
-        assert.ok(!exclusions.some((p) => minimatch(rel, p.slice(1), { dot: true })),
-            `no mas.files exclusion removes ${rel}, the pure-JS fallback the store build runs`);
-    }
-}
-for (const where of ['files', 'mac', 'linux', 'win']) {
+for (const where of ['files', 'mac', 'mas', 'linux', 'win']) {
     const list = where === 'files' ? config.files : (config[where]?.files ?? []);
     assert.ok(!list.some((p) => typeof p === 'string' && p.includes('tiny-secp256k1')),
-        `${where === 'files' ? 'the top-level files list' : `${where}.files`} keeps tiny-secp256k1's `
-        + 'binding (the Linux packages ship the one their install compiles)');
+        `${where === 'files' ? 'the top-level files list' : `${where}.files`} has no stale `
+        + 'tiny-secp256k1 exception');
 }
 
 console.log('OK: desktop MAS build smoke (ITSAppUsesNonExemptEncryption false as on iOS, '
     + 'camera text inherited, ASAR crawl resolves, mergeASARs setting retained, '
-    + 'tiny-secp256k1/build excluded from the store build only)');
+    + 'no retired native-binding exclusion)');

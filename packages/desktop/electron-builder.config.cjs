@@ -651,16 +651,9 @@ const config = {
         enableEmbeddedAsarIntegrityValidation: true,
     },
 
-    // Explicit asar: reduces startup I/O + lets electron-builder
-    // write deterministic archive entries. THERE IS ONE NATIVE MODULE,
-    // and asar already unpacks it: a Linux install compiles
-    // tiny-secp256k1 (root package.json's pnpm onlyBuiltDependencies),
-    // and the Linux artifacts ship
-    // resources/app.asar.unpacked/node_modules/tiny-secp256k1/build/Release/secp256k1.node
-    // (counted it in the release lane's own.deb). It needs no
-    // asarUnpack entry because *.node is unpacked by default; a macOS
-    // build compiles nothing, which is why this read as "none right
-    // now" for as long as it did.
+    // Explicit asar reduces startup I/O and lets electron-builder write
+    // deterministic archive entries. The packaged wallet has no native
+    // dependency now that Ledger uses bitcoinjs-lib 7.
     asar: true,
 
     // Resources we ship alongside the app bundle. The renderer build
@@ -678,15 +671,8 @@ const config = {
         '!**/.DS_Store',
     ],
 
-    // `npmRebuild: false` skips electron-builder's post-install
-    // rebuild step, and NOT because there are no native deps: there is
-    // one, and the INSTALL is what compiles it. The Linux artifacts are
-    // built by `pnpm install` inside the verifier's pinned container,
-    // so electron-builder invoking node-gyp afterwards would recompile
-    // that addon outside the pinned toolchain, against timestamps
-    // nothing controls. See the `desktop-linux` job in
-    // .github/workflows/release.yml ("THE COMPILE HAPPENS AT INSTALL
-    // TIME, NOT AT PACKAGE TIME").
+    // `npmRebuild: false` skips an unnecessary electron-builder rebuild.
+    // Runtime dependencies currently carry no native addon.
     npmRebuild: false,
 
     // `buildDependenciesFromSource: false` opts out of building
@@ -898,20 +884,9 @@ const config = {
         // deliberately re-enabled. pnpm-workspace.yaml now keeps
         // @electron/asar on glob's callback-compatible, patched 7.x line, so
         // the universal merge no longer hangs. Off remains sound because the
-        // store build carries no native module (files below), so both arch
+        // store build carries no native module, so both arch
         // halves hold the same app.asar.
         mergeASARs: false,
-        // tiny-secp256k1's compiled binding stays out of the store build.
-        // A Mac install compiles it for the host arch only, so the x64 half
-        // of a universal app would carry an arm64 Mach-O, which
-        // @electron/universal refuses (v0.343.0 build-1). Its index.js
-        // falls back to the pure-JS implementation when the binding is
-        // absent, which is what the v0.342.1 and v0.343.0 store builds
-        // shipped after moving build/ aside by hand. Store build only: the
-        // Linux packages ship the binding their install compiles.
-        files: [
-            '!**/node_modules/tiny-secp256k1/build{,/**/*}',
-        ],
     },
 
     // --- Windows -------------------------------------------------------

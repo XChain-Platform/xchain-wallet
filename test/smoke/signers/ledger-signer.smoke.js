@@ -536,8 +536,8 @@ assert.match(
     'hw-transport-webhid pinned to ^6.x',
 );
 assert.match(
-    extPkg.dependencies['@ledgerhq/hw-app-btc'], /^\^10\./,
-    'hw-app-btc pinned to ^10.x',
+    extPkg.dependencies['@ledgerhq/hw-app-btc'], /^\^12\./,
+    'hw-app-btc pinned to ^12.x',
 );
 
 const webPkg = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8'));
