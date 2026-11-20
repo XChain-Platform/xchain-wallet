@@ -191,6 +191,9 @@ function run(args, env = {}) {
                 GNUPGHOME: gnupg,
                 XCHAIN_VERIFY_KEY: SMOKE_FPR,
                 XCHAIN_WALLET_RELEASE_RECORDS: RECORDS,
+                CLOUDFLARE_ZONE_ID: '',
+                CLOUDFLARE_PURGE_TOKEN: '',
+                XCHAIN_TEST_CLOUDFLARE_API_BASE: '',
                 ...env,
             },
         });
@@ -549,6 +552,28 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     });
 }
 
+/** A local Cloudflare purge endpoint that records the complete request. */
+function servePurge({ status = 200, response = { success: true } } = {}) {
+    const requests = [];
+    const server = createServer((req, res) => {
+        let body = '';
+        req.setEncoding('utf8');
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', () => {
+            requests.push({ method: req.method, url: req.url, headers: req.headers, body });
+            res.writeHead(status, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(response));
+        });
+    });
+    return new Promise((resolve) => {
+        server.listen(0, '127.0.0.1', () => resolve({
+            server,
+            requests,
+            base: `http://127.0.0.1:${server.address().port}/client/v4`,
+        }));
+    });
+}
+
 {
     const target = makeTarget('feed-edge-ok');
     const { server, base } = await serve(target);
@@ -820,6 +845,58 @@ const ABSENT_RECORD = join(work, 'REHEARSAL-never-written.json');
     assert.ok(r.out.indexOf('android/latest.json naming')
         > r.out.indexOf('uploading the signed manifest'),
     'the production feed advances after the APK and signed manifest are in place');
+}
+
+// ------------------------------ pointer purge through the Cloudflare API
+//
+// This drives publish.sh, not the helper in isolation. The fake endpoint proves
+// the exact method, endpoint, authorization header and JSON body, including the
+// direct Android pointer, which the purge list must carry whenever it is written.
+{
+    const token = 'purge-token-success';
+    const target = makeTarget('feed-partial-purge-ok');
+    const purge = await servePurge();
+    const r = await run(['--input', partial, '--tag', TAG, '--target', target,
+        '--public-base', 'https://downloads.example.invalid/wallet', '--no-edge-verify'], {
+        CLOUDFLARE_ZONE_ID: 'zone/test',
+        CLOUDFLARE_PURGE_TOKEN: token,
+        XCHAIN_TEST_CLOUDFLARE_API_BASE: purge.base,
+    });
+    purge.server.close();
+
+    assert.equal(r.status, 0, `a successful purge lets the publish finish:\n${r.out}`);
+    assert.match(r.out, /purging 1 pointer path\(s\)/);
+    assert.match(r.out, /edge cache purged/);
+    assert.equal(purge.requests.length, 1, 'one purge request was made');
+    assert.equal(purge.requests[0].method, 'POST');
+    assert.equal(purge.requests[0].url, '/client/v4/zones/zone%2Ftest/purge_cache');
+    assert.equal(purge.requests[0].headers.authorization, `Bearer ${token}`);
+    assert.equal(purge.requests[0].headers['content-type'], 'application/json');
+    assert.deepEqual(JSON.parse(purge.requests[0].body), {
+        files: ['https://downloads.example.invalid/wallet/android/latest.json'],
+    });
+}
+
+{
+    const token = 'purge-token-must-not-leak';
+    const target = makeTarget('feed-partial-purge-fail');
+    const purge = await servePurge({
+        status: 403,
+        response: { success: false, errors: [{ code: 10000, message: `denied for ${token}` }] },
+    });
+    const r = await run(['--input', partial, '--tag', TAG, '--target', target,
+        '--public-base', 'https://downloads.example.invalid/wallet', '--no-edge-verify'], {
+        CLOUDFLARE_ZONE_ID: 'zone-test',
+        CLOUDFLARE_PURGE_TOKEN: token,
+        XCHAIN_TEST_CLOUDFLARE_API_BASE: purge.base,
+    });
+    purge.server.close();
+
+    assert.equal(r.status, 0, `a purge failure stays nonfatal after publishing:\n${r.out}`);
+    assert.match(r.out, /cloudflare-purge: API failure \(HTTP 403\):/);
+    assert.match(r.out, /\[REDACTED\]/, 'the API response body is printed with secrets redacted');
+    assert.doesNotMatch(r.out, new RegExp(token), 'the purge token is never printed');
+    assert.match(r.out, /WARNING - the purge did not report success/);
 }
 
 {
@@ -1139,13 +1216,13 @@ for (const order of [['desktop', 'android'], ['android', 'desktop']]) {
 }
 
 {
-    // The credential must never reach the process table, where any local
-    // user can read it out of `ps` for the life of the call.
+    // The credential must never reach argv, where it would be exposed in the
+    // process listing. The helper reads it from the inherited environment.
     const src = readFileSync(publish, 'utf8');
-    assert.match(src, /--config -/,
-        'the purge feeds curl its Authorization header on stdin');
-    assert.doesNotMatch(src, /-H\s+["']Authorization: Bearer \$/,
-        'and never as a command-line argument');
+    assert.match(src, /node "\$HERE\/cloudflare-purge\.mjs" "\$\{PURGE_URLS\[@\]\}"/,
+        'the publisher delegates the request to the shared Node helper');
+    assert.doesNotMatch(src, /cloudflare-purge\.mjs"[^\n]*CLOUDFLARE_PURGE_TOKEN/,
+        'and never puts the token on the helper command line');
 }
 
 // A REHEARSAL MANIFEST MUST NEVER REACH THE PRODUCTION FEED (§7.5,
