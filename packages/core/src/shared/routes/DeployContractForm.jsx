@@ -1690,7 +1690,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                help="Maximum computation allowed when deploying or calling the contract."
+                help={t('components.deployContractForm.gasLimitHelp')}
                 hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 inputMode="numeric"
