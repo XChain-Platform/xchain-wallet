@@ -17,6 +17,7 @@ import {
     NATIVE_FEE_WARNING,
     nativeFeeErrorMessage,
     nativeFeeToggleLabel,
+    oracleFeeRefusalMessage,
     resolveDustThreshold,
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import { protocolFeeRowCopy } from '../../../packages/core/src/flows/protocolFeeRow.js';
@@ -428,6 +429,41 @@ describe('nativeFeeErrorMessage', () => {
         expect(msg).not.toMatch(/ORACLE_ADDRESS/);
         expect(msg).toMatch(/24 hours/);
         expect(msg).toMatch(/Nothing was signed or sent/);
+    });
+
+    it('treats the current stale oracle verdict as a wait-or-publish condition', () => {
+        const err = new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { valid: false, error: 'invalid: ORACLE_ADDRESS (stale oracle price)' },
+        });
+        const msg = nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true });
+
+        expect(msg).toMatch(/no price in effect right now/i);
+        expect(msg).toMatch(/24 hours after its block/i);
+        expect(msg).toMatch(/wait for a pending price or publish a new one/i);
+        expect(msg).not.toMatch(/Waiting will not change this/i);
+        expect(msg).not.toMatch(/ORACLE_ADDRESS/);
+
+        const crossed = {
+            name: 'OracleFeeUnpayableError',
+            message: 'oracle usage fee pre-flight failed (invalid): invalid: ORACLE_ADDRESS (stale oracle price)',
+        };
+        expect(oracleFeeRefusalMessage(crossed, { coinTicker: 'DOGE' })).toBe(msg);
+    });
+
+    it('describes a validator pairing failure without blaming the oracle usage fee', () => {
+        const err = new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: {
+                valid: false,
+                error: 'invalid: ORACLE_ADDRESS (no validator price pairs with the oracle price)',
+            },
+        });
+        const msg = nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true });
+
+        expect(msg).toMatch(/can.t be paired with a current network price for DOGE/i);
+        expect(msg).not.toMatch(/usage fee/i);
+        expect(msg).not.toMatch(/ORACLE_ADDRESS/);
     });
 
     // The four ORACLE_ADDRESS verdicts have four different remedies, and one of

@@ -36,6 +36,8 @@
 
 import { satsResponseAmount } from './amountValidation.js';
 import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/preflightCopy.js';
 
 // Consensus fee destinations copied from the SDK coin registry. The remote quote may
 // confirm this address, but it never chooses it. Selecting by the SDK's local chain identity
@@ -234,14 +236,14 @@ const PRICE_REJECTION = /price|oracle|stale/i;
  */
 function oracleVerdictMessage(detail, coin) {
     if (!detail || !/^ORACLE_ADDRESS\b/i.test(detail)) return null;
-    if (/no effective oracle price/i.test(detail)) {
-        return 'The price oracle this dispenser names has no price in effect yet. A published '
-            + 'price starts pricing 24 hours after the block it lands in, so a quote published '
-            + 'today cannot be used until tomorrow. Nothing was signed or sent.';
+    if (/no effective oracle price|stale oracle price/i.test(detail)) {
+        return t('preflightCopy.nativeFee.oraclePriceInactive');
+    }
+    if (/no validator price pairs with the oracle price/i.test(detail)) {
+        return t('preflightCopy.nativeFee.oraclePricePairMissing', { coin });
     }
     if (/no validator price/i.test(detail)) {
-        return `The oracle's usage fee cannot be priced right now: the network has no current `
-            + `${coin} rate to value it against. Nothing was signed or sent; try again in a moment.`;
+        return t('preflightCopy.nativeFee.validatorPriceMissing', { coin });
     }
     if (/missing oracle fee output|insufficient oracle fee/i.test(detail)) {
         return 'This dispenser owes its price oracle a usage fee, and the amount this wallet '
@@ -273,7 +275,7 @@ export function oracleFeeRefusalMessage(err, { coinTicker } = {}) {
         .exec(String(/** @type {any} */ (err).message || ''));
     const detail = m ? m[1].trim().replace(/^invalid:\s*/i, '') : '';
     if (!/^ORACLE_ADDRESS\b/i.test(detail)
-        || !/no effective oracle price|no validator price|missing oracle fee output|insufficient oracle fee/i
+        || !/no effective oracle price|stale oracle price|no validator price|missing oracle fee output|insufficient oracle fee/i
             .test(detail)) {
         return null;
     }

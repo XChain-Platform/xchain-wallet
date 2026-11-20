@@ -71,6 +71,9 @@ const messages = {
     'preflightCopy.unverified.dispenseSettlementMatch': "Whether your payment exactly matches what the dispenser expects",
     'preflightCopy.unverified.gatedHandoffRef': "How the key to locked content reaches the recipient, when this token unlocks any",
     'preflightCopy.unverified.dispenserRestrictions': "Pause, allow and block rules on the dispenser's token and addresses",
+    'preflightCopy.nativeFee.oraclePriceInactive': 'This oracle has no price in effect right now. A published price starts pricing 24 hours after its block and stops 24 hours after it took effect, so wait for a pending price or publish a new one. Nothing was signed or sent.',
+    'preflightCopy.nativeFee.oraclePricePairMissing': "This dispenser oracle price can't be paired with a current network price for {coin}. Nothing was signed or sent; try again when both prices are current.",
+    'preflightCopy.nativeFee.validatorPriceMissing': "The oracle usage fee can't be priced right now because the network has no current {coin} rate to value it against. Nothing was signed or sent; try again in a moment.",
 };
 
 addEnglish(messages);
