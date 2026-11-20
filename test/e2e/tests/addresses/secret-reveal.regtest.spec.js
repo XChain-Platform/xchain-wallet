@@ -47,7 +47,7 @@
 
 import bitcoin from 'bitcoinjs-lib';
 import wifCodec from 'wif';
-import * as ecc from 'tiny-secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
@@ -79,8 +79,12 @@ function wifControlsAddress(wif, address) {
     }
     // bitcoinjs-lib v6 dropped ECPair, so the pubkey comes off the curve
     // directly rather than through another dependency.
-    const point = ecc.pointFromScalar(decoded.privateKey, decoded.compressed);
-    if (!point) return false;
+    let point;
+    try {
+        point = secp256k1.getPublicKey(decoded.privateKey, decoded.compressed);
+    } catch {
+        return false;
+    }
     const pub = Buffer.from(point);
 
     const testnet = bitcoin.networks.testnet;

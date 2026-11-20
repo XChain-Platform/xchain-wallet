@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import wifCodec from 'wif';
 import xchainSdk from 'xchain-sdk';
 import {
@@ -42,8 +42,8 @@ function generatedKey(type = 'p2wpkh') {
     let privateKey;
     do {
         privateKey = randomBytes(32);
-    } while (!ecc.isPrivate(privateKey));
-    const publicKey = Buffer.from(ecc.pointFromScalar(privateKey, true));
+    } while (!secp256k1.utils.isValidPrivateKey(privateKey));
+    const publicKey = Buffer.from(secp256k1.getPublicKey(privateKey, true));
     const payment = bitcoin.payments[type]({ pubkey: publicKey, network: TESTNET_NETWORK });
     const wif = wifCodec.encode(TESTNET_NETWORK.wif, privateKey, true);
     privateKey.fill(0);

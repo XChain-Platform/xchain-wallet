@@ -35,7 +35,7 @@
 // guard that runs without a human. This is that guard.
 //
 // THE VECTOR IS DERIVED, NOT TRUSTED. The expected address is computed here from
-// the WIF with `wif` + `tiny-secp256k1` + `bitcoinjs-lib`, independently of
+// the WIF with `wif` + `@noble/curves` + `bitcoinjs-lib`, independently of
 // anything the wallet does, so "the wallet imported an address" cannot pass for
 // "the wallet imported THE RIGHT address". A screen that pairs a key with
 // somebody else's address looks perfectly correct and nothing else would catch
@@ -75,7 +75,7 @@
 
 import bitcoin from 'bitcoinjs-lib';
 import wifCodec from 'wif';
-import * as ecc from 'tiny-secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { pickOption } from '../../fixtures/pickOption.js';
@@ -128,7 +128,7 @@ const VENUE_HRP = { RBTC: 'bcrt', RLTC: 'rltc' };
  */
 function expectedP2wpkh(wif, hrp) {
     const decoded = wifCodec.decode(wif);
-    const point = ecc.pointFromScalar(decoded.privateKey, decoded.compressed);
+    const point = secp256k1.getPublicKey(decoded.privateKey, decoded.compressed);
     const pubkey = Buffer.from(point);
     return bitcoin.payments.p2wpkh({
         pubkey,
