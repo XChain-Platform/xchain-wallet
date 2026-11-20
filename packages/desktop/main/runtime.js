@@ -132,6 +132,9 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   autoLockCleanupPending: boolean,
  *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   hostEpoch: number,
+ *   hostBuildInFlight: Promise<ReturnType<typeof createDesktopMessageHost> | null> | null,
+ *   hostClosedHolds: number,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
  */
@@ -203,6 +206,13 @@ export function createRuntime(deps) {
         autoLockCleanupPending: false,
         // OS lock and suspend can arrive together, so they share one lock.
         systemLockInFlight: null,
+        // A teardown invalidates an asynchronous host build. Overlapping
+        // callers share one build so only one Vault can own the session key.
+        hostEpoch: 0,
+        hostBuildInFlight: null,
+        // Nonzero while a teardown still owes its session-key clear, so no
+        // host can be built from the key it is about to remove.
+        hostClosedHolds: 0,
         // One broadcast-queue store for every host this process builds, as the
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
@@ -415,19 +425,31 @@ async function lockRuntimeForAutoLock(runtime, store, reason) {
  *
  * @param {DesktopRuntime} runtime
  */
-export async function ensureHost(runtime) {
-    if (runtime.autoLockCleanupPending) return null;
-    if (runtime.host) return runtime.host;
-
+async function buildHost(runtime) {
+    const epoch = runtime.hostEpoch;
+    const pool = runtime.signerPool;
     const masterKey = await runtime.sessionBackend.load();
+    if (runtime.hostEpoch !== epoch) {
+        masterKey?.fill(0);
+        return null;
+    }
     if (!masterKey) return null;
 
     const vault = new storageLib.Vault({
         backend: runtime.storageBackend,
         masterKey,
     });
+    const abandonBuild = () => {
+        if (!runtime.lockedAutopay?.holdsVault(vault)) {
+            try { vault.close(); } catch (_err) { /* best-effort */ }
+        }
+        if (runtime.vault === vault) runtime.vault = null;
+        try { pool.lockAll(); } catch (_err) { /* best-effort */ }
+        return null;
+    };
     try {
         await vault.open();
+        if (runtime.hostEpoch !== epoch) return abandonBuild();
         runtime.vault = vault;
 
         // The keychain restores the already-derived vault key rather than a
@@ -437,7 +459,7 @@ export async function ensureHost(runtime) {
         try {
             const meta = await runtime.metaBackend.load();
             if (meta?.kdfParams) {
-                await runtime.signerPool.populate({
+                await pool.populate({
                     vault,
                     masterKey,
                     masterKeyKdfParams: meta.kdfParams,
@@ -450,6 +472,7 @@ export async function ensureHost(runtime) {
             // when its wallet has no signer, so this cannot leave a false
             // unlocked state with address derivation unavailable.
         }
+        if (runtime.hostEpoch !== epoch) return abandonBuild();
 
         // Apply the egress policy before the host or any watcher can reach
         // the network (both boot and the `onUnlocked` path land here).
@@ -463,12 +486,15 @@ export async function ensureHost(runtime) {
                 console.error('[xchain] egress policy not applied at unlock:', err);
             }
         }
+        if (runtime.hostEpoch !== epoch) return abandonBuild();
 
+        // Publishing and watcher construction below are synchronous. Any
+        // await added before publication needs another epoch check.
         runtime.host = createDesktopMessageHost({
             vault,
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
-            signerPool: runtime.signerPool,
+            signerPool: pool,
             loadAmountRules: runtime.loadAmountRules,
             // A password change re-seals the vault; the keychain-cached
             // session key must follow it or the next launch opens nothing.
@@ -645,6 +671,7 @@ export async function ensureHost(runtime) {
 
         return runtime.host;
     } catch (err) {
+        if (runtime.hostEpoch !== epoch) return abandonBuild();
         // Cached key doesn't decrypt the vault. Most likely the user
         // reset the wallet, or the vault file was replaced by a
         // different install. Close the vault (zeros its key copy) and
@@ -661,12 +688,39 @@ export async function ensureHost(runtime) {
 }
 
 /**
+ * Return the current host or share one asynchronous build among callers.
+ * A caller that joined a build which found no session builds once more,
+ * since it may be the unlock that saved the key after that build read it.
+ * It never retries when a teardown ran after it joined: its request predates
+ * that lock, and the session key may outlive the teardown (a wipe clears it
+ * only after its other stores).
+ *
+ * @param {DesktopRuntime} runtime
+ */
+export async function ensureHost(runtime) {
+    if (runtime.autoLockCleanupPending || runtime.hostClosedHolds > 0) return null;
+    if (runtime.host) return runtime.host;
+    const joined = runtime.hostBuildInFlight !== null;
+    const joinedEpoch = runtime.hostEpoch;
+    if (!runtime.hostBuildInFlight) {
+        const build = buildHost(runtime).finally(() => {
+            if (runtime.hostBuildInFlight === build) runtime.hostBuildInFlight = null;
+        });
+        runtime.hostBuildInFlight = build;
+    }
+    const result = await runtime.hostBuildInFlight;
+    if (result != null || !joined || runtime.hostEpoch !== joinedEpoch) return result;
+    return ensureHost(runtime);
+}
+
+/**
  * Close the vault + drop the host. Used by the `wallet.lock` pre-host
  * callback and by app-before-quit. Safe to call when already torn down.
  *
  * @param {DesktopRuntime} runtime
  */
 export function tearDownHost(runtime) {
+    runtime.hostEpoch += 1;
     if (runtime.notificationService) {
         try { runtime.notificationService.stop(); } catch (_err) { /* best-effort */ }
         runtime.notificationService = null;
@@ -703,6 +757,22 @@ export function tearDownHost(runtime) {
         runtime.vault = null;
     }
     runtime.host = null;
+}
+
+/**
+ * Tear the host down, then clear the cached session key, building no host
+ * from that key until the clear settles. Rejects with the clear's error.
+ *
+ * @param {DesktopRuntime} runtime
+ */
+export async function closeHostAndClearSession(runtime) {
+    tearDownHost(runtime);
+    runtime.hostClosedHolds += 1;
+    try {
+        await runtime.sessionBackend.clear();
+    } finally {
+        runtime.hostClosedHolds -= 1;
+    }
 }
 
 /**
@@ -787,6 +857,23 @@ export async function wipeRuntimeStores(runtime) {
     // The vault being erased is the one locked auto pay holds.
     try { await runtime.lockedAutopay?.end('wallet-wipe'); } catch { /* the wipe goes on */ }
     tearDownHost(runtime);
+    // The session key outlives the teardown until its turn below, so no host
+    // may be built from it while the wipe runs.
+    runtime.hostClosedHolds += 1;
+    try {
+        return await clearRuntimeStores(runtime);
+    } finally {
+        runtime.hostClosedHolds -= 1;
+    }
+}
+
+/**
+ * The store-clearing half of `wipeRuntimeStores`, run with the host closed.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<WipeResult>}
+ */
+async function clearRuntimeStores(runtime) {
     // Seal the shared queue store so a broadcast the torn-down host still has
     // on the network writes nothing back; the next unlock gets a fresh one.
     try {

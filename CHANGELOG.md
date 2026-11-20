@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux lists the wallet under Office and Finance in the application menu.
 - The Mac App Store build is produced straight from the repository and declares its encryption use.
 - A donation that rode along on a send is no longer paid again on the next send when the confirmation wait times out.
+- Locking the desktop wallet just after launch or unlock keeps it locked, with no signing keys left live.
 
 ## [0.343.0] - 2026-11-18
 
