@@ -20,6 +20,7 @@ import { UnbindForm } from '../../../packages/core/src/shared/routes/UnbindForm.
 import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -96,6 +97,23 @@ afterEach(() => {
 });
 
 describe('Unbind Controller form', () => {
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'JDOG'), null);
+        const getTokenInfo = vi.fn(({ tick } = {}) => Promise.resolve({
+            chainId: CHAIN, tick, creator: HD.address, locks: {},
+        }));
+        const { utils, calls } = await mount({ tick: 'JDOG' }, { getTokenInfo });
+        const submit = unbindButton(utils);
+        await waitFor(() => expect(submit).toBeEnabled());
+        fireEvent.click(submit);
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'Wait for the wallet to verify the current owner of JDOG.',
+        );
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(1));
+        fireEvent.click(submit);
+        await waitFor(() => expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(true));
+    });
+
     it('renders on the Form Standard: From, the Controller section, Memo, Fees and an Unbind action with an icon', async () => {
         const { utils } = await mount({ tick: 'JDOG' });
         await waitFor(() => expect(unbindButton(utils).disabled).toBe(false));

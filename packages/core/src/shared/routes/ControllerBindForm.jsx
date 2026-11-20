@@ -54,6 +54,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { controllerBindValidationError } from '../../flows/controllerBind.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { toggleActionClass, waitForTxOutputsVisible } from '../utils/controllerBindClasses.js';
 import { MAX_MEMO_LENGTH } from '../utils/memoLimit.js';
 import { t } from '../../i18n/index.js';
@@ -162,6 +163,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [sourceError, setSourceError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const defaultFromIdRef = useRef(/** @type {string | null} */ (null));
     // 'token' → ISSUE v6 (gate a TICK); 'address' → ADDRESS v1 (gate the signer).
     const [target, setTarget] = useState(/** @type {'token' | 'address'} */ (tick ? 'token' : 'address'));
     const [selectedTick, setSelectedTick] = useState('');
@@ -266,7 +268,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 setSourceError(null);
                 // preferredSourceId falls back to the newest HD address, which a
                 // hardware-only or watch-only wallet does not hold.
-                setFromAddressId(preferredSourceId(addrs, active?.[cid]) || addrs[0].id);
+                const picked = preferredSourceId(addrs, active?.[cid]) || addrs[0].id;
+                defaultFromIdRef.current = picked;
+                setFromAddressId(picked);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
@@ -330,8 +334,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // finishes loading after the user has already selected the token target.
     useEffect(() => {
         if (target !== 'token' || !selectedTick || !ownedTokens) return;
+        if (fromAddressId && fromAddressId !== defaultFromIdRef.current) return;
         const token = ownedTokens.find((row) => row.tick === selectedTick);
-        if (token && token.ownerAddressId !== fromAddressId) setFromAddressId(token.ownerAddressId);
+        if (token && token.ownerAddressId !== fromAddressId) {
+            defaultFromIdRef.current = null;
+            setFromAddressId(token.ownerAddressId);
+        }
     }, [fromAddressId, ownedTokens, selectedTick, target]);
 
     // Action-class list from the SDK (degrades to the locked-fact list).
@@ -519,6 +527,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             return;
         }
         if (target === 'token' && issuerEligibility.pending) {
+            // A tick read before it was issued can sit cached as unknown, so
+            // the refused tap asks again.
+            invalidateTokenInfo(chainId, selectedTick);
             setFormError(`Wait for the wallet to verify the current owner of ${selectedTick}.`);
             setFormErrorSection('controller');
             return;

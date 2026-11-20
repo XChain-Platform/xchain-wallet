@@ -76,6 +76,7 @@ import {
     UNKNOWN_TOKEN_ISSUER_MESSAGE,
     tokenIssuerEligibility,
 } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
@@ -176,6 +177,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         chainId,
         setChainId,
         fromAddress,
+        fromAddressId,
         setFromAddressId,
         chainsWithAddresses,
         descriptor,
@@ -253,6 +255,19 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         tick: ticker,
         sourceAddress: fromAddress?.address,
     });
+    // An owner read can answer after the shared hook chose its default source.
+    // Move that untouched default to the owner, but preserve a user's pick.
+    const defaultFromIdRef = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (!addressesByChain || !fromAddressId) return;
+        if (!defaultFromIdRef.current) defaultFromIdRef.current = fromAddressId;
+        if (fromAddressId !== defaultFromIdRef.current || !owner) return;
+        const match = (addressesByChain[chainId] || []).find((address) => address.address === owner);
+        if (match && match.id !== fromAddressId) {
+            defaultFromIdRef.current = null;
+            setFromAddressId(match.id);
+        }
+    }, [addressesByChain, chainId, fromAddressId, owner, setFromAddressId]);
     const payoutInfo = useTokenInfo({ chainId, tick: cbTick, skip: !cbTick });
     // Unknown until the payout token answers: a failed read carries no
     // decimals, and guessing 0 floors every holder's payout to whole units.
@@ -607,6 +622,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             return false;
         }
         if (issuerEligibility.pending) {
+            // A tick read before it was issued can sit cached as unknown, so
+            // the refused tap asks again.
+            invalidateTokenInfo(chainId, ticker);
             setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
             return false;
         }
@@ -1042,9 +1060,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     // G22: enabled whatever the fields hold; a press with
                     // the Token empty marks it, and every other refusal
                     // (no callback set, memo too long) shows in the slot.
-                    disabled={issuerEligibility.pending
-                        || refreshing
-                        || confirmAction.composing}
+                    disabled={refreshing || confirmAction.composing}
                 >
                     Recall Tokens
                 </FormAction>

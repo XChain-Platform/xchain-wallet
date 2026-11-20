@@ -15,6 +15,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ onSelect }) => (
@@ -81,6 +82,21 @@ afterEach(() => {
 });
 
 describe('SleepForm token state decides the action', () => {
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'gate'), null);
+        const { target } = mount(vi.fn().mockResolvedValue({ resumeBlock: null }));
+        const pause = await screen.findByRole('button', { name: /^Pause token$/i });
+        fireEvent.click(screen.getByRole('button', { name: /^Pause setting/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Pause indefinitely' }));
+        fireEvent.click(pause);
+        await waitFor(() => expect(screen.getAllByText(
+            'Wait for the wallet to verify the current owner of gate.',
+        ).length).toBeGreaterThan(0));
+        await waitFor(() => expect(target.getTokenInfo).toHaveBeenCalledTimes(1));
+        fireEvent.click(pause);
+        expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    });
+
     it('offers only Pause for an active token, with no status line', async () => {
         mount(vi.fn().mockResolvedValue({ resumeBlock: null }));
         const pause = await screen.findByRole('button', { name: /^Pause token$/i });
