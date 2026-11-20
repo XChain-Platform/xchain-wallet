@@ -1381,7 +1381,7 @@ export function PlaceOrderPanel({
                             onGetChange={(raw) => editTicket('get', raw)}
                             onSettle={() => setTicketDraft(null)}
                             payBalance={t('market.trade.balance', { amount: balanceFor(payTick) ?? '-' })}
-                            getNote={price ? `at ${trimAmountTail(price)} each` : ''}
+                            getNote={price ? t('market.trade.priceEach', { price: trimAmountTail(price) }) : ''}
                             onFlip={() => setSide(side === 'buy' ? 'sell' : 'buy')}
                         />
                     ) : (

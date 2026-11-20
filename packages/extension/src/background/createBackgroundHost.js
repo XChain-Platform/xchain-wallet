@@ -111,6 +111,7 @@ import { createAddressDiscoveryTask } from './addressDiscoveryTask.js';
 const {
     importedAddressIdsFor,
     importedAddressIdsForStrict,
+    importedAddressIdsOfWallet,
     createAccount,
     activateChain,
     renameWallet,
@@ -1835,14 +1836,18 @@ export function createBackgroundHost(deps) {
     // endpoints are unchanged, so unrelated saves never drop live SDK
     // instances.
     async function applyEndpointOverridesFromVault(vault, sdkRegistry) {
-        if (!vault) return;
-        if (typeof sdkRegistry?.applyEndpointOverridesFromSettings !== 'function') return;
+        if (!vault) return [];
+        if (typeof sdkRegistry?.applyEndpointOverridesFromSettings !== 'function') return [];
         try {
             const settings = await vault.settings.get();
-            if (settings) sdkRegistry.applyEndpointOverridesFromSettings(settings);
+            const applied = settings
+                ? sdkRegistry.applyEndpointOverridesFromSettings(settings)
+                : null;
+            return Array.isArray(applied?.changed) ? applied.changed : [];
         } catch {
             // Vault not open yet or read failed: the bundled defaults keep
             // serving and the next trigger tries again.
+            return [];
         }
     }
     // A restore that replaces the Settings record can bring custom chains and
@@ -1856,6 +1861,7 @@ export function createBackgroundHost(deps) {
     async function rehydrateAfterSettingsRestore(vault, chainRegistry, sdkRegistry) {
         if (!vault || !chainRegistry) return;
         let moved = false;
+        const droppedSdkIds = new Set();
         try {
             if (customChainsSeedPromise) await customChainsSeedPromise;
             const restored = await vault.settings.get();
@@ -1869,13 +1875,23 @@ export function createBackgroundHost(deps) {
                     : restored,
             );
             for (const id of [...result.removed, ...result.replaced]) {
+                droppedSdkIds.add(id);
                 try { sdkRegistry?.invalidate?.(id); } catch { /* a cache drop never fails the restore */ }
             }
             moved = result.added.length + result.removed.length + result.replaced.length > 0;
         } catch {
             // The restore already committed; a failed re-read must not fail it.
         }
-        await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        for (const id of await applyEndpointOverridesFromVault(vault, sdkRegistry)) {
+            droppedSdkIds.add(id);
+        }
+        if (droppedSdkIds.size > 0 && typeof onSdkEndpointsChanged === 'function') {
+            try {
+                await onSdkEndpointsChanged([...droppedSdkIds]);
+            } catch (err) {
+                console.error('[xchain] endpoint change follow-up failed:', err);
+            }
+        }
         if (throttleVault !== vault) {
             throttleVault = vault;
             throttleLimitsLoaded = false;
@@ -3362,22 +3378,34 @@ export function createBackgroundHost(deps) {
 
     // §17.6: confirm a persisted hardware receive address on the device's
     // trusted screen and cross-check it against what the wallet holds. The
-    // Receive screen's "Verify on your device" action calls this; requires
-    // the paired HW signer (RemoteSigner) named by req.signerId.
-    host.register('receive.verifyAddress', async (req, { vault, chainRegistry, signerPool }) => {
-        const signer = await pickSignerFromRequest({
-            vault,
-            walletId: req?.walletId,
-            signerId: req?.signerId,
-            signerPool,
-        });
-        if (!signer) {
-            throw new Error('receive.verifyAddress: a connected hardware wallet is required');
+    // Receive screen's "Verify on your device" action resolves the paired
+    // hardware signer from the stored address, which is authoritative.
+    host.register('receive.verifyAddress', async (req, { vault, chainRegistry }) => {
+        const walletId = req?.walletId;
+        const addressId = req?.addressId;
+        if (typeof walletId !== 'string' || walletId.length === 0) {
+            throw new Error('receive.verifyAddress: walletId is required');
         }
+        if (typeof addressId !== 'string' || addressId.length === 0) {
+            throw new Error('receive.verifyAddress: addressId is required');
+        }
+        const address = await vault.addresses.get(addressId);
+        if (!address) throw new Error(`receive.verifyAddress: address "${addressId}" not found`);
+        await assertAddressInWallet(vault, address, walletId);
+        const descriptor = await resolveSigner({ vault, address });
+        if (!schemas.isDeviceSignerKind(descriptor.kind)) {
+            throw new Error('receive.verifyAddress: address is not a hardware address');
+        }
+        if (typeof req?.signerId === 'string' && req.signerId.length > 0
+            && req.signerId !== descriptor.signerRecord.id) {
+            throw new Error('receive.verifyAddress: signerId does not match the device that owns this address');
+        }
+        const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
+        const signer = buildRemoteSigner(descriptor, transport);
         return verifyReceiveAddress({
             vault,
             chainId: req?.chainId,
-            addressId: req?.addressId,
+            addressId,
             signer,
             chainRegistry,
         });
@@ -3490,7 +3518,7 @@ export function createBackgroundHost(deps) {
     //     writing the snapshot back on top would list one address twice
     //     with two ids: a duplicate that outlives the toast and that
     //     `assertNotAlreadyImported` would never have allowed;
-    //   - the owning account can be deleted while the toast is up
+    //   - the owning account or imported-key wallet can be deleted while the toast is up
     //     (removeWallet takes its addresses with it). Restoring into a
     //     gone account resurrects a row whose key no longer exists, so
     //     that fails closed too.
@@ -3522,6 +3550,14 @@ export function createBackgroundHost(deps) {
         if (address.accountId) {
             const account = await vault.accounts?.get?.(address.accountId);
             if (!account) return { ok: false, restored: false, reason: 'account-missing' };
+        } else {
+            if (typeof vault.wallets?.list !== 'function') {
+                return { ok: false, restored: false, reason: 'owner-missing' };
+            }
+            const wallets = await vault.wallets.list();
+            const owned = Array.isArray(wallets)
+                && wallets.some((wallet) => importedAddressIdsOfWallet(wallet).has(address.id));
+            if (!owned) return { ok: false, restored: false, reason: 'owner-missing' };
         }
 
         await vault.addresses.put(address);
@@ -3543,6 +3579,7 @@ export function createBackgroundHost(deps) {
         return setActiveAddress({
             vault,
             accountId: req?.accountId,
+            walletId: req?.walletId,
             chainId: req?.chainId,
             addressId: req?.addressId,
         });
@@ -4574,21 +4611,32 @@ export function createBackgroundHost(deps) {
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
             : (broadcast?.txid ?? broadcast?.tx_hash ?? null);
-        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
-            await settleOrJournalPatch(vault, walletId, pending.id, {
-                status: 'failed',
-                error: 'SDK did not return a txid',
+        const queueAmbiguousReplacement = async (error) => {
+            await settleOrJournalPatch(vault, walletId, pending.id, { status: 'queued', error });
+            await enqueueSignedBroadcast(walletId, {
+                chainId,
+                signedTxHex: signed.txHex,
+                summary: pending.actionSummary,
+                txid: signed.txid,
+                pendingTxId: pending.id,
+                rbfReplacesPendingTxId: conflictRecord.id,
+                resumedClaim: true,
             });
             await flushOwedSettlements(vault);
-            throw new Error('tx.replace: SDK did not return a txid');
+        };
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
+            await queueAmbiguousReplacement('SDK did not return a txid');
+            const err = new Error('tx.replace: SDK did not return a txid');
+            err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+            throw err;
         }
         if (lowerHash(replacementTxHash) !== lowerHash(signed.txid)) {
-            await settleOrJournalPatch(vault, walletId, pending.id, {
-                status: 'failed',
-                error: 'broadcast txid did not match signed transaction',
-            });
-            await flushOwedSettlements(vault);
-            throw new Error('tx.replace: broadcast txid did not match signed transaction');
+            await queueAmbiguousReplacement(
+                `broadcast txid did not match signed transaction (${replacementTxHash})`,
+            );
+            const err = new Error('tx.replace: broadcast txid did not match signed transaction');
+            err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+            throw err;
         }
 
         const broadcastedAt = new Date().toISOString();
@@ -4771,7 +4819,12 @@ export function createBackgroundHost(deps) {
             const retryAfterMs = Number.isFinite(entry.nextRetryAt)
                 ? Math.ceil(entry.nextRetryAt - Date.now())
                 : 0;
-            if (retryAfterMs > 0) {
+            const maximumRetryAfterMs = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
+                ? queuedBroadcastRetryDelay(entry.retryAttempt)
+                : QUEUED_BROADCAST_RETRY_MAX_MS;
+            // A persisted deadline cannot legitimately have more time left than
+            // the delay that created it. A larger value means the clock moved back.
+            if (retryAfterMs > 0 && retryAfterMs <= maximumRetryAfterMs) {
                 const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
                 const retryError = new Error(
                     `Sending is paused after a network failure. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,

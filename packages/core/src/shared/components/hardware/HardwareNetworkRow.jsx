@@ -159,7 +159,9 @@ export function useAddHardwareNetwork({ messaging, walletId, signerId, onAdded }
             const added = Array.isArray(result?.addresses)
                 && result.addresses.some((entry) => entry?.accountId === accountId);
             const already = Array.isArray(result?.skippedAccountDetails)
-                && result.skippedAccountDetails.some((entry) => entry?.accountId === accountId);
+                && result.skippedAccountDetails.some((entry) => (
+                    entry?.accountId === accountId && entry?.reason !== 'custody-mismatch'
+                ));
             if (!added && !already) {
                 setState(key, 'failed');
                 return false;

@@ -166,6 +166,31 @@ describe('useConfirmAction', () => {
         expect(calls).toBe(2);
     });
 
+    it.each(['AeadAuthError', 'WrongPasswordError'])(
+        're-prompts for the typed signing credential failure %s',
+        async (name) => {
+            const { result } = renderHook(() => useConfirmAction());
+            const failure = Object.assign(new Error('aes/gcm: invalid ghash tag'), { name });
+            let p;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED,
+                    onApprove: async () => { throw failure; },
+                    chainId: 'btc', preflight: preflightWith(),
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+
+            await act(async () => { await result.current.approve({}); });
+            expect(result.current.phase).toBe('ready');
+            expect(result.current.error).toBe(failure);
+
+            let out;
+            await act(async () => { result.current.reject(); out = await p; });
+            expect(out.err).toBeInstanceOf(UserRejectedError);
+        },
+    );
+
     it('does NOT double-reserve when a credential failure re-prompts', async () => {
         const { result } = renderHook(() => useConfirmAction());
         const badPw = Object.assign(new Error('bad'), { name: 'InvalidPasswordError' });
@@ -374,6 +399,24 @@ describe('useConfirmAction', () => {
             out = await p;
         });
         expect(out.err.message).toBe('node unreachable');
+        expect(result.current.phase).toBe('error');
+    });
+
+    it('does not classify credential-like message text without a typed signal', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const failure = new Error('invalid password policy on server');
+        let p;
+        await act(async () => {
+            p = settle(result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => { throw failure; },
+                chainId: 'btc', preflight: preflightWith(),
+            }));
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        let out;
+        await act(async () => { await result.current.approve({}); out = await p; });
+        expect(out.err).toBe(failure);
         expect(result.current.phase).toBe('error');
     });
 

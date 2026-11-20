@@ -26,6 +26,93 @@ import { buildAccountWindowStore } from '../cosigner/vaultWindowPersistence.js';
 import { evaluateAllowedTicks, nativeTickForChain, sdkValueUnreadable } from '../cosigner/allowedTicks.js';
 import { CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 
+function tokenRefusalPreview(account, decoded, tokenVerdict, evaluation, clockWarnings) {
+    return {
+        account,
+        decodeOk: true,
+        decodeReason: null,
+        action: decoded.action,
+        params: decoded.params,
+        amount: evaluation.amount,
+        tick: tokenVerdict.violation.details.tick ?? evaluation.tick,
+        destinations: Array.isArray(evaluation.destinations) ? evaluation.destinations : [],
+        policyOk: false,
+        policyReason: tokenVerdict.violation.code,
+        needsConfirmation: false,
+        clockWarnings,
+    };
+}
+
+function windowFailurePreview(account, decoded) {
+    return {
+        account,
+        decodeOk: true,
+        decodeReason: null,
+        action: decoded.action,
+        params: decoded.params,
+        amount: undefined,
+        tick: undefined,
+        destinations: [],
+        policyOk: false,
+        policyReason: 'WINDOW_STATE_CORRUPT',
+        needsConfirmation: false,
+        clockWarnings: [],
+    };
+}
+
+async function loadPreviewWindow(vault, account, now) {
+    const store = buildAccountWindowStore({ vault, account, now });
+    if (!store) return { failed: false, usage: undefined, warnings: [] };
+    try {
+        await store.load();
+        return {
+            failed: false,
+            usage: store.snapshot(),
+            warnings: typeof store.clockWarnings === 'function' ? store.clockWarnings() : [],
+        };
+    } catch {
+        return { failed: true, usage: undefined, warnings: [] };
+    }
+}
+
+async function previewDecodedRequest({ vault, sdk, account, accountSummary, decoded, now }) {
+    const window = await loadPreviewWindow(vault, account, now);
+    const actionData = { action: decoded.action, version: decoded.version, params: decoded.params };
+    const tickOptions = {
+        nativeTick: nativeTickForChain(account.chainId), valueUnreadable: sdkValueUnreadable(sdk),
+    };
+    if (window.failed) {
+        const tokenVerdict = evaluateAllowedTicks(account.policy, actionData, tickOptions);
+        return tokenVerdict.ok
+            ? windowFailurePreview(accountSummary, decoded)
+            : tokenRefusalPreview(accountSummary, decoded, tokenVerdict, {}, []);
+    }
+    const verdict = sdk.coSigner.evaluatePolicy(account.policy, actionData, window.usage);
+    const evaluation = verdict.evaluation || {};
+    const tokenVerdict = verdict.ok === true
+        ? evaluateAllowedTicks(account.policy, actionData, tickOptions)
+        : null;
+    if (tokenVerdict && !tokenVerdict.ok) {
+        return tokenRefusalPreview(
+            accountSummary, decoded, tokenVerdict, evaluation, window.warnings,
+        );
+    }
+    return {
+        account: accountSummary,
+        decodeOk: true,
+        decodeReason: null,
+        action: decoded.action,
+        params: decoded.params,
+        amount: evaluation.amount,
+        tick: evaluation.tick,
+        destinations: Array.isArray(evaluation.destinations) ? evaluation.destinations : [],
+        policyOk: verdict.ok === true,
+        policyReason: verdict.ok ? null : (verdict.violation && verdict.violation.code) || 'POLICY_DENIED',
+        needsConfirmation: Boolean(evaluation.needsConfirmation),
+        clockWarnings: window.warnings,
+    };
+}
+
 /**
  * @typedef {Object} CoSignPreview
  * @property {{ id: string, name: string, chainId: string, aggregateAddress: string, enabled: boolean }} account
@@ -104,63 +191,5 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
         };
     }
 
-    // 2. Dry-run the policy against the current spending-window snapshot
-    //    (read-only: load the window but never record).
-    let windowUsage;
-    let clockWarnings = [];
-    const windowStore = buildAccountWindowStore({ vault, account, now });
-    if (windowStore) {
-        await windowStore.load();
-        windowUsage = windowStore.snapshot();
-        if (typeof windowStore.clockWarnings === 'function') clockWarnings = windowStore.clockWarnings();
-    }
-    // The decoded VERSION rides along: without it the evaluator cannot tell
-    // whether an amount cap can bind this exact format (G2), and the preview
-    // would show "allowed" for an action the daemon then refuses.
-    const verdict = sdk.coSigner.evaluatePolicy(
-        account.policy,
-        { action: decoded.action, version: decoded.version, params: decoded.params },
-        windowUsage,
-    );
-
-    const evalu = verdict.evaluation || {};
-    // The SDK evaluator has no allowed-tokens rule; the wallet applies it next,
-    // so the approval screen refuses what the signing decision would refuse.
-    // Both read a ^<id> only through the policy's saved tickIds; no explorer.
-    const tokenVerdict = verdict.ok === true
-        ? evaluateAllowedTicks(
-            account.policy,
-            { action: decoded.action, version: decoded.version, params: decoded.params },
-            { nativeTick: nativeTickForChain(account.chainId), valueUnreadable: sdkValueUnreadable(sdk) },
-        )
-        : null;
-    if (tokenVerdict && !tokenVerdict.ok) {
-        return {
-            account: accountSummary,
-            decodeOk: true,
-            decodeReason: null,
-            action: decoded.action,
-            params: decoded.params,
-            amount: evalu.amount,
-            tick: tokenVerdict.violation.details.tick ?? evalu.tick,
-            destinations: Array.isArray(evalu.destinations) ? evalu.destinations : [],
-            policyOk: false,
-            policyReason: tokenVerdict.violation.code,
-            needsConfirmation: false,
-        };
-    }
-    return {
-        account: accountSummary,
-        decodeOk: true,
-        decodeReason: null,
-        action: decoded.action,
-        params: decoded.params,
-        amount: evalu.amount,
-        tick: evalu.tick,
-        destinations: Array.isArray(evalu.destinations) ? evalu.destinations : [],
-        policyOk: verdict.ok === true,
-        policyReason: verdict.ok ? null : (verdict.violation && verdict.violation.code) || 'POLICY_DENIED',
-        needsConfirmation: Boolean(evalu.needsConfirmation),
-        clockWarnings,
-    };
+    return previewDecodedRequest({ vault, sdk, account, accountSummary, decoded, now });
 }

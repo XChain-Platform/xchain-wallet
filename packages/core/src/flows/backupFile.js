@@ -644,18 +644,20 @@ async function reuseExistingSignerIds(vault, payload) {
 }
 
 /**
- * @param {BackupPayload['accounts']} accounts
+ * Accounts and key-only wallets both hold overrides; one naming an address
+ * outside the payload is dropped so resolution falls back to the default.
+ * @param {Array<{ activeAddressByChainId?: Record<string, string> }>} holders
  * @param {Map<string, string>} addressIdMap
  */
-function remapActiveAddressOverrides(accounts, addressIdMap) {
-    for (const account of accounts ?? []) {
-        const overrides = account?.activeAddressByChainId;
+function remapActiveAddressOverrides(holders, addressIdMap) {
+    for (const holder of holders ?? []) {
+        const overrides = holder?.activeAddressByChainId;
         if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) continue;
         const remapped = {};
         for (const [chainId, addressId] of Object.entries(overrides)) {
             if (addressIdMap.has(addressId)) remapped[chainId] = addressIdMap.get(addressId);
         }
-        account.activeAddressByChainId = remapped;
+        holder.activeAddressByChainId = remapped;
     }
 }
 
@@ -707,7 +709,7 @@ function remapSiteGrants(sites, accountIdMap) {
  * references one of the re-minted ids:
  *
  *   - wallet.id
- *   - wallet.importedKeys[].addressId
+ *   - wallet.importedKeys[].addressId, wallet.activeAddressByChainId values
  *   - account.id, account.walletId, account.activeAddressByChainId values
  *   - address.id, address.accountId
  *   - signer.id, signer.walletId, hardware address.signerId
@@ -755,7 +757,7 @@ export function remintIdentifiers(decoded) {
     }
 
     remintSignerIds(decoded, walletIdMap);
-    remapActiveAddressOverrides(decoded.accounts, addressIdMap);
+    remapActiveAddressOverrides([...(decoded.accounts ?? []), decoded.wallet], addressIdMap);
     remapSiteGrants(decoded.connectedSites, accountIdMap);
 
     // Wallet's importedKeys point at the re-minted address ids by

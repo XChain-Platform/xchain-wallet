@@ -29,6 +29,8 @@
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { assertMainnetActionAllowed } from '../flows/mainnetPrelaunch.js';
+import { assertXbridgeLive } from '../flows/protocolActivations.js';
+import { indexerWatermark } from '../flows/balances.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
 import { capRbfToDescriptor } from '../flows/rbfCap.js';
@@ -422,6 +424,15 @@ export async function submitWithSigner({
         // would produce different bytes depending on which route built it.
         bareNativePayment = isBareNativePayment(actionData, chainRegistry?.get(chainId));
         createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
+        if (createResult) {
+            await assertXbridgeLive({
+                chainId,
+                action: createResult.action ?? actionData.action,
+                actionString: createResult.actionString,
+                getBlockHeight: async () => (await indexerWatermark({ sdkRegistry, chainId })).watermark,
+                where: 'submitWithSigner',
+            });
+        }
 
         const envelopeRequest = createResult
             ? envelopeEncoderOpts({

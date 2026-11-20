@@ -166,6 +166,17 @@ describe('validateWallet', () => {
         expect(r.errors).toHaveLength(0);
     });
 
+    it('accepts only string-valued active address overrides', () => {
+        const wallet = createWallet(BASE_INPUT);
+        expect(validateWallet({
+            ...wallet, activeAddressByChainId: { 'bitcoin-regtest': 'addr-1' },
+        }).ok).toBe(true);
+        expect(validateWallet({
+            ...wallet, activeAddressByChainId: { 'bitcoin-regtest': null },
+        }).ok).toBe(false);
+        expect(validateWallet({ ...wallet, activeAddressByChainId: [] }).ok).toBe(false);
+    });
+
     it('rejects non-object input', () => {
         expect(validateWallet(null).ok).toBe(false);
         expect(validateWallet('x').ok).toBe(false);

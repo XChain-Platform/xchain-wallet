@@ -408,7 +408,7 @@ export function desktopInstallChannel({
  * @param {string|null} [opts.pointerName]  the channel pointer to anchor against; tests only
  * @param {string|null} [opts.laneName]  the release lane this install belongs to; tests only
  * @param {() => boolean} [opts.canRestart]  reports whether wallet work permits a restart
- * @returns {Promise<{ checkForUpdates: () => Promise<void>, downloadUpdate: () => Promise<any>, downloadAndInstall: () => Promise<any>, restartAndInstall: () => Promise<any>, isActive: boolean }>}
+ * @returns {Promise<{ checkForUpdates: () => Promise<void>, downloadUpdate?: () => Promise<any>, downloadAndInstall: () => Promise<any>, restartAndInstall?: () => Promise<any>, isActive: boolean, netSession: any }>}
  */
 export async function attachUpdater({
     loader = defaultLoader,
@@ -438,6 +438,7 @@ export async function attachUpdater({
         log('[xchain] updater skipped: this build has no update configuration');
         return {
             isActive: false,
+            netSession: null,
             async checkForUpdates() { /* no update configuration */ },
             async downloadAndInstall() { /* no update configuration */ },
         };
@@ -475,6 +476,7 @@ export async function attachUpdater({
         || (process.env.SNAP && process.env.SNAP_NAME)) {
         return {
             isActive: false,
+            netSession: null,
             async checkForUpdates() { /* the store owns updates */ },
             async downloadUpdate() { return { ok: false, reason: 'updates are store-managed' }; },
             async downloadAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
@@ -490,6 +492,7 @@ export async function attachUpdater({
         // way the answer is the same inert surface as the store builds.
         return {
             isActive: false,
+            netSession: null,
             async checkForUpdates() { /* snapd owns updates */ },
             async downloadUpdate() { return { ok: false, reason: 'updates are store-managed' }; },
             async downloadAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
@@ -519,6 +522,7 @@ export async function attachUpdater({
     if (!isActive) {
         return {
             isActive: false,
+            netSession: null,
             async checkForUpdates() { /* no-op in dev */ },
             async downloadUpdate() { return { ok: false, reason: 'updater is inactive' }; },
             async downloadAndInstall() { return { ok: false, reason: 'updater is inactive' }; },
@@ -630,6 +634,7 @@ export async function attachUpdater({
 
     return {
         isActive: true,
+        netSession: autoUpdater.netSession ?? null,
 
         async checkForUpdates() {
             try {

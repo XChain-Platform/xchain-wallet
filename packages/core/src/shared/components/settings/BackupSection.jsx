@@ -79,7 +79,6 @@ import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { submitFailureMessage } from '../../utils/submitFailureMessage.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
-import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
 import {
@@ -689,7 +688,9 @@ export function BackupSection({ activeWallet, onExportInTab, only = null, direct
                 <UnlockPrompt
                     direct={phraseDirect}
                     label={t('settings.backup.revealRecoveryPhrase')}
-                    hint={t('settings.backup.enterYourWalletPasswordMake', { RECOVERY_PHRASE_WARNING })}
+                    hint={t('settings.backup.enterYourWalletPasswordMake', {
+                        warning: t('common.recoveryPhraseWarning'),
+                    })}
                     busy={revealing}
                     onCancel={phraseDirect ? undefined : handleHideMnemonic}
                     onSubmit={(pw) => onReveal(pw)}
@@ -889,7 +890,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit, direct = f
                     and the page's note, then the field, then the button. */}
                 {direct ? (
                     <Notice tone="danger" role="note" testId="reveal-phrase-note">
-                        <p>{RECOVERY_PHRASE_WARNING}</p>
+                        <p>{t('common.recoveryPhraseWarning')}</p>
                         <p>{t('settings.backup.directPhraseNote')}</p>
                     </Notice>
                 ) : null}
@@ -961,7 +962,9 @@ function RevealedMnemonic({
     return (
         <FormSection
             title={t('settings.backup.yourRecoveryPhrase')}
-            description={t('settings.backup.writeItOnPaperOr', { RECOVERY_PHRASE_WARNING })}
+            description={t('settings.backup.writeItOnPaperOr', {
+                warning: t('common.recoveryPhraseWarning'),
+            })}
             className={`${cardStyles.card} ${styles.recoverySheet}`}
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>{t('settings.backup.wallet')} {walletName}</div>

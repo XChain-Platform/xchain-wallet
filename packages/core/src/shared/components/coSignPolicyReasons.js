@@ -33,6 +33,8 @@ const POLICY_REASON_TEXT = Object.freeze({
         "this account only allows listed tokens, and this transaction moves tokens it doesn't name",
     POLICY_TICK_CASE_COLLISION:
         "this account's limits name the same token more than once in different capitalization, so it is unclear which limit applies",
+    WINDOW_STATE_CORRUPT:
+        "this account's recent spending record cannot be read, so its spending limits cannot be checked",
 });
 
 /**

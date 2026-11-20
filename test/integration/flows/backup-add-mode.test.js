@@ -24,6 +24,7 @@ import {
     importBackupFile,
 } from '../../../packages/core/src/flows/backupFile.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { deriveMasterKey, encrypt, bytesToBase64 } from '../../../packages/core/src/crypto/index.js';
 
 const KDF_PARAMS = {
     algorithm: 'argon2id',
@@ -189,6 +190,50 @@ describe('integration/flows/backup-add-mode', () => {
             'bitcoin-mainnet': byAddress.get('bc1qaddr-derived-1'),
             'litecoin-mainnet': byAddress.get('bc1qaddr-imp-src'),
         });
+    });
+
+    it('remaps a key-only wallet override onto the re-minted imported key', async () => {
+        const imported = (id) => ({
+            ...sampleAddress(id, null), accountId: null, source: 'imported-wif', derivationPath: null,
+        });
+        // Real seals, so the restore also runs the re-key that rewrites the record.
+        const mk = deriveMasterKey('old-device-pw', KDF_PARAMS);
+        const seal = async () => bytesToBase64(await encrypt(mk, new TextEncoder().encode('wif')));
+        const importedKeys = [
+            { addressId: 'key-one', encryptedWif: await seal(), importedAt: '2026-01-01T00:00:00.000Z' },
+            { addressId: 'key-two', encryptedWif: await seal(), importedAt: '2026-01-01T00:00:00.000Z' },
+        ];
+        mk.fill(0);
+        const soloVault = makeVault({
+            wallets: [{
+                ...sampleWallet('solo'),
+                format: 'wif-only',
+                encryptedSeed: null,
+                kdfParams: KDF_PARAMS,
+                importedKeys,
+                activeAddressByChainId: { 'bitcoin-mainnet': 'key-two', 'litecoin-mainnet': 'gone' },
+            }],
+            addresses: [imported('key-one'), imported('key-two')],
+        });
+        const backup = await exportBackupFile({
+            vault: soloVault, walletId: 'solo', password, kdfParams: KDF_PARAMS,
+        });
+        const targetVault = makeVault();
+        const restored = await importBackupFile({
+            vault: targetVault,
+            fileContent: backup.fileContent,
+            password,
+            walletPassword: 'old-device-pw',
+            devicePassword: 'new-device-pw',
+            mode: 'add',
+        });
+        const wallet = await targetVault.wallets.get(restored.walletId);
+        const byAddress = new Map((await targetVault.addresses.list()).map((row) => [row.address, row.id]));
+
+        expect(restored.rekeyed).toBe(true);
+        expect(byAddress.get('bc1qkey-two')).not.toBe('key-two');
+        expect(wallet.activeAddressByChainId).toEqual({ 'bitcoin-mainnet': byAddress.get('bc1qkey-two') });
+        expect(wallet.importedKeys[1].addressId).toBe(byAddress.get('bc1qkey-two'));
     });
 
     it('fresh mode keeps the original wallet id (default behavior unchanged)', async () => {

@@ -17,13 +17,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const confirmResult = { current: null };
+const confirmRuns = vi.hoisted(() => ({ count: 0 }));
+// These fixtures sit on mainnet, where the bridge is not live; the layout
+// cases read it as live, and the refusal case turns the real schedule back on.
+const bridgeLive = vi.hoisted(() => ({ current: true }));
+
+vi.mock('../../../packages/core/src/flows/protocolActivations.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        xbridgeScheduledHeight: (...args) => (bridgeLive.current ? 0 : actual.xbridgeScheduledHeight(...args)),
+    };
+});
 
 vi.mock('../../../packages/core/src/shared/hooks/useActionConfirmFlow.js', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
         useActionConfirmFlow: () => ({
-            run: async () => confirmResult.current,
+            run: async () => { confirmRuns.count += 1; return confirmResult.current; },
             open: false,
             composing: false,
             confirmAction: null,
@@ -47,7 +59,7 @@ const DOGE_ADDRESS = Object.freeze({
 const BY_CHAIN = Object.freeze({ [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] });
 const WAIT = { timeout: 4000 };
 
-function mountBridge({ getAddressesByChain, walletMode = 'full' } = {}) {
+function mountBridge({ getAddressesByChain, walletMode = 'full', buildActionPsbtRequest } = {}) {
     // The wallet's mode is read from the wallet list, not from settings.
     publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const walletBalances = {};
@@ -68,6 +80,7 @@ function mountBridge({ getAddressesByChain, walletMode = 'full' } = {}) {
         listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        ...(buildActionPsbtRequest ? { buildActionPsbtRequest } : {}),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -115,6 +128,22 @@ afterEach(() => {
     vi.clearAllMocks();
     __clearTokenInfoCache();
     confirmResult.current = null;
+    confirmRuns.count = 0;
+    bridgeLive.current = true;
+});
+
+describe('BridgeMoveForm refuses a move where the bridge is not live', () => {
+    it.each(['full', 'watcher'])('refuses on a mainnet source in %s mode before anything is composed', async (walletMode) => {
+        bridgeLive.current = false;
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff' });
+        const container = mountBridge({ walletMode, buildActionPsbtRequest });
+        await submitMove(container);
+        await waitFor(() => expect(container.textContent)
+            .toContain('Moving tokens across networks is not live on this network yet.'), WAIT);
+        expect(confirmRuns.count).toBe(0);
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="result-screen-notice"]')).toBeNull();
+    });
 });
 
 describe('BridgeMoveForm lays out every page state through FormPage', () => {

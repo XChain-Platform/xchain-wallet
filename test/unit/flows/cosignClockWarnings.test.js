@@ -126,4 +126,31 @@ describe('previewCoSignRequest carries window clock warnings to the approval scr
         });
         expect(preview.clockWarnings).toEqual([]);
     });
+
+    it('keeps the warnings when the allowed-tokens rule refuses', async () => {
+        await vault.coSignerAccounts.put({
+            ...account,
+            policy: { ...POLICY, allowedTicks: ['XCHAIN'] },
+            window: FUTURE_STATE,
+        });
+        const refusingRegistry = {
+            get: () => ({
+                wallet: { getBitcoinNetwork: () => ({ bech32: 'bcrt' }) },
+                coSigner: {
+                    decodeActionFromPsbt: () => ({
+                        ok: true, action: 'SEND', params: { TICK: 'PEPECASH' },
+                    }),
+                    evaluatePolicy: () => ({
+                        ok: true, violation: null, evaluation: { action: 'SEND', destinations: [] },
+                    }),
+                },
+            }),
+        };
+        const preview = await previewCoSignRequest({
+            vault, sdkRegistry: refusingRegistry, accountId: account.id,
+            request: { psbt: 'aabb' }, now: () => NOW,
+        });
+        expect(preview.policyReason).toBe('POLICY_TOKEN_NOT_ALLOWED');
+        expect(preview.clockWarnings[0]).toMatch(/clamped/);
+    });
 });

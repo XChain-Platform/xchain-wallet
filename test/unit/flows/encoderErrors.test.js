@@ -26,6 +26,10 @@ import {
     BROADCAST_FAILED_PERMANENT_NAME,
 } from '../../../packages/core/src/flows/broadcastPermanence.js';
 import { NativeFeeForfeitError } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
+import { protocolRefusalReason } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
+import {
+    hydrateEnvelopeError, serializeError,
+} from '../../../packages/extension/src/background/MessageHost.js';
 
 // The SDK's own error shape (xchain-sdk src/errors.js).
 function sdkEncoderError(code, message, details = {}) {
@@ -43,6 +47,10 @@ function acrossBoundary(err) {
     const revived = new Error(wire.message);
     revived.name = wire.name;
     return revived;
+}
+
+function acrossRealBoundary(err) {
+    return hydrateEnvelopeError(serializeError(err).error);
 }
 
 // Every error the SDK mints itself, by code and by its message.
@@ -95,15 +103,15 @@ describe('encoderErrorCode: encoder-origin NO_UTXOS / UTXO_TRACKER_STALE', () =>
         }
     });
 
-    it('keeps every other RPC refusal as ENCODER_RPC_ERROR', () => {
+    it('keeps unrelated RPC refusals generic and lifts tracker outages', () => {
         const funds = encoderRpcError('INSUFFICIENT_FUNDS', 'insufficient funds in the funding set');
         expect(encoderErrorCode(funds)).toBe('ENCODER_RPC_ERROR');
         for (const [reason, message] of [
             ['UTXO_TRACKER_HALTED', 'utxo-tracker is halted (unrecoverable reorg); refusing to select utxos from it'],
             ['UTXO_TRACKER_NOT_READY', 'utxo-tracker has not reconverged its mempool yet, so an already-spent confirmed output cannot be filtered; refusing to select utxos from it'],
         ]) {
-            expect(encoderErrorCode(encoderRpcError(reason, message)), reason).toBe('ENCODER_RPC_ERROR');
-            expect(encoderErrorCode(acrossBoundary(encoderRpcError(reason, message))), reason).toBe('ENCODER_RPC_ERROR');
+            expect(encoderErrorCode(encoderRpcError(reason, message)), reason).toBe(reason);
+            expect(encoderErrorCode(acrossBoundary(encoderRpcError(reason, message))), reason).toBe(reason);
         }
         const noDetails = sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: createTx requires pubkey', { context: null });
         expect(encoderErrorCode(noDetails)).toBe('ENCODER_RPC_ERROR');
@@ -302,8 +310,39 @@ describe('encoderErrorMessage', () => {
     it('hides the encoder service\'s uninformative internal error', () => {
         const raw = 'Encoder RPC error: Internal encoder error';
         const copy = encoderErrorMessage(sdkEncoderError('ENCODER_RPC_ERROR', raw), {});
-        expect(copy).toBe('This transaction could not be built. Nothing was signed or sent, so nothing was spent.');
+        expect(copy).toMatch(/transaction service could not complete this request/i);
+        expect(copy).toMatch(/Try again in a moment/);
         expect(copy).not.toContain('Internal encoder error');
+    });
+
+    it.each([
+        'Internal encoder error',
+        'Fee estimation failed',
+        'UTXO fetch failed',
+        'Transaction status lookup failed',
+    ])('recognises fixed internal RPC wording after a legacy boundary: %s', (reason) => {
+        const err = sdkEncoderError('ENCODER_RPC_ERROR', `Encoder RPC error: ${reason}`);
+        const crossed = acrossBoundary(err);
+        expect(encoderErrorMessage(crossed)).toMatch(/transaction service could not complete this request/i);
+        expect(submitFailureMessage(crossed, { verb: 'send' })).toMatch(/nothing was signed or sent/i);
+        expect(protocolRefusalReason(crossed)).toBeNull();
+    });
+
+    it('preserves arbitrary -32603 classification and -32010 reasons across the real boundary', () => {
+        const internal = acrossRealBoundary(sdkEncoderError(
+            'ENCODER_RPC_ERROR',
+            'Encoder RPC error: upstream node unavailable',
+            { rpcError: { code: -32603, data: null } },
+        ));
+        expect(encoderErrorMessage(internal)).toMatch(/Try again in a moment/);
+        expect(protocolRefusalReason(internal)).toBeNull();
+
+        const refusal = acrossRealBoundary(sdkEncoderError(
+            'ENCODER_RPC_ERROR',
+            'Encoder RPC error: This token is already registered.',
+            { rpcError: { code: -32010, data: { reason: 'TOKEN_ALREADY_REGISTERED' } } },
+        ));
+        expect(protocolRefusalReason(refusal)).toBe('This token is already registered.');
     });
 
     it('maps JSON-RPC server failures to temporary copy while preserving real protocol refusals', () => {

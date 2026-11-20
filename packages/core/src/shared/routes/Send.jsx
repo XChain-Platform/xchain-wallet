@@ -69,6 +69,7 @@ import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/demo.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/home.js';
+import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/transactionStatus.js';
 import '../../i18n/locales/en/ui.js';
@@ -93,7 +94,7 @@ import {
     resolvePreflightPrivacy,
     resolveTestSendFiat,
 } from '../../schemas/settings.js';
-import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
+import { createUndoHoldId, createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -2787,6 +2788,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // unavailable; then its amount is unknown, not zero.
     const sourceHalfUnavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
         && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
+    const pendingUnknown = isNativeSend
+        && previewBalances.sdkShape?.native?.pendingUnknown === true;
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || sourceHalfUnavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
@@ -3310,17 +3313,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
                     const holding = Boolean(sendBase.holdId && sendBase.undoSeconds);
+                    const attempt = holding ? { ...sendBase, holdId: createUndoHoldId() } : sendBase;
                     if (holding) {
-                        undoHoldIdRef.current = sendBase.holdId;
+                        undoHoldIdRef.current = attempt.holdId;
                         setUndoHoldActive(true);
                         startUndoSend(sendBase.undoSeconds);
                     }
                     const dispatched = isHwSource
                         ? messaging.sendAssetHw({
-                            ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
+                            ...attempt, signerId: fromAddress.signerId, prebuiltPsbt,
                         })
                         : messaging.sendToken({
-                            ...sendBase, password: passwordValueRef.current, prebuiltPsbt,
+                            ...attempt, password: passwordValueRef.current, prebuiltPsbt,
                         });
                     // A rejected attempt (wrong password, device retry) leaves the confirm
                     // open for another Approve. Its countdown ends here, or the retry
@@ -4819,6 +4823,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             />
             {maxNote ? (
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
+            {pendingUnknown ? (
+                <p className={styles.balanceHint} data-testid="send-pending-unknown" role="status">
+                    {t('balances.pendingUnknown')}
+                </p>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already put the same sentence in the error map,

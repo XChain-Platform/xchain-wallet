@@ -46,7 +46,7 @@ function spend() {
         }],
     });
     for (const inp of decomposed.inputs) {
-        inp.prevTxInfo = { hash: inp.prevTxHash, version: 2, lock_time: 0, inputs: [], bin_outputs: [] };
+        inp.prevTxInfo = { hash: inp.prevTxHash, version: 2, locktime: 0, inputs: [], bin_outputs: [] };
         inp.nonWitnessUtxoHex = 'aa';
     }
     return { decomposed, txHex: signedReplyFor(decomposed, { keys: [key] }) };

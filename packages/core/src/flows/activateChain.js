@@ -48,6 +48,7 @@ import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import { hardwareNetworkSupport, hardwareWalletRecord, isHardwareWallet } from './hardwareWallet.js';
 import { recordLedgerIdentities } from './registerSigner.js';
 import { isWrongAppError } from '../signers/hardwareSession.js';
+import { accountCustody, signerOwnsAccount } from './custody/signerCustody.js';
 
 /**
  * @typedef {Object} ActivateChainOpts
@@ -66,8 +67,8 @@ import { isWrongAppError } from '../signers/hardwareSession.js';
  * @typedef {Object} ActivateChainResult
  * @property {string} chainId
  * @property {Array<{ accountId: string, address: import('../schemas/address.js').Address }>} addresses   newly persisted addresses (skipped accounts are absent)
- * @property {number} skippedAccounts                              count of accounts that already had an address on chainId
- * @property {Array<{ accountId: string, name: string }>} skippedAccountDetails   accounts that already had an address on chainId
+ * @property {number} skippedAccounts                              count of accounts that already had an address on chainId or belong to another signer
+ * @property {Array<{ accountId: string, name: string, reason?: 'custody-mismatch' }>} skippedAccountDetails   skipped accounts; reason 'custody-mismatch' marks one whose existing addresses belong to another signer
  * @property {'no-device' | 'unsupported-network' | 'wrong-app'} [hardwareSkipped]   set only for a hardware wallet whose address step was skipped: no device signer was supplied, the device cannot sign this chain, or (a Ledger) another app is open than the chain needs, so the network waits for that app and Try again
  */
 
@@ -184,9 +185,12 @@ export async function activateChain({
             const alreadyHasOnChain = accountAddrs.some(
                 (a) => a.chain === descriptor.coin && a.network === descriptor.networkKind,
             );
-            if (alreadyHasOnChain) {
+            const custodyMismatch = !alreadyHasOnChain
+                && !signerOwnsAccount(signer, accountCustody(account.id, accountAddrs));
+            if (alreadyHasOnChain || custodyMismatch) {
                 skipped += 1;
-                skippedAccountDetails.push({ accountId: account.id, name: account.name || '' });
+                const reason = custodyMismatch ? { reason: 'custody-mismatch' } : {};
+                skippedAccountDetails.push({ accountId: account.id, name: account.name || '', ...reason });
                 continue;
             }
             let derived;

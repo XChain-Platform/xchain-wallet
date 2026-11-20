@@ -765,15 +765,16 @@ function verdictRank(v) { return v === 'fail' ? 2 : v === 'warn' ? 1 : 0; }
  * on the same PSBT; everything else is terminal.
  *
  * The error crosses the messaging boundary as a plain object, so match on the
- * fields that survive: `name` (what the software-unlock path throws) plus a
- * code/message fallback.
+ * fields that survive: the typed `name` from software-unlock paths plus the
+ * stable codes used by remote signers.
  */
 function isCredentialFailure(err) {
     if (!err) return false;
-    if (err.name === 'InvalidPasswordError') return true;
+    if (err.name === 'InvalidPasswordError'
+        || err.name === 'WrongPasswordError'
+        || err.name === 'AeadAuthError') return true;
     const code = err.code || err.reason;
-    if (code === 'INVALID_PASSWORD' || code === 'BAD_CREDENTIALS') return true;
-    return /incorrect password|invalid password|bad password/i.test(String(err.message || ''));
+    return code === 'INVALID_PASSWORD' || code === 'BAD_CREDENTIALS';
 }
 
 function retryableHardwareSigningError(err) {

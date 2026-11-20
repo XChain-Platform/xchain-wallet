@@ -31,8 +31,8 @@ import {
     networkApprovalIsPartial,
     preflightCheckState,
 } from './preflightCheckState.js';
-import { consensusRefusalMessage, isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
-import { unverifiedText, warningText } from './preflightFindingCopy.js';
+import { isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
+import { errorText, unverifiedText, warningText } from './preflightFindingCopy.js';
 import { formatDisplayAmount, sumDecimalStrings } from './amountFormat.js';
 import { neutralizeControlText } from './textHardening.js';
 import { t } from '../../i18n/index.js';
@@ -399,12 +399,15 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     const kind = confirmKindFor({ variant, actionName, decoded, summary: form });
     const spec = CONFIRM_KINDS[kind];
     const recipients = recipientsOf(form);
-    const decodedRecipient = bareValue((Array.isArray(decoded?.details) ? decoded.details : [])
+    const decodedRecipientValue = bareValue((Array.isArray(decoded?.details) ? decoded.details : [])
         .find((detail) => ADDRESS_LABEL.test(String(detail?.label || '')))?.value);
+    const decodedRecipient = decodedRecipientValue.length >= 20 && !/\s/.test(decodedRecipientValue)
+        ? decodedRecipientValue
+        : '';
     const source = form.address || sourceAddress || null;
     let address = null;
-    if (spec.address === 'recipient') address = form.recipient || decodedRecipient || source;
-    else if (spec.address === 'recipientOnly') address = form.recipient || decodedRecipient || null;
+    if (spec.address === 'recipient') address = decodedRecipient || form.recipient || source;
+    else if (spec.address === 'recipientOnly') address = decodedRecipient || form.recipient || null;
     else if (spec.address === 'source') address = source;
     const ctx = { decoded, summary: form, recipients };
     const fromKind = spec.sentence ? spec.sentence(ctx) : null;
@@ -415,7 +418,8 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     const amount = form.amount && form.ticker ? formatDisplayAmount(String(form.amount)) : '';
     const target = String(form.ticker || form.target || '').trim();
     const fromForm = verb
-        ? [verb, amount, target].filter(Boolean).join(' ') + (address && address === form.recipient ? ' to' : '')
+        ? [verb, amount, target].filter(Boolean).join(' ')
+            + (address && (address === decodedRecipient || address === form.recipient) ? ' to' : '')
         : '';
     // A user-chosen name goes on its own line above the sentence, so the
     // sentence stays short however long the name is.
@@ -748,10 +752,16 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
     if (state === S.FAIL) {
         title = t('confirmStandard.warning.fail');
         const errors = findings.filter((f) => f?.severity === 'error');
-        const reasons = [...new Set(errors
-            .map((f) => consensusRefusalMessage(f) || String(f?.message || '').trim())
-            .filter(Boolean))];
-        reasons.forEach((text, i) => points.push({ key: `fail-${i}`, text }));
+        const seenReasons = new Set();
+        const reasons = errors.map((f) => errorText(f)).filter(({ headline, detail }) => {
+            const key = JSON.stringify([headline, detail]);
+            if (seenReasons.has(key)) return false;
+            seenReasons.add(key);
+            return Boolean(headline);
+        });
+        reasons.forEach(({ headline, detail }, i) => points.push({
+            key: `fail-${i}`, text: headline, detail,
+        }));
         if (reasons.length === 0) points.push({ key: 'fail-unexplained', text: t('confirmStandard.warning.failUnexplained') });
         // A warning or an unanswered network check beside the failure is
         // still said, in the same notice.

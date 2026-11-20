@@ -23,6 +23,7 @@
 
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/preflightCopy.js';
+import { consensusRefusalMessage } from './preflightFindingKey.js';
 
 // The demotion the SDK stamps when the network accepted the action but a local
 // projection over the sender's other unconfirmed actions still flags the balance
@@ -37,6 +38,36 @@ const WARNING_FALLBACK = 'The checks flagged something to review before you sign
 // Keep the protocol-fee forfeiture as one warning because the producer's
 // message restates the same consequence in protocol-facing words.
 const HEADLINE_ONLY_WARNINGS = new Set(['NATIVE_FEE_FORFEIT']);
+
+const ERROR_FALLBACK = 'A check found a problem that would stop this action. The detail below says what.';
+
+export const ERROR_COPY = Object.freeze({
+    PARSE_INVALID: 'Part of this action could not be read, so it cannot be completed.',
+    VALIDATOR_SEMANTICS: 'This action uses a combination of values that is not accepted.',
+    DEST_ADDRESS_INVALID: 'The destination address is not valid for this action.',
+    ENCODING_TOO_LARGE: 'This action is too large to fit in one transaction.',
+    AMOUNT_FORMAT_INVALID: 'An amount is not written in a form this action accepts.',
+    BALANCE_INSUFFICIENT: 'The available balance does not cover this action.',
+    TOKEN_NOT_FOUND: 'The token named by this action could not be found.',
+    NOT_OWNER: 'This address does not control the item this action changes.',
+    SUPPLY_EXCEEDED: 'This action would exceed the token supply limit.',
+    MINT_OVER_MAX: "This token's minting rules do not allow this mint.",
+    LIST_NOT_FOUND: 'The address list named by this action could not be found.',
+    DISPENSER_NOT_FOUND: 'The dispenser named by this action could not be found.',
+    DISPENSER_NOT_OPEN: 'This dispenser is not open.',
+    DISPENSER_TERMS_MISMATCH: 'The payment does not match the dispenser terms.',
+    DISPENSER_EMPTY: 'This dispenser does not have enough tokens left.',
+    DRYRUN_INVALID: 'The network check found that this action would fail.',
+    DRYRUN_SUBCOMMAND_INVALID: 'The network check found a batch command that would fail.',
+});
+
+export function errorText(f) {
+    const refusal = consensusRefusalMessage(f);
+    if (refusal) return { headline: refusal, detail: null };
+    const headline = ERROR_COPY[f?.code] || ERROR_FALLBACK;
+    const message = String(f?.message || '').trim();
+    return { headline, detail: message && message !== headline ? message : null };
+}
 
 export const WARNING_COPY = Object.freeze({
     // Also raised for a dispense against a dispenser whose own price is not

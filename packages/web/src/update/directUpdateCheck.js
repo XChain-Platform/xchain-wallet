@@ -119,10 +119,9 @@ export function updateNoticeText(version) {
 /**
  * Run a check.
  *
- * Returns null for every "nothing to say" case, including every failure:
- * the network being down, the feed being malformed, the check being
- * disabled or too recent. A failed update check is not something to
- * interrupt someone's wallet with.
+ * A recent check or a failed refresh reuses the last validated version when
+ * it is still newer. It never makes an extra request. Disabled checks and
+ * invalid versions stay silent.
  *
  * @param {object} opts
  * @param {string} opts.currentVersion
@@ -145,7 +144,9 @@ export async function checkForDirectUpdate(opts) {
 
     const prefs = readPrefs(storage);
     if (prefs.enabled === false) return null;
-    if (!force && prefs.lastCheck && now - prefs.lastCheck < CHECK_INTERVAL_MS) return null;
+    if (!force && prefs.lastCheck && now - prefs.lastCheck < CHECK_INTERVAL_MS) {
+        return noticeFor(prefs.feedVersion, currentVersion);
+    }
 
     // Stamp BEFORE the request, not after. A feed that hangs or fails must
     // not leave the app retrying on every launch: that turns an outage into
@@ -155,15 +156,22 @@ export async function checkForDirectUpdate(opts) {
     let version;
     try {
         const text = await requestFeed(fetchImpl);
-        if (typeof text !== 'string' || text.length > MAX_FEED_BYTES) return null;
+        if (typeof text !== 'string' || text.length > MAX_FEED_BYTES) {
+            return noticeFor(prefs.feedVersion, currentVersion);
+        }
         version = parseUpdateFeed(JSON.parse(text));
     } catch (_err) {
         // Offline, DNS failure, malformed JSON, a schema violation: all the
         // same to the user, and none of them is worth a dialog.
-        return null;
+        return noticeFor(prefs.feedVersion, currentVersion);
     }
 
-    if (!isNewerVersion(version, currentVersion)) return null;
+    writePrefs(storage, { ...readPrefs(storage), feedVersion: version });
+    return noticeFor(version, currentVersion);
+}
+
+function noticeFor(version, currentVersion) {
+    if (typeof version !== 'string' || !isNewerVersion(version, currentVersion)) return null;
     return { version, notice: updateNoticeText(version) };
 }
 

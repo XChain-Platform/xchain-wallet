@@ -580,6 +580,10 @@ export function DeployContractForm({ walletId, onBack }) {
             code,
             gasLimit: effectiveGasLimit,
             constructorParams: constructorParams.trim() || undefined,
+            ...(actionParams.COOLDOWN_BLOCKS ? {
+                cooldownBlocks: actionParams.COOLDOWN_BLOCKS,
+                slashDestination: actionParams.SLASH_DESTINATION,
+            } : {}),
         })
             .then((p) => { if (!cancelled) setPlan(p); })
             // The planner reports an over-budget contract as
@@ -587,7 +591,7 @@ export function DeployContractForm({ walletId, onBack }) {
             // SDK constant as a limit the author can act on.
             .catch((e) => { if (!cancelled) setPlanError(humanizeDeployDiagnostic(e).message || 'Could not size this contract.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, code, effectiveGasLimit, constructorParams]);
+    }, [messaging, chainId, code, effectiveGasLimit, constructorParams, actionParams]);
 
     // Re-read the contract's identity whenever the source changes. Static and
     // host-side (an acorn walk, no network), so it rides the same edit cadence

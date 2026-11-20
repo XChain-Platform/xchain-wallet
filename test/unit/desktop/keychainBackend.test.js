@@ -13,6 +13,7 @@ const fs = vi.hoisted(() => ({
     mkdir: vi.fn(),
     readFile: vi.fn(),
     rename: vi.fn(),
+    stat: vi.fn(),
     unlink: vi.fn(),
     writeFile: vi.fn(),
 }));
@@ -39,6 +40,7 @@ beforeEach(() => {
     fs.mkdir.mockResolvedValue(undefined);
     fs.readFile.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     fs.rename.mockResolvedValue(undefined);
+    fs.stat.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     fs.unlink.mockResolvedValue(undefined);
     fs.writeFile.mockResolvedValue(undefined);
 });
@@ -110,6 +112,36 @@ describe('KeychainSessionBackend', () => {
         ]);
         expect(await backend.load()).toBeNull();
         expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it('distinguishes absent ciphertext from a live or temporary file', async () => {
+        const backend = new KeychainSessionBackend({
+            safeStorage: safeStorage(),
+            filePath: '/profile/session.bin',
+        });
+        await expect(backend.hasPersistedCiphertext()).resolves.toBe(false);
+        fs.stat.mockResolvedValueOnce({});
+        await expect(backend.hasPersistedCiphertext()).resolves.toBe(true);
+        expect(fs.stat).toHaveBeenLastCalledWith('/profile/session.bin');
+
+        fs.stat.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+            .mockResolvedValueOnce({});
+        await expect(backend.hasPersistedCiphertext()).resolves.toBe(true);
+        expect(fs.stat).toHaveBeenLastCalledWith('/profile/session.bin.tmp');
+    });
+
+    it('treats an uncertain stat as present and a revoked slot as absent', async () => {
+        const backend = new KeychainSessionBackend({
+            safeStorage: safeStorage(),
+            filePath: '/profile/session.bin',
+        });
+        fs.stat.mockRejectedValue(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+        await expect(backend.hasPersistedCiphertext()).resolves.toBe(true);
+
+        await backend.clear();
+        fs.stat.mockClear();
+        await expect(backend.hasPersistedCiphertext()).resolves.toBe(false);
+        expect(fs.stat).not.toHaveBeenCalled();
     });
 
     it.each([undefined, null, '', 0, {}])('rejects an invalid session path %j', (path) => {

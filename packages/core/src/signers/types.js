@@ -30,6 +30,7 @@
 
 /**
  * @typedef {Object} PrevTxInfo
+ * SDK decomposition shape. Vendor adapters map it to their own API fields.
  * @property {string} hash                                   display-order txid
  * @property {number} version
  * @property {number} locktime

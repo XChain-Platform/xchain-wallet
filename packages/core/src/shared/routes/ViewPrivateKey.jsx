@@ -15,7 +15,7 @@ import { AddressText, Button, CopyButton, FormPage, Icon, Input, ListPage, Notic
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
-import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
+import { privateKeyWarning } from '../utils/securityMomentCopy.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './ViewPrivateKey.module.css';
 // The key page reuses Receive's QR layout.
@@ -262,7 +262,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             <div className={`${qrStyles.stack} ${receiveStyles.receiveQrDisplay} ${styles.keyStack}`}>
                 {/* The security notice always leads the page. */}
                 <Notice tone="danger" role="note" data-warning-line="critical">
-                    <p>{PRIVATE_KEY_WARNING}</p>
+                    <p>{privateKeyWarning()}</p>
                 </Notice>
                 {/* A successful export adds the QR directly below the notice. */}
                 {stage === 'revealed' && keyQr ? (

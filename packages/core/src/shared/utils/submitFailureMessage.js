@@ -46,7 +46,7 @@
 // get swept?" a question with one answer.
 
 import { nativeFeeErrorMessage, oracleFeeRefusalMessage } from '../../sdk/nativeFeePreflight.js';
-import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
+import { encoderErrorCode, encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
@@ -341,6 +341,10 @@ export function submitFailureMessage(
     err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
+    const encoderCode = encoderErrorCode(err);
+    if (encoderCode === 'NO_UTXOS' || encoderCode?.startsWith('UTXO_TRACKER_')) {
+        return safeBuildMessage(encoderErrorMessage(err, { coinTicker, requiredNative }), generic);
+    }
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
     // A freeze refusal says so only when the user armed it; a duress-armed one

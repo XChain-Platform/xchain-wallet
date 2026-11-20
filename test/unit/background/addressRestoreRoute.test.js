@@ -57,11 +57,13 @@ const addressRecord = (over = {}) => ({
     ...over,
 });
 
-function makeHost({ addresses = [], accounts } = {}) {
+function makeHost({ addresses = [], accounts, wallets } = {}) {
     const vault = {
         addresses: memCollection(addresses),
         ...(accounts ? { accounts: memCollection(accounts) } : {}),
-        wallets: memCollection([{ id: 'w1', name: 'Main', importedKeys: [] }]),
+        wallets: memCollection(wallets || [{
+            id: 'w1', name: 'Main', importedKeys: [{ addressId: 'addr-1' }],
+        }]),
         settings: { get: async () => ({ schemaVersion: 2 }), put: async () => {} },
     };
     const host = createBackgroundHost({
@@ -169,6 +171,27 @@ describe('addresses.restore fails closed when the vault moved under the snapshot
 
         const res = await h.call('addresses.restore', { address: rec });
         expect(res.result).toEqual({ ok: true, restored: true });
+    });
+
+    it('refuses an imported address after its wallet is removed', async () => {
+        const rec = addressRecord();
+        const h = makeHost({ addresses: [rec] });
+        await h.call('addresses.delete', { id: rec.id });
+        await h.vault.wallets.delete('w1');
+
+        const res = await h.call('addresses.restore', { address: rec });
+        expect(res.result).toEqual({ ok: false, restored: false, reason: 'owner-missing' });
+        expect(await h.vault.addresses.get(rec.id)).toBe(null);
+    });
+
+    it('refuses an imported address its wallet no longer lists', async () => {
+        const rec = addressRecord();
+        const h = makeHost({ addresses: [rec], wallets: [{ id: 'w1', importedKeys: [] }] });
+        await h.call('addresses.delete', { id: rec.id });
+
+        const res = await h.call('addresses.restore', { address: rec });
+        expect(res.result).toEqual({ ok: false, restored: false, reason: 'owner-missing' });
+        expect(await h.vault.addresses.get(rec.id)).toBe(null);
     });
 });
 

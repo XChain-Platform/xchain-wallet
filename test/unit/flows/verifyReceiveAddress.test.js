@@ -41,6 +41,7 @@ function hwAddress(overrides = {}) {
         chain: 'bitcoin',
         network: 'regtest',
         source: 'trezor',
+        signerId: 'sig-1',
         addressType: 'p2wpkh',
         derivationPath: "m/84'/0'/0'/0/3",
         address: 'addr_real',
@@ -49,15 +50,17 @@ function hwAddress(overrides = {}) {
 }
 
 // Signer that echoes a chosen address on a verify:true derivation.
-function makeSigner(deviceAddress) {
+function makeSigner(deviceAddress, overrides = {}) {
     const calls = [];
     return {
+        id: 'sig-1',
         kind: 'trezor',
         calls,
         async getAddresses(params) {
             calls.push(params);
             return [{ index: params.startIndex, address: deviceAddress, publicKey: 'pub', path: 'p' }];
         },
+        ...overrides,
     };
 }
 
@@ -95,5 +98,32 @@ describe('verifyReceiveAddress (§17.6)', () => {
         await expect(
             verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
         ).rejects.toThrow(/does not match/i);
+    });
+
+    it('refuses an address record that has no owning signer id before derivation', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress({ signerId: null })] });
+        const signer = makeSigner('addr_real');
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/does not own/i);
+        expect(signer.calls).toHaveLength(0);
+    });
+
+    it('refuses a different device signer before derivation', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress()] });
+        const signer = makeSigner('addr_real', { id: 'sig-2' });
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/does not own/i);
+        expect(signer.calls).toHaveLength(0);
+    });
+
+    it('refuses a signer kind that contradicts the stored source', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress()] });
+        const signer = makeSigner('addr_real', { kind: 'ledger' });
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/does not own/i);
+        expect(signer.calls).toHaveLength(0);
     });
 });

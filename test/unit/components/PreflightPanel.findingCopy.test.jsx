@@ -12,8 +12,10 @@ import { render, screen, cleanup, within } from '@testing-library/react';
 import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 import { PreflightPanel } from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
 import {
+    ERROR_COPY,
     UNVERIFIED_COPY,
     WARNING_COPY,
+    errorText,
     unverifiedText,
     warningText,
 } from '../../../packages/core/src/shared/utils/preflightFindingCopy.js';
@@ -54,6 +56,28 @@ const DISPENSER_GIVE_AMOUNT = {
         + 'and below it the dispenser opens but credits nothing while absorbing payments.',
     data: { giveAmount: null, giveOwnership: '0' },
 };
+
+describe('PreflightPanel error copy', () => {
+    it('keeps report wording out of the failure headline', () => {
+        const finding = {
+            code: 'MINT_OVER_MAX', severity: 'error', source: 'client',
+            message: 'LOCK_MINT is set; the indexer refuses this MINT.',
+        };
+        const { headline, detail } = errorText(finding);
+        expect(headline).toBe(ERROR_COPY.MINT_OVER_MAX);
+        expect(headline).not.toMatch(/LOCK_MINT|indexer/);
+        expect(detail).toBe(finding.message);
+
+        mount(reportWith({ verdict: 'fail', findings: [finding] }));
+        expect(screen.getByText(headline)).toBeTruthy();
+        expect(screen.getByText(finding.message)).toBeTruthy();
+    });
+
+    it('uses neutral copy for a future error code', () => {
+        const finding = { code: 'FUTURE_ERROR', message: 'INTERNAL_FIELD failed.' };
+        expect(errorText(finding).headline).not.toContain('INTERNAL_FIELD');
+    });
+});
 
 describe('PreflightPanel warning copy (§5.2.4)', () => {
     it('shows the checked block height ungrouped (G123)', () => {

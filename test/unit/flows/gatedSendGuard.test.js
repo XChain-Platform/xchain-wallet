@@ -30,6 +30,7 @@ import {
     gatedGroupThreshold,
     GatedSendKeysMissingError,
     GatedRecipientPubkeyMissingError,
+    GatedSendTickUnresolvedError,
 } from '../../../packages/core/src/flows/gatedSendGuard.js';
 import { PubkeyMismatchError } from '../../../packages/core/src/flows/messageAction.js';
 import {
@@ -60,6 +61,9 @@ function makeSdk(overrides = {}) {
     const keyByBuf = (k) => (k.equals(KEY_A) ? HASH_A : (k.equals(KEY_B) ? HASH_B : null));
     return {
         getFiles: vi.fn(async () => [gatedRow(HASH_A, '100')]),
+        findToken: vi.fn(async (tick) => (
+            String(tick).startsWith('^') ? { tick: 'GATED', tick_id: Number(String(tick).slice(1)) } : null
+        )),
         getPublicKey: vi.fn(async () => RECIPIENT_PUBKEY),
         gatedFile: {
             verifyKey: vi.fn((key, hash) => keyByBuf(key) === String(hash).toLowerCase()),
@@ -181,6 +185,18 @@ describe('prepareGatedSend detection', () => {
         ]);
     });
 
+    it('strict lookup throws when the token fallback fails instead of reporting no groups', async () => {
+        const notFound = Object.assign(new Error('Explorer returned HTTP 404'), { code: 'EXPLORER_HTTP_404' });
+        const sdk = makeSdk({
+            getFiles: vi.fn(async (_tick, type) => {
+                if (type === 'gate') throw notFound;
+                throw new Error('token route down');
+            }),
+        });
+        await expect(listGatedFiles({ sdk, tick: 'GATED' })).resolves.toEqual([]);
+        await expect(listGatedFiles({ sdk, tick: 'GATED', strict: true })).rejects.toThrow('token route down');
+    });
+
     it('de-duplicates explorer rows by action index', async () => {
         const row = { ...gatedRow(HASH_A, '100'), status: 'valid' };
         const sdk = makeSdk({ getFiles: vi.fn(async () => [row, { ...row }]) });
@@ -213,9 +229,40 @@ describe('prepareGatedSend detection', () => {
     });
 
     it('returns null for a ^id tick (indexer backstop documented)', async () => {
-        const sdk = makeSdk();
+        const sdk = makeSdk({ getFiles: vi.fn(async () => []) });
         expect(await prepareGatedSend(makeArgs({ sdk, tick: '^123' }))).toBeNull();
+        expect(sdk.findToken).toHaveBeenCalledWith('^123', { noRetry: true });
+        expect(sdk.getFiles).toHaveBeenCalledWith('GATED', 'gate');
+    });
+
+    it('resolves a gated ^id tick and keeps the original alias in the SEND command', async () => {
+        const sdk = makeSdk();
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, tick: '^123' }));
+
+        expect(plan.actionData.params.COMMAND).toMatch(/^SEND\|0\|\^123\|/);
+        expect(sdk.getFiles).toHaveBeenCalledWith('GATED', 'gate');
+    });
+
+    it('refuses a ^id tick when the explorer answer does not echo its id', async () => {
+        const sdk = makeSdk({ findToken: vi.fn(async () => ({ tick: 'GATED', tick_id: 124 })) });
+        await expect(prepareGatedSend(makeArgs({ sdk, tick: '^123' })))
+            .rejects.toBeInstanceOf(GatedSendTickUnresolvedError);
         expect(sdk.getFiles).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when gated-file detection fails after resolving a ^id tick', async () => {
+        const sdk = makeSdk({ getFiles: vi.fn(async () => { throw new Error('explorer down'); }) });
+        await expect(prepareGatedSend(makeArgs({ sdk, tick: '^123' })))
+            .rejects.toThrow('explorer down');
+    });
+
+    it('fails closed for a ^id tick when gated-send capabilities are unavailable', async () => {
+        const sdk = { findToken: vi.fn(async () => ({ tick: 'GATED', tick_id: 123 })) };
+        await expect(prepareGatedSend(makeArgs({ sdk, tick: '^123' })))
+            .rejects.toBeInstanceOf(GatedSendTickUnresolvedError);
     });
 
     it('ignores demo-only gated groups', async () => {
@@ -375,6 +422,13 @@ describe('gatedSendReadiness', () => {
         expect((await gatedSendReadiness({ ...base, tick: 'BTC' })).state).toBe('ungated');
         expect((await gatedSendReadiness({ ...base, tick: '^9' })).state).toBe('ungated');
         expect((await gatedSendReadiness({ ...base, tick: 'GATED' })).state).toBe('ungated');
+    });
+
+    it('reports a caret resolution failure without treating it as a checked ungated token', async () => {
+        const sdk = makeSdk({ findToken: vi.fn(async () => null) });
+        const report = await gatedSendReadiness({ ...makeArgs({ sdk }), tick: '^9' });
+        expect(report).toEqual({ state: 'ungated', groups: [], tickUnresolved: true });
+        expect(sdk.getFiles).not.toHaveBeenCalled();
     });
 
     it('reports ready / partial / blocked from vault key coverage', async () => {

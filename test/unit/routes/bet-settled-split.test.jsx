@@ -189,6 +189,21 @@ describe('isLiveFeedStatus', () => {
 });
 
 describe('BetFeedDetail: a settled market reports what happened', () => {
+    it('explains that a rejected create never opened a market', async () => {
+        const { messaging } = harness({
+            betFeed: () => Promise.resolve({ data: [feed('invalid')] }),
+            bets: () => Promise.resolve({ data: [] }),
+        });
+        const utils = await openMarket(messaging);
+        const settlement = utils.getByTestId('bet-settlement');
+
+        expect(settlement.textContent).toContain('This market was never opened');
+        expect(settlement.textContent).toContain('network rejected the create transaction');
+        expect(utils.container.textContent).toContain('Rejected');
+        expect(utils.container.textContent).not.toContain('invalid');
+        expect(utils.queryByRole('button', { name: /Buy / })).toBeNull();
+    });
+
     it('names the winner and explains that payouts need no claim', async () => {
         const { messaging } = harness({
             betFeed: () => Promise.resolve({ data: [feed('resolved', { winning_outcome: 0 })] }),

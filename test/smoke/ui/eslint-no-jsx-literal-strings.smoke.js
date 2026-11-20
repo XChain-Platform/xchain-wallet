@@ -81,6 +81,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'payBalance', 'amountLabel', 'give', 'get',
     'clearLabel', 'inputLabel', 'chooseLabel', 'pickLabel', 'viewLabel',
     'winnerLabel', 'chartRegionLabel', 'tabsLabel', 'infoLabel',
+    'getNote', 'valueText', 'statusText', 'subLeft', 'subRight', 'badgeTitle',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -282,6 +283,10 @@ assert.match(v[0].message, /copyLabel/);
 v = findViolations(jsxAttr('balanceText', jsxExpr(template('', ' BTC available'))));
 assert.strictEqual(v.length, 1, 'flags template copy in a balanceText prop');
 assert.match(v[0].message, /balanceText/);
+v = findViolations(jsxAttr('getNote', jsxExpr(template('at ', ' each'))));
+assert.strictEqual(v.length, 1, 'flags template copy in a getNote prop');
+v = findViolations(jsxAttr('valueText', literal('Free, 0 percent')));
+assert.strictEqual(v.length, 1, 'flags literal copy in a valueText prop');
 
 // 18c. Toggle copy in a ternary attribute value. Both attribute paths
 // enumerated three value shapes (Literal, container Literal, container

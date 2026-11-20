@@ -193,7 +193,7 @@ const NUMERIC_ERROR_FIELDS = ['retryAfterMs', 'burst', 'windowMs'];
  * Flatten an Error into the wire envelope's `error` payload.
  *
  * @param {unknown} err
- * @returns {{ ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: true } }}
+ * @returns {{ ok: false, error: { name: string, message: string, code?: string, rpcCode?: number, rpcReason?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: true } }}
  */
 export function serializeError(err) {
     const any = /** @type {any} */ (err);
@@ -202,6 +202,10 @@ export function serializeError(err) {
     /** @type {any} */
     const error = { name, message };
     if (any && typeof any.code === 'string' && any.code) error.code = any.code;
+    const rpcError = any?.details?.rpcError || any?.rpcError;
+    if (Number.isInteger(rpcError?.code)) error.rpcCode = rpcError.code;
+    const rpcReason = rpcError?.data?.reason || any?.details?.context?.reason || any?.data?.reason;
+    if (typeof rpcReason === 'string' && rpcReason.trim()) error.rpcReason = rpcReason.trim();
     for (const field of NUMERIC_ERROR_FIELDS) {
         const value = any ? any[field] : undefined;
         if (typeof value === 'number' && Number.isFinite(value)) error[field] = value;
@@ -219,7 +223,7 @@ export function serializeError(err) {
  * envelope uses this, so `code` survives the round trip in all of them rather
  * than in whichever one was patched last.
  *
- * @param {{ name?: string, message?: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: boolean } | undefined} payload
+ * @param {{ name?: string, message?: string, code?: string, rpcCode?: number, rpcReason?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: boolean } | undefined} payload
  * @param {string} [fallbackMessage]
  * @returns {Error}
  */
@@ -227,6 +231,10 @@ export function hydrateEnvelopeError(payload, fallbackMessage = 'unknown error')
     const err = /** @type {any} */ (new Error(payload?.message || fallbackMessage));
     err.name = payload?.name || 'Error';
     if (typeof payload?.code === 'string' && payload.code) err.code = payload.code;
+    if (Number.isInteger(payload?.rpcCode)) err.rpcCode = payload.rpcCode;
+    if (typeof payload?.rpcReason === 'string' && payload.rpcReason.trim()) {
+        err.rpcReason = payload.rpcReason.trim();
+    }
     for (const field of NUMERIC_ERROR_FIELDS) {
         const value = payload ? /** @type {any} */ (payload)[field] : undefined;
         if (typeof value === 'number' && Number.isFinite(value)) err[field] = value;

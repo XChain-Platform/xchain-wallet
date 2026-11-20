@@ -355,6 +355,9 @@ export class MockXChainProvider implements XChainProvider {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
+        if (typeof params.appId !== 'string' || params.appId.length === 0) {
+            return { ok: false, error: 'INVALID_PARAMS' };
+        }
         const chainId = this.opts.activeChains.find((id) => (
             this.isChainGranted(id)
             && (!params.chainId || params.chainId === id)

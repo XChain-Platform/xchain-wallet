@@ -35,7 +35,7 @@
 // backends are the only place they live outside the service worker.
 
 import { crypto as cryptoLib, storage as storageLib, flows as flowsLib } from '@xchain-wallet/core';
-import { saveSigningSecret } from './signingSecretSession.js';
+import { clearSigningSecret, saveSigningSecret } from './signingSecretSession.js';
 import { startPhraseRecoveryReconcile } from './walletCreate.js';
 import { checkUnlockAllowed, recordFailure } from './unlockThrottle.js';
 
@@ -240,14 +240,22 @@ async function performWalletUnlock(request, deps) {
         // Password was correct. Clear the throttle so the next lock/unlock
         // cycle starts fresh, then persist the master key to the session
         // backend (that's what `ensureHost()` reads to build the host).
-        if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
-        await deps.sessionBackend.save(masterKey);
-        // Cache the password so the SignerPool can be rebuilt after a
-        // service-worker restart; the master key can't decrypt seeds. The
-        // password is now the whole secret: a passphrase wallet carries its
-        // own encrypted 25th word on the record, so a typed one has nothing
-        // left to unlock and is deliberately NOT written to the slot.
-        await saveSigningSecret(deps.signingSecretBackend, password);
+        try {
+            if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
+            await deps.sessionBackend.save(masterKey);
+            // Cache the password so the SignerPool can be rebuilt after a
+            // service-worker restart; the master key can't decrypt seeds. The
+            // password is now the whole secret: a passphrase wallet carries its
+            // own encrypted 25th word on the record, so a typed one has nothing
+            // left to unlock and is deliberately NOT written to the slot.
+            await saveSigningSecret(deps.signingSecretBackend, password);
+        } catch (err) {
+            // A failed commit opens no session, so no pooled signer or cached
+            // secret may survive it. Each rollback step is independent so the
+            // original storage error remains the result.
+            await rollbackUnlockCommit(deps);
+            throw err;
+        }
         // Backfill or refresh the recovery-phrase reset record off the reply
         // path (operator ruling 2026-11-16); it never fails or slows the unlock.
         startPhraseRecoveryReconcile(deps, masterKey, password);
@@ -261,6 +269,18 @@ async function performWalletUnlock(request, deps) {
     return poolUnavailable
         ? { unlocked: true, passphraseCaptureNeeded, poolUnavailable: true }
         : { unlocked: true, passphraseCaptureNeeded };
+}
+
+async function rollbackUnlockCommit(deps) {
+    try { deps.signerPool?.lockAll(); } catch (err) {
+        console.error('[xchain] wallet.unlock rollback: signerPool.lockAll failed:', err);
+    }
+    try { await deps.sessionBackend.clear(); } catch (err) {
+        console.error('[xchain] wallet.unlock rollback: sessionBackend.clear failed:', err);
+    }
+    try { await clearSigningSecret(deps.signingSecretBackend); } catch (err) {
+        console.error('[xchain] wallet.unlock rollback: clearSigningSecret failed:', err);
+    }
 }
 
 // Only a GCM tag mismatch is a wrong password. The old heuristic matched

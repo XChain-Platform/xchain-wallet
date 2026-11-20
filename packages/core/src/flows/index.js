@@ -18,7 +18,11 @@ export {
 // the query AddressList actually reads, so it needs the imported-WIF rule
 // as much as any flow does. Exporting it here is what keeps that host from
 // growing a sixth private copy of the rule.
-export { importedAddressIdsFor, importedAddressIdsForStrict } from './_importedAddressIds.js';
+export {
+    importedAddressIdsFor,
+    importedAddressIdsForStrict,
+    importedAddressIdsOfWallet,
+} from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
 export { createAccount, LegacySingleAccountError } from './createAccount.js';
 export { activateChain } from './activateChain.js';
@@ -199,6 +203,7 @@ export {
     splitGroupsByThreshold,
     GatedSendKeysMissingError,
     GatedRecipientPubkeyMissingError,
+    GatedSendTickUnresolvedError,
 } from './gatedSendGuard.js';
 export {
     GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS,
@@ -207,6 +212,12 @@ export {
     resolveGateMinAmountActive,
     LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
     isListEditRemoveActive,
+    XBRIDGE_ACTIVATION_HEIGHTS,
+    TOKEN_BRIDGE_ACTIVATION_HEIGHTS,
+    xbridgeScheduledHeight,
+    resolveXbridgeActive,
+    xbridgeVersionsIn,
+    assertXbridgeLive,
 } from './protocolActivations.js';
 export {
     messageAction,

@@ -23,6 +23,7 @@ import { safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatWithThousands, trimAmountTail } from '../utils/amountFormat.js';
 import { BET_RANGE_WINDOWS, lineChange, probabilitySeries } from './betMarketSeries.js';
+import { isRejectedFeedStatus } from '../../market/feedStatus.js';
 
 /** The card's seven range chips (Home's, without YTD). */
 const BET_RANGES = CHART_RANGES.filter((r) => r.id in BET_RANGE_WINDOWS);
@@ -55,6 +56,7 @@ function betClosingText(deadline, now = Math.floor(Date.now() / 1000)) {
 
 /** The status chip's short word and dot for each market status. */
 function betStatusChip(status) {
+    if (isRejectedFeedStatus(status)) return { text: 'Rejected', dot: 'done' };
     if (status === 'open') return { text: 'Open', dot: 'open' };
     if (status === 'closed') return { text: 'Purchases closed', dot: 'closed' };
     if (status === 'resolved') return { text: 'Settled', dot: 'done' };

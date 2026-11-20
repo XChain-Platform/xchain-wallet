@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { toTrezorSignTransaction } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
-const prevTx = (hash, version) => ({ hash, inputs: [], outputs: [], version, locktime: 0 });
+const prevTx = (hash, version) => ({ hash, inputs: [], bin_outputs: [], version, locktime: 0 });
 
 function mixedInputs(secondPrevTxInfo) {
     return {

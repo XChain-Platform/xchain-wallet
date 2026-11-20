@@ -237,10 +237,13 @@ function publishedError(response, trusted) {
     }
     // The pre-signing flag is for the wallet's own confirm screen; a page sees
     // the published error shape only.
-    const { refusedBeforeSigning, ...published } = error;
+    const {
+        refusedBeforeSigning, rpcCode, rpcReason, ...published
+    } = error;
     // bridgeErrorCodeFor hands a published code straight back, so an envelope
     // the handlers already translated is returned untouched by identity.
     const code = bridgeErrorCodeFor(published);
-    if (code === published.code && refusedBeforeSigning === undefined) return response;
+    if (code === published.code && refusedBeforeSigning === undefined
+        && rpcCode === undefined && rpcReason === undefined) return response;
     return { ...response, error: { ...published, code } };
 }

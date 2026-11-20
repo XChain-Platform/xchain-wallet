@@ -106,6 +106,102 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
 }
 
 /**
+ * chainId -> the height the indexer's XBRIDGE activation rows arm at, per
+ * version family: XBRIDGE_ACTIVATION_HEIGHTS for v0/v1
+ * (xchain_bridge_activation.XCHAIN_BRIDGE_ACTIVATION) and
+ * TOKEN_BRIDGE_ACTIVATION_HEIGHTS for v3/v4
+ * (token_bridge_activation.TOKEN_BRIDGE_ACTIVATION). Null is unarmed and the
+ * indexer refuses every user-broadcast bridge there; 0 is live from genesis.
+ * A test pins both maps to the indexer rows.
+ */
+export const XBRIDGE_ACTIVATION_HEIGHTS = Object.freeze({
+    'bitcoin-mainnet': null,
+    'bitcoin-testnet': 152929,
+    'bitcoin-regtest': 0,
+    'litecoin-mainnet': null,
+    'litecoin-testnet': 4887898,
+    'litecoin-regtest': 0,
+    'dogecoin-mainnet': null,
+    'dogecoin-testnet': 67902062,
+    'dogecoin-regtest': 0,
+});
+
+export const TOKEN_BRIDGE_ACTIVATION_HEIGHTS = Object.freeze({
+    'bitcoin-mainnet': null,
+    'bitcoin-testnet': 154567,
+    'bitcoin-regtest': 0,
+    'litecoin-mainnet': null,
+    'litecoin-testnet': 4903068,
+    'litecoin-regtest': 0,
+    'dogecoin-mainnet': null,
+    'dogecoin-testnet': 67951140,
+    'dogecoin-regtest': 0,
+});
+
+export function xbridgeScheduledHeight(chainId, version, maps = {}) {
+    // Number('') and Number(null) are 0, which would read a missing version as v0.
+    if (version === null || version === undefined || String(version).trim() === '') return null;
+    const v = Number(version);
+    const heights = v === 0 || v === 1
+        ? (maps.xchain || XBRIDGE_ACTIVATION_HEIGHTS)
+        : v === 3 || v === 4
+            ? (maps.token || TOKEN_BRIDGE_ACTIVATION_HEIGHTS)
+            : null;
+    if (!heights) return null;
+    const height = heights[chainId];
+    return Number.isFinite(height) ? Number(height) : null;
+}
+
+export async function resolveXbridgeActive({ chainId, version, getBlockHeight, maps }) {
+    const scheduled = xbridgeScheduledHeight(chainId, version, maps);
+    if (scheduled === null) return false;
+    if (scheduled === 0) return true;
+    let height;
+    try { height = await getBlockHeight(); } catch { return false; }
+    return Number.isFinite(height) && Number(height) >= scheduled;
+}
+
+/**
+ * The XBRIDGE versions a canonical action string carries: its own for a
+ * top-level XBRIDGE, and every nested one inside a BATCH command. A top-level
+ * XBRIDGE whose string names no version yields an undefined version, which
+ * reads as unscheduled.
+ *
+ * @param {{ action?: string, actionString?: string }} created
+ * @returns {Array<string | undefined>}
+ */
+export function xbridgeVersionsIn({ action, actionString }) {
+    const parts = String(actionString || '').split('|');
+    const head = parts[0].trim().toUpperCase();
+    const name = String(action || head).trim().toUpperCase();
+    if (name === 'XBRIDGE') return [head === 'XBRIDGE' ? parts[1] : undefined];
+    if (name !== 'BATCH' || head !== 'BATCH') return [];
+    return parts.slice(2).join('|').split(';')
+        .map((sub) => sub.split('|'))
+        .filter(([sub]) => String(sub || '').trim().toUpperCase() === 'XBRIDGE')
+        .map(([, version]) => version);
+}
+
+/**
+ * Refuse, before any encoding, an action the indexer would grade as an
+ * XBRIDGE before activation. The tip is read at most once, and only when a
+ * carried version is scheduled at a positive height.
+ *
+ * @param {{ chainId: string, action?: string, actionString?: string,
+ *           getBlockHeight: () => Promise<number | null>, where: string }} params
+ */
+export async function assertXbridgeLive({ chainId, action, actionString, getBlockHeight, where }) {
+    const versions = xbridgeVersionsIn({ action, actionString });
+    let tip = null;
+    const readOnce = () => (tip ||= Promise.resolve().then(getBlockHeight));
+    for (const version of versions) {
+        if (!(await resolveXbridgeActive({ chainId, version, getBlockHeight: readOnce }))) {
+            throw new Error(`${where}: cross-chain moves are not active on this network yet`);
+        }
+    }
+}
+
+/**
  * Chain activation heights for the zero sentinel on DISPENSER, ORDER, and
  * SWAP list edits. Null leaves the feature unarmed.
  */

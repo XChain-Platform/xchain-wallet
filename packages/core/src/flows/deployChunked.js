@@ -58,14 +58,36 @@ import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
 import { waitForLegIndexed, legMayBeOnChain } from './deployLegWait.js';
 import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from './variadicActionSize.js';
 
+async function submitComposedLeg(composed, submitOpts) {
+    let signingStarted = false;
+    const reportProgress = submitOpts.onProgress;
+    try {
+        return await submitAction({
+            ...submitOpts,
+            onProgress: (phase, data) => {
+                if (phase === 'signing') signingStarted = true;
+                reportProgress?.(phase, data);
+            },
+        });
+    } catch (err) {
+        // Unlock can fail before submitAction reaches the catch that marks a refusal.
+        if (err?.refusedBeforeSigning === true || !signingStarted) {
+            try { await composed.releaseEncoderInputs?.(); } catch { /* the reservation expires */ }
+        }
+        throw err;
+    }
+}
+
 /**
  * Plan a deploy: does this source fit one inline DEPLOY, or does it need
  * chunking? Pure passthrough to the SDK's consensus-exact planner.
  *
- * @param {{ sdkRegistry: any, chainId: string, code: string, gasLimit?: string|number, constructorParams?: string|string[] }} args
+ * @param {{ sdkRegistry: any, chainId: string, code: string, gasLimit?: string|number, constructorParams?: string|string[], cooldownBlocks?: string|number, slashDestination?: string }} args
  * @returns {{ codeHash: string, single: boolean, parts: string[] | null, totalChunks: number }}
  */
-export function planChunkedDeploy({ sdkRegistry, chainId, code, gasLimit, constructorParams, cooldownBlocks }) {
+export function planChunkedDeploy({
+    sdkRegistry, chainId, code, gasLimit, constructorParams, cooldownBlocks, slashDestination,
+}) {
     if (!sdkRegistry) throw new Error('planChunkedDeploy: sdkRegistry is required');
     if (!chainId) throw new Error('planChunkedDeploy: chainId is required');
     if (typeof code !== 'string' || code.length === 0) {
@@ -75,11 +97,21 @@ export function planChunkedDeploy({ sdkRegistry, chainId, code, gasLimit, constr
     if (typeof sdk.planDeploy !== 'function') {
         throw new Error('planChunkedDeploy: this SDK build has no planDeploy (needs the PC-38 SDK leg)');
     }
-    const plan = sdk.planDeploy(code, { gasLimit, constructorParams });
+    const normalizedCooldown = cooldownBlocks === undefined || cooldownBlocks === null
+        ? ''
+        : String(cooldownBlocks).trim();
+    const staking = normalizedCooldown !== '';
+    const plan = sdk.planDeploy(code, {
+        gasLimit,
+        constructorParams,
+        ...(staking ? {
+            cooldownBlocks: normalizedCooldown,
+            slashDestination: String(slashDestination || '').trim() || 'BURN',
+        } : {}),
+    });
     // The assembling DEPLOY v2 ends in a repeating CONSTRUCTOR_PARAMS field. Over
     // 8192 compiled bytes it rides a Taproot envelope the wallet cannot verify,
     // and every chunk before it would already be paid for. Refuse before any leg.
-    const staking = cooldownBlocks !== undefined && cooldownBlocks !== null && String(cooldownBlocks).trim() !== '';
     if (!plan.single && !staking) {
         const tooLarge = variadicSizeMessage(
             deployActionFit({ code, gasLimit, constructorParams: normalizeConstructorParams(constructorParams) }),
@@ -476,6 +508,7 @@ export async function deployChunkedRun(opts) {
         gasLimit: opts.gasLimit,
         constructorParams: opts.constructorParams,
         cooldownBlocks: opts.cooldownBlocks,
+        slashDestination: opts.slashDestination,
     });
     if (plan.single) {
         throw new Error('deployChunkedRun: this source fits a single DEPLOY; use deployAction instead');
@@ -722,7 +755,7 @@ export async function deployChunkedRun(opts) {
             ownAddresses: [source.address],
             signer: opts.from,
         });
-        return submitAction({
+        return submitComposedLeg(composed, {
             vault: opts.vault,
             walletId: opts.walletId,
             password: opts.password,

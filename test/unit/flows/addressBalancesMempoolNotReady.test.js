@@ -68,16 +68,20 @@ describe('a coin balance while the tracker reports an unconverged mempool', () =
     });
 
     it('batch route: the same body reads the confirmed balance', async () => {
+        const unconverged = body({
+            mempool_ready: false,
+            balances: { confirmed: '0.00150000', pending: '-0.00050000' },
+        });
         const sdk = {
             getBalances: async () => tokens,
-            getAddress: async () => body({ mempool_ready: false }),
+            getAddress: async () => unconverged,
             getBalancesBatch: async () => ({
-                [SOURCE]: { balances: tokens, address: body({ mempool_ready: false }), error: null },
+                [SOURCE]: { balances: tokens, address: unconverged, error: null },
             }),
         };
         const res = await walletBalances({ vault, walletId: 'w1', chainRegistry, sdkRegistry: { get: () => sdk } });
         const entry = res[CHAIN_ID].find((e) => e.address === SOURCE);
-        expect(entry.balances.native).toMatchObject({ quantity: '150000' });
+        expect(entry.balances.native).toMatchObject({ quantity: '150000', pendingUnknown: true });
         expect(entry.balances.unavailable).toBeUndefined();
     });
 
@@ -98,6 +102,16 @@ describe('a coin balance while the tracker reports an unconverged mempool', () =
 });
 
 describe('the pendingUnknown marker on the coin balance', () => {
+    it('marks false as unknown without trusting or netting the pending figure', async () => {
+        const shape = await readOne(body({
+            mempool_ready: false,
+            balances: { confirmed: '0.00150000', pending: '-0.00050000' },
+        }));
+        expect(shape.native).toMatchObject({ quantity: '150000', pendingUnknown: true });
+        expect(shape.native).not.toHaveProperty('pendingQuantity');
+        expect(shape.native).not.toHaveProperty('pendingOutgoingQuantity');
+    });
+
     it.each([['true', { mempool_ready: true }], ['absent', {}], ['null', { mempool_ready: null }]])(
         'mempool_ready %s leaves the marker off',
         async (_label, extra) => {

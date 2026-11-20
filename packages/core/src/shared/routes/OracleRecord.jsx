@@ -18,6 +18,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 // The Copy Address action and safe market titles.
 import { copyText } from '../clipboard.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { isRejectedFeed } from '../../market/feedStatus.js';
 import styles from './IssueTokenForm.module.css';
 // The identity card, the fact rows shared with the bet market page, and
 // this page's own market rows.
@@ -188,7 +189,8 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
 
     useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
-    const rows = useMemo(() => orderedMarkets(markets || []), [markets]);
+    // A rejected create never opened: not listed or counted, as in total_feeds.
+    const rows = useMemo(() => orderedMarkets((markets || []).filter((m) => !isRejectedFeed(m))), [markets]);
     const statusCounts = useMemo(() => {
         const counts = { all: rows.length, open: 0, resolving: 0, resolved: 0, refunded: 0 };
         for (const m of rows) {
@@ -264,7 +266,8 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
 
     const openRows = rows.filter((m) => m.feed_status === 'open');
     const listed = listedMarketCount(record);
-    const partial = markets !== null && !marketsError && rows.length < listed;
+    // The raw page (rejected rows included) is short, and opened ones are missing.
+    const partial = markets !== null && !marketsError && markets.length < listed && rows.length < total;
     const feeText = markets ? feeRangeText(rows) : null;
 
     // One fact per row (label, value), as on the bet market page.
@@ -320,7 +323,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
             );
         }
         if (!markets) return <p className={styles.hint}>Loading markets…</p>;
-        if (markets.length === 0) {
+        if (rows.length === 0) {
             return <EmptyState title="No markets yet" body="Markets created by this address on this network appear here." titleAs="p" />;
         }
         return null;
@@ -337,7 +340,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
                 </ul>
             )}
             {partial ? (
-                <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {listed} markets.</p>
+                <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {total} markets.</p>
             ) : null}
         </>
     );

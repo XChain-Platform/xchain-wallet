@@ -656,7 +656,7 @@ export async function copyGatedKeysToWallet({ vault, fromWalletId, toWalletId, c
  *   }>,
  * }>>}
  */
-export async function listGatedFiles({ sdk, tick }) {
+export async function listGatedFiles({ sdk, tick, strict = false }) {
     if (!tick) throw new Error('listGatedFiles: tick is required');
 
     // Demo content short-circuit: known demo tickers serve in-memory
@@ -678,8 +678,9 @@ export async function listGatedFiles({ sdk, tick }) {
         const notFound = status === 404
             || error?.code === 'EXPLORER_HTTP_404'
             || /Explorer returned HTTP 404\b/.test(String(error?.message || ''));
+        if (strict && !notFound) throw error;
         if (!notFound) rows = [];
-        else rows = await sdk.getFiles(tick, 'token').catch(() => []);
+        else rows = strict ? await sdk.getFiles(tick, 'token') : await sdk.getFiles(tick, 'token').catch(() => []);
     }
     const list = Array.isArray(rows) ? rows : (rows && Array.isArray(rows.data) ? rows.data : []);
     const byKeyHash = /** @type {Map<string, any>} */ (new Map());

@@ -104,6 +104,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {string|null} encryptedPassphrase  §15.6 BIP39 passphrase, base64 ciphertext under this wallet's own master key; null when the wallet has none, and null on a passphrase wallet created before the passphrase was stored (awaiting the one-time capture step)
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
+ * @property {Record<string, string>} [activeAddressByChainId]
  * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22: multiple per wallet (BTC-only at launch)
  * @property {typeof WALLET_MODES[number]} walletMode   §20: chosen once at create, import or pair; read-only afterwards
  */
@@ -183,6 +184,14 @@ export function validateWallet(record) {
     }
     check(errors, 'kdfParams', isKdfParams(r.kdfParams), 'malformed');
     checkEach(errors, 'importedKeys', r.importedKeys, isImportedKey, 'malformed');
+    check(
+        errors,
+        'activeAddressByChainId',
+        r.activeAddressByChainId === undefined
+            || (isPlainObject(r.activeAddressByChainId)
+                && Object.values(r.activeAddressByChainId).every(isNonEmptyString)),
+        'must be a map of chain ids to address ids',
+    );
     check(errors, 'walletMode', isOneOf(r.walletMode, WALLET_MODES), `must be one of ${WALLET_MODES.join(', ')}`);
 
     // A wif-only wallet must have at least one imported key (otherwise

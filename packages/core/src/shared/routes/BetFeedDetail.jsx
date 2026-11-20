@@ -83,6 +83,9 @@ import { OUTCOME_COLORS } from '../components/outcomeDetail/outcomeColors.js';
 import { OutcomeList, OutcomeMark, outcomeMarkOf } from './OutcomeList.jsx';
 import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { t } from '../../i18n/index.js';
+import {
+    isRejectedFeed, isRejectedFeedStatus, REJECTED_FEED_LABEL,
+} from '../../market/feedStatus.js';
 import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -171,6 +174,7 @@ export function poolRowsForOutcomes(rows, outcomeCount) {
 const SETTLED_BET_LIMIT = 500;
 
 function statusLabel(status) {
+    if (isRejectedFeedStatus(status)) return REJECTED_FEED_LABEL;
     if (status === 'open') return 'Positions available';
     if (status === 'closed') return 'Purchases closed, waiting on the result';
     if (status === 'resolved') return 'Settled';
@@ -1165,7 +1169,14 @@ export function BetFeedDetail({
     // Result, once the market stops taking bets: what happened to it, the
     // split (final once settled, the winner marked), and what this wallet bet.
     let verdict = null;
-    if (feed.feed_status === 'closed') {
+    if (isRejectedFeed(feed)) {
+        verdict = {
+            title: 'This market was never opened',
+            tone: 'info',
+            testId: 'bet-settlement',
+            body: 'The network rejected the create transaction. No market exists, no positions can be bought, and nothing is owed to anyone.',
+        };
+    } else if (feed.feed_status === 'closed') {
         verdict = {
             title: 'Pending resolution',
             tone: 'info',

@@ -27,7 +27,7 @@ import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { exportBackupFile } from '../../../packages/core/src/flows/backupFile.js';
 import { ChainRegistry, BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
-import { SDKRegistry } from '../../../packages/core/src/sdk/SDKRegistry.js';
+import { SDKRegistry, joinEndpoint } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { createVaultKeyring } from '../../../packages/extension/src/background/vaultKeyring.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 
@@ -44,12 +44,13 @@ const AFTER = {
     displayName: 'Operator relocated',
     explorer: { defaultUrl: 'http://10.0.0.77', defaultPort: 18080 },
 };
+const BUNDLED = BUNDLED_DESCRIPTORS.find((d) => d.id === 'litecoin-regtest');
 
 async function flush(rounds = 200) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-async function backupFileContent(customChains) {
+async function backupFileContent(customChains, sdkEndpoints) {
     const kdfParams = makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 });
     const vault = new Vault({ backend: new InMemoryBackend(), masterKey: deriveMasterKey(SOURCE_WALLET, kdfParams) });
     await vault.open();
@@ -73,6 +74,7 @@ async function backupFileContent(customChains) {
     // `undefined` leaves the record exactly as a wallet that never added a
     // custom chain stores it: no list at all.
     if (customChains !== undefined) settings.customChains = customChains;
+    if (sdkEndpoints !== undefined) settings.sdkEndpoints = sdkEndpoints;
     await vault.settings.put(settings);
     const { fileContent } = await exportBackupFile({
         vault,
@@ -84,7 +86,7 @@ async function backupFileContent(customChains) {
 }
 
 /** A host whose vault already holds BEFORE and whose registry is seeded with it. */
-async function openHostWithChain() {
+async function openHostWithChain({ hookThrows = false } = {}) {
     const kdfParams = makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 });
     const vault = new Vault({ backend: new InMemoryBackend(), masterKey: deriveMasterKey(DEVICE, kdfParams) });
     await vault.open();
@@ -99,6 +101,7 @@ async function openHostWithChain() {
         sdkFactory: (opts) => { sdkCalls.push(opts); return { network: opts.network, explorerUrl: opts.explorerUrl }; },
     });
     const published = [];
+    const dropped = [];
     const host = createBackgroundHost({
         vault,
         chainRegistry,
@@ -112,11 +115,15 @@ async function openHostWithChain() {
         logConsoleStorage: null,
         vaultKeyring: createVaultKeyring({ metaBackend: { load: async () => ({ kdfParams }) } }),
         surfaceStateEvents: { publish: async (kind) => { published.push(kind); } },
+        onSdkEndpointsChanged: async (ids) => {
+            if (hookThrows) throw new Error('refresh failed');
+            dropped.push(ids);
+        },
     });
     expect((await host.handle({ type: 'settings.get', request: {} })).ok).toBe(true);
     await flush();
     expect(chainRegistry.has(BEFORE.id)).toBe(true);
-    return { host, chainRegistry, sdkRegistry, sdkCalls, published };
+    return { host, chainRegistry, sdkRegistry, sdkCalls, published, dropped };
 }
 
 const restore = (h, fileContent) => h.host.handle({
@@ -147,6 +154,7 @@ describe('an overwrite restore reconciles the running registry with the vault', 
         expect(h.sdkCalls.length).toBe(callsBefore + 1);
         expect(fresh.explorerUrl).toBe('http://10.0.0.77:18080');
         expect(h.published).toContain('custom-chains');
+        expect(h.dropped).toEqual([[BEFORE.id]]);
     });
 
     it('removes a chain the backup does not list and drops its cached client', async () => {
@@ -160,6 +168,7 @@ describe('an overwrite restore reconciles the running registry with the vault', 
         expect(h.chainRegistry.has(BEFORE.id)).toBe(false);
         expect(h.sdkRegistry.activeChainIds()).not.toContain(BEFORE.id);
         expect(h.published).toContain('custom-chains');
+        expect(h.dropped).toEqual([[BEFORE.id]]);
     });
 
     it('removes the chain when the backup record carries no custom chain list at all', async () => {
@@ -185,5 +194,35 @@ describe('an overwrite restore reconciles the running registry with the vault', 
         expect(reply.ok, JSON.stringify(reply.error ?? {})).toBe(true);
         expect(h.sdkRegistry.get(BEFORE.id)).toBe(live);
         expect(h.published).not.toContain('custom-chains');
+        expect(h.dropped).toEqual([]);
+    });
+
+    it('reports a bundled client dropped by a restored endpoint override', async () => {
+        const override = {
+            explorerUrl: 'http://10.0.0.9:18080',
+            encoderUrl: joinEndpoint(BUNDLED.encoder),
+            hubUrl: joinEndpoint(BUNDLED.hub),
+            custom: true,
+        };
+        const fileContent = await backupFileContent([BEFORE], { [BUNDLED.id]: override });
+        const h = await openHostWithChain();
+        h.sdkRegistry.get(BUNDLED.id);
+
+        const reply = await restore(h, fileContent);
+
+        expect(reply.ok, JSON.stringify(reply.error ?? {})).toBe(true);
+        expect(h.dropped).toEqual([[BUNDLED.id]]);
+    });
+
+    it('keeps the completed restore when the socket refresh hook fails', async () => {
+        const fileContent = await backupFileContent([AFTER]);
+        const h = await openHostWithChain({ hookThrows: true });
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const reply = await restore(h, fileContent);
+
+        expect(reply.ok, JSON.stringify(reply.error ?? {})).toBe(true);
+        expect(logged).toHaveBeenCalledOnce();
+        logged.mockRestore();
     });
 });

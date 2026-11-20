@@ -26,6 +26,7 @@ import { ActionList } from '../components/ActionList.jsx';
 import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
+import { isRejectedFeedStatus, REJECTED_FEED_LABEL } from '../../market/feedStatus.js';
 import '../../i18n/locales/en/components.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { FeeSection } from '../components/formStandard/index.js';
@@ -65,6 +66,7 @@ function countdown(targetSec, nowSec) {
 }
 
 function marketStatusLabel(status) {
+    if (isRejectedFeedStatus(status)) return REJECTED_FEED_LABEL;
     if (status === 'open') return 'Positions available';
     if (status === 'closed') return 'Purchases closed, waiting for your result';
     if (status === 'resolved') return 'Settled';

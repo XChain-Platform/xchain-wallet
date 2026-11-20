@@ -407,18 +407,29 @@ function useActivation({ walletId, descriptor, onActivated }) {
 
 /**
  * What a finished activation says, as a toast: how many addresses it made,
- * and by name each account it left alone because it already had one.
+ * by name each account it left alone because it already had one, and each
+ * account it skipped because another signer holds it.
  */
 export function activationMessage(descriptor, result) {
     const created = Array.isArray(result?.addresses) ? result.addresses.length : 0;
-    const skipped = Array.isArray(result?.skippedAccountDetails) ? result.skippedAccountDetails : [];
+    const details = Array.isArray(result?.skippedAccountDetails) ? result.skippedAccountDetails : [];
+    const isOtherSigner = (account) => account?.reason === 'custody-mismatch';
+    const skipped = details.filter((account) => !isOtherSigner(account));
+    const otherSigner = details.filter(isOtherSigner);
+    const accountNames = (list) => list
+        .map((account) => account?.name || account?.accountId).filter(Boolean).join(', ');
+    const otherLine = otherSigner.length > 0
+        ? t('settings.testNetworks.otherSignerAccounts', { names: accountNames(otherSigner) })
+        : '';
+    if (otherLine && created === 0) return otherLine;
     const name = networkName(descriptor);
     const lead = created > 0
         ? t('settings.testNetworks.activated', { name, count: created })
         : t('settings.testNetworks.alreadyActive', { name });
-    if (skipped.length === 0 || created === 0) return lead;
-    const names = skipped.map((account) => account?.name || account?.accountId).filter(Boolean).join(', ');
-    return `${lead} ${t('settings.testNetworks.skippedAccounts', { names })}`;
+    const skippedLine = skipped.length > 0 && created > 0
+        ? t('settings.testNetworks.skippedAccounts', { names: accountNames(skipped) })
+        : '';
+    return [lead, skippedLine, otherLine].filter(Boolean).join(' ');
 }
 
 function ActivateInPlace({ activation, descriptor, walletId }) {

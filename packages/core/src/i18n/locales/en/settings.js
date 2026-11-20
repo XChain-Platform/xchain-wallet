@@ -56,7 +56,7 @@ const messages = {
     // The same action on a button, where labels are Title Case.
     'settings.backup.revealRecoveryPhraseAction': 'Reveal Recovery Phrase',
     'settings.backup.enterYourWalletPasswordMake':
-        'Enter your wallet password. {RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.',
+        'Enter your wallet password. {warning} Make sure no one is looking over your shoulder.',
     'settings.backup.backUpRecoveryPhrase': 'Back up recovery phrase',
     'settings.backup.useTheWalletPasswordTo':
         'Use the wallet password to reveal the words for copying to paper or another device.',
@@ -226,6 +226,7 @@ const messages = {
     'settings.testNetworks.activated': '{name} is active. New addresses made: {count}.',
     'settings.testNetworks.alreadyActive': '{name} was already active. No new addresses were needed.',
     'settings.testNetworks.skippedAccounts': 'Already had an address on it, so left unchanged: {names}.',
+    'settings.testNetworks.otherSignerAccounts': 'No address made for accounts another signer holds: {names}.',
     'settings.testNetworks.actionsLabel': 'Network actions',
     'settings.testNetworks.detailsLabel': 'Network details',
     'settings.testNetworks.activateOnWallet': 'Activate on this wallet',
@@ -933,7 +934,7 @@ const messages = {
     'settings.notifications.pauseAllNotificationsIncludingPrice': 'Daily pause, including price alerts.',
     'settings.notifications.couldNotSaveQuietHours': "Couldn't save quiet hours. Try again.",
     'settings.backup.writeItOnPaperOr':
-        '{RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.',
+        '{warning} Write it on paper or store it in a password manager.',
     'settings.backup.enterTheRecoveryPhraseFrom':
         "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {countState, select, number {{value}} other {selected}} addresses on every active network from it and lists any that don't match. Nothing is saved.",
     'settings.backup.afterUploadingTheEncryptedFile':

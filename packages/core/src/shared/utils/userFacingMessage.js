@@ -27,6 +27,7 @@
 // this one when the flow layer already owns the wording.
 
 import { t } from '../../i18n/index.js';
+import { isInternalRpcFailure } from '../../sdk/internalRpcFailure.js';
 
 // A leading `identifier:` or `some.namespaced-identifier:` segment, including
 // kebab-case producer names such as `multisig-envelope:`. The lowercase first
@@ -55,24 +56,6 @@ const USER_COPY_ERROR_NAMES = new Set(['InvalidWifError']);
 // node enforced, so it keeps the encoder copy that says nothing was signed or
 // sent instead of being shown as a bare reason.
 const COIN_SELECTION_SHORTFALL = /^insufficient funds: (?:selected inputs total|all \d+ candidate input)/i;
-const INTERNAL_RPC_FAILURE = /^internal (?:server )?error\b/i;
-
-/**
- * True when the encoder returned a service failure rather than a protocol
- * verdict. The encoder uses -32010 for real refusals too, so a reserved server
- * code is treated as a failure only when it carries no machine-readable reason.
- * The text check preserves that distinction after messaging drops RPC details.
- */
-function isInternalRpcFailure(e, reason) {
-    if (INTERNAL_RPC_FAILURE.test(reason)) return true;
-    const rpcError = e.details?.rpcError || e.rpcError;
-    const code = Number(rpcError?.code);
-    if (code === -32603) return true;
-    if (!Number.isInteger(code) || code < -32099 || code > -32000) return false;
-    const protocolReason = rpcError?.data?.reason || e.details?.context?.reason || e.data?.reason;
-    return !String(protocolReason || '').trim();
-}
-
 /**
  * True when text contains a machine error code or an internal error type.
  * Callers that preserve other diagnostic prose can apply this narrower check.
@@ -136,6 +119,7 @@ export function protocolRefusalReason(err) {
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
     if (!reason || isInternalRpcFailure(e, reason) || COIN_SELECTION_SHORTFALL.test(reason)
+        || /\butxo[- _]?tracker\b/i.test(reason)
         || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
         return null;
     }

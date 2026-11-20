@@ -38,6 +38,7 @@ import { attachUpdater, UPDATE_REQUEST_HEADERS } from '../../../packages/desktop
 function fakeModule() {
     const calls = [];
     const autoUpdater = {
+        netSession: { setProxy: vi.fn() },
         autoDownload: true,             // upstream defaults
         autoInstallOnAppQuit: true,     // upstream defaults
         isUpdaterActive: () => true,
@@ -85,6 +86,7 @@ describe('the install gate', () => {
         await updater.checkForUpdates();
 
         expect(updater.isActive).toBe(false);
+        expect(updater.netSession).toBeNull();
         expect(loader).not.toHaveBeenCalled();
         expect(calls).not.toContain('checkForUpdates');
         expect(onEvent).not.toHaveBeenCalled();
@@ -109,6 +111,7 @@ describe('the install gate', () => {
         });
 
         expect(updater.isActive).toBe(true);
+        expect(updater.netSession).toBe(mod.autoUpdater.netSession);
         expect(updateConfigExists).toHaveBeenCalledExactlyOnceWith(
             '/app/Resources/app-update.yml',
         );

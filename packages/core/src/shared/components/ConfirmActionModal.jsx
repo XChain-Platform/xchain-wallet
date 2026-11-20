@@ -56,7 +56,6 @@ import { OriginIdentity } from './OriginIdentity.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { approveSettle } from '../utils/approveSettle.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
-import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
 import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
@@ -780,7 +779,7 @@ export function ConfirmActionModal({
         actionWarningIds: cardIds,
         decodedWarnings: variant === 'action' && Array.isArray(formattedDecoded?.warnings) ? formattedDecoded.warnings : [],
         extraWarnings: [
-            ...(isContractCall ? [CONTRACT_CALL_WARNING] : []),
+            ...(isContractCall ? [t('common.contractCallWarning')] : []),
             ...(Array.isArray(extraWarnings) ? extraWarnings : []),
         ],
         testId: warningTestId,
