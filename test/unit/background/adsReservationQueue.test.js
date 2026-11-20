@@ -47,6 +47,11 @@ function memCollection() {
     return {
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, updater) => {
+            const next = updater(m.has(id) ? copy(m.get(id)) : null);
+            if (next) m.set(id, copy(next));
+            return next ? copy(next) : null;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         find: async (id) => (m.has(id) ? copy(m.get(id)) : null),
@@ -64,7 +69,12 @@ function walletVault(ads = {}) {
     };
     const vault = {
         pendingTxs: memCollection(),
-        wallets: { list: async () => [{ id: W, name: 'Main' }] },
+        wallets: {
+            get: async (id) => (id === W ? { id: W, name: 'Main', importedAddressIds: [] } : null),
+            list: async () => [{ id: W, name: 'Main', importedAddressIds: [] }],
+        },
+        accounts: { findBy: async () => [{ id: 'account-1', walletId: W }] },
+        addresses: { list: async () => [{ id: 'address-1', accountId: 'account-1', address: SOURCE }] },
         settings: {
             get: vi.fn(async () => JSON.parse(JSON.stringify(settings))),
             put: vi.fn(async (r) => { settings = JSON.parse(JSON.stringify(r)); }),
@@ -304,12 +314,26 @@ describe('a send waiting in the retry queue holds the payout', () => {
         const w = walletVault();
         const q = queueBlob();
         await expect(composedSend(w.vault, q.enqueue)).rejects.toThrow();
-        // A worker restart rebuilt the entry from the vault: no ADS verdict rides it.
-        const { adsCommit: _dropped, ...bare } = q.blob[W][0];
-        q.blob[W][0] = bare;
+        const [record] = await w.vault.pendingTxs.list();
+        const { adsCommit: _removed, ...legacy } = record;
+        await w.vault.pendingTxs.put(legacy);
+        q.blob[W] = [];
         const call = makeHost(w.vault, q.storage, vi.fn(async () => ({ txid: 'txid-A' })));
-        expect((await call('broadcast.queue.broadcast', { walletId: W, id: bare.id })).ok).toBe(true);
+        const [restored] = (await call('broadcast.queue.list', { walletId: W })).result;
+        expect((await call('broadcast.queue.broadcast', { walletId: W, id: restored.id })).ok).toBe(true);
         expect(w.ads()).toMatchObject({ queued: '0', donated: '30', donationCount: 1 });
+        expect(w.ads().reserved).toBeUndefined();
+    });
+
+    it('an entry rebuilt from its PendingTx books its durable verdict', async () => {
+        const w = walletVault();
+        const q = queueBlob();
+        await expect(composedSend(w.vault, q.enqueue)).rejects.toThrow();
+        q.blob[W] = [];
+        const call = makeHost(w.vault, q.storage, vi.fn(async () => ({ txid: 'txid-A' })));
+        const [restored] = (await call('broadcast.queue.list', { walletId: W })).result;
+        expect((await call('broadcast.queue.broadcast', { walletId: W, id: restored.id })).ok).toBe(true);
+        expect(w.ads()).toMatchObject({ queued: '0.05', donated: '30', donationCount: 1 });
         expect(w.ads().reserved).toBeUndefined();
     });
 

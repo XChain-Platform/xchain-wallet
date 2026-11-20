@@ -59,6 +59,13 @@ function vaultOver(rows, { wallets = [W] } = {}) {
         pendingTxs: {
             get: async (id) => { assertOpen(); return rows.has(id) ? { ...rows.get(id) } : null; },
             put: async (rec) => { assertOpen(); rows.set(rec.id, { ...rec }); },
+            update: async (id, decide) => {
+                assertOpen();
+                const next = decide(rows.has(id) ? { ...rows.get(id) } : null);
+                if (next == null) return false;
+                rows.set(id, { ...next });
+                return true;
+            },
             findBy: async (k, v) => { assertOpen(); return [...rows.values()].filter((r) => r[k] === v); },
             list: async () => { assertOpen(); return [...rows.values()]; },
             delete: async (id) => { assertOpen(); rows.delete(id); },

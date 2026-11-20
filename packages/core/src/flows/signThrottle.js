@@ -22,10 +22,9 @@
 // The extension background wires both through
 // packages/extension/src/background/signThrottleStorage.js, so an MV3
 // service-worker restart does not hand a rate-limited origin a fresh
-// burst. The one gap is the window before that async load resolves, when
-// checks run against an empty bucket. Signing itself survives a restart
-// (see packages/extension/src/background/signingSecretSession.js), which
-// is why the buckets must too.
+// burst. The host gates signing checks on that asynchronous load. Signing
+// itself survives a restart (see the background signing-secret session),
+// which is why the buckets must too.
 //
 // Why this exists:
 //   1. A site granted `canSignMessage: true` (saved permanent) could

@@ -108,6 +108,7 @@
 // pointless.
 
 import { readFileSync } from 'node:fs';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 /**
  * @typedef {Object} Lane
@@ -562,7 +563,7 @@ basenameGlobMatch(glob, name), directLanesForArtifacts(names),
 directLanesForShipped(lanesText, names).
 `;
 
-if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     const argv = process.argv.slice(2);
     if (argv.some((a) => a === '--help' || a === '-h')) {
         process.stdout.write(USAGE);

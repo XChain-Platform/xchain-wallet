@@ -26,6 +26,8 @@ import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWall
 import { resolveActiveAddresses, setActiveAddress } from '../../../packages/core/src/flows/activeAddress.js';
 import { deriveChangeAddress } from '../../../packages/core/src/flows/changeAddress.js';
 import { createAccount } from '../../../packages/core/src/flows/createAccount.js';
+import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { Vault } from '../../../packages/core/src/storage/Vault.js';
 
 function memCollection(initial = [], { failPutAt = 0 } = {}) {
     const rows = new Map(initial.map((row) => [row.id, structuredClone(row)]));
@@ -169,15 +171,10 @@ describe('wallet graph persistence', () => {
     });
 
     it('rolls back the complete new wallet graph when an address write fails', async () => {
-        const wallets = memCollection();
-        const accounts = memCollection();
-        const addresses = memCollection([], { failPutAt: 1 });
-        const vault = {
-            wallets,
-            accounts,
-            addresses,
-            settings: { get: vi.fn(async () => null), put: vi.fn(async () => {}) },
-        };
+        const backend = new InMemoryBackend();
+        const vault = new Vault({ backend, masterKey: new Uint8Array(32).fill(9) });
+        await vault.open();
+        backend.save = async () => { throw new Error('storage failed'); };
 
         await expect(persistHdWallet({
             mnemonic: 'test mnemonic',
@@ -197,9 +194,9 @@ describe('wallet graph persistence', () => {
             activeNetwork: 'regtest',
         })).rejects.toThrow('storage failed');
 
-        expect(await wallets.list()).toEqual([]);
-        expect(await accounts.list()).toEqual([]);
-        expect(await addresses.list()).toEqual([]);
+        expect(await vault.wallets.list()).toEqual([]);
+        expect(await vault.accounts.list()).toEqual([]);
+        expect(await vault.addresses.list()).toEqual([]);
     });
 });
 

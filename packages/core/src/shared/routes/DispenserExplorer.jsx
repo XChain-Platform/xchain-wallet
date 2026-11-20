@@ -33,7 +33,7 @@ import {
     dispenserStockLeft,
     dispenserStockTotal,
 } from '../components/DispenserExplorerCard.jsx';
-import { normalizeMarket } from './MarketsList.jsx';
+import { normalizeMarket } from '../../market/marketRow.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/dispenserExplorer.js';
 import '../../i18n/locales/en/send.js';

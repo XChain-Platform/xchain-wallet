@@ -28,19 +28,20 @@
 // record to preserve the work.
 
 import { createPendingTx, queuedRevealOf } from '../schemas/pendingTx.js';
+import { rawTxid } from '../signers/verifySignedTx.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
-import { releaseAdsReservation, settleAdsReservation } from './ads.js';
+import { releaseAdsReservation } from './ads.js';
+import { bookQueuedDelivery } from './adsDelivery.js';
 
 // §36: a queued send that carries the automatic donation holds the claim on
 // the queue under its PendingTx id (submitAction). Delivery settles it, and a
 // permanent refusal or a discard lets it go, so the next send may carry the
 // payout. Bookkeeping only: it never changes what this drain returns.
-async function endAdsClaim(vault, pendingTxId, delivered) {
+async function releaseAdsClaim(vault, pendingTxId) {
     try {
-        if (delivered) await settleAdsReservation({ vault, reservationId: pendingTxId });
-        else await releaseAdsReservation({ vault, reservationId: pendingTxId });
+        await releaseAdsReservation({ vault, reservationId: pendingTxId });
     } catch {
         // A refused settings write leaves the claim for reconcileAdsReservation.
     }
@@ -62,6 +63,17 @@ export class NoQueuedTxError extends Error {
     }
 }
 
+function deliveredTxid(txHex, result, fallback) {
+    if (typeof fallback === 'string' && fallback) return fallback;
+    let fromBytes = null;
+    try { fromBytes = rawTxid(txHex); } catch { /* response or stored id may still be usable */ }
+    const response = typeof result === 'string' ? result : result?.txid;
+    const normalized = (value) => (
+        typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value) ? value.toLowerCase() : null
+    );
+    return normalized(fromBytes) ?? normalized(response);
+}
+
 /**
  * @typedef {Object} EnqueueSignedTxOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -74,6 +86,7 @@ export class NoQueuedTxError extends Error {
  * @property {string} txHex                       signed tx
  * @property {string} [psbtHex]                   optional; retained for parity with PendingTx shape
  * @property {string} [existingPendingTxId]       if set, update that record instead of creating a new one
+ * @property {object | null} [adsCommit]           compose-time ADS verdict for eventual delivery
  */
 
 /**
@@ -97,6 +110,7 @@ export async function enqueueSignedTx({
     txHex,
     psbtHex = '',
     existingPendingTxId,
+    adsCommit,
 }) {
     if (!vault) throw new Error('enqueueSignedTx: vault is required');
     if (typeof txHex !== 'string' || txHex.length === 0) {
@@ -113,13 +127,14 @@ export async function enqueueSignedTx({
             txHex,
             psbtHex: existing.psbtHex || psbtHex,
             error: null,
+            ...(adsCommit !== undefined ? { adsCommit } : {}),
         };
     } else {
         record = createPendingTx({
             chain, network, fromAddress, toAddress, action, actionSummary,
             psbtHex,
         });
-        record = { ...record, status: 'queued', txHex };
+        record = { ...record, status: 'queued', txHex, ...(adsCommit !== undefined ? { adsCommit } : {}) };
     }
     await vault.pendingTxs.put(record);
     return { pendingTxId: record.id, pendingTx: record };
@@ -151,8 +166,8 @@ export async function listQueuedBroadcasts({ vault, chainId, chainRegistry }) {
 
 /**
  * Attempt to broadcast a single queued PendingTx. Transitions:
- *   success              → status='broadcast', broadcastAt = now
- *   already on network   → status='broadcast' (the node holds this txid)
+ *   success              → status='broadcast', broadcastAt and txid recorded
+ *   already on network   → status='broadcast', bytes-derived txid recorded
  *   transient failure    → stays 'queued', error recorded, retry allowed
  *   permanent failure    → status='failed' (§5.3: inputs gone; only a
  *                          re-compose can succeed, so it stops retrying)
@@ -282,22 +297,34 @@ export async function drainQueuedBroadcast({
                 // a refused write leaves the pair on disk, and a resume re-sends
                 // the commit, which the node answers as already known.
             }
+            // The commit request is a window in which another context can arm
+            // the freeze. Keep its landed reveal queued until the freeze lifts.
+            try {
+                assertSigningAllowed();
+            } catch (err) {
+                try { await vault.pendingTxs.put({ ...current, status: 'queued', error: null }); } catch { /* retry resumes the pair */ }
+                throw err;
+            }
         }
 
+        let broadcastResult;
         try {
-            await sdk.encoder.broadcastTx(current.txHex);
+            broadcastResult = await sdk.encoder.broadcastTx(current.txHex);
         } catch (err) {
             // Settle "already known" as delivery: the node holds this txid, so
             // retiring it as 'failed' would invite a re-compose that pays twice.
             if (isAlreadyOnNetworkRejection(err)) {
                 const delivered = {
                     ...current,
+                    txid: deliveredTxid(current.txHex, null, current.txid),
                     status: 'broadcast',
                     broadcastAt: new Date().toISOString(),
                     error: null,
                 };
                 await vault.pendingTxs.put(delivered);
-                await endAdsClaim(vault, pendingTxId, true);
+                await bookQueuedDelivery({
+                    vault, chainRegistry, pendingTxId, adsCommit: delivered.adsCommit ?? null,
+                });
                 if (onProgress) {
                     try { onProgress('broadcast', { pendingTxId }); } catch { /* swallow */ }
                 }
@@ -308,12 +335,15 @@ export async function drainQueuedBroadcast({
 
         const broadcast = {
             ...current,
+            txid: deliveredTxid(current.txHex, broadcastResult, current.txid),
             status: 'broadcast',
             broadcastAt: new Date().toISOString(),
             error: null,
         };
         await vault.pendingTxs.put(broadcast);
-        await endAdsClaim(vault, pendingTxId, true);
+        await bookQueuedDelivery({
+            vault, chainRegistry, pendingTxId, adsCommit: broadcast.adsCommit ?? null,
+        });
         if (onProgress) {
             try { onProgress('broadcast', { pendingTxId }); } catch { /* swallow */ }
         }
@@ -350,7 +380,7 @@ async function settleDrainFailure(vault, pendingTxId, record, err) {
         ? commitLandedRecord(record, msg)
         : { ...record, status, error: msg });
     // Bytes that can never confirm never pay the donation.
-    if (status === 'failed') await endAdsClaim(vault, pendingTxId, false);
+    if (status === 'failed') await releaseAdsClaim(vault, pendingTxId);
     const refreshed = await vault.pendingTxs.get(pendingTxId);
     return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
 }
@@ -378,12 +408,12 @@ export async function discardQueuedBroadcast({ vault, pendingTxId }) {
     // Keep a discarded reveal whose commit landed, so the commit's spend stays netted.
     if (existing.commitLanded === true) {
         await vault.pendingTxs.put(commitLandedRecord(existing, 'reveal discarded; its commit is already on the network'));
-        await endAdsClaim(vault, pendingTxId, false);
+        await releaseAdsClaim(vault, pendingTxId);
         return true;
     }
     const removed = await vault.pendingTxs.delete(pendingTxId);
     // Discarded bytes never pay the donation, so the next send may carry it.
-    await endAdsClaim(vault, pendingTxId, false);
+    await releaseAdsClaim(vault, pendingTxId);
     return removed;
 }
 

@@ -29,6 +29,12 @@ function memoryStorage() {
     };
 }
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
 function hostOver(store) {
     return createBroadcastQueueEngine({
         store,
@@ -74,6 +80,47 @@ describe('removed-wallet gate across hosts sharing one queue store', () => {
 
         expect(saved).toBe(true);
         expect(storage.read()['w-kept']).toEqual([expect.objectContaining({ txid: 'kept-1' })]);
+    });
+
+    it('refuses an enqueue removed during a recovery repair save', async () => {
+        let blob = {};
+        let failLoad = true;
+        let holdNextSave = false;
+        const saveStarted = deferred();
+        const releaseSave = deferred();
+        const storage = {
+            async load() { return failLoad ? null : structuredClone(blob); },
+            async loadSettlements() { return []; },
+            async save(next) {
+                if (holdNextSave) {
+                    holdNextSave = false;
+                    saveStarted.resolve();
+                    await releaseSave.promise;
+                }
+                blob = structuredClone(next);
+            },
+            async saveSettlements() {},
+            async clear() { blob = {}; },
+            read: () => structuredClone(blob),
+        };
+        const store = createBroadcastQueueStore({ storage, prunedLedger: null });
+        const engine = hostOver(store);
+
+        expect((await engine.enqueueSignedBroadcast('w-kept', entry('kept-before-recovery'))).persisted)
+            .toBe(false);
+        failLoad = false;
+        holdNextSave = true;
+        const pending = engine.enqueueSignedBroadcast('w-gone', entry('late-during-recovery'));
+        await saveStarted.promise;
+        await engine.pruneWalletFromQueue('w-gone');
+        releaseSave.resolve();
+
+        await expect(pending).resolves.toEqual({ entry: null, persisted: false });
+        expect(store.queues.get('w-gone')).toBeUndefined();
+        expect(storage.read()['w-gone']).toBeUndefined();
+        expect(storage.read()['w-kept']).toEqual([
+            expect.objectContaining({ txid: 'kept-before-recovery' }),
+        ]);
     });
 
     it('empties the removal gate when the store is sealed', async () => {

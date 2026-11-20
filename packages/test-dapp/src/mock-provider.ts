@@ -168,17 +168,24 @@ export class MockXChainProvider implements XChainProvider {
         };
     }
 
-    // Priority: blockedSite > not connected > throttle > rejectAll. Returning
+    // Priority: blockedSite > not connected > chain grant > throttle > rejectAll. Returning
     // the matching error result lets sign* methods short-circuit before doing
     // any work, which mirrors how the production wallet checks site status
     // and the connection before it opens an approval window. connect() passes
     // forConnect so only the blocked-site check applies to it.
-    private maybeBlockedOrThrottled(forConnect = false): { ok: false; error: 'BLOCKED_BY_USER' | 'NOT_CONNECTED' } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
+    private maybeBlockedOrThrottled(forConnect = false, chainId?: ChainId): { ok: false; error: 'BLOCKED_BY_USER' | 'NOT_CONNECTED' | 'CHAIN_NOT_SUPPORTED'; message?: string } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
         if (this.opts.blockedSite) {
             return { ok: false, error: 'BLOCKED_BY_USER' };
         }
         if (!forConnect && !this.connected) {
             return { ok: false, error: 'NOT_CONNECTED' };
+        }
+        if (!forConnect && chainId && !this.isChainGranted(chainId)) {
+            return {
+                ok: false,
+                error: 'CHAIN_NOT_SUPPORTED',
+                message: `CHAIN_NOT_SUPPORTED: ${chainId} is outside the connect grant`,
+            };
         }
         if (!forConnect && this.opts.throttle) {
             const t = this.opts.throttle;
@@ -273,7 +280,7 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async signMessage(params: SignMessageParams): Promise<SignMessageResult> {
-        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        const blockedOrThrottled = this.maybeBlockedOrThrottled(false, params.chainId);
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         return {
@@ -287,7 +294,7 @@ export class MockXChainProvider implements XChainProvider {
     async signAction<TParams = Record<string, unknown>>(
         params: SignActionParams<TParams>,
     ): Promise<SignActionResult> {
-        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        const blockedOrThrottled = this.maybeBlockedOrThrottled(false, params.chainId);
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         if (!this.opts.supportedActions.includes(params.action)) {
@@ -310,7 +317,7 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async signPsbt(params: SignPsbtParams): Promise<SignPsbtResult> {
-        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        const blockedOrThrottled = this.maybeBlockedOrThrottled(false, params.chainId);
         if (blockedOrThrottled) return blockedOrThrottled;
         const shapeError = signingPathsError(params.signingPaths);
         if (shapeError) return { ok: false, error: 'INVALID_PARAMS', message: shapeError };
@@ -326,7 +333,7 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async coSign(params: CoSignParams): Promise<CoSignResult> {
-        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        const blockedOrThrottled = this.maybeBlockedOrThrottled(false, params.chainId);
         if (blockedOrThrottled) return blockedOrThrottled;
         const { sighashType } = params;
         if (sighashType !== undefined && !Number.isInteger(sighashType)) {
@@ -349,7 +356,8 @@ export class MockXChainProvider implements XChainProvider {
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         const chainId = this.opts.activeChains.find((id) => (
-            (!params.chainId || params.chainId === id)
+            this.isChainGranted(id)
+            && (!params.chainId || params.chainId === id)
             && this.opts.addresses[id]?.some((a) => !params.chains?.length || params.chains.includes(a.chain))
         ));
         const firstAddress = chainId
@@ -431,7 +439,7 @@ export class MockXChainProvider implements XChainProvider {
         }
     }
 
-    // The connect grant gates every per-chain read, as it does in the wallet: a
+    // The connect grant gates every per-chain read and signing method: a
     // chain outside it is refused with CHAIN_NOT_SUPPORTED.
     private isChainGranted(chainId: ChainId): boolean {
         const chains = this.grantedPermissions?.chains ?? [];

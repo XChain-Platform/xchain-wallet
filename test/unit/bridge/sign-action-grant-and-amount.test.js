@@ -124,6 +124,20 @@ describe('bridge.signAction: SEND carrying both amount fields', () => {
         expect(calls.signAction).toHaveLength(1);
         expect(calls.signAction[0].payload.AMOUNT).toBe('0.5');
     });
+
+    it.each([
+        { amount: 9007199254740993 },
+        { amountRaw: 9007199254740993 },
+    ])('refuses unsafe numeric amount input before any prompt', async (extra) => {
+        const { resp, calls } = await drive('bridge.signAction', {
+            chainId: descriptor.id,
+            action: 'SEND',
+            params: sendParams(extra),
+        });
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toContain('INVALID_PARAMS');
+        expect(calls.signAction).toHaveLength(0);
+    });
 });
 
 describe('bridge.parallel: the grouped modal payload', () => {
@@ -151,6 +165,19 @@ describe('bridge.parallel: the grouped modal payload', () => {
             }],
         });
         expect(resp.ok).toBe(true);
+        expect(resp.result[0].ok).toBe(false);
+        expect(resp.result[0].message).toContain('INVALID_PARAMS');
+        expect(calls.parallel).toHaveLength(0);
+    });
+
+    it('refuses an unsafe numeric slot before the grouped prompt', async () => {
+        const { resp, calls } = await drive('bridge.parallel', {
+            actions: [{
+                chainId: descriptor.id,
+                action: 'SEND',
+                params: sendParams({ amount: 9007199254740993 }),
+            }],
+        });
         expect(resp.result[0].ok).toBe(false);
         expect(resp.result[0].message).toContain('INVALID_PARAMS');
         expect(calls.parallel).toHaveLength(0);

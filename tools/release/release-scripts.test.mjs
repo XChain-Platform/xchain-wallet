@@ -372,13 +372,17 @@ test('waiver: an unfetchable jobs list refuses', async () => {
     });
 });
 
-test('the committed gate-waivers.json has exactly the reviewed 0.341.4 and 0.343.0 entries', () => {
+test('the committed gate-waivers.json has exactly the reviewed 0.341.4, 0.343.0 and 0.343.1 entries', () => {
     const list = JSON.parse(readFileSync(join(HERE, 'gate-waivers.json'), 'utf8'));
-    assert.equal(list.length, 2);
+    assert.equal(list.length, 3);
     assert.equal(list[0].version, '0.341.4');
     assert.deepEqual(list[0].jobs, ['e2e-regtest', 'verdict']);
     // Operator ruling 2026-11-18: the 0.343.0 regtest shard failed only on stale spec copies and venue lag.
     assert.equal(list[1].version, '0.343.0');
     assert.deepEqual(list[1].jobs, ['e2e-regtest (rolling shard)', 'verdict']);
     assert.equal(list[1].ruled_by, 'operator (J-Dog)');
+    // Operator ruling 2026-11-19: the 0.343.1 hotfix's regtest shard stalled on the venue tunnel and carries the same stale spec copies.
+    assert.equal(list[2].version, '0.343.1');
+    assert.deepEqual(list[2].jobs, ['e2e-regtest (rolling shard)', 'verdict']);
+    assert.equal(list[2].ruled_by, 'operator (J-Dog)');
 });

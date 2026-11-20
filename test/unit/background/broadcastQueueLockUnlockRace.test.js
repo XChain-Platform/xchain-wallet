@@ -69,6 +69,12 @@ function pendingTxTable() {
         rows,
         get: async (id) => (rows.has(id) ? copy(rows.get(id)) : null),
         put: async (rec) => { rows.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(rows.has(id) ? copy(rows.get(id)) : null);
+            if (next == null) return false;
+            rows.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(rows.values()).map(copy),
         delete: async (id) => rows.delete(id),
         find: async (id) => (rows.has(id) ? copy(rows.get(id)) : null),
@@ -96,6 +102,7 @@ function openVault(table, hold = null) {
             pendingTxs: {
                 get: guard(get),
                 put: guard(table.put),
+                update: guard(table.update),
                 list: guard(table.list),
                 delete: guard(table.delete),
                 find: guard(table.find),

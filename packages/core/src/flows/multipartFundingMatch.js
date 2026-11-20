@@ -21,12 +21,22 @@ function hasValidValue(output) {
     return Number.isSafeInteger(output?.value) && output.value >= 0;
 }
 
+function exactValue(value) {
+    if (typeof value === 'number') {
+        return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : null;
+    }
+    if (typeof value === 'bigint') return value >= 0n ? value : null;
+    if (typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value)) return BigInt(value);
+    return null;
+}
+
 function validateOutputs(expectedOutputs, fundingTxOutputs) {
     if (!Array.isArray(expectedOutputs) || !Array.isArray(fundingTxOutputs)) {
         throw fundingError(FUNDING_INPUT_INVALID, 'Funding outputs must be arrays');
     }
-    if (!expectedOutputs.every(hasValidValue) || !fundingTxOutputs.every(hasValidValue)) {
-        throw fundingError(FUNDING_INPUT_INVALID, 'Funding output values must be non-negative safe integers');
+    if (!expectedOutputs.every(hasValidValue)
+        || !fundingTxOutputs.every((output) => exactValue(output?.value) !== null)) {
+        throw fundingError(FUNDING_INPUT_INVALID, 'Funding output values must be exact non-negative integers');
     }
 }
 
@@ -36,7 +46,7 @@ function matchedOutputIndexes(expectedOutputs, fundingTxOutputs) {
         const outputIndex = fundingTxOutputs.findIndex((output, index) => (
             !consumed.has(index)
             && output.address === expected.address
-            && output.value === expected.value
+            && exactValue(output.value) === BigInt(expected.value)
         ));
         if (outputIndex < 0) {
             throw fundingError(FUNDING_OUTPUT_MISSING, `Funding output missing for piece ${pieceIndex}`);
@@ -51,12 +61,12 @@ export function matchFundingOutputs(expectedOutputs, fundingTxOutputs, fundingTx
     if (typeof fundingTxid !== 'string' || fundingTxid.trim().length === 0) {
         throw fundingError(FUNDING_INPUT_INVALID, 'Funding transaction id must not be empty');
     }
-    return matchedOutputIndexes(expectedOutputs, fundingTxOutputs).map((outputIndex) => {
+    return matchedOutputIndexes(expectedOutputs, fundingTxOutputs).map((outputIndex, pieceIndex) => {
         const output = fundingTxOutputs[outputIndex];
         return {
             txid: fundingTxid,
             vout: output.vout,
-            value: output.value,
+            value: expectedOutputs[pieceIndex].value,
             scriptPubKey: output.scriptPubKey,
         };
     });

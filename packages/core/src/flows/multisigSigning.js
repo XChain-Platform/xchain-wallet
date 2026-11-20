@@ -41,6 +41,7 @@ import { rawTxid } from '../signers/verifySignedTx.js';
 import { assembleMultisigTx } from './multisigSpend.js';
 import { assertMultisigTransactionBinding, findMatchingMultisigConfig } from './multisigTransactionBinding.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
+import { commitAdsStepWithBooking, isAdsCountedSend } from './ads.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/multisig.js';
 
@@ -560,6 +561,7 @@ async function aggregateMultisigSessionLocked({ vault, sdkRegistry, sessionId })
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} [opts.sdkRegistry]
+ * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @param {string} opts.sessionId
  * @param {string} [opts.finalizedTxHex] hex-encoded raw tx
  * @param {string} [opts.txid]
@@ -568,6 +570,7 @@ async function aggregateMultisigSessionLocked({ vault, sdkRegistry, sessionId })
 async function finalizeMultisigSigningSessionLocked({
     vault,
     sdkRegistry,
+    chainRegistry,
     sessionId,
     finalizedTxHex,
     txid,
@@ -615,7 +618,9 @@ async function finalizeMultisigSigningSessionLocked({
             // transaction is the broadcast having happened, so the session records
             // it instead of offering a retry that can never succeed.
             if (isAlreadyOnNetworkRejection(err)) {
-                return persist(vault, { ...session, status: 'broadcast' });
+                const delivered = await persist(vault, { ...session, status: 'broadcast' });
+                await bookMultisigBroadcastAds({ vault, chainRegistry, session: delivered });
+                return delivered;
             }
             throw err;
         }
@@ -631,7 +636,11 @@ async function finalizeMultisigSigningSessionLocked({
             && broadcastTxid.toLowerCase() !== session.txid.toLowerCase()) {
             throw new Error('finalizeMultisigSigningSession: broadcast returned a txid for a different transaction');
         }
-        return persist(vault, { ...session, txid: broadcastTxid.toLowerCase(), status: 'broadcast' });
+        const delivered = await persist(vault, {
+            ...session, txid: broadcastTxid.toLowerCase(), status: 'broadcast',
+        });
+        await bookMultisigBroadcastAds({ vault, chainRegistry, session: delivered });
+        return delivered;
     }
 
     assertStatus(session, 'ready-to-finalize', 'finalized');
@@ -707,6 +716,22 @@ async function finalizeMultisigSigningSessionLocked({
             : session.txid,
         status: 'finalized',
     });
+}
+
+async function bookMultisigBroadcastAds({ vault, chainRegistry, session }) {
+    if (typeof vault?.settings?.get !== 'function' || typeof vault?.settings?.put !== 'function') return;
+    try {
+        const settings = await vault.settings.get();
+        const descriptor = chainRegistry?.get?.(session.chainId) ?? null;
+        const mainnet = isAdsCountedSend({ settings, descriptor });
+        await commitAdsStepWithBooking({
+            vault,
+            donationIncluded: false,
+            mainnet,
+        });
+    } catch {
+        // ADS accounting cannot turn a landed multisig transaction into a failure.
+    }
 }
 
 // Public entry points: each change to one session waits for the one before it.

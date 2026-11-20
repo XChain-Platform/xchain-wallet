@@ -235,16 +235,13 @@ describe('import flow persistence safety', () => {
     });
 
     it('removes mnemonic wallet records when an initial address write fails', async () => {
+        const backend = new InMemoryBackend();
         const hdVault = new Vault({
-            backend: new InMemoryBackend(),
+            backend,
             masterKey: new Uint8Array(32).fill(9),
         });
         await hdVault.open();
-        const put = hdVault.addresses.put;
-        hdVault.addresses.put = async (record) => {
-            await put(record);
-            throw new Error('initial address save failed');
-        };
+        backend.save = async () => { throw new Error('initial address save failed'); };
 
         await expect(importMnemonic({
             password: 'correct horse battery staple',

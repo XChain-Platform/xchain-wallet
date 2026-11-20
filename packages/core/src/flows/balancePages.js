@@ -14,9 +14,9 @@
  * than the page cap. This reader takes the first page the caller already has and
  * fetches the rest, so the token list is whole before it is shaped.
  *
- * It never invents completeness: a later page that fails, comes back short or
- * malformed, or a ledger past the page ceiling returns the first page untouched,
- * and the caller's own `total` check then marks the token half unavailable.
+ * It never invents completeness: a later page that fails, names another scope,
+ * comes back short or malformed, or a ledger past the page ceiling returns the
+ * first page untouched, and the caller marks the token half unavailable.
  */
 
 // Most later pages one address may cost, so a huge ledger is not a request storm.
@@ -27,10 +27,11 @@ function pageRows(page) {
 }
 
 /**
- * @param {{ sdk: { getBalances: Function }, address: string, first: unknown, opts?: object }} args
+ * @param {{ sdk: { getBalances: Function }, address: string, first: unknown,
+ *   opts?: object, acceptsPage?: (page: unknown) => boolean }} args
  * @returns {Promise<unknown>} `first`, or a copy of it whose `data` holds every row
  */
-export async function completeBalancePages({ sdk, address, first, opts }) {
+export async function completeBalancePages({ sdk, address, first, opts, acceptsPage }) {
     const rows = pageRows(first);
     if (!rows || rows.length === 0) return first;
     const total = Number(/** @type {any} */ (first).total);
@@ -49,7 +50,7 @@ export async function completeBalancePages({ sdk, address, first, opts }) {
         for (let page = 2; page <= pages; page += 1) {
             const body = await sdk.getBalances(address, { ...(opts || {}), page, limit });
             const more = pageRows(body);
-            if (!more || more.length === 0) return first;
+            if (!more || more.length === 0 || (acceptsPage && !acceptsPage(body))) return first;
             take(more);
         }
     } catch {

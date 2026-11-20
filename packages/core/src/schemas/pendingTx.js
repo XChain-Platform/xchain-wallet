@@ -110,6 +110,8 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @property {{id: string, fiat: string, currency: string, paid: boolean, booked: boolean, reversed?: boolean} | null} [adsBooking]
  *          the donation payout booked for this replacement family. `paid`
  *          describes whether this record's own outputs still carry it.
+ * @property {{chainId: string, donationIncluded: boolean, donatedFiat?: string | null, currency?: string | null, mainnet?: boolean, reservationId?: string | null, bookingKey?: string | null} | null} [adsCommit]
+ *          the compose-time donation verdict for queued signed bytes.
  */
 
 /**
@@ -305,6 +307,26 @@ export function validatePendingTx(record) {
             && (r.adsBooking.reversed === undefined || typeof r.adsBooking.reversed === 'boolean')
         ),
         'must be null or a donation booking stamp',
+    );
+    check(
+        errors,
+        'adsCommit',
+        r.adsCommit === undefined || r.adsCommit === null || (
+            isPlainObject(r.adsCommit)
+            && isNonEmptyString(r.adsCommit.chainId)
+            && typeof r.adsCommit.donationIncluded === 'boolean'
+            && (r.adsCommit.donatedFiat === undefined || r.adsCommit.donatedFiat === null
+                || (typeof r.adsCommit.donatedFiat === 'string'
+                    && /^\d+(\.\d+)?$/.test(r.adsCommit.donatedFiat)))
+            && (r.adsCommit.currency === undefined || r.adsCommit.currency === null
+                || isNonEmptyString(r.adsCommit.currency))
+            && (r.adsCommit.mainnet === undefined || typeof r.adsCommit.mainnet === 'boolean')
+            && (r.adsCommit.reservationId === undefined || r.adsCommit.reservationId === null
+                || isNonEmptyString(r.adsCommit.reservationId))
+            && (r.adsCommit.bookingKey === undefined || r.adsCommit.bookingKey === null
+                || isNonEmptyString(r.adsCommit.bookingKey))
+        ),
+        'must be null or a queued donation verdict',
     );
     return result(errors);
 }

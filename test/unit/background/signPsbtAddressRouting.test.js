@@ -21,6 +21,11 @@ function makeHost(overrides = {}) {
     const vault = {
         addresses: { get: async () => address },
         accounts: { get: async () => account },
+        wallets: {
+            get: async (id) => (id === 'wallet-1'
+                ? { id, importedKeys: overrides.importedKeys ?? [{ addressId: 'addr-1' }] }
+                : null),
+        },
         signers: {
             find: async (id) => (id === 'signer-1'
                 ? { id, walletId: 'wallet-1', kind: address.source }
@@ -95,6 +100,17 @@ describe('auth.signPsbt address routing', () => {
         expect(signPsbt).toHaveBeenCalledWith(expect.objectContaining({
             signingPaths: [{ inputIndex: 0, addressId: 'addr-1' }],
         }));
+    });
+
+    it('refuses an imported key the wallet does not list', async () => {
+        const { host, signPsbt } = makeHost({
+            address: { source: 'imported-wif', accountId: null, derivationPath: null, signerId: null },
+            importedKeys: [],
+        });
+        const response = await sign(host);
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toMatch(/not in this wallet/);
+        expect(signPsbt).not.toHaveBeenCalled();
     });
 
     it('refuses signerId on the software route', async () => {

@@ -93,9 +93,16 @@ assert.ok(
 const desktopPkg = JSON.parse(
     readFileSync(join(wsRoot, 'packages', 'desktop', 'package.json'), 'utf8'),
 );
+// The scope note lives in `_descriptionNote`, not `description`: the
+// installers write `description` into every shortcut, where Windows caps
+// it at 260 characters (desktop-shortcut-text.smoke.js).
 assert.ok(
-    /Phase 2/.test(desktopPkg.description),
-    'desktop/package.json description mentions Phase 2',
+    /Phase 2/.test(desktopPkg._descriptionNote),
+    'desktop/package.json _descriptionNote mentions Phase 2',
+);
+assert.ok(
+    !/Phase 2/.test(desktopPkg.description),
+    'desktop/package.json description is user-facing and carries no scope note',
 );
 
 console.log('OK: phase-scope smoke (§8, §39, §40.12, status doc, desktop package.json)');

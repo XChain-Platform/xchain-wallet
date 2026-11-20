@@ -39,6 +39,11 @@ import { utxoListOf } from './txInclusionProbe.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 import { gatedManifestActionData } from './gatedMultipartManifest.js';
 import { recordGateOf, resumeGateOf } from './gatedUploadGate.js';
+import {
+    commitAdsStep,
+    isAdsCountedSend,
+    releaseAdsBookingScopes,
+} from './ads.js';
 
 const TXID = /^[0-9a-f]{64}$/i;
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -86,6 +91,35 @@ async function broadcast(encoder, signed) {
     } catch (error) {
         if (!isAlreadyOnNetworkRejection(error)) throw error;
     }
+}
+
+function uploadAdsScope(ctx) {
+    const wave = ctx.record.wave?.index ?? 0;
+    return `fileUpload:${ctx.record.id}:w${wave}:transactions`;
+}
+
+async function bookUploadTx(ctx, txid) {
+    if (!ctx.adsCounts || typeof txid !== 'string' || !TXID.test(txid)) return;
+    try {
+        await commitAdsStep({
+            vault: ctx.adsVault,
+            mainnet: true,
+            bookingScope: uploadAdsScope(ctx),
+            bookingKey: txid.toLowerCase(),
+        });
+    } catch (error) {
+        ctx.adsBookingFailed = true;
+        progress(ctx.opts, 'ads-commit-failed', {
+            chainId: ctx.chainId,
+            error: error && error.message ? String(error.message) : String(error),
+        });
+    }
+}
+
+async function bookPieceTxids(ctx, index) {
+    const pieces = ctx.record.wave?.pieces ?? ctx.record.pieces;
+    const piece = pieces.find((item) => item.index === index);
+    for (const txid of piece?.signedTxids ?? []) await bookUploadTx(ctx, txid);
 }
 
 function manifestParams(plan) {
@@ -220,7 +254,9 @@ async function signAndBroadcastPiece(ctx, index) {
     ctx.record = replacePiece(ctx.record, index, { txid: pair.reveal.txid });
     await ctx.save(ctx.record);
     await broadcast(ctx.sdk.encoder, pair.commit);
+    await bookUploadTx(ctx, pair.commit.txid);
     await broadcast(ctx.sdk.encoder, pair.reveal);
+    await bookUploadTx(ctx, pair.reveal.txid);
     progress(ctx.opts, 'piece-broadcast', { index, txid: pair.reveal.txid });
 }
 
@@ -269,7 +305,7 @@ function normalizeOutput(output, index) {
     return {
         vout: Number(output.vout ?? output.index ?? output.n ?? index),
         address: output.address ?? output.scriptPubKey?.address,
-        value: Number(output.value),
+        value: output.value,
         scriptPubKey: typeof output.scriptPubKey === 'string'
             ? output.scriptPubKey
             : (output.scriptPubKey?.hex ?? output.scriptPubKeyHex ?? output.script),
@@ -334,10 +370,12 @@ async function fundUpload(ctx, pieceValues) {
     ctx.record = withFunding(ctx.record, { fundingTxid: signed.txid, fundingOutputs: outputs });
     await ctx.save(ctx.record);
     await broadcast(ctx.sdk.encoder, signed);
+    await bookUploadTx(ctx, signed.txid);
     progress(ctx.opts, 'funding-broadcast', {
         wave: ctx.record.wave?.index ?? 0, txid: signed.txid,
     });
     await waitForFunding(ctx, signed.txid);
+    await bookUploadTx(ctx, signed.txid);
     if (ctx.record.stage === 'funding') {
         ctx.record = advanceUploadStage(ctx.record, 'sending');
         await ctx.save(ctx.record);
@@ -370,6 +408,15 @@ async function chainStatesFor(ctx) {
 async function resumePlan(ctx) {
     const chainStates = await chainStatesFor(ctx);
     const resend = planResend({ record: ctx.record, chainStates });
+    const wave = ctx.record.wave ?? ctx.record;
+    if (['confirmed', 'mempool'].includes(chainStates[wave.fundingTxid])) {
+        await bookUploadTx(ctx, wave.fundingTxid);
+    }
+    for (const piece of wave.pieces) {
+        for (const txid of piece.signedTxids) {
+            if (['confirmed', 'mempool'].includes(chainStates[txid])) await bookUploadTx(ctx, txid);
+        }
+    }
     if (resend.funding !== 'done') {
         await waitForFunding(ctx, ctx.record.wave?.fundingTxid ?? ctx.record.fundingTxid);
     }
@@ -448,6 +495,7 @@ async function sendAndIndex(ctx, plan) {
     const indexes = [...new Set([...plan.wait, ...plan.send])];
     const results = await Promise.all(indexes.map((index) => waitForPiece(ctx, index)));
     for (const result of results) {
+        await bookPieceTxids(ctx, result.index);
         ctx.record = replacePiece(ctx.record, result.index, { actionIndex: result.actionIndex });
         if (result.index === -1) {
             const manifest = ctx.record.wave.pieces.find((piece) => piece.index === -1);
@@ -701,10 +749,19 @@ export async function publishMultipartFile(opts) {
     const save = async (next) => opts.vault.pendingFileUploads.put(next);
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
+    const adsVault = opts.adsVault ?? opts.vault;
+    let adsCounts = false;
+    try {
+        adsCounts = isAdsCountedSend({
+            settings: await adsVault.settings.get(),
+            descriptor: opts.chainRegistry?.get?.(opts.chainId),
+        });
+    } catch { /* ADS cannot block an upload */ }
     const ctx = {
         opts: run.effectiveOpts, sdk, source, lane: config.lane, buildMode: config.buildMode,
         partSource, plan, rate, record, save, waitForTxid,
         signer: opts.signer, chainId: opts.chainId,
+        adsVault, adsCounts, adsBookingFailed: false,
     };
     const totalWaves = multipartWaveCount(plan.totalParts);
     while (ctx.record.wavesDone < totalWaves) {
@@ -728,6 +785,14 @@ export async function publishMultipartFile(opts) {
         ctx.record = { ...ctx.record, wavesDone: waveIndex + 1 };
         progress(ctx.opts, 'wave-confirmed', { wave: waveIndex, waves: totalWaves });
         await ctx.save(ctx.record);
+        if (!ctx.adsBookingFailed) {
+            try {
+                await releaseAdsBookingScopes({
+                    vault: ctx.adsVault,
+                    prefix: `fileUpload:${ctx.record.id}:w${waveIndex}:`,
+                });
+            } catch { /* stale keys are harmless and keep retries idempotent */ }
+        }
         if (ctx.record.wavesDone < totalWaves) {
             ctx.record = {
                 ...ctx.record,

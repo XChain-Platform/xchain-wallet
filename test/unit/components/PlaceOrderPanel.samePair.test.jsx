@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
-import { normalizeMarket } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+import { normalizeMarket } from '../../../packages/core/src/market/marketRow.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {

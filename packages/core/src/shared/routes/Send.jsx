@@ -80,6 +80,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { activeNetworkLabel } from '../utils/activeNetworkSwitch.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { createSendConfirmSnapshot } from './send/confirmSnapshot.js';
 import { isHwSignBack } from '../../signers/hardwareSession.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -693,6 +694,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const confirmBusy = ['composing', 'preflighting', 'ready', 'signing', 'rechecking']
         .includes(confirmAction.phase);
     const confirmLaunchRef = useRef(false);
+    const confirmSendSnapshotRef = useRef(null);
     const submitInFlightRef = useRef(false);
 
     // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
@@ -3244,6 +3246,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 ...(isMultiSend ? { legs: sendLegs } : {}),
                 ...(createUndoSendRequest(settings) || {}),
             };
+            confirmSendSnapshotRef.current = createSendConfirmSnapshot({
+                sendBase,
+                sendTotals,
+                isMultiSend,
+                isNativeSend,
+                coinControlEnabled,
+                coinControlLabel,
+                feeEstimateAmount: feeEstimate?.coinAmount,
+            });
             setSubmitError(null);
             setSubmitErrorCause(null);
             const res = await confirmAction.confirm({
@@ -3395,7 +3406,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
         clearUndoHold, resetUndoSend, reportUndoHandoffOutcome, showToast, changeAddress, coinControlEnabled, selectedUtxos, maxActive,
-        feeTiers,
+        feeTiers, feeEstimate?.coinAmount, coinControlLabel,
     ]);
 
     // Why the review's Approve cannot send yet, or null. Approve never looks
@@ -3727,25 +3738,31 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // fit small viewports); all other form state stays intact behind it. It goes
     // through the SHARED <ActionConfirmScreen>, which owns the exact fee and deltas.
     if (confirmModalOpen) {
-        // Hero and before and after, from what this form already holds:
-        // the amount, the recipient, the source's balances (unless hidden or
-        // unchecked) and the composed fee, else the form's fee estimate.
-        const sendTick = tick.trim().toUpperCase();
-        const nativeTick = nativeTickerFor(descriptor) || '';
+        // Transaction-defining copy comes from the same immutable snapshot
+        // handed to compose, never from the draft that remains behind it.
+        const snapshot = confirmSendSnapshotRef.current;
+        const summaryChainId = snapshot?.chainId || chainId;
+        const summaryDescriptor = chainRegistry.get(summaryChainId) || descriptor;
+        const snapshotLegs = Array.isArray(snapshot?.legs) ? snapshot.legs : [];
+        const snapshotTotals = Array.isArray(snapshot?.totals) ? snapshot.totals : [];
+        const snapshotMulti = snapshot?.isMultiSend === true;
+        const snapshotNative = snapshot?.isNativeSend === true;
+        const sendTick = String(snapshot?.tick || '').trim().toUpperCase();
+        const nativeTick = nativeTickerFor(summaryDescriptor) || '';
         const composedFeeSats = confirmAction.composed?.networkFeeSats;
         const sendFeeAmount = Number.isSafeInteger(composedFeeSats) && composedFeeSats >= 0
-            ? decimalStringFromSats(BigInt(composedFeeSats), descriptor)
-            : (feeEstimate?.coinAmount ? String(feeEstimate.coinAmount) : null);
-        const sendAmount = String(amount).trim();
+            ? decimalStringFromSats(BigInt(composedFeeSats), summaryDescriptor)
+            : snapshot?.feeEstimateAmount;
+        const sendAmount = String(snapshot?.amount || '').trim();
         // A hidden balance stays hidden here too. An unchecked one (the
         // network could not confirm it is current) is still the balance the
         // form shows, so it is the "before" this page shows.
-        const showBalances = !balancesHidden && !isMultiSend;
+        const showBalances = !balancesHidden && !snapshotMulti;
         const sendChanges = [];
         const nativeBefore = showBalances && nativeSourceBalance?.amount != null
             ? String(nativeSourceBalance.amount).trim()
             : '';
-        if (showBalances && isNativeSend && nativeBefore && sendFeeAmount && sendAmount) {
+        if (showBalances && snapshotNative && nativeBefore && sendFeeAmount && sendAmount) {
             const nativeAfter = sumDecimalStrings([nativeBefore, `-${sendAmount}`, `-${sendFeeAmount}`]);
             sendChanges.push({
                 label: t('components.confirmSummary.your', { tick: nativeTick }),
@@ -3770,7 +3787,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     });
                 }
             }
-        } else if (showBalances && !isNativeSend && sourceBalance?.amount != null && sendAmount) {
+        } else if (showBalances && !snapshotNative && sourceBalance?.amount != null && sendAmount) {
             const tokenBefore = String(sourceBalance.amount).trim();
             sendChanges.push({
                 label: t('components.confirmSummary.your', { tick: sendTick }),
@@ -3789,31 +3806,31 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         const sendSummary = {
             verb: t('send.title'),
-            amount: isMultiSend ? '' : sendAmount,
+            amount: snapshotMulti ? '' : sendAmount,
             // Several assets have no one icon to show.
-            ticker: isMultiSend && sendTotals.length > 1 ? '' : sendTick,
-            chainId,
+            ticker: snapshotMulti && snapshotTotals.length > 1 ? '' : sendTick,
+            chainId: summaryChainId,
             direction: 'out',
-            address: fromAddress?.address,
-            recipient: isMultiSend ? undefined : (toAddress.trim() || undefined),
+            address: snapshot?.fromAddress || undefined,
+            recipient: snapshotMulti ? undefined : (String(snapshot?.to || '').trim() || undefined),
             // A multi-recipient send names its high-level count in the hero;
             // the facts card has one exact summary row per asset.
-            ...(isMultiSend ? {
-                target: `${sendLegs.length} recipients`,
-                recipients: sendLegs.map((leg) => ({ to: leg.to, tick: leg.tick.toUpperCase(), amount: leg.amount })),
-                totals: recipientTotalsText(sendLegs),
+            ...(snapshotMulti ? {
+                target: `${snapshotLegs.length} recipients`,
+                recipients: snapshotLegs.map((leg) => ({ to: leg.to, tick: leg.tick.toUpperCase(), amount: leg.amount })),
+                totals: recipientTotalsText(snapshotLegs),
             } : {}),
             changes: sendChanges,
-            networkFee: feeEstimate?.coinAmount ? { amount: String(feeEstimate.coinAmount), ticker: nativeTick } : undefined,
+            networkFee: snapshot?.feeEstimateAmount ? { amount: snapshot.feeEstimateAmount, ticker: nativeTick } : undefined,
             // The advanced choices the user made, as facts card rows (G127):
             // a default (automatic inputs, change back to the source, no fee
             // bumping) is not a detail that matters for this send. A decoded
             // Memo row, when the host sends one, wins over this one.
             facts: [
-                ...(trimmedMemo ? [{ label: t('send.memo'), value: trimmedMemo }] : []),
-                ...(rbfForSend ? [{ label: t('send.advanced.feeBumping'), value: t('send.advanced.allowed') }] : []),
-                ...(coinControlEnabled ? [{ label: t('send.advanced.coinControl'), value: coinControlLabel }] : []),
-                ...(changeAddress?.address ? [{ label: t('send.advanced.changeAddress'), value: changeAddress.address, address: true }] : []),
+                ...(snapshot?.memo ? [{ label: t('send.memo'), value: snapshot.memo }] : []),
+                ...(snapshot?.rbf ? [{ label: t('send.advanced.feeBumping'), value: t('send.advanced.allowed') }] : []),
+                ...(snapshot?.coinControlEnabled ? [{ label: t('send.advanced.coinControl'), value: snapshot.coinControlLabel }] : []),
+                ...(snapshot?.changeAddress ? [{ label: t('send.advanced.changeAddress'), value: snapshot.changeAddress, address: true }] : []),
             ],
         };
         return (
@@ -3823,12 +3840,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 formatNativeFee={formatConfirmFeeFiat}
                 walletId={walletId}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={summaryDescriptor?.displayName || summaryChainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
-                feeText={feeEstimate?.coinAmount
+                feeText={snapshot?.feeEstimateAmount
                     ? t('send.networkFeeValue', {
-                        amount: feeEstimate.coinAmount,
-                        ticker: nativeTickerFor(descriptor) || '',
+                        amount: snapshot.feeEstimateAmount,
+                        ticker: nativeTick,
                     }).trim()
                     : undefined}
                 signerReady={signerReady}

@@ -50,6 +50,7 @@
 
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 export const EXIT = { OK: 0, VIOLATION: 1, CONFIG: 2 };
 
@@ -278,6 +279,6 @@ export function main(argv = process.argv.slice(2), out = process.stdout, err = p
     return verdict.code;
 }
 
-if (process.argv[1] && process.argv[1].endsWith('verify-apk-play-protection.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     process.exitCode = main();
 }

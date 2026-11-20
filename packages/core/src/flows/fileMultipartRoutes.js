@@ -12,6 +12,7 @@ import { bytesFromLatin1 } from './latin1Bytes.js';
 import { gatedMultipartRequest } from './fileMultipartGateKey.js';
 import { maxPublicFileBytes } from './fileSizeLimits.js';
 import { releaseUploadBlob, releasesUploadBlob } from './uploadBlobRelease.js';
+import { releaseAdsBookingScopes } from './ads.js';
 
 function requireText(value, field, caller) {
     if (typeof value !== 'string' || value.trim().length === 0) {
@@ -212,6 +213,7 @@ export async function handleFileMultipart(req, deps) {
             ...(sizes === undefined ? {} : { sizes }),
             signer,
             vault: vaultWithFileRef(vault, req),
+            adsVault: vault,
             chainRegistry,
             sdkRegistry,
             onBroadcastFailure,
@@ -244,6 +246,9 @@ export async function handleDiscardPendingFileUpload(req, { vault, fileBlobs }) 
     }
     const { paidTransactions } = uploadCounts(record);
     await vault.pendingFileUploads.delete(req.id);
+    try {
+        await releaseAdsBookingScopes({ vault, prefix: `fileUpload:${req.id}:` });
+    } catch { /* discarded uploads do not depend on accounting cleanup */ }
     if (record.blobKey) await releaseUploadBlob(fileBlobs ?? vault.pendingFileBlobs, record.blobKey);
     return { removed: true, paidTransactions };
 }

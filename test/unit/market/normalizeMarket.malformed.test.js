@@ -12,7 +12,7 @@
 // "NaN", "[object Object]" or a percentage read out of an overflowing exponent.
 
 import { describe, it, expect } from 'vitest';
-import { normalizeMarket } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+import { normalizeMarket } from '../../../packages/core/src/market/marketRow.js';
 
 const base = { tick1: 'BTC', tick2: 'TOKEN' };
 

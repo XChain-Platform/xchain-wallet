@@ -143,6 +143,44 @@ describe('projectBetPayout pool normalization', () => {
         expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['0', '0', '0']);
     });
 
+    it('keeps opposing row pools when the market outcome count is unknown', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: [{ outcome: 0, pool: '10' }, { outcome: 1, pool: '20' }],
+            outcome: 0, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['10', '20']);
+    });
+
+    it('keeps known pools and pads to an unbacked selected outcome', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: [{ outcome: 0, pool: '10' }, { outcome: 1, pool: '20' }],
+            outcome: 3, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['10', '20', '0', '0']);
+    });
+
+    it('keeps a dense pool list when the market outcome count is unknown', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c', pools: ['10', '20'], outcome: 0, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['10', '20']);
+    });
+
+    it('does not let an out-of-range row widen an unknown market', async () => {
+        const sdk = projectingSdk();
+        await projectBetPayout({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'c',
+            pools: [{ outcome: 0, pool: '5' }, { outcome: 20, pool: '999' }],
+            outcome: 0, stake: '5',
+        });
+        expect(sdk.betting.projectPayout.mock.calls[0][0].pools).toEqual(['5']);
+    });
+
     it('leaves the SDK range check meaningful for an outcome off the end of the market', async () => {
         // A declared count is authoritative: outcome 7 of a 2-outcome market must
         // still reach the SDK as out of range rather than be padded into legality.

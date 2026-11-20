@@ -49,12 +49,13 @@ const COMPOSED = Object.freeze({
 
 beforeEach(() => {
     __clearTokenInfoCache();
+    // Fakes only the timeout and interval clocks, the only ones these tests
+    // drive (the quote debounce). React's scheduler runs its queued work on
+    // setImmediate in Node, so faking setImmediate left renders waiting on a
+    // clock nothing advanced, and on loaded CI shards the confirmation never
+    // reached the DOM before the test looked for it.
     vi.useFakeTimers({
-        toFake: [
-            'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
-            'setImmediate', 'clearImmediate', 'requestAnimationFrame',
-            'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
-        ],
+        toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     });
 });
 

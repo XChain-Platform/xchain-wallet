@@ -39,6 +39,12 @@ function memCollection() {
     return {
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? copy(m.get(id)) : null);
+            if (next == null) return false;
+            m.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         findBy: async (k, v) => Array.from(m.values()).filter((r) => r[k] === v).map(copy),
@@ -499,6 +505,7 @@ describe('a wallet removed while the queue blob is unreadable stays removed', ()
         };
         const vault = await removableVault();
         vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        vault.pendingTxs.update = async () => { throw new Error('VaultStateError: vault is closed'); };
         const h = makeHost({ storage, vault });
         await h.call('wallet.remove', { walletId: GONE });
 

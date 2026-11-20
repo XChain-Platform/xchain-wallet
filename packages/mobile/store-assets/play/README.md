@@ -9,11 +9,11 @@ and are the source of truth; this directory holds only the images.
 | File | Play field | Notes |
 |---|---|---|
 | `icon-512.png` | App icon, 512x512 | Rendered from the vector brand mark and cropped to **exactly the shipped launcher icon's composition**: the mark spans 77.6% of the canvas (149/192, measured off `mipmap-xxxhdpi/ic_launcher.png`), centred, on white. A store icon that does not match the launcher icon looks like a different app. |
-| `feature-graphic-1024x500.png` | Feature graphic | Brand gradient `#017BB5` to `#6E377C`, both sampled from the mark itself, with the white lockup that ships in the brand kit (`XChain White Logo.pdf`). No alpha, which Play requires. |
-| `screenshots/01-balances.png` | Phone screenshot | |
+| `feature-graphic-1024x500.png` | Feature graphic | Since v0.343.0, the Chrome promo tile design (logo, "One wallet for everything blockchain", coin icons) at 1024x500, approved and uploaded 2026-11-18. No alpha, which Play requires. The recipe under Regenerating builds the earlier gradient lockup, not this one. |
+| `screenshots/01-balances.png` | Phone screenshot | Balances over the demo wallet |
 | `screenshots/02-receive.png` | Phone screenshot | Address + QR |
-| `screenshots/03-confirm.png` | Phone screenshot | The Approve/Reject signing screen |
-| `screenshots/04-biometric.png` | Phone screenshot | Safety settings: biometric unlock enabled, panic mode, duress passphrase |
+| `screenshots/03-confirm.png` | Phone screenshot | Send form (uploaded to Play as `03-send.png`; the repo name is kept) |
+| `screenshots/04-biometric.png` | Phone screenshot | Security settings: password, auto-lock, biometric unlock, sending safeguards (uploaded to Play as `04-security.png`; the repo name is kept) |
 
 All four screenshots are 1080x1920 (9:16), captured off the API 36 emulator
 with the system UI in demo mode so the status bar reads a clean 9:30 with no
@@ -21,6 +21,10 @@ notification clutter.
 
 ## Provenance, stated because it matters for review
 
+- **The v0.343.0 set shows the demo wallet dataset**, the same seeded data the
+  other listing captures use: priced fiat totals, no real funds and no live
+  addresses. The three notes below describe the first set (2026-08-01) and are
+  kept as its record.
 - **The wallet in these shots is a regtest wallet**, holding 3 LTC on the local
   regtest chain. No screenshot shows a mainnet address and none shows real
   funds, per the demo-data convention.

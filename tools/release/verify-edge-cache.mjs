@@ -100,6 +100,7 @@
 import { pointerNameFor } from './update-info.mjs';
 import { DESKTOP_POINTER_LANES } from './pointer-gate.mjs';
 import { UPDATE_FEED_URL } from '../../packages/web/src/update/directUpdateCheck.js';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 const BAD_NAME = /^latest/;
 
@@ -135,8 +136,7 @@ function arg(name, fallback) {
 // Importing this module for its judges must not fire a live scan, so main-ness
 // is decided here rather than at the bottom: the help answer below has to come
 // before the argument reads, and both have to stay out of an importer's way.
-const isMain = Boolean(process.argv[1])
-    && process.argv[1].endsWith('verify-edge-cache.mjs');
+const isMain = isInvokedDirectly(import.meta.url);
 
 const USAGE = `verify-edge-cache.mjs - does the CDN edge serve the update feed under the
 cache contract? (§3.)

@@ -59,6 +59,7 @@ import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 // The re-sign rule, in its one JS home. `xr_release_tag_of` in lib.sh is the
 // bash half and release-resign-tag.smoke.js drives both spellings over one
@@ -656,7 +657,7 @@ async function main(argv, env, log = console.log) {
     return 0;
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith('cws-upload.mjs');
+const invokedDirectly = isInvokedDirectly(import.meta.url);
 if (invokedDirectly) {
     main(process.argv.slice(2), process.env)
         .then((code) => process.exit(code))

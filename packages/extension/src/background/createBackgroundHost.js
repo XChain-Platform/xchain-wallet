@@ -691,6 +691,10 @@ async function loadAddressForHwSigning(vault, req, chainRegistry) {
         const addr = await vault.addresses.get(fromAddressId);
         if (addr) {
             await assertAddressInWallet(vault, addr, walletId);
+            if (!addressOnRequestChain(addr, req, chainRegistry)) {
+                throw new Error('action.*.hw: source address is not on the request chain');
+            }
+            assertRequestMatchesStoredSource(req, addr);
             return addr;
         }
     }
@@ -707,7 +711,10 @@ async function loadAddressForHwSigning(vault, req, chainRegistry) {
             if (!addressOnRequestChain(a, req, chainRegistry)) continue;
             matches.push(a);
         }
-        if (matches.length === 1) return matches[0];
+        if (matches.length === 1) {
+            assertRequestMatchesStoredSource(req, matches[0]);
+            return matches[0];
+        }
         if (matches.length > 1) {
             throw new Error('action.*.hw: more than one address in this wallet matches; pick the address by id');
         }
@@ -734,6 +741,25 @@ function addressOnRequestChain(address, req, chainRegistry) {
     const chainId = req?.broadcastChainId || req?.chainId;
     if (typeof chainId !== 'string' || chainId.length === 0) return true;
     return chainRegistry.chainIdFor(address.chain, address.network) === chainId;
+}
+
+function assertRequestMatchesStoredSource(req, record) {
+    const from = req?.from;
+    if (!from || typeof from !== 'object') return;
+    if (typeof from.addressId === 'string' && typeof from.id === 'string'
+        && from.addressId !== from.id) {
+        throw new Error('signing request names two different source address ids');
+    }
+    for (const field of ['address', 'publicKey']) {
+        if (from[field] != null && from[field] !== record[field]) {
+            throw new Error(`signing request's from.${field} does not match stored address "${record.id}"`);
+        }
+    }
+    const requestedPath = from.derivationPath == null || from.derivationPath === '' ? '' : from.derivationPath;
+    const storedPath = record.derivationPath == null || record.derivationPath === '' ? '' : record.derivationPath;
+    if (requestedPath !== storedPath && Object.prototype.hasOwnProperty.call(from, 'derivationPath')) {
+        throw new Error(`signing request's from.derivationPath does not match stored address "${record.id}"`);
+    }
 }
 
 /**
@@ -878,10 +904,23 @@ const SPENDING_ROUTES_OUTSIDE_ACTIONS = ['messaging.handshake', 'wallet.publishL
  * @returns {Promise<any | null>} null when nothing stored matches
  */
 async function storedRecordForSigning(req, vault) {
-    const named = req?.from?.addressId ?? req?.addressId;
+    const named = req?.from?.addressId ?? req?.from?.id ?? req?.addressId;
     if (typeof named === 'string' && named.length > 0) {
         const byId = await vault.addresses.get(named);
-        if (byId) return byId;
+        if (byId) {
+            if (byId.source !== 'watch-only') {
+                const walletId = req?.walletId;
+                // Count an imported key through the wallet's importedKeys (it has no account).
+                const inWallet = byId.accountId
+                    ? await addressInWallet(vault, byId, walletId)
+                    : (await importedAddressIdsFor(vault, walletId)).has(byId.id);
+                if (!inWallet) {
+                    throw new Error('signing request source address is not in this wallet');
+                }
+            }
+            assertRequestMatchesStoredSource(req, byId);
+            return byId;
+        }
     }
     const walletId = req?.walletId;
     const text = req?.from?.address;
@@ -892,7 +931,9 @@ async function storedRecordForSigning(req, vault) {
         if (a.address === text && (await addressInWallet(vault, a, walletId))) matches.push(a);
     }
     if (matches.every((m) => m.source === matches[0].source && m.signerId === matches[0].signerId)) {
-        return matches[0] ?? null;
+        const record = matches[0] ?? null;
+        if (record) assertRequestMatchesStoredSource(req, record);
+        return record;
     }
     throw new Error(`address "${text}" matches stored addresses of different kinds in this wallet; pick it by id`);
 }
@@ -933,6 +974,7 @@ async function checkSignerAgainstStoredAddress(req, vault, leaveToFlow) {
         if (signerId !== record.signerId) {
             throw new Error(`address "${named}" is a ${record.source} address; sign it with its own device`);
         }
+        await resolveSigner({ vault, address: record });
         return false;
     }
     if (signerId !== null) {
@@ -1500,13 +1542,13 @@ export function createBackgroundHost(deps) {
                         ? await vault.wallets.get(entry.walletId)
                         : null;
                     if (!wallet) continue;
-                    const record = await vault.pendingTxs.get(entry.pendingTxId);
                     let summary = null;
-                    if (record) {
-                        const patch = finishPatchFor(entry, record);
-                        if (patch) await vault.pendingTxs.put({ ...record, ...patch });
+                    await vault.pendingTxs.update(entry.pendingTxId, (record) => {
+                        if (!record) return null;
                         summary = typeof record.actionSummary === 'string' ? record.actionSummary : null;
-                    }
+                        const patch = finishPatchFor(entry, record);
+                        return patch ? { ...record, ...patch } : null;
+                    });
                     kept.push({ ...entry, finished: true, summary });
                 } catch {
                     // The vault could not answer; the next list retries this one.
@@ -1734,16 +1776,16 @@ export function createBackgroundHost(deps) {
         })();
     }
 
-    // Cluster S FOLLOWUP 1: sign-throttle limits read from settings.
-    // The throttle's `getLimits` returns from a closure cache so reads
-    // are sync. The cache is hydrated asynchronously (vault.settings.get
-    // is async) by `refreshThrottleLimitsFromVault()`, called both at
-    // host construction and after every successful settings.update.
-    // While the cache is null (first refresh hasn't completed yet), the
-    // throttle falls back to its defaults: fine for a short window.
+    // The throttle reads limits from a synchronous closure cache. The host
+    // fills that cache from settings and signing waits for the first attempt,
+    // so a restart cannot briefly substitute the default limits.
     let cachedThrottleLimits = /** @type {{ burst?: number, windowMs?: number } | null} */ (null);
     /** @type {import('@xchain-wallet/core').storage.Vault | null} */
-    let throttleVault = null;
+    let throttleVault = hostDeps?.vault ?? null;
+    let throttleLimitsLoaded = false;
+    /** @type {Promise<void> | null} */
+    let throttleLimitsLoadPromise = null;
+    let throttleLimitsLoadIsForced = false;
     // Cluster Q FOLLOWUP 2: track whether we've already seeded the
     // chainRegistry instance with the persisted custom chains. The
     // registry is module-scoped in the shell entry (extension/web/
@@ -1834,6 +1876,11 @@ export function createBackgroundHost(deps) {
             // The restore already committed; a failed re-read must not fail it.
         }
         await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        if (throttleVault !== vault) {
+            throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        await refreshThrottleLimitsFromVault({ force: true });
         if (moved) await publishSurfaceState('custom-chains', {});
     }
     // Seed BEFORE the override pass, and seed here rather than only on
@@ -1852,40 +1899,67 @@ export function createBackgroundHost(deps) {
         await applyEndpointOverridesFromVault(hostDeps?.vault, hostDeps?.sdkRegistry);
     })();
 
-    async function refreshThrottleLimitsFromVault() {
-        if (!throttleVault) return;
+    async function refreshThrottleLimitsFromVault({ force = false } = {}) {
+        let vault = throttleVault;
+        if (!vault || (!force && throttleLimitsLoaded)) return;
+        if (throttleLimitsLoadPromise) {
+            const inFlightWasForced = throttleLimitsLoadIsForced;
+            await throttleLimitsLoadPromise;
+            if ((!force && throttleLimitsLoaded) || (force && inFlightWasForced)) return;
+            vault = throttleVault;
+            if (!vault) return;
+        }
+        if (throttleLimitsLoadPromise) return throttleLimitsLoadPromise;
+        const load = (async () => {
+            try {
+                const settings = await vault.settings.get();
+                if (throttleVault !== vault) return;
+                cachedThrottleLimits = settings?.signThrottle ?? null;
+                throttleLimitsLoaded = true;
+            } catch {
+                // A failed read does not latch, so the next trigger retries.
+            }
+        })();
+        throttleLimitsLoadPromise = load;
+        throttleLimitsLoadIsForced = force;
         try {
-            const settings = await throttleVault.settings.get();
-            cachedThrottleLimits = settings?.signThrottle ?? null;
-        } catch {
-            // Vault not open yet (boot race) or read failed: keep
-            // whatever was previously cached. The next refresh will
-            // try again.
+            await load;
+        } finally {
+            if (throttleLimitsLoadPromise === load) {
+                throttleLimitsLoadPromise = null;
+                throttleLimitsLoadIsForced = false;
+            }
         }
     }
-    // Cluster S FOLLOWUP 2: persist throttle state across SW restarts.
-    // The throttle is constructed with onPersist wired to the storage
-    // adapter; bucket state is hydrated asynchronously via the throttle's
-    // `seed()` method as soon as the load resolves. While hydration is
-    // pending, the throttle checks requests against an empty bucket, so up
-    // to one burst can slip through right after an SW restart; `seed()`
-    // then merges the restored timestamps with those live ones. That
-    // pending window is the one gap in otherwise persistent bucket state.
+    const signThrottleLimitsHydrated = refreshThrottleLimitsFromVault();
+    // Bucket state is persisted across worker restarts. The saved timestamps
+    // are merged before a signing route can make its first throttle check.
     const signThrottle = createSignThrottle({
         getLimits: () => cachedThrottleLimits || {},
         onPersist: signThrottleStorage
             ? (snapshot) => signThrottleStorage.save(snapshot)
             : undefined,
     });
-    if (signThrottleStorage) {
-        void (async () => {
+    const signThrottleHydrated = signThrottleStorage
+        ? (async () => {
             try {
                 const snapshot = await signThrottleStorage.load();
                 signThrottle.seed(snapshot?.buckets || {});
             } catch {
                 // Hydration failed: start fresh.
             }
-        })();
+        })()
+        : Promise.resolve();
+
+    async function whenSignThrottleReady(vault) {
+        await Promise.all([signThrottleHydrated, signThrottleLimitsHydrated]);
+        if (vault && throttleVault !== vault) {
+            throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        if (!throttleLimitsLoaded && throttleVault) {
+            await refreshThrottleLimitsFromVault();
+        }
     }
 
     // §19.5.2 label auto-sync. One scheduler per host, and a host IS an
@@ -2263,13 +2337,12 @@ export function createBackgroundHost(deps) {
 
 
     host.register('settings.get', async (_req, { vault, chainRegistry, sdkRegistry }) => {
-        // Cluster S FOLLOWUP 1: opportunistic throttle-limits cache
-        // hydration. The bridge handlers don't await this, so the very
-        // first sign request after SW restart may run on stale defaults
-        // for one bucket; the second onward sees the user-configured
-        // limits.
-        if (!throttleVault) {
+        // Retry a failed construction-time read once settings are available.
+        if (throttleVault !== vault) {
             throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        if (!throttleLimitsLoaded) {
             void refreshThrottleLimitsFromVault();
         }
         // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed,
@@ -2377,7 +2450,7 @@ export function createBackgroundHost(deps) {
         // take effect on the very next sign request.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'signThrottle')) {
             throttleVault = vault;
-            await refreshThrottleLimitsFromVault();
+            await refreshThrottleLimitsFromVault({ force: true });
         }
         // Privacy settings that change how requests are MADE
         // have to take effect on the next request, not the next restart.
@@ -4280,7 +4353,7 @@ export function createBackgroundHost(deps) {
         const accounts = await vault.accounts.findBy('walletId', walletId);
         const accountIds = new Set(accounts.map((account) => account.id));
         const addresses = await vault.addresses.list();
-        const importedAddressIds = await importedAddressIdsFor(vault, walletId);
+        const importedAddressIds = await importedAddressIdsForStrict(vault, walletId);
         const walletAddresses = addresses.filter((address) => (
             accountIds.has(address.accountId) || importedAddressIds.has(address.id)
         ));
@@ -4548,6 +4621,21 @@ export function createBackgroundHost(deps) {
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
     }
+    async function ownsSignedTxAds(vault, pending) {
+        if (typeof pending?.txid !== 'string' || typeof vault.pendingTxs.findBy !== 'function') return true;
+        try {
+            const matches = await vault.pendingTxs.findBy('txid', pending.txid);
+            const live = matches.filter((record) => (
+                record && record.status !== 'failed'
+            )).sort((left, right) => {
+                const byTime = String(left.createdAt || '').localeCompare(String(right.createdAt || ''));
+                return byTime || String(left.id).localeCompare(String(right.id));
+            });
+            return live[0]?.id === pending.id;
+        } catch {
+            return true;
+        }
+    }
     // Write a patch to a PendingTx this route stamped, owing it through the journal when the vault refuses.
     async function settleOrJournalPatch(vault, walletId, pendingTxId, patch) {
         if (await settleQueuedPendingTx(vault, { pendingTxId }, patch) === 'unreachable') {
@@ -4569,33 +4657,17 @@ export function createBackgroundHost(deps) {
     // mainnet chain. Accounting is non-critical: a settings-write failure must
     // not turn a landed broadcast into an error for the caller.
     async function bookLandedAds(vault, chainRegistry, entry, { accrue }) {
-        const verdict = entry?.adsCommit;
-        try {
-            if (verdict && accrue) {
-                const descriptor = chainRegistry?.get?.(verdict.chainId ?? entry.chainId) ?? null;
-                const { booking } = await flows.commitAdsStepWithBooking({
-                    vault,
-                    donationIncluded: verdict.donationIncluded,
-                    donatedFiat: verdict.donatedFiat ?? null,
-                    currency: verdict.currency ?? null,
-                    mainnet: verdict.mainnet !== false && descriptor?.networkKind === 'mainnet',
-                    reservationId: verdict.reservationId ?? null,
-                });
-                if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-                    await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
-                }
-            } else {
-                const reservationId = adsClaimOf(entry);
-                if (reservationId) {
-                    const { booking } = await flows.settleAdsReservationWithBooking({ vault, reservationId });
-                    if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-                        await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
-        }
+        await flows.bookQueuedDelivery({
+            vault,
+            chainRegistry,
+            pendingTxId: entry?.pendingTxId ?? null,
+            adsCommit: entry?.adsCommit ?? null,
+            accrue,
+            stampBooking: notifications.stampPendingTxAdsBooking,
+            onError: (e) => console.warn(
+                'broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e),
+            ),
+        });
     }
     // Let a queued entry's claim go: its bytes were refused for good or
     // discarded, so they never pay the donation.
@@ -5106,13 +5178,34 @@ export function createBackgroundHost(deps) {
         if (!knownTxid) {
             try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
         }
+        let counted = false;
+        try {
+            counted = flows.isAdsCountedSend({
+                settings: await vault.settings.get(), descriptor,
+            });
+        } catch { /* a settings failure cannot block the broadcast */ }
+        let adsCommit = {
+            chainId,
+            donationIncluded: false,
+            donatedFiat: null,
+            currency: null,
+            mainnet: counted,
+            reservationId: null,
+            bookingKey: knownTxid ?? pending.id,
+        };
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
+            adsCommit,
             ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
+        if (!(await ownsSignedTxAds(vault, pending))) {
+            adsCommit = null;
+            pending = { ...pending, adsCommit: null };
+            await vault.pendingTxs.put(pending);
+        }
 
         let result;
         try {
@@ -5130,6 +5223,9 @@ export function createBackgroundHost(deps) {
                     recordOwedSettlement(walletId, pending.id, 'patch', deliveredPatch);
                 }
                 await flushOwedSettlements(vault);
+                await bookLandedAds(vault, chainRegistry, {
+                    chainId, pendingTxId: pending.id, adsCommit,
+                }, { accrue: true });
                 return { txid: pending.txid, alreadyOnNetwork: true };
             }
             if (flows.classifyBroadcastFailure(err) === 'permanent') {
@@ -5152,6 +5248,7 @@ export function createBackgroundHost(deps) {
                 summary: 'Signed transaction waiting to broadcast',
                 txid: pending.txid,
                 pendingTxId: pending.id,
+                adsCommit,
             });
             await flushOwedSettlements(vault);
             return {
@@ -5180,6 +5277,7 @@ export function createBackgroundHost(deps) {
                 txid: pending.txid,
                 pendingTxId: pending.id,
                 resumedClaim: true,
+                adsCommit,
             });
             await flushOwedSettlements(vault);
             return {
@@ -5201,6 +5299,11 @@ export function createBackgroundHost(deps) {
             recordOwedSettlement(walletId, pending.id, 'patch', landedPatch);
         }
         await flushOwedSettlements(vault);
+        await bookLandedAds(vault, chainRegistry, {
+            chainId,
+            pendingTxId: pending.id,
+            adsCommit: adsCommit ? { ...adsCommit, bookingKey: txid } : null,
+        }, { accrue: true });
         return { txid };
     });
 
@@ -5448,14 +5551,25 @@ export function createBackgroundHost(deps) {
             const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
+            const canonical = {
+                ...rest,
+                from: {
+                    ...(rest.from || {}),
+                    addressId: address.id,
+                    address: address.address,
+                    publicKey: address.publicKey,
+                    derivationPath: address.derivationPath ?? undefined,
+                    source: address.source,
+                },
+            };
             // Auto-enqueue on broadcast failure for HW lanes too.
             const onBroadcastFailure = enqueueOnBroadcastFailure(req?.walletId);
             // reservationLedger rides along for flows with post-broadcast
             // cleanup (sweepToken's PC-34 force-close leg); other flows
             // ignore the extra option.
             // A send claims its coins inside sendWithHold; every other action claims them here.
-            if (flow === sendWithHold) return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
-            return withSpendClaim(rest, deps, (claimDeps) => flow({ ...rest, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
+            if (flow === sendWithHold) return flow({ ...canonical, ...deps, reservationLedger, signer, onBroadcastFailure });
+            return withSpendClaim(canonical, deps, (claimDeps) => flow({ ...canonical, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
         });
     }
 
@@ -6429,8 +6543,8 @@ export function createBackgroundHost(deps) {
         return aggregateMultisigSession({ ...req, vault, sdkRegistry });
     });
 
-    host.register('multisigSign.finalize', async (req, { vault, sdkRegistry }) => {
-        return finalizeMultisigSigningSession({ ...req, vault, sdkRegistry });
+    host.register('multisigSign.finalize', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return finalizeMultisigSigningSession({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // §22.3 + §42.9 local-cosigner contribution (Step 21). Unlocks
@@ -7122,7 +7236,13 @@ export function createBackgroundHost(deps) {
         }
     });
 
-    registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
+    registerBridgeHandlers(host, {
+        approvals,
+        events: bridgeEvents,
+        signThrottle,
+        signThrottleReady: whenSignThrottleReady,
+        getAssetUrl,
+    });
     // A dApp SEND or SWEEP builds its PSBT after the approval and claims its
     // coins there, before it signs. A page names no reviewed PSBT to claim.
     for (const type of ['bridge.signAction', 'bridge.parallel']) {

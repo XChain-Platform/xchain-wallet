@@ -88,6 +88,7 @@ import { createSign, createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 import {
     storeVersionFromTag, marketingVersionFromTag, MAX_LANE_N,
@@ -996,6 +997,6 @@ async function main() {
     return outcome.exit;
 }
 
-if (process.argv[1] && process.argv[1].endsWith('verify-appstore-version.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     process.exitCode = await main();
 }

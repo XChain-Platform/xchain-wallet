@@ -31,7 +31,7 @@ const ledger = (count) => Array.from({ length: count }, (_row, i) => ({
 }));
 
 // An explorer stand-in that serves `rows` by page and limit, like the real route.
-function pagedSdk(rows, { failPage = null, calls = [] } = {}) {
+function pagedSdk(rows, { failPage = null, calls = [], pageScope = null } = {}) {
     return {
         calls,
         getAddress: async () => addressBody,
@@ -40,7 +40,11 @@ function pagedSdk(rows, { failPage = null, calls = [] } = {}) {
             const page = opts.page ?? 1;
             calls.push({ page, limit });
             if (page === failPage) throw new Error('explorer hiccup');
-            return { total: rows.length, data: rows.slice((page - 1) * limit, page * limit) };
+            return {
+                total: rows.length,
+                data: rows.slice((page - 1) * limit, page * limit),
+                ...(pageScope?.(page) || {}),
+            };
         },
     };
 }
@@ -64,6 +68,36 @@ describe('a token ledger longer than one page', () => {
         expect(shape.unavailable).toContain('tokens');
         expect(shape.unavailableReason).toMatch(/only part of the token list/);
         expect(shape.tokens).toHaveLength(500);
+    });
+
+    it('refuses a continuation page that names another address', async () => {
+        const sdk = pagedSdk(ledger(1200), {
+            pageScope: (page) => (page === 2 ? { address: 'bcrt1qdifferent' } : {}),
+        });
+        const shape = await readOne(sdk);
+        expect(shape.unavailable).toContain('tokens');
+        expect(shape.unavailableReason).toMatch(/only part of the token list/);
+        expect(shape.tokens).toHaveLength(500);
+    });
+
+    it('accepts a continuation whose declared scope matches the query', async () => {
+        const sdk = pagedSdk(ledger(1200), {
+            pageScope: (page) => (page > 1 ? {
+                address: ADDRESS.toUpperCase(), coin: 'bitcoin', network: 'regtest',
+            } : {}),
+        });
+        const shape = await readOne(sdk);
+        expect(shape.unavailable).toBeUndefined();
+        expect(shape.tokens).toHaveLength(1200);
+    });
+
+    it('returns the original first page when a continuation predicate rejects', async () => {
+        const sdk = pagedSdk(ledger(600));
+        const first = { total: 600, data: ledger(500) };
+        const full = await completeBalancePages({
+            sdk, address: ADDRESS, first, opts: {}, acceptsPage: () => false,
+        });
+        expect(full).toBe(first);
     });
 
     it('does not walk a ledger past the page ceiling', async () => {
@@ -117,5 +151,25 @@ describe('the batch route with a ledger longer than its slot', () => {
         expect(entry.balances.unavailable).toBeUndefined();
         expect(entry.balances.tokens).toHaveLength(700);
         expect(per.calls).toEqual([{ page: 2, limit: 500 }]);
+    });
+
+    it('marks a truncated batch slot unavailable when page two names another address', async () => {
+        const rows = ledger(700);
+        const per = pagedSdk(rows, { pageScope: () => ({ address: 'bcrt1qdifferent' }) });
+        const sdk = {
+            ...per,
+            getBalancesBatch: async () => ({
+                [ADDRESS]: { balances: { total: 700, data: rows.slice(0, 500) }, address: addressBody, error: null },
+            }),
+        };
+        const vault = {
+            wallets: { get: async () => ({ id: 'w1', importedKeys: [] }), list: async () => [] },
+            accounts: { findBy: async () => [{ id: 'acct-1', walletId: 'w1' }], get: async () => ({ id: 'acct-1', walletId: 'w1' }) },
+            addresses: { list: async () => [{ id: 'a0', accountId: 'acct-1', chain: 'bitcoin', network: 'regtest', source: 'hd', address: ADDRESS }] },
+        };
+        const res = await walletBalances({ vault, walletId: 'w1', chainRegistry, sdkRegistry: { get: () => sdk } });
+        const entry = res[CHAIN_ID].find((item) => item.address === ADDRESS);
+        expect(entry.balances.unavailable).toContain('tokens');
+        expect(entry.balances.tokens).toHaveLength(500);
     });
 });

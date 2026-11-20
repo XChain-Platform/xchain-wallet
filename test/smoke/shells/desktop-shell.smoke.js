@@ -390,8 +390,8 @@ assert.match(
     'electron version is a caret range',
 );
 assert.ok(
-    /Phase 2/.test(pkg.description),
-    'desktop/package.json description still mentions Phase 2 (phase-scope smoke)',
+    /Phase 2/.test(pkg._descriptionNote),
+    'desktop/package.json _descriptionNote still mentions Phase 2 (phase-scope smoke)',
 );
 
 // --- 8. Renderer bridge messaging unwraps envelopes correctly ----------

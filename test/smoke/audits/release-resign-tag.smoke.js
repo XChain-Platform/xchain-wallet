@@ -456,7 +456,8 @@ const execFileSyncPair = (script, args) => {
     // Everything sign.sh reads out of --repo EXCEPT launch-probe.mjs, which
     // is the shape of a tag cut before that check existed.
     for (const f of ['lib.sh', 'sign.sh', 'expected-artifacts.txt', 'shipped-lanes.txt',
-        'update-info.mjs', 'verify-signatures.mjs', 'store-profile-status.txt']) {
+        'update-info.mjs', 'verify-signatures.mjs', 'is-invoked-directly.mjs',
+        'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     cpSync(REAL_GATE, join(repo, 'tools/build-reproduce/check-no-dev-mock.sh'));

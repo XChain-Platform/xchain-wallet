@@ -376,6 +376,7 @@ export class Vault {
         if (!reloaded || !retryOnConflict) throw new VaultConflictError();
         const retried = retryOnConflict(reloaded);
         if (!retried) throw new VaultConflictError();
+        if (retried === reloaded) return;
         blob = await encodeDocument(this._masterKey, retried, this._aad);
         try {
             await this._saveBlob(blob, retried);
@@ -501,7 +502,7 @@ export class Vault {
                 document: steps.reduce((next, apply) => apply(next), document),
                 persist: steps.length > 0,
             };
-        });
+        }, { rebuildOnConflict: true });
     }
 
     /**
@@ -660,13 +661,15 @@ export class Vault {
         return result;
     }
 
-    async _mutate(buildNext) {
+    async _mutate(buildNext, { rebuildOnConflict = false } = {}) {
         this._assertOpen();
         return this._enqueueWrite(async () => {
             this._assertOpen();
             const previous = this._doc;
             const { document, result, persist = true } = buildNext(previous);
-            const retryOnConflict = makeConflictReplay(previous, document);
+            const retryOnConflict = rebuildOnConflict
+                ? (reloaded) => buildNext(reloaded).document
+                : makeConflictReplay(previous, document);
             this._doc = document;
             try {
                 if (this._autoSave && persist) await this._saveNow(retryOnConflict);
@@ -780,6 +783,32 @@ function makeCollection(vault, collection, migrate, validate) {
             vault._assertOpen();
             const apply = vault[collection]._prepare(record);
             await vault._mutate((document) => ({ document: apply(document) }));
+        },
+
+        /**
+         * Atomically decide and apply a replacement from the record in the
+         * vault write slot. Use this whenever a write depends on current state.
+         * The decision callback must be synchronous. Returning null or
+         * undefined leaves the document untouched and reports false.
+         *
+         * @param {string} id
+         * @param {(current: T | null) => T | null | undefined} decide
+         * @returns {Promise<boolean>} whether a replacement was written
+         */
+        async update(id, decide) {
+            vault._assertOpen();
+            if (typeof decide !== 'function') throw new TypeError('decide must be a function');
+            return vault._mutate((document) => {
+                const found = document[collection].find((record) => record.id === id);
+                const current = found ? migrate(found) : null;
+                const replacement = decide(current);
+                if (replacement && typeof replacement.then === 'function') {
+                    throw new TypeError('collection update decision must be synchronous');
+                }
+                if (replacement == null) return { document, result: false, persist: false };
+                const apply = vault[collection]._prepare(replacement);
+                return { document: apply(document), result: true };
+            });
         },
 
         /** Validate `record` and return the document step that stores it (see Vault.putMany). */

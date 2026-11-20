@@ -93,7 +93,7 @@ function syncEntryToCommitLandedRecord(entry, record) {
  * these bytes hold, which their broadcast settles and their discard releases.
  *
  * @param {unknown} verdict
- * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null}
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string, bookingKey?: string } | null}
  */
 export function cleanAdsCommit(verdict) {
     if (!verdict || typeof verdict !== 'object') return null;
@@ -106,6 +106,7 @@ export function cleanAdsCommit(verdict) {
         ...(typeof v.currency === 'string' && v.currency ? { currency: v.currency } : {}),
         ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
         ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
+        ...(typeof v.bookingKey === 'string' && v.bookingKey ? { bookingKey: v.bookingKey } : {}),
     };
 }
 
@@ -136,10 +137,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // After a web lease reload whose read failed, the map also holds what this
     // store saved before it went dormant, and another writer may have removed
     // some of it since. `queueStore.persisted` tells the two apart: it records
-    // what the key held at the last load or save that resolved, so a live entry
-    // it names that the snapshot lacks was removed and is dropped, and one it
-    // does not name never reached storage and stays. Before the first load the
-    // record is empty, so that window keeps every live entry.
+    // what the key held at the last save that resolved or read adopted into live
+    // state, so a live entry it names that the snapshot lacks was removed and is
+    // dropped, and one it does not name never reached storage and stays. Before
+    // the first load the record is empty, so that window keeps every live entry.
     //
     // The one removal that can run in that window is `pruneWalletFromQueue`,
     // so it records the walletId in `queueStore.prunedWallets`; the merge skips
@@ -309,6 +310,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 mergeQueueSnapshot(snapshot, knownQueues);
                 mergeOwedSettlements(persistedOwed, knownOwed);
                 queueStore.loaded = true;
+                queueStore.storage.adoptRead?.();
                 // Once `loaded` latches no merge runs again, so the live map is
                 // the whole truth and the pending prunes have nothing left to skip.
                 queueStore.prunedWallets?.clear();
@@ -725,6 +727,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         let owned;
         let queued;
         let claimed = [];
+        let claimScanOk = true;
         try {
             owned = await ownedAddressesFor(vault, walletId);
             if (owned.size === 0) return;
@@ -739,10 +742,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         } catch (_e) {
             // The interrupted-claim half is additive. A vault that answers the
             // 'queued' read and refuses this one still gets its never-sent
-            // records back rather than losing both halves to one refusal.
+            // records back rather than losing both halves to one refusal. Keep
+            // recovery un-latched so a later call retries this half; queued
+            // entries restored now are held by id and skipped on that retry.
             claimed = [];
+            claimScanOk = false;
         }
-        recoveredWallets.add(walletId);
+        // Removal can land during either vault read. Do not recreate its live
+        // queue after the prune has completed.
+        if (isWalletRemoved(walletId)) return;
+        if (claimScanOk) recoveredWallets.add(walletId);
         const candidates = [
             ...(Array.isArray(queued) ? queued.map((record) => ({ record, resumedClaim: false })) : []),
             ...(Array.isArray(claimed) ? claimed.map((record) => ({ record, resumedClaim: true })) : []),
@@ -782,11 +791,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 ...(typeof record.rbfReplacesPendingTxId === 'string' && record.rbfReplacesPendingTxId
                     ? { rbfReplacesPendingTxId: record.rbfReplacesPendingTxId }
                     : {}),
-                // No ADS verdict: it rode the entry, never the record, so the
-                // donation this transaction may carry is not re-derivable here.
-                // Booking nothing under-counts the accumulator; booking a guess
-                // credits a donation that was never paid.
-                adsCommit: null,
+                // New queued records carry the compose-time verdict. Older
+                // records have none and still settle only the claim they hold.
+                adsCommit: cleanAdsCommit(record.adsCommit),
             });
         }
     }
@@ -978,6 +985,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         // Refuse a removed wallet: no route lists its queue, so the entry would never be sent or discarded.
         if (isWalletRemoved(walletId)) return { entry: null, persisted: false };
         await ensureQueueLoaded();
+        // A removal can finish while a load or its repair save is pending.
+        // Check before liveTwinOf, which creates the wallet's map entry.
+        if (isWalletRemoved(walletId)) return { entry: null, persisted: false };
         // A first list in the gap after the 'queued' stamp may have rebuilt
         // these bytes already; give that entry the verdict instead of a twin.
         const twin = liveTwinOf(walletId, entry);
@@ -1149,63 +1159,61 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * @returns {Promise<'settled' | 'closed' | 'unreachable'>}
      */
     async function applyPendingTxPatch(vault, pendingTxId, patch) {
-        let existing;
+        let verdict = 'closed';
         try {
-            existing = await vault?.pendingTxs?.get(pendingTxId);
-        } catch (_e) {
-            return 'unreachable';
-        }
-        if (!existing) return 'closed';
-        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
-        // The network holds a landed commit's spend, so a refusal never retires its
-        // record as 'failed', whichever entry or journal entry the patch came from.
-        const written = patch?.status === 'failed' && existing.commitLanded === true
-            ? {
-                ...existing,
-                ...patch,
-                status: 'broadcast',
-                broadcastAt: existing.broadcastAt ?? new Date().toISOString(),
-                txid: existing.commitTxid ?? existing.txid ?? null,
-            }
-            : { ...existing, ...patch };
-        try {
-            await vault.pendingTxs.put(written);
-        } catch (_e) {
-            return 'unreachable';
-        }
-        return 'settled';
-    }
-    /** Promote a two-phase record from its commit to the reveal already held in the vault. */
-    async function applyRevealPromotion(vault, pendingTxId, reveal) {
-        let existing;
-        try {
-            existing = await vault?.pendingTxs?.get(pendingTxId);
-        } catch (_e) {
-            return 'unreachable';
-        }
-        if (!existing) return 'closed';
-        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
-        if (existing.commitLanded === true) return 'settled';
-        const revealTxid = typeof existing.revealTxid === 'string' && existing.revealTxid
-            ? existing.revealTxid
-            : null;
-        const expectedTxid = typeof reveal?.txid === 'string' && reveal.txid ? reveal.txid : null;
-        if (typeof existing.revealTxHex !== 'string' || !existing.revealTxHex) return 'closed';
-        if (expectedTxid && revealTxid && expectedTxid !== revealTxid) return 'closed';
-        try {
-            await vault.pendingTxs.put({
-                ...existing,
-                status: 'broadcasting',
-                txHex: existing.revealTxHex,
-                txid: expectedTxid ?? revealTxid ?? null,
-                commitLanded: true,
-                commitTxid: reveal?.commitTxid ?? existing.commitTxid ?? null,
-                error: null,
+            await vault?.pendingTxs?.update(pendingTxId, (existing) => {
+                if (!existing) return null;
+                if (existing.status !== 'queued' && existing.status !== 'broadcasting') return null;
+                verdict = 'settled';
+                // The network holds a landed commit's spend, so a refusal never
+                // retires its record as failed.
+                return patch?.status === 'failed' && existing.commitLanded === true
+                    ? {
+                        ...existing,
+                        ...patch,
+                        status: 'broadcast',
+                        broadcastAt: existing.broadcastAt ?? new Date().toISOString(),
+                        txid: existing.commitTxid ?? existing.txid ?? null,
+                    }
+                    : { ...existing, ...patch };
             });
         } catch (_e) {
             return 'unreachable';
         }
-        return 'settled';
+        return verdict;
+    }
+    /** Promote a two-phase record from its commit to the reveal already held in the vault. */
+    async function applyRevealPromotion(vault, pendingTxId, reveal) {
+        let verdict = 'closed';
+        try {
+            await vault?.pendingTxs?.update(pendingTxId, (existing) => {
+                if (!existing) return null;
+                if (existing.status !== 'queued' && existing.status !== 'broadcasting') return null;
+                if (existing.commitLanded === true) {
+                    verdict = 'settled';
+                    return null;
+                }
+                const revealTxid = typeof existing.revealTxid === 'string' && existing.revealTxid
+                    ? existing.revealTxid
+                    : null;
+                const expectedTxid = typeof reveal?.txid === 'string' && reveal.txid ? reveal.txid : null;
+                if (typeof existing.revealTxHex !== 'string' || !existing.revealTxHex) return null;
+                if (expectedTxid && revealTxid && expectedTxid !== revealTxid) return null;
+                verdict = 'settled';
+                return {
+                    ...existing,
+                    status: 'broadcasting',
+                    txHex: existing.revealTxHex,
+                    txid: expectedTxid ?? revealTxid ?? null,
+                    commitLanded: true,
+                    commitTxid: reveal?.commitTxid ?? existing.commitTxid ?? null,
+                    error: null,
+                };
+            });
+        } catch (_e) {
+            return 'unreachable';
+        }
+        return verdict;
     }
     return {
         ensureQueueLoaded,

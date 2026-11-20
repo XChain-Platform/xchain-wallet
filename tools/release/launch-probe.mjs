@@ -71,6 +71,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 /**
  * How an artifact can be launched, and by which host.
@@ -282,6 +283,16 @@ function delay(ms) {
     return p;
 }
 
+async function stopProcessGroup(child, closed, streamsClosed) {
+    if (!Number.isInteger(child.pid) || child.pid <= 0) return;
+    try { process.kill(-child.pid, 'SIGTERM'); } catch { /* already gone */ }
+    await Promise.race([closed, delay(3000)]);
+    if (!streamsClosed()) {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+        await Promise.race([closed, delay(1000)]);
+    }
+}
+
 /**
  * Launch a command, watch it for `timeoutMs`, then stop it.
  *
@@ -290,10 +301,10 @@ function delay(ms) {
  * leave those parented to init on a release machine. The group is signalled
  * instead, TERM then KILL, in a finally.
  *
- * Resolves as soon as the process is gone, so a crash at 0.3s costs 0.3s
- * rather than the full window. `close` rather than `exit` is the trigger,
- * because the crash dump is written to stderr as the process dies and
- * resolving on `exit` would report the failure without the reason for it.
+ * Parent termination is tracked through `exit`, so a helper holding the
+ * output pipes cannot make a dead app look alive. `close` is still awaited,
+ * with a bound, so crash output is collected and pipe-holding helpers are
+ * stopped with the rest of the process group.
  *
  * @returns {Promise<{exited: boolean, exitCode: number|null, signal: string|null,
  *                    output: string, waitedMs: number, spawnError: string|null}>}
@@ -305,6 +316,7 @@ export async function launchAndWatch(cmd, args, { timeoutMs = 8000, env = proces
     let exitCode = null;
     let signal = null;
     let spawnError = null;
+    let streamsClosed = false;
 
     const child = spawn(cmd, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env, cwd });
     const capture = (chunk) => {
@@ -317,9 +329,16 @@ export async function launchAndWatch(cmd, args, { timeoutMs = 8000, env = proces
     child.stdout?.on('data', capture);
     child.stderr?.on('data', capture);
 
+    let resolveGone;
+    const gone = new Promise((resolve) => { resolveGone = resolve; });
     const closed = new Promise((resolve) => {
-        child.on('error', (err) => { spawnError = String(err?.message || err); exited = true; resolve(); });
-        child.on('close', (code, sig) => { exited = true; exitCode = code; signal = sig; resolve(); });
+        child.on('error', (err) => {
+            spawnError = String(err?.message || err); exited = true; resolveGone();
+        });
+        child.on('exit', (code, sig) => {
+            exited = true; exitCode = code; signal = sig; resolveGone();
+        });
+        child.on('close', () => { streamsClosed = true; resolve(); });
     });
 
     // THE OBSERVATION IS SNAPSHOT BEFORE THE PROBE INTERVENES, and this is
@@ -332,17 +351,12 @@ export async function launchAndWatch(cmd, args, { timeoutMs = 8000, env = proces
     const window = delay(timeoutMs);
     let observed;
     try {
-        await Promise.race([closed, window]);
+        await Promise.race([gone, window]);
         observed = { exited, exitCode, signal, waitedMs: Date.now() - started };
     } finally {
         window.cancel();
-        if (!exited) {
-            // Signal the GROUP (negative pid). Failure to signal is not an
-            // error worth failing the release over, but a survivor is worth
-            // one more, harder attempt.
-            try { process.kill(-child.pid, 'SIGTERM'); } catch { /* already gone */ }
-            await Promise.race([closed, delay(3000)]);
-            if (!exited) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ } }
+        if (!exited || !streamsClosed) {
+            await stopProcessGroup(child, closed, () => streamsClosed);
         }
     }
     // `output` is read after teardown on purpose, unlike the exit state: a
@@ -856,7 +870,7 @@ export async function run(dir, { releaseSet = 'release', timeoutMs = 8000, expec
     return 0;
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith('launch-probe.mjs');
+const invokedDirectly = isInvokedDirectly(import.meta.url);
 
 const USAGE = `launch-probe.mjs - does the packaged app actually START? (row 144.)
 

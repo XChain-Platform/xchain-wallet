@@ -61,7 +61,7 @@ const makeRepo = (gateBody) => {
     mkdirSync(join(repo, 'tools', 'build-reproduce'), { recursive: true });
     for (const f of ['lib.sh', 'sign.sh', 'expected-artifacts.txt',
         'shipped-lanes.txt', 'update-info.mjs', 'verify-signatures.mjs',
-        'store-profile-status.txt']) {
+        'is-invoked-directly.mjs', 'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     const gate = join(repo, 'tools/build-reproduce/check-no-dev-mock.sh');

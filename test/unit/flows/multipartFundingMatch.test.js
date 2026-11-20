@@ -46,6 +46,28 @@ describe('matchFundingOutputs matching', () => {
         expect(matchFundingOutputs([], shuffled, 'tx')).toEqual([]);
         expect(fundingMatchesQuote([], [])).toBe(true);
     });
+
+    it.each(['9007199254740993', 9007199254740993n])(
+        'ignores an exact large change output expressed as %s',
+        (value) => {
+            const outputs = [
+                { vout: 0, address: 'source-a', value: 1200, scriptPubKey: 'piece-0' },
+                { vout: 1, address: 'source-a', value, scriptPubKey: 'change' },
+                { vout: 2, address: 'source-a', value: 1200, scriptPubKey: 'piece-1' },
+            ];
+            expect(matchFundingOutputs(expected.slice(0, 2), outputs, 'tx')).toEqual([
+                { txid: 'tx', vout: 0, value: 1200, scriptPubKey: 'piece-0' },
+                { txid: 'tx', vout: 2, value: 1200, scriptPubKey: 'piece-1' },
+            ]);
+        },
+    );
+
+    it('matches an exact decimal string and returns the bounded expected value', () => {
+        const outputs = [{ vout: 3, address: 'source-a', value: '1200', scriptPubKey: 'piece' }];
+        expect(matchFundingOutputs([expected[0]], outputs, 'tx')).toEqual([
+            { txid: 'tx', vout: 3, value: 1200, scriptPubKey: 'piece' },
+        ]);
+    });
 });
 
 describe('matchFundingOutputs missing output refusals', () => {
@@ -96,6 +118,17 @@ describe('matchFundingOutputs input refusals', () => {
         );
         expect(fundingMatchesQuote(expected, outputs)).toBe(false);
     });
+
+    it.each(['12.5', '-1', '0x10', '', ' 1', 1.5, Number.MAX_SAFE_INTEGER + 1])(
+        'rejects invalid decoded output value %s',
+        (value) => {
+            const outputs = [{ vout: 0, address: 'source-a', value, scriptPubKey: 'script' }];
+            expect(() => matchFundingOutputs(expected, outputs, 'tx')).toThrowError(
+                expect.objectContaining({ code: 'FUNDING_INPUT_INVALID' }),
+            );
+            expect(fundingMatchesQuote(expected, outputs)).toBe(false);
+        },
+    );
 
     it.each(['', '   ', null])('rejects an empty funding transaction id', (txid) => {
         expect(() => matchFundingOutputs([], [], txid)).toThrowError(

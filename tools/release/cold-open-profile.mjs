@@ -70,6 +70,8 @@ import { createRequire } from 'node:module';
 import http from 'node:http';
 import https from 'node:https';
 
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
+
 import { ChainRegistry } from '../../packages/core/src/registry/index.js';
 import { SDKRegistry, DEFAULT_SDK_NETWORK_OPTIONS } from '../../packages/core/src/sdk/SDKRegistry.js';
 import { sharedExplorerLimiter } from '../../packages/core/src/sdk/explorerRateLimit.js';
@@ -1006,6 +1008,6 @@ async function main() {
     return ok ? EXIT.OK : EXIT.FAILURE;
 }
 
-if (process.argv[1] && process.argv[1].endsWith('cold-open-profile.mjs')) {
+if (isInvokedDirectly(import.meta.url)) {
     process.exitCode = await main();
 }

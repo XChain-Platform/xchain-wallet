@@ -118,6 +118,12 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')], addressOverride
             get: vi.fn(async (id) => rows.get(id) ?? null),
             findBy: vi.fn(async (field, value) => [...rows.values()].filter((row) => row[field] === value)),
             put,
+            update: vi.fn(async (id, decide) => {
+                const next = decide(rows.get(id) ?? null);
+                if (next == null) return false;
+                await put(next);
+                return true;
+            }),
         },
         settings: { get: vi.fn(async () => ({ ...settings })) },
     };

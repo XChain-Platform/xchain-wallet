@@ -68,6 +68,12 @@ function memCollection() {
     return {
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? copy(m.get(id)) : null);
+            if (next == null) return false;
+            m.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         find: async (id) => (m.has(id) ? copy(m.get(id)) : null),
@@ -631,7 +637,7 @@ describe('the host queue settles the PendingTx half it was handed', () => {
             entries: [entry('A', { pendingTxId: 'p1' })],
             broadcastTx: vi.fn(async () => 'tx-A'),
         });
-        locked.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        locked.vault.pendingTxs.update = async () => { throw new Error('VaultStateError: vault is closed'); };
         const res = await locked.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(res.ok).toBe(true);
         expect(await locked.list()).toEqual([]);
@@ -669,15 +675,15 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
             broadcastTx: vi.fn(async () => 'tx-A'),
         });
         await h.vault.pendingTxs.put(queuedRecord('p1'));
-        const open = h.vault.pendingTxs.get;
-        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        const open = h.vault.pendingTxs.update;
+        h.vault.pendingTxs.update = async () => { throw new Error('VaultStateError: vault is closed'); };
 
         // The bytes land and the entry leaves the queue, so nothing but the
         // journal still names the record the broadcast settles.
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect(await h.list()).toEqual([]);
 
-        h.vault.pendingTxs.get = open;
+        h.vault.pendingTxs.update = open;
         await h.list();
         const rec = await h.vault.pendingTxs.get('p1');
         expect(rec.status).toBe('broadcast');
@@ -694,11 +700,11 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
         await h.vault.pendingTxs.put(queuedRecord('p1'));
         await h.vault.pendingTxs.put(queuedRecord('p2'));
         await h.list();
-        const open = h.vault.pendingTxs.get;
-        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        const open = h.vault.pendingTxs.update;
+        h.vault.pendingTxs.update = async () => { throw new Error('VaultStateError: vault is closed'); };
 
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
-        h.vault.pendingTxs.get = open;
+        h.vault.pendingTxs.update = open;
         await h.list();
 
         expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
@@ -711,11 +717,11 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
             broadcastTx: vi.fn(async () => { throw new Error('bad-txns-inputs-missingorspent'); }),
         });
         await h.vault.pendingTxs.put(queuedRecord('p1'));
-        const open = h.vault.pendingTxs.get;
-        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        const open = h.vault.pendingTxs.update;
+        h.vault.pendingTxs.update = async () => { throw new Error('VaultStateError: vault is closed'); };
 
         await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
-        h.vault.pendingTxs.get = open;
+        h.vault.pendingTxs.update = open;
         await h.list();
         expect(await h.vault.pendingTxs.get('p1')).toMatchObject({
             status: 'failed', error: 'bad-txns-inputs-missingorspent',
@@ -749,7 +755,7 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
                 storage: createBroadcastQueueStorage(),
                 pendingTxs: {
                     ...records,
-                    get: async () => { throw new Error('VaultStateError: vault is closed'); },
+                    update: async () => { throw new Error('VaultStateError: vault is closed'); },
                 },
                 broadcastTx: vi.fn(async () => 'tx-A'),
             });
@@ -1334,6 +1340,11 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
                 if (rec.status !== 'broadcasting') throw new Error('VaultStateError: vault is closed');
                 return records.put(rec);
             },
+            update: (id, decide) => records.update(id, (current) => {
+                const next = decide(current);
+                if (next?.status !== 'broadcasting') throw new Error('VaultStateError: vault is closed');
+                return next;
+            }),
         };
         const first = makeHost({
             entries: [entry('A', { pendingTxId: 'p1' })],
@@ -1449,6 +1460,7 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
             pendingTxs: {
                 ...records,
                 put: async () => { throw new Error('VaultStateError: vault is closed'); },
+                update: async () => { throw new Error('VaultStateError: vault is closed'); },
             },
             broadcastTx: vi.fn(),
             storage: {

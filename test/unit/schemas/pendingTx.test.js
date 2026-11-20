@@ -255,4 +255,25 @@ describe('validatePendingTx', () => {
             expect(validatePendingTx({ ...tx, adsBooking: invalid }).ok).toBe(false);
         }
     });
+
+    it('accepts a queued donation verdict and rejects malformed verdicts', () => {
+        const tx = createPendingTx(BASE_INPUT);
+        const adsCommit = {
+            chainId: 'bitcoin-mainnet', donationIncluded: true, donatedFiat: '25.50',
+            currency: 'USD', mainnet: true, reservationId: tx.id,
+        };
+        expect(validatePendingTx({ ...tx, adsCommit }).ok).toBe(true);
+        expect(validatePendingTx({ ...tx, adsCommit: null }).ok).toBe(true);
+        expect(validatePendingTx(tx).ok).toBe(true);
+        for (const invalid of [
+            { ...adsCommit, chainId: '' },
+            { ...adsCommit, donationIncluded: 'yes' },
+            { ...adsCommit, donatedFiat: '-1' },
+            { ...adsCommit, currency: '' },
+            { ...adsCommit, mainnet: 'yes' },
+            { ...adsCommit, reservationId: '' },
+        ]) {
+            expect(validatePendingTx({ ...tx, adsCommit: invalid }).ok).toBe(false);
+        }
+    });
 });

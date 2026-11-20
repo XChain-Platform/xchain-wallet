@@ -301,8 +301,8 @@ export function ConnectApproval({ id, payload, onReject }) {
         clearFieldError('accounts');
     }
 
-    // With options on screen the user must share at least one account; with
-    // none (the account read failed) the background grants the primary one.
+    // With options on screen the user must share at least one account. With no
+    // options, the background narrows to a primary account or refuses an empty vault.
     const accountsMissing = accountOptions.length > 0 && approvedAccounts.length === 0;
     const requestError = !payloadValid
         ? INVALID_REQUEST_MESSAGE

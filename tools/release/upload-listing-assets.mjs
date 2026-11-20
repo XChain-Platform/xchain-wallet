@@ -52,6 +52,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 import {
     EXIT,
@@ -387,7 +388,7 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
     return EXIT.READY;
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith('upload-listing-assets.mjs');
+const invokedDirectly = isInvokedDirectly(import.meta.url);
 if (invokedDirectly) {
     uploadListingAssets({ argv: process.argv.slice(2) })
         .then((code) => { process.exitCode = code; })

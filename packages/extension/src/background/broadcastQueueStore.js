@@ -153,14 +153,15 @@ function owedKeysOf(owed) {
     return new Set((Array.isArray(owed) ? owed : []).filter(Boolean).map(owedRecordKey));
 }
 
-// Track what the key holds from the calls that resolved. Either save writes
-// the pair (the half it was given plus the adapter's cached other half), so
-// `pair` follows the halves the next write would carry. A refused save leaves
-// the record alone, and a call that resolves after a later one does not
-// overwrite the newer record.
+// Track what the key holds from saves that resolved and reads adopted into live
+// state. Either save writes the pair (the half it was given plus the adapter's
+// cached other half), so `pair` follows the halves the next write would carry.
+// A refused save or abandoned read leaves the record alone, and an older call
+// cannot overwrite a newer record.
 function withPersistedRecord(storage, persisted) {
     const wrapped = Object.create(storage);
     const pair = { queues: persisted.queues, owed: persisted.owed };
+    let stagedRead = null;
     let issued = 0;
     let applied = 0;
     const commit = (ticket, queues, owed) => {
@@ -171,10 +172,11 @@ function withPersistedRecord(storage, persisted) {
     };
     wrapped.load = async () => {
         const ticket = ++issued;
+        stagedRead = null;
         const snapshot = await storage.load();
         if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
             pair.queues = queueKeysOf(snapshot);
-            commit(ticket, pair.queues, persisted.owed);
+            stagedRead = { ticket, queues: pair.queues };
         }
         return snapshot;
     };
@@ -192,11 +194,16 @@ function withPersistedRecord(storage, persisted) {
             const owed = await storage.loadSettlements();
             if (Array.isArray(owed)) {
                 pair.owed = owedKeysOf(owed);
-                commit(ticket, persisted.queues, pair.owed);
+                stagedRead = { ...(stagedRead ?? {}), ticket, owed: pair.owed };
             }
             return owed;
         };
     }
+    wrapped.adoptRead = () => {
+        if (!stagedRead) return;
+        commit(stagedRead.ticket, stagedRead.queues ?? persisted.queues, stagedRead.owed ?? persisted.owed);
+        stagedRead = null;
+    };
     if (typeof storage.saveSettlements === 'function') {
         wrapped.saveSettlements = async (records) => {
             const ticket = ++issued;
@@ -205,6 +212,12 @@ function withPersistedRecord(storage, persisted) {
             pair.owed = owed;
             await storage.saveSettlements(records);
             commit(ticket, queues, owed);
+        };
+    }
+    if (typeof storage.clear === 'function') {
+        wrapped.clear = async () => {
+            stagedRead = null;
+            return storage.clear();
         };
     }
     return wrapped;
@@ -456,8 +469,8 @@ function adoptStoredState(store, snapshot, settlements, known) {
  * Reload a dormant store from persistence after its shell acquires an
  * exclusive writer lease, and end its dormancy. Both halves are read before
  * live state changes, so an unreadable queue or journal leaves the cache
- * intact and `loaded` false; the engine's next load then folds the read in
- * by the same persisted record, so what another writer removed stays removed.
+ * intact and `loaded` false; the persisted baseline advances only after both
+ * halves are adopted, so what another writer removed stays removed.
  * Entries and journal records whose save was refused, or that were made while
  * dormant, survive the reload and are written back under the lease.
  *
@@ -502,6 +515,7 @@ export async function refreshBroadcastQueueStore(store) {
         const pruned = store.prunedWallets;
         const carried = adoptStoredState(store, snapshot, settlements, known);
         store.loaded = true;
+        store.storage.adoptRead?.();
 
         if (carried || pruned?.size > 0) {
             const queues = toStoredQueueSnapshot(store.queues);

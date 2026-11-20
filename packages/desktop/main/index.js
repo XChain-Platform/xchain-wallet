@@ -127,6 +127,7 @@ import {
     createUpdateCheckMenuItem,
 } from './desktopPresentation.js';
 import {
+    closeHostAndClearSession,
     createRuntime,
     enforceIdleAutoLock,
     enforceLaunchAutoLock,
@@ -138,6 +139,7 @@ import {
     wipeRuntimeStores,
 } from './runtime.js';
 import { createOsNotifier } from './osNotification.js';
+import { applyAppUserModelId } from './appUserModelId.js';
 
 logConsole.attach();
 
@@ -830,8 +832,7 @@ function runWindowlessIdleGate(action, logAction) {
             // Cannot decide, so it costs a password prompt rather than an unlock.
             reportMainFailure(`auto-lock check before ${logAction}`, err);
             if (runtime) {
-                tearDownHost(runtime);
-                try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
+                try { await closeHostAndClearSession(runtime); } catch { /* logged by the check */ }
             }
         }
         runMainCallback(() => { action(); }, `${logAction} window`);
@@ -1050,6 +1051,11 @@ function buildApplicationMenu() {
 // covered.
 // Test launches only: Chromium's mock keychain, set before app ready.
 applyTestMockKeychain(app);
+
+// Windows: claim the id the installer stamps on every shortcut, before the
+// first window, so the taskbar button pairs with the pinned shortcut and
+// shows its icon (main/appUserModelId.js).
+applyAppUserModelId(app);
 
 app.on('web-contents-created', (_event, contents) => {
     runMainCallback(() => hardenWebContents(contents), 'web contents hardening');

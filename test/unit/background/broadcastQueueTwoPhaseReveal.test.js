@@ -41,6 +41,12 @@ function memCollection() {
     return {
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? copy(m.get(id)) : null);
+            if (next == null) return false;
+            m.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         find: async (id) => (m.has(id) ? copy(m.get(id)) : null),

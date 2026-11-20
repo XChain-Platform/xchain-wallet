@@ -588,7 +588,9 @@ fi
 # certify-only and a signing subkey makes the signature, so the
 # fingerprint a user reads on the published channel never appears as the
 # signer. Either half may be named by --key; a mismatch on both is a
-# wrong key. The human output still goes to stderr for the operator.
+# wrong key. VALIDSIG alone does not establish that the key and signature
+# are currently valid: revoked or expired keys can still produce it. The
+# human output still goes to stderr for the operator.
 if GPG_STATUS="$(run_gpg_bounded env GNUPGHOME="$VERIFY_GNUPGHOME" \
     gpg --batch --no-options --no-autostart --trust-model always --status-fd 3 \
     --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)"; then
@@ -603,12 +605,19 @@ else
     exit 1
 fi
 
-SIGNER_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($3); exit}')"
-PRIMARY_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($NF); exit}')"
-if [[ -z "$SIGNER_FPR" ]]; then
+VALIDSIG_COUNT="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{n++} END{print n+0}')"
+NEWSIG_COUNT="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] NEWSIG([[:space:]]|$)/{n++} END{print n+0}')"
+if [[ "$VALIDSIG_COUNT" -eq 0 ]]; then
     echo "verify.sh: gpg reported no VALIDSIG for $MANIFEST; refusing to call it verified." >&2
     exit 1
 fi
+if [[ "$VALIDSIG_COUNT" -ne 1 || "$NEWSIG_COUNT" -gt 1 ]]; then
+    echo "verify.sh: gpg reported an ambiguous signature set; refusing to call it verified." >&2
+    exit 1
+fi
+
+SIGNER_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($3); exit}')"
+PRIMARY_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($NF); exit}')"
 if [[ "$SIGNER_FPR" != "$EXPECT_KEY" && "$PRIMARY_FPR" != "$EXPECT_KEY" ]]; then
     echo "verify.sh: the signature is GOOD and it is from the WRONG KEY." >&2
     echo "  expected:  $EXPECT_KEY (via $PIN_SOURCE)" >&2
@@ -619,6 +628,36 @@ if [[ "$SIGNER_FPR" != "$EXPECT_KEY" && "$PRIMARY_FPR" != "$EXPECT_KEY" ]]; then
     echo "  this release. If the release key was rotated, pass the" >&2
     echo "  fingerprint this release was signed with as --key, taking it" >&2
     echo "  from https://xchain.io/security." >&2
+    exit 1
+fi
+
+INVALID_STATUS="$(printf '%s\n' "$GPG_STATUS" | awk '
+    /^\[GNUPG:\] (REVKEYSIG|EXPKEYSIG|EXPSIG|BADSIG|ERRSIG)([[:space:]]|$)/ { print $2; exit }
+')"
+if [[ -n "$INVALID_STATUS" ]]; then
+    case "$INVALID_STATUS" in
+        REVKEYSIG) reason="the signing key is REVOKED" ;;
+        EXPKEYSIG) reason="the signing key has EXPIRED" ;;
+        EXPSIG) reason="the signature has EXPIRED" ;;
+        BADSIG) reason="gpg reported a BAD signature" ;;
+        ERRSIG) reason="gpg reported a signature ERROR" ;;
+    esac
+    echo "verify.sh: $reason; refusing to call $MANIFEST verified." >&2
+    echo "  Do not publish or install this release." >&2
+    exit 1
+fi
+
+GOODSIG_MATCH=0
+while IFS= read -r GOOD_KEY; do
+    GOOD_KEY="$(printf '%s' "$GOOD_KEY" | tr '[:lower:]' '[:upper:]')"
+    if [[ "$GOOD_KEY" == "$SIGNER_FPR" ]] \
+        || [[ "$GOOD_KEY" =~ ^[0-9A-F]{16}$ && "$SIGNER_FPR" == *"$GOOD_KEY" ]]; then
+        GOODSIG_MATCH=1
+        break
+    fi
+done < <(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] GOODSIG /{print $3}')
+if [[ "$GOODSIG_MATCH" -ne 1 ]]; then
+    echo "verify.sh: gpg reported no GOODSIG from the signing key; refusing to call $MANIFEST verified." >&2
     exit 1
 fi
 
