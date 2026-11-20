@@ -52,13 +52,4 @@ describe('Send available amount while the pending side is unknown', () => {
         expect(await screen.findByText(/1 BTC available/, {}, { timeout: 10_000 })).toBeInTheDocument();
         expect(screen.queryByTestId('send-pending-unknown')).toBeNull();
     });
-
-    it('shows a caveat when the tracker has not converged its pending view', async () => {
-        mount({
-            tick: 'BTC', quantity: '100000000', divisibility: 8, pendingUnknown: true,
-        });
-        expect(await screen.findByTestId('send-pending-unknown')).toHaveTextContent(
-            'Pending not fully known yet',
-        );
-    });
 });

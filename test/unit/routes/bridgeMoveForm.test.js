@@ -41,14 +41,6 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
     ),
 }));
 
-// The fixtures sit on mainnet, where the bridge is not live yet. These cases
-// are about the move itself, so the schedule reads as live here; the refusal
-// is covered against the real schedule in BridgeMoveForm.pageStates.test.jsx.
-vi.mock('../../../packages/core/src/flows/protocolActivations.js', async (importOriginal) => ({
-    ...(await importOriginal()),
-    xbridgeScheduledHeight: () => 0,
-}));
-
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import {

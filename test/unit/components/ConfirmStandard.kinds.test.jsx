@@ -532,14 +532,14 @@ describe('Confirm Standard, list transfer', () => {
         expect(queryByTestId('confirm-source')).toBeNull();
     });
 
-    it('shows the composed destination instead of a differing form recipient', () => {
+    it('still shows a composed destination that differs from the form\'s new owner', () => {
         const other = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
         const { container, getByTestId } = render(<ConfirmActionModal {...props('listTransfer', {
             summary: transferSummary({ recipient: other }),
         })} />);
-        expect(getByTestId('confirm-address').getAttribute('title')).toBe(ADDR);
+        expect(getByTestId('confirm-address').getAttribute('title')).toBe(other);
         expect(shownCount(container, ADDR)).toBe(1);
-        expect(shownCount(container, other)).toBe(0);
+        expect(getByTestId('confirm-facts').textContent).toContain('Destination');
     });
 
     it('keeps "You can\'t undo this" as the short warning under a failed check', () => {

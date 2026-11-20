@@ -73,22 +73,4 @@ describe('receiveAddress index space for a hardware account in a legacy wallet',
         expect(rec.derivationPath).toBe("m/84'/0'/1'/0/0");
         expect(rec.source).toBe('trezor');
     });
-
-    it('refuses a software signer for the hardware-owned account before derivation', async () => {
-        const signer = makeSigner('software');
-        let derivations = 0;
-        const derive = signer.getAddresses;
-        signer.getAddresses = async (params) => { derivations += 1; return derive(params); };
-        const vault = {
-            wallets: memCollection([{ id: 'w1', format: 'counterwallet-legacy' }]),
-            accounts: memCollection(ACCOUNTS),
-            addresses: memCollection(trezorP2pkh()),
-        };
-
-        await expect(receiveAddress({
-            vault, walletId: 'w1', signer, chainRegistry, sdkRegistry: offlineSdk,
-            chainId: 'bitcoin', accountId: 'acct-b', addressType: 'p2wpkh',
-        })).rejects.toThrow(/does not own account/i);
-        expect(derivations).toBe(0);
-    });
 });

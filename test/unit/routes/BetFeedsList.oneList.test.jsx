@@ -12,7 +12,6 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList, marketsForView } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import cardStyles from '../../../packages/core/src/shared/components/BetMarketCard.module.css';
@@ -101,37 +100,6 @@ function markup(container) {
 }
 
 describe('Prediction markets: one list for All, My predictions and My markets', () => {
-    it('does not list a rejected create as a market', async () => {
-        const accepted = market(1, OTHER);
-        const rejected = { ...market(2, OWN), feed_status: 'invalid', label: 'Rejected create' };
-        const { messaging } = harness({ markets: [accepted, rejected], bets: [] });
-        const utils = await mount(messaging);
-
-        expect(listed(utils.container)).toEqual([accepted.action_index]);
-        expect(screen.queryByRole('button', { name: 'Rejected create' })).not.toBeInTheDocument();
-    });
-
-    it('keeps a rejected create on its creator\'s list under All markets, marked as never opened', async () => {
-        const own = market(1, OWN);
-        const rejected = { ...market(2, OWN), feed_status: 'invalid', label: 'Rejected create' };
-        const { messaging } = harness({ markets: [own, rejected], bets: [] });
-        const utils = await mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: 'Filter prediction markets' }));
-        await act(async () => {
-            selectOption(screen.getByRole('combobox', { name: 'Status' }), 'all');
-            for (let i = 0; i < 10; i += 1) await Promise.resolve();
-        });
-
-        expect(listed(utils.container)).toEqual([own.action_index]);
-        await pick('markets');
-        await screen.findByRole('button', { name: 'Rejected create' });
-        expect(listed(utils.container)).toEqual([own.action_index, rejected.action_index]);
-        const markers = screen.getAllByTestId('bet-market-rejected');
-        expect(markers).toHaveLength(1);
-        expect(markers[0]).toHaveTextContent('Rejected, never opened');
-        expect(screen.getByRole('button', { name: 'Rejected create' })).toContainElement(markers[0]);
-    });
-
     it('draws the exact same list on all three tabs when every market is the wallet\'s', async () => {
         const markets = [market(1, OWN), market(2, OWN), market(3, OWN)];
         const { messaging } = harness({ markets, bets: markets.map(bet) });

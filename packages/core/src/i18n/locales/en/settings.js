@@ -226,7 +226,6 @@ const messages = {
     'settings.testNetworks.activated': '{name} is active. New addresses made: {count}.',
     'settings.testNetworks.alreadyActive': '{name} was already active. No new addresses were needed.',
     'settings.testNetworks.skippedAccounts': 'Already had an address on it, so left unchanged: {names}.',
-    'settings.testNetworks.otherSignerAccounts': 'No address made for accounts another signer holds: {names}.',
     'settings.testNetworks.actionsLabel': 'Network actions',
     'settings.testNetworks.detailsLabel': 'Network details',
     'settings.testNetworks.activateOnWallet': 'Activate on this wallet',

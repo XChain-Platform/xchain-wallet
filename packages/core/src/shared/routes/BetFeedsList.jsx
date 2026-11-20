@@ -15,7 +15,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
-import { isRejectedFeed } from '../../market/feedStatus.js';
 // The standard title-line filter, the gauge card and the wallet's bets loader.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
@@ -253,7 +252,6 @@ export function BetFeedsList({
                 for (const m of answers.flat()) {
                     if (!m || seen.has(String(m.action_index))) continue;
                     seen.add(String(m.action_index));
-                    // A rejected create stays here, marked, so its creator sees it failed.
                     if (!openOnly || m.feed_status === 'open') all.push(m);
                 }
                 return all.sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
@@ -272,7 +270,7 @@ export function BetFeedsList({
                 : { chainId, opts: { limit: 50 } };
             const read = readMode === 'own'
                 ? readOwn()
-                : messaging.betFeeds(req).then(extractRows).then((list) => list.filter((m) => !isRejectedFeed(m)));
+                : messaging.betFeeds(req).then(extractRows);
             return read
                 .then((list) => {
                     if (!cancelled && requestId === latestRequestId) {

@@ -198,21 +198,6 @@ describe('submitFailureMessage oracle pre-flight refusals', () => {
     });
 });
 
-describe('submitFailureMessage tracker refusals', () => {
-    it.each([
-        ['UTXO_TRACKER_HALTED', 'utxo-tracker is halted (unrecoverable reorg); refusing to select utxos from it'],
-        ['UTXO_TRACKER_NOT_READY', 'utxo-tracker has not reconverged its mempool yet; refusing to select utxos from it'],
-        ['UTXO_TRACKER_SYNC_MISSING', 'utxo-tracker did not report its sync state; the remote profile refuses an unattested view'],
-    ])('maps %s to plain service copy', (reason, raw) => {
-        const err = codedError('SDKEncoderError', 'ENCODER_RPC_ERROR', `Encoder RPC error: ${raw}`, {
-            details: { context: { reason }, rpcError: { code: -32010, data: { reason } } },
-        });
-        const message = submitFailureMessage(err, { coinTicker: 'BTC' });
-        expect(message).toMatch(/unavailable right now/i);
-        expect(message).not.toMatch(/utxo|tracker|mempool|reorg|refusing/i);
-    });
-});
-
 describe('submitFailureMessage native-fee verdicts', () => {
     // The popup boundary keeps only name and message, so the error is passed in
     // that shape, the one a Mint form on Litecoin or Dogecoin receives.

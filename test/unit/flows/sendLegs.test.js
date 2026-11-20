@@ -236,9 +236,6 @@ describe('assertNoGatedLegs', () => {
         const sdk = {
             gatedFile: {},
             messaging: {},
-            findToken: vi.fn(async (tick) => (
-                tick === '^42' ? { tick: 'GATEDC', tick_id: 42 } : null
-            )),
             getFiles: vi.fn(async (tick) => rowsByTick[String(tick).toUpperCase()] || []),
         };
         return {
@@ -277,41 +274,11 @@ describe('assertNoGatedLegs', () => {
 
     it('skips the native coin and ^id ticks, exactly like prepareGatedSend', async () => {
         const { sdk, args } = ctx({});
-        await expect(assertNoGatedLegs({
+        await assertNoGatedLegs({
             ...args,
             legs: [{ to: A, tick: 'BTC', amount: '1' }, { to: B, tick: '^42', amount: '2' }],
-        })).resolves.toBeUndefined();
-        expect(sdk.getFiles).not.toHaveBeenCalledWith('BTC', expect.anything());
-        expect(sdk.getFiles).not.toHaveBeenCalledWith('^42', expect.anything());
-        expect(sdk.getFiles).toHaveBeenCalledWith('GATEDC', 'gate');
-    });
-
-    it('refuses a multi-recipient ^id leg that resolves to a gated token', async () => {
-        const { sdk, args } = ctx({ GATEDC: [gatedRow('GATEDC')] });
-        await expect(assertNoGatedLegs({
-            ...args,
-            legs: [{ to: A, tick: 'BTC', amount: '1' }, { to: B, tick: '^42', amount: '2' }],
-        })).rejects.toThrow(/GATEDC has token-gated content/);
-        expect(sdk.findToken).toHaveBeenCalledWith('^42', { noRetry: true });
-    });
-
-    it('fails closed when a multi-send caret tick cannot be resolved', async () => {
-        const { sdk, args } = ctx({});
-        sdk.findToken.mockResolvedValueOnce(null);
-        await expect(assertNoGatedLegs({
-            ...args,
-            legs: [{ to: A, tick: '^42', amount: '1' }, { to: B, tick: '^42', amount: '2' }],
-        })).rejects.toMatchObject({ code: 'GATED_SEND_TICK_UNRESOLVED' });
+        });
         expect(sdk.getFiles).not.toHaveBeenCalled();
-    });
-
-    it('fails closed for a multi-send caret tick when gated capabilities are unavailable', async () => {
-        await expect(assertNoGatedLegs({
-            sdkRegistry: { get: () => ({}) },
-            chainRegistry: { get: () => ({ coin: 'bitcoin' }) },
-            chainId: 'bitcoin-regtest',
-            legs: [{ to: A, tick: '^42', amount: '1' }, { to: B, tick: '^42', amount: '2' }],
-        })).rejects.toMatchObject({ code: 'GATED_SEND_TICK_UNRESOLVED' });
     });
 
     it('degrades to allowing the send when detection fails (matches the guard policy)', async () => {

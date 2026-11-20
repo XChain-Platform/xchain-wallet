@@ -41,7 +41,7 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { formatWithThousands } from '../shared/utils/amountFormat.js';
-import { GatedSendTickUnresolvedError, getGatedGroupsForSend, resolveGatedSendTick } from './gatedSendGuard.js';
+import { getGatedGroupsForSend } from './gatedSendGuard.js';
 
 /*
  * Recipient cap. Not a protocol limit (the indexer parses any leg count) and
@@ -258,12 +258,12 @@ export function assertMultiSendSupported({ legs, descriptor }) {
 /**
  * Refuse a multi-recipient send of a token that has active gated content.
  *
- * Detection mirrors prepareGatedSend (same TTL-memoized group lookup and caret
- * resolution), so a tick that would compose as BATCH(SEND, MESSAGE)
- * on the single path is exactly the tick refused here. A named-tick detection
- * failure degrades to allowing the send because the indexer rejects an unpaired
- * named gated send. Caret resolution and detection fail closed because that
- * indexer protection is activation-gated for caret aliases.
+ * Detection mirrors prepareGatedSend (same TTL-memoized group lookup, same
+ * native / `^id` skips), so a tick that would compose as BATCH(SEND, MESSAGE)
+ * on the single path is exactly the tick refused here. A detection failure
+ * degrades to allowing the send, matching the guard's own policy: the indexer
+ * rejects an unpaired gated send, so the failure mode is a rejected action
+ * rather than stranded funds.
  *
  * @param {{
  *   sdkRegistry: object,
@@ -275,37 +275,25 @@ export function assertMultiSendSupported({ legs, descriptor }) {
 export async function assertNoGatedLegs({ sdkRegistry, chainRegistry, chainId, legs }) {
     if (!Array.isArray(legs) || legs.length < 2) return;
     const sdk = sdkRegistry?.get?.(chainId);
-    if (!sdk?.gatedFile || !sdk?.messaging) {
-        const caret = legs.find((leg) => String(leg.tick).trim().startsWith('^'));
-        if (caret) throw new GatedSendTickUnresolvedError(String(caret.tick).trim().toUpperCase());
-        return;
-    }
+    if (!sdk?.gatedFile || !sdk?.messaging) return;
     const descriptor = chainRegistry?.get?.(chainId);
     const nativeTicker = descriptor?.coin ? tickerForCoin(descriptor.coin) : null;
 
     const ticks = [...new Set(legs.map((leg) => String(leg.tick).trim().toUpperCase()))]
-        .filter((t) => t && t !== nativeTicker);
-    const resolvedTicks = [];
+        .filter((t) => t && t !== nativeTicker && !t.startsWith('^'));
     for (const tick of ticks) {
-        const resolved = tick.startsWith('^') ? await resolveGatedSendTick({ sdk, tick }) : tick;
-        const found = resolvedTicks.find((entry) => entry.tick === resolved);
-        if (found) found.strict = found.strict || tick.startsWith('^');
-        else resolvedTicks.push({ tick: resolved, strict: tick.startsWith('^') });
-    }
-    for (const entry of resolvedTicks) {
         let groups = [];
         try {
-            groups = await getGatedGroupsForSend({ sdk, chainId, tick: entry.tick, strict: entry.strict });
-        } catch (error) {
-            if (entry.strict) throw error;
+            groups = await getGatedGroupsForSend({ sdk, chainId, tick });
+        } catch {
             continue;
         }
         if (groups.length > 0) {
             throw new MultiSendUnsupportedError(
                 'GATED_MULTI_SEND',
-                `${entry.tick} has token-gated content, and each recipient needs their own unlock-key handoff. `
-                + `Send ${entry.tick} to one recipient at a time.`,
-                { tick: entry.tick },
+                `${tick} has token-gated content, and each recipient needs their own unlock-key handoff. `
+                + `Send ${tick} to one recipient at a time.`,
+                { tick },
             );
         }
     }

@@ -30,8 +30,7 @@
 
 import { AddressText, Button, Checkbox, Icon, Notice } from '@xchain-wallet/core/ui';
 import factStyles from '../routes/FactRows.module.css';
-import { preflightFindingKey } from '../utils/preflightFindingKey.js';
-import { errorText } from '../utils/preflightFindingCopy.js';
+import { preflightFindingKey, consensusRefusalMessage } from '../utils/preflightFindingKey.js';
 import { unknownActionStatus, withAddressFact, withNetworkFact } from '../utils/confirmStandardModel.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import styles from './ConfirmStandard.module.css';
@@ -199,7 +198,7 @@ export function ConfirmStatusNotice({ status, acknowledged, onAcknowledge, statu
                             key={`${key}-${index}`}
                             label={t('components.preflightPanel.signAnyway')}
                             help={status.overrides.length > 1
-                                ? errorText(finding).headline
+                                ? (consensusRefusalMessage(finding) || finding.message)
                                 : t('components.preflightPanel.signAnywayHelp')}
                             checked={Boolean(acknowledged?.has(key))}
                             onChange={() => onAcknowledge?.(key)}

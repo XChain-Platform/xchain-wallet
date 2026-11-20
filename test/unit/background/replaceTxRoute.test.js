@@ -544,30 +544,6 @@ describe('tx.replace when the vault refuses a write after the send', () => {
         const response = await call(h.host, {});
 
         expect(response.ok).toBe(false);
-        expect(response.error.name).toBe('BroadcastFailedTransientError');
         expect(response.error.message).toMatch(/did not return a txid/);
-        expect(await queueOf(h.host)).toEqual([expect.objectContaining({
-            txid: REPLACEMENT,
-            rbfReplacesPendingTxId: 'pending-aaaa',
-            resumedClaim: true,
-        })]);
-    });
-
-    it('queues a resolved broadcast whose returned txid does not match the signed bytes', async () => {
-        const h = harness();
-        h.broadcastTx.mockResolvedValueOnce({ txid: 'dd'.repeat(32) });
-
-        const response = await call(h.host, {});
-
-        expect(response).toMatchObject({ ok: false, error: { name: 'BroadcastFailedTransientError' } });
-        expect([...h.rows.values()]).toEqual(expect.arrayContaining([
-            expect.objectContaining({ txid: REPLACEMENT, status: 'queued' }),
-            expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
-        ]));
-        expect(await queueOf(h.host)).toEqual([expect.objectContaining({
-            txid: REPLACEMENT,
-            rbfReplacesPendingTxId: 'pending-aaaa',
-            resumedClaim: true,
-        })]);
     });
 });

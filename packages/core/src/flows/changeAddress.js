@@ -40,13 +40,32 @@ import { createAddress } from '../schemas/address.js';
 import { addressSourceForSignerKind, isDeviceAddressSource } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
-import { signerOwnsSource } from './custody/signerCustody.js';
 
 /** BIP44 internal branch. m / purpose' / coin' / account' / 1 / index */
 export const CHANGE_BRANCH = 1;
 
 /** HD-derived sources: these share one index space per branch per account. */
 const isHdSource = (source) => source === 'hd' || isDeviceAddressSource(source);
+
+/**
+ * Does the signer in hand own the key material behind the spending address?
+ * The seed signer the host pools cannot derive a hardware account's
+ * independent keys (walletAddressDiscovery guards discovery the same way), so
+ * deriving change with it would move device-custody value to a hot key. A
+ * device record without a signer id cannot be tied to a device and fails the
+ * check.
+ */
+function signerOwnsSource(signer, sourceRecord) {
+    let source;
+    try {
+        source = addressSourceForSignerKind(signer.kind);
+    } catch {
+        return false;
+    }
+    if (source !== sourceRecord.source) return false;
+    if (!isDeviceAddressSource(source)) return true;
+    return typeof sourceRecord.signerId === 'string' && signer.id === sourceRecord.signerId;
+}
 
 /**
  * Is change-address rotation switched on in this Settings record?

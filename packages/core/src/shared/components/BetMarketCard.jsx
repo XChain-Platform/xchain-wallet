@@ -14,7 +14,6 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import { isRejectedFeed, REJECTED_FEED_LABEL } from '../../market/feedStatus.js';
 import styles from './BetMarketCard.module.css';
 
 // Segment colours in outcome order; the brand pair first, so Yes and No take
@@ -273,12 +272,10 @@ export function BetMarketCard({ market, onOpen, yourPosition = null, yours = fal
     const tick = neutralizeControlText(market?.tick, { maxLength: 24 }) || 'n/a';
     const { slices, total, known } = betSlices(market);
     const pool = betPoolTotal(market);
-    const rejected = isRejectedFeed(market);
     // Only the question, the odds and the pool line (operator ruling
     // 2026-11-13): no tile, market number, ticker caption, clock or status
     // pill. The button is named by the question; the odds and the pool line
-    // are its description. The one marker is on a rejected create, which only
-    // its creator's list carries and which is not a market at all.
+    // are its description.
     return (
         <QuestionCard
             question={question}
@@ -299,7 +296,6 @@ export function BetMarketCard({ market, onOpen, yourPosition = null, yours = fal
                     ) : <>{t('components.betMarketCard.poolOnPage')}</>}
                 </span>
                 {yours ? <span className={`${styles.chip} ${styles.chipYours}`}>{t('components.betMarketCard.yourMarket')}</span> : null}
-                {rejected ? <span className={styles.chip} data-testid="bet-market-rejected">{REJECTED_FEED_LABEL}</span> : null}
                 </>
             )}
             trailingChip={yourPosition ? {

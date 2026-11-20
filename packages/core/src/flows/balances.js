@@ -156,14 +156,6 @@ function nativeFromAddress(addrResp, nativeTicker) {
     const balances = addrResp && addrResp.balances;
     const confirmed = atomicFromHumanAmount(balances?.confirmed, 8);
     if (confirmed == null || !nativeTicker) return null;
-    if (addrResp.mempool_ready === false) {
-        return {
-            tick: nativeTicker,
-            quantity: confirmed,
-            divisibility: 8,
-            pendingUnknown: true,
-        };
-    }
     const pending = balances?.pending == null || !isExactNonnegativeDecimal(balances.pending)
         ? null
         : atomicFromHumanAmount(balances.pending, 8);

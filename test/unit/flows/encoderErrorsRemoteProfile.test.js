@@ -38,9 +38,8 @@ describe('encoderErrorCode: remote tracker profile wording', () => {
         expect(encoderErrorMessage(wire, { coinTicker: 'LTC' })).toMatch(/not a problem with your wallet or your address/i);
     });
 
-    it('maps an unattested view to an unavailable service refusal', () => {
+    it('keeps the unattested-view refusal out of the stale mapping', () => {
         const wire = roundTrip(encoderRpcError('UTXO_TRACKER_SYNC_MISSING', REMOTE_SYNC_MISSING));
-        expect(encoderErrorCode(wire)).toBe('UTXO_TRACKER_SYNC_MISSING');
-        expect(encoderErrorMessage(wire)).toMatch(/unavailable right now/i);
+        expect(encoderErrorCode(wire)).toBe('ENCODER_RPC_ERROR');
     });
 });

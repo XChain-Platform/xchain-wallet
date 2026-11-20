@@ -44,12 +44,6 @@ describe('describePolicyReason', () => {
         expect(describePolicyReason('')).toBeNull();
     });
 
-    it('describes an unreadable spending window without echoing its code', () => {
-        const clause = describePolicyReason('WINDOW_STATE_CORRUPT');
-        expect(clause).toMatch(/spending record/);
-        expect(clause).not.toContain('WINDOW_STATE_CORRUPT');
-    });
-
     it('returns null for non-strings and inherited property names', () => {
         expect(describePolicyReason(null)).toBeNull();
         expect(describePolicyReason(undefined)).toBeNull();

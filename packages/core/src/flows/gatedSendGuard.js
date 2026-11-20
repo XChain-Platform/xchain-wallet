@@ -8,14 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// gatedSendGuard (PC-26): once a named token has an active gated FILE, the
+// gatedSendGuard (PC-26): once a token has an active gated FILE, the
 // indexer rejects any SEND of it that is not paired IN THE SAME
 // TRANSACTION with a MESSAGE v2 to the destination carrying the pack
 // key(s). The pairing is structural: sibling actions only exist inside
 // a BATCH (the indexer's SIBLING_ACTIONS is populated by the BATCH
-// handler alone). Caret aliases are resolved here because the indexer only
-// applies that protection to them after its caret pack-key activation.
-// See Token_Gated_Content.md and the §12 B1-a
+// handler alone), so a bare gated SEND is ALWAYS rejected, even for a
+// single recipient. See Token_Gated_Content.md and the §12 B1-a
 // verification notes in the wallet coverage spec.
 //
 // This module is the one compose-time chokepoint every SEND-building
@@ -101,38 +100,6 @@ export class GatedRecipientPubkeyMissingError extends Error {
         this.tick = tick;
         this.destination = destination;
     }
-}
-
-export class GatedSendTickUnresolvedError extends Error {
-    constructor(tick) {
-        super(`${tick} could not be resolved to a token name, so the send was stopped to protect gated content.`);
-        this.name = 'GatedSendTickUnresolvedError';
-        this.code = 'GATED_SEND_TICK_UNRESOLVED';
-        this.userFacing = true;
-        this.tick = tick;
-    }
-}
-
-export async function resolveGatedSendTick({ sdk, tick }) {
-    const value = String(tick || '').trim().toUpperCase();
-    if (!value.startsWith('^')) return value;
-    const requestedId = Number(value.slice(1));
-    if (!Number.isSafeInteger(requestedId) || requestedId <= 0) {
-        throw new GatedSendTickUnresolvedError(value);
-    }
-    let info;
-    try {
-        if (typeof sdk?.findToken === 'function') info = await sdk.findToken(value, { noRetry: true });
-        else if (typeof sdk?.getToken === 'function') {
-            const raw = await sdk.getToken(value, { noRetry: true });
-            info = Array.isArray(raw) ? raw[0]?.info : raw?.info;
-        }
-    } catch (_error) {
-        throw new GatedSendTickUnresolvedError(value);
-    }
-    const name = typeof info?.tick === 'string' ? info.tick.trim().toUpperCase() : '';
-    if (!name || Number(info?.tick_id) !== requestedId) throw new GatedSendTickUnresolvedError(value);
-    return name;
 }
 
 // Cache positive groups per (chainId, tick) to spare repeat explorer calls.
@@ -288,14 +255,14 @@ export async function splitGroupsByThreshold({ sdk, to, tick, amount, groups }) 
  * Real (non-demo) gated groups for a tick, positive-result TTL-memoized. Demo fixtures
  * are display-only and must never make a real send compose as gated.
  *
- * @param {{ sdk: object, chainId: string, tick: string, strict?: boolean }} params
+ * @param {{ sdk: object, chainId: string, tick: string }} params
  * @returns {Promise<any[]>}
  */
-export async function getGatedGroupsForSend({ sdk, chainId, tick, strict = false }) {
+export async function getGatedGroupsForSend({ sdk, chainId, tick }) {
     const cacheKey = `${chainId}|${String(tick).toUpperCase()}`;
     const hit = GROUPS_CACHE.get(cacheKey);
     if (hit && Date.now() - hit.at < GROUPS_TTL_MS) return hit.groups;
-    const all = await listGatedFiles({ sdk, tick, strict });
+    const all = await listGatedFiles({ sdk, tick });
     const groups = (Array.isArray(all) ? all : []).filter((g) => {
         const files = Array.isArray(g?.files) ? g.files : [];
         return files.length > 0 && !files.every((f) => isDemoGatedActionIndex(f.actionIndex));
@@ -364,12 +331,12 @@ export async function resolveGatedSendKeys({ sdk, vault, walletId, chainId, tick
  * no active real gated groups), otherwise the BATCH(SEND, MESSAGE)
  * rewrite plan. Throws typed errors on the two hard-block cases.
  *
- * Detection failure policy: for a named tick a dead explorer degrades
- * to a plain SEND, because the indexer rejects an unpaired named gated
- * send and blocking on every explorer hiccup would DoS ungated sends.
- * A caret alias fails closed instead (resolution or lookup errors
- * throw): the indexer only enforces the pairing for `^id` once its
- * caret pack-key activation is armed.
+ * Detection failure policy: listGatedFiles already swallows explorer
+ * errors into an empty list, so a dead explorer degrades to a plain
+ * SEND. That is the right direction: the indexer rejects an unpaired
+ * gated send (funds stay put, the action just fails to validate),
+ * whereas blocking every send whenever the explorer hiccups would DoS
+ * ungated sends too.
  *
  * @param {{
  *   sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry,
@@ -395,17 +362,16 @@ export async function prepareGatedSend({
     const tickUpper = String(tick).trim().toUpperCase();
     // Native-coin sends move coin, not a tick; nothing can gate them.
     if (coin && tickUpper === coin) return null;
-    const sdk = sdkRegistry.get(chainId);
-    const caretTick = tickUpper.startsWith('^');
-    if (!sdk?.gatedFile || !sdk?.messaging) {
-        if (caretTick) throw new GatedSendTickUnresolvedError(tickUpper);
-        return null;
-    }
-    const resolvedTick = await resolveGatedSendTick({ sdk, tick: tickUpper });
+    // TICK_ID (^id) sends bypass detection by design: gate_ticker rows
+    // carry the ticker name, so a ^id alias cannot match. The indexer
+    // still rejects an unpaired gated send, so the failure mode is a
+    // rejected action, never stranded funds. Send.jsx composes by name.
+    if (tickUpper.startsWith('^')) return null;
 
-    const allGroups = await getGatedGroupsForSend({
-        sdk, chainId, tick: resolvedTick, strict: caretTick,
-    });
+    const sdk = sdkRegistry.get(chainId);
+    if (!sdk?.gatedFile || !sdk?.messaging) return null;
+
+    const allGroups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
     if (allGroups.length === 0) return null;
 
     // PC-29 threshold lane: packs the destination's post-send balance
@@ -415,7 +381,7 @@ export async function prepareGatedSend({
     // below-threshold lane. A balance or amount it cannot read refuses
     // the send here, before any key is resolved.
     const { requiredGroups: groups, belowThresholdKeyHashes } = await splitGroupsByThreshold({
-        sdkRegistry, chainId, sdk, to, tick: resolvedTick, amount, groups: allGroups,
+        sdkRegistry, chainId, sdk, to, tick: tickUpper, amount, groups: allGroups,
         heights: _activationHeights,
     });
     if (groups.length === 0) return null;
@@ -428,12 +394,12 @@ export async function prepareGatedSend({
     }
 
     const { keysByHash, missingKeyHashes } = await resolveGatedSendKeys({
-        sdk, vault, walletId, chainId, tick: resolvedTick,
+        sdk, vault, walletId, chainId, tick: tickUpper,
         sourceAddress: source?.address, groups,
     });
     const attachedKeyHashes = Object.keys(keysByHash);
     if (attachedKeyHashes.length === 0) {
-        throw new GatedSendKeysMissingError(resolvedTick, missingKeyHashes);
+        throw new GatedSendKeysMissingError(tickUpper, missingKeyHashes);
     }
 
     if (!coin) throw new Error(`prepareGatedSend: cannot resolve protocol coin ticker for ${chainId}`);
@@ -443,7 +409,7 @@ export async function prepareGatedSend({
     // hostile-capable, so re-derive the address from the returned key
     // (same anti-substitution bind the MESSAGE flow enforces).
     const pubkey = await sdk.getPublicKey(to);
-    if (!pubkey) throw new GatedRecipientPubkeyMissingError(resolvedTick, to);
+    if (!pubkey) throw new GatedRecipientPubkeyMissingError(tickUpper, to);
     if (!recipientPubkeyMatchesAddress(sdk, pubkey, to, descriptor)) {
         throw new PubkeyMismatchError(to);
     }
@@ -472,14 +438,14 @@ export async function prepareGatedSend({
     const warnings = missingKeyHashes.length > 0
         ? [{
             code: 'GATED_SEND_PARTIAL_KEYS',
-            message: `Attaching ${attachedKeyHashes.length} of ${groups.length} unlock keys for ${resolvedTick}; `
+            message: `Attaching ${attachedKeyHashes.length} of ${groups.length} unlock keys for ${tickUpper}; `
                 + `the recipient will not be able to open the pack(s) ${missingKeyHashes.join(', ')}.`,
         }]
         : [];
     if (belowThresholdKeyHashes.length > 0) {
         warnings.push({
             code: 'GATED_SEND_BELOW_THRESHOLD',
-            message: `The recipient's ${resolvedTick} balance after this send stays below the unlock `
+            message: `The recipient's ${tickUpper} balance after this send stays below the unlock `
                 + `threshold for ${belowThresholdKeyHashes.length} pack(s); per the publisher's setting, `
                 + 'those keys are not attached.',
         });
@@ -497,7 +463,7 @@ export async function prepareGatedSend({
  * Pre-submit readiness report for the Send UI: is the tick gated, and
  * which pack keys does the wallet hold? Secret-free (key hashes and
  * booleans only) so it can cross the messaging boundary. `state`:
- *   'ungated'  no active gated groups (or native tick)
+ *   'ungated'  no active gated groups (or native/^id tick)
  *   'ready'    every pack key held
  *   'partial'  some keys held; send composes but the caller must warn
  *   'blocked'  no keys held; the flow guard would hard-block
@@ -528,24 +494,11 @@ export async function gatedSendReadiness({
     const descriptor = chainRegistry?.get?.(chainId);
     const coin = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : null;
     const tickUpper = String(tick || '').trim().toUpperCase();
-    if (!tickUpper || (coin && tickUpper === coin)) return ungated;
+    if (!tickUpper || tickUpper.startsWith('^') || (coin && tickUpper === coin)) return ungated;
     const sdk = sdkRegistry.get(chainId);
-    const caretTick = tickUpper.startsWith('^');
-    if (!sdk?.gatedFile) return caretTick ? { ...ungated, tickUnresolved: true } : ungated;
-    let resolvedTick;
-    try {
-        resolvedTick = await resolveGatedSendTick({ sdk, tick: tickUpper });
-    } catch (error) {
-        if (error instanceof GatedSendTickUnresolvedError) return { ...ungated, tickUnresolved: true };
-        throw error;
-    }
+    if (!sdk?.gatedFile) return ungated;
 
-    let allGroups;
-    try {
-        allGroups = await getGatedGroupsForSend({ sdk, chainId, tick: resolvedTick, strict: caretTick });
-    } catch (_error) {
-        return { ...ungated, tickUnresolved: true };
-    }
+    const allGroups = await getGatedGroupsForSend({ sdk, chainId, tick: tickUpper });
     if (allGroups.length === 0) return ungated;
 
     // Mirror the compose-time threshold lane when the caller supplied a
@@ -559,7 +512,7 @@ export async function gatedSendReadiness({
         // Throwing here would surface the Send form's key-recovery failure line.
         try {
             const split = await splitGroupsByThreshold({
-                sdkRegistry, chainId, sdk, to, tick: resolvedTick, amount, groups: allGroups,
+                sdkRegistry, chainId, sdk, to, tick: tickUpper, amount, groups: allGroups,
                 heights: _activationHeights,
             });
             groups = split.requiredGroups;
@@ -572,7 +525,7 @@ export async function gatedSendReadiness({
     }
 
     const { keysByHash } = await resolveGatedSendKeys({
-        sdk, vault, walletId, chainId, tick: resolvedTick, sourceAddress, groups,
+        sdk, vault, walletId, chainId, tick: tickUpper, sourceAddress, groups,
     });
     const rows = groups.map((g) => ({
         keyHash: String(g.keyHash).toLowerCase(),

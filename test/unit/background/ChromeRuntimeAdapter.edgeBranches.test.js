@@ -114,30 +114,6 @@ describe('ChromeRuntimeAdapter edge branches', () => {
         });
     });
 
-    it('keeps encoder classification private to trusted wallet surfaces', async () => {
-        const response = {
-            ok: false,
-            error: {
-                name: 'SDKEncoderError',
-                message: 'Encoder RPC error: rejected',
-                code: 'INTERNAL_ERROR',
-                rpcCode: -32010,
-                rpcReason: 'NODE_REJECTED',
-            },
-        };
-        const trustedRuntime = runtimeBus();
-        attachChromeRuntime({ handle: async () => response }, trustedRuntime);
-        await expect(trustedRuntime.emit({ type: 'wallet.list' })).resolves.toEqual(response);
-
-        const webRuntime = runtimeBus();
-        attachChromeRuntime({ handle: async () => response }, webRuntime);
-        const published = await webRuntime.emit({
-            type: 'bridge.getAccounts', request: { origin: WEB.origin },
-        }, WEB);
-        expect(published.error).not.toHaveProperty('rpcCode');
-        expect(published.error).not.toHaveProperty('rpcReason');
-    });
-
     it('adds the browser-supplied requester tab without mutating the request', async () => {
         const runtime = runtimeBus();
         const request = { origin: WEB.origin };

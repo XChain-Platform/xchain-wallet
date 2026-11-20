@@ -13,8 +13,6 @@
 // the fee the markets were created with. All come from the page's one page
 // of markets; nothing here reads. Kept pure.
 
-import { isRejectedFeedStatus } from '../../market/feedStatus.js';
-
 function num(v) {
     const n = Number(v || 0);
     return Number.isFinite(n) ? n : 0;
@@ -35,7 +33,6 @@ export const ORACLE_MARKET_STATUSES = ['open', 'resolving', 'resolved', 'refunde
 
 /** The list state of one market's feed_status, or null for one it cannot place. */
 export function marketStatusKind(feedStatus) {
-    if (isRejectedFeedStatus(feedStatus)) return null;
     if (feedStatus === 'open') return 'open';
     if (feedStatus === 'closed') return 'resolving';
     if (feedStatus === 'resolved' || feedStatus === 'resolved_void') return 'resolved';

@@ -41,29 +41,21 @@
 // subject differs ("The transaction service").
 import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors.js';
 import { encoderFieldError } from './encoderFieldErrors.js';
-import { isInternalRpcFailure } from './internalRpcFailure.js';
 
 // Suffix `annotateEncoderFeeRequirement` appends; `requiredFeeFromError` parses
 // it back. Only the AMOUNT rides along: the quote has no ticker field, and the
 // form that renders the sentence already knows which chain it is on.
 const FEE_REQUIREMENT_RE = /; protocol fee requires ([0-9]+(?:\.[0-9]+)?) in native coin$/;
 
-// Match the encoder's own wording for coin-selection service refusals, which it
+// Match the encoder's own wording for NO_UTXOS / UTXO_TRACKER_STALE, which it
 // forwards as an ENCODER_RPC_ERROR carrying the code in `data.reason` (the SDK
-// pre-check wording is above).
+// pre-check wording is above). Stale patterns miss HALTED/NOT_READY and SYNC_MISSING.
 const ENCODER_REASON_WORDING = [
     [/no utxos were provided and no utxos found on the blockchain/i, 'NO_UTXOS'],
     [/utxo-tracker view is stale\b/i, 'UTXO_TRACKER_STALE'],
     [/utxo-tracker did not assert that it is synced\b/i, 'UTXO_TRACKER_STALE'],
-    [/utxo-tracker is halted\b/i, 'UTXO_TRACKER_HALTED'],
-    [/utxo-tracker has not reconverged its mempool yet\b/i, 'UTXO_TRACKER_NOT_READY'],
-    [/utxo-tracker did not report its sync state\b/i, 'UTXO_TRACKER_SYNC_MISSING'],
-    [/utxo-tracker is unreachable\b/i, 'UTXO_TRACKER_UNREACHABLE'],
-    [/UTXO_TRACKER_PROFILE=remote requires UTXO_TRACKER_URL/i, 'UTXO_TRACKER_NOT_CONFIGURED'],
-    [/\butxo[- _]?tracker\b/i, 'UTXO_TRACKER_ERROR'],
 ];
 const LIFTED_RPC_REASONS = new Set(ENCODER_REASON_WORDING.map(([, code]) => code));
-const TRACKER_ERROR_CODES = new Set([...LIFTED_RPC_REASONS].filter((code) => code.startsWith('UTXO_TRACKER_')));
 
 // A code recovered from the developer-facing message, for the boundary-crossed
 // case where `err.code` is gone. Ordered most-specific first; ENCODER_HTTP_*
@@ -97,6 +89,7 @@ const UNKNOWN_ENCODER_FAILURE = `This transaction could not be built. ${NOTHING_
 const TEMPORARY_ENCODER_FAILURE = 'The transaction service could not complete this request. Nothing was signed or sent, '
     + 'so nothing was spent. Try again in a moment.';
 const UNINFORMATIVE_RPC_REASON = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal))\.?$/i;
+const INTERNAL_RPC_FAILURE = /^internal (?:server )?error\b/i;
 
 /**
  * The SDK encoder error code, however the error reached us.
@@ -112,7 +105,7 @@ export function encoderErrorCode(err) {
     // A raw axios/network error also has a `code` (ECONNABORTED, ENOTFOUND);
     // only codes the SDK actually mints count, so those fall through to the
     // message match and, failing that, to null.
-    if (code && (WALLET_BUG_CODES.has(code) || code === 'NO_UTXOS' || TRACKER_ERROR_CODES.has(code)
+    if (code && (WALLET_BUG_CODES.has(code) || code === 'NO_UTXOS' || code === 'UTXO_TRACKER_STALE'
         || code.startsWith('ENCODER_'))) {
         return code;
     }
@@ -237,6 +230,18 @@ function encoderServiceMessage(code, err) {
     return TEMPORARY_ENCODER_FAILURE;
 }
 
+/** A JSON-RPC service failure, not a protocol verdict the person can act on. */
+function isInternalRpcFailure(err, reason) {
+    if (INTERNAL_RPC_FAILURE.test(String(reason || ''))) return true;
+    const e = /** @type {any} */ (err || {});
+    const rpcError = e.details?.rpcError || e.rpcError;
+    const rpcCode = Number(rpcError?.code);
+    if (rpcCode === -32603) return true;
+    if (!Number.isInteger(rpcCode) || rpcCode < -32099 || rpcCode > -32000) return false;
+    const protocolReason = rpcError?.data?.reason || e.details?.context?.reason || e.data?.reason;
+    return !String(protocolReason || '').trim();
+}
+
 /**
  * The sentence to show a user when an SDK encoder call failed.
  *
@@ -274,12 +279,6 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
         return 'The service that tracks your spendable balance is still catching up; this delay is on our '
             + 'side, not a problem with your wallet or your address; nothing was signed or sent, and nothing was spent. '
             + 'Wait a moment and try again.';
-    }
-
-    if (TRACKER_ERROR_CODES.has(code)) {
-        return 'The service that tracks your spendable balance is unavailable right now. This is on our side, '
-            + 'not a problem with your wallet or your address. Nothing was signed or sent, and nothing was spent. '
-            + 'Try again later.';
     }
 
     if (WALLET_BUG_CODES.has(code)) {

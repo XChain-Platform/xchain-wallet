@@ -110,9 +110,6 @@ export async function verifyReceiveAddress({
     if (!isDeviceAddressSource(record.source)) {
         throw new NotHardwareAddressError(record.source);
     }
-    if (!record.signerId || signer.id !== record.signerId || signer.kind !== record.source) {
-        throw new Error('verifyReceiveAddress: signer does not own this address');
-    }
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`verifyReceiveAddress: unknown chain "${chainId}"`);

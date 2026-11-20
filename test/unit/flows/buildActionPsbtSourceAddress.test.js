@@ -33,7 +33,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { buildActionPsbt } from '../../../packages/core/src/flows/buildActionPsbt.js';
-import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const SOURCE = {
     address: 'bcrt1qexampleexampleexampleexampleexampleex',
@@ -97,69 +96,5 @@ describe('the watcher build names its spender', () => {
         const chainRegistry = { get: () => ({ coin: 'bitcoin', networkKind: 'regtest' }) };
         const { calls } = await build({ chainRegistry });
         expect(calls[0].feePerKb).toBe(6_000);
-    });
-});
-
-describe('the watcher build enforces chain action gates', () => {
-    function gatedHarness(action, version) {
-        const createTx = vi.fn(async () => ({ psbt: '70736274ff', encoding: 'opreturn' }));
-        const sdk = {
-            actions: { createAction: vi.fn(() => ({ actionString: `${action}|${version}|x`, action, version })) },
-            encoder: { createTx },
-        };
-        return { sdkRegistry: { get: () => sdk }, createTx };
-    }
-
-    it('refuses a Bitcoin-only stake version on Litecoin before encoding', async () => {
-        const h = gatedHarness('STAKE', 1);
-        await expect(buildActionPsbt({
-            sdkRegistry: h.sdkRegistry,
-            chainRegistry: defaultRegistry(),
-            chainId: 'litecoin-regtest',
-            from: SOURCE,
-            actionData: { action: 'STAKE', params: { VERSION: '1' } },
-        })).rejects.toThrow(/accepted on Bitcoin only/);
-        expect(h.createTx).not.toHaveBeenCalled();
-    });
-
-    it('refuses an unarmed mainnet bridge before encoding', async () => {
-        const h = gatedHarness('XBRIDGE', 3);
-        await expect(buildActionPsbt({
-            sdkRegistry: h.sdkRegistry,
-            chainRegistry: defaultRegistry(),
-            chainId: 'bitcoin-mainnet',
-            from: SOURCE,
-            actionData: { action: 'XBRIDGE', params: { VERSION: '3' } },
-        })).rejects.toThrow(/not active on this network yet/);
-        expect(h.createTx).not.toHaveBeenCalled();
-    });
-
-    it('builds a bridge on a live chain and holds a testnet one until its armed height is indexed', async () => {
-        const live = gatedHarness('XBRIDGE', 3);
-        await buildActionPsbt({
-            sdkRegistry: live.sdkRegistry,
-            chainRegistry: defaultRegistry(),
-            chainId: 'bitcoin-regtest',
-            from: SOURCE,
-            actionData: { action: 'XBRIDGE', params: { VERSION: '3' } },
-        });
-        expect(live.createTx).toHaveBeenCalledOnce();
-
-        for (const [tip, built] of [[154566, false], [154567, true]]) {
-            const h = gatedHarness('XBRIDGE', 3);
-            const sdk = h.sdkRegistry.get();
-            sdk.explorer = { coin: 'TBTC' };
-            sdk.getStatus = async () => ({ last_block: { TBTC: tip } });
-            const run = buildActionPsbt({
-                sdkRegistry: h.sdkRegistry,
-                chainRegistry: defaultRegistry(),
-                chainId: 'bitcoin-testnet',
-                from: SOURCE,
-                actionData: { action: 'XBRIDGE', params: { VERSION: '3' } },
-            });
-            if (built) await run;
-            else await expect(run).rejects.toThrow(/not active on this network yet/);
-            expect(h.createTx).toHaveBeenCalledTimes(built ? 1 : 0);
-        }
     });
 });

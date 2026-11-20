@@ -53,8 +53,6 @@ import { compiledPayloadByteLen, envelopeEncoderOpts, rawDataByteLen } from './e
 import { capRbfToDescriptor } from './rbfCap.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 import { withDefaultFeePerKb } from './feeEstimate.js';
-import { indexerWatermark } from './balances.js';
-import { assertXbridgeLive } from './protocolActivations.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -188,15 +186,6 @@ export async function composeForConfirm({
 
     // 1. Action string (pure formatting, no network). None for a bare payment.
     const createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
-    if (createResult) {
-        await assertXbridgeLive({
-            chainId,
-            action: createResult.action ?? actionData.action,
-            actionString: createResult.actionString,
-            getBlockHeight: async () => (await indexerWatermark({ sdkRegistry, chainId })).watermark,
-            where: 'composeForConfirm',
-        });
-    }
 
     // 1b. A payload over the legacy carrier asks for the Taproot envelope when
     // this chain and signer can carry one, whichever action it is.

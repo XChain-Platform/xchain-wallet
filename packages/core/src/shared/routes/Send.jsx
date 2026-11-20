@@ -69,7 +69,6 @@ import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/demo.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/home.js';
-import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/transactionStatus.js';
 import '../../i18n/locales/en/ui.js';
@@ -2788,8 +2787,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // unavailable; then its amount is unknown, not zero.
     const sourceHalfUnavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
         && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
-    const pendingUnknown = isNativeSend
-        && previewBalances.sdkShape?.native?.pendingUnknown === true;
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || sourceHalfUnavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
@@ -4823,11 +4820,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             />
             {maxNote ? (
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
-            ) : null}
-            {pendingUnknown ? (
-                <p className={styles.balanceHint} data-testid="send-pending-unknown" role="status">
-                    {t('balances.pendingUnknown')}
-                </p>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already put the same sentence in the error map,

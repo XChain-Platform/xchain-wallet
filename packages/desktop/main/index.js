@@ -263,7 +263,6 @@ function kickChainRegistrySync() {
 // reports. A bare (non-`persist:`) partition name is in-memory only:
 // nothing the hosted script does here survives a relaunch.
 let trezorConnectSession = null;
-let updaterSession = null;
 function getTrezorConnectSession() {
     if (!trezorConnectSession) {
         trezorConnectSession = session.fromPartition('trezor-connect-isolated');
@@ -564,14 +563,9 @@ function buildRuntime() {
                 settings,
                 sdkRegistry,
                 session: session.defaultSession,
-                extraSessions: () => [trezorConnectSession, updaterSession].filter(Boolean),
+                extraSessions: () => (trezorConnectSession ? [trezorConnectSession] : []),
                 log: (m) => console.info(m),
             });
-            egressPolicyKnown = true;
-            if (updateCheckPending) {
-                updateCheckPending = false;
-                void runMainTask(requestUpdateCheck, 'deferred launch update check');
-            }
             // Routing is now in force, so the first hub request may leave.
             kickChainRegistrySync();
         },
@@ -782,9 +776,6 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
-let egressPolicyKnown = false;
-let updateCheckPending = false;
-const UPDATE_EGRESS_REASON = 'desktop: unlock the wallet to check for updates';
 // Sends that sign and then broadcast or persist; reads are never counted.
 let activeSendOperations = 0;
 let activeUpdateDownloads = 0;
@@ -795,10 +786,6 @@ const quitDeferral = createQuitDeferral({
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
-    if (!egressPolicyKnown) {
-        if (!visible) updateCheckPending = true;
-        return Promise.resolve(false);
-    }
     if (visible) updateCheckVisible = true;
     if (updaterCheckInFlight) return updaterCheckInFlight;
     updaterCheckInFlight = Promise.resolve(runUpdaterCheck())
@@ -1151,14 +1138,6 @@ void runMainTask(async () => {
             reportMainFailure('desktop auto-unlock', err);
         }
     }
-    if (!runtime.vault) {
-        try {
-            const meta = await runtime.metaBackend.load();
-            if (!meta?.kdfParams) egressPolicyKnown = true;
-        } catch {
-            // A damaged or unreadable wallet stays locked until its policy is known.
-        }
-    }
 
     powerMonitor.on('lock-screen', () => { void runSystemAutoLock('screen lock'); });
     powerMonitor.on('suspend', () => { void runSystemAutoLock('system suspend'); });
@@ -1177,8 +1156,8 @@ void runMainTask(async () => {
 
     // electron-updater is active only in packaged direct-download builds.
     // Events relay to every open renderer so every window can surface an
-    // update offer. The launch check waits for a known egress policy but may
-    // still start before the first window, so its latest event is retained.
+    // update offer. The launch check starts before the first window exists,
+    // so the latest event is retained for a renderer that subscribes later.
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
     let downloadAndInstall = null;
@@ -1189,7 +1168,6 @@ void runMainTask(async () => {
             downloadUpdate,
             restartAndInstall: restart,
             isActive,
-            netSession,
         } = await attachUpdater({
             isPackaged: app.isPackaged,
             resourcesPath: process.resourcesPath,
@@ -1203,8 +1181,6 @@ void runMainTask(async () => {
         downloadAndInstall = downloadUpdate;
         restartAndInstall = restart;
         runUpdaterCheck = isActive ? checkForUpdates : null;
-        updaterSession = netSession ?? null;
-        if (updaterSession) await applyProxyToSession(updaterSession);
 
         // Kick a quiet check on launch. The menu path marks its events so
         // the renderer can show progress and an explicit up-to-date result.
@@ -1244,12 +1220,10 @@ void runMainTask(async () => {
         }
         try {
             if (action === 'check') {
-                const started = await requestUpdateCheck({ visible: true });
-                if (started === false) return { ok: false, reason: UPDATE_EGRESS_REASON };
+                await requestUpdateCheck({ visible: true });
                 return { ok: true };
             }
             if (action === 'restart') return await restartAndInstall();
-            if (!egressPolicyKnown) return { ok: false, reason: UPDATE_EGRESS_REASON };
             // Counted so a quit during the fetch or signature check waits
             // for the verdict instead of cutting it off.
             activeUpdateDownloads += 1;

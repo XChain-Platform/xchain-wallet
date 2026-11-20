@@ -22,8 +22,8 @@
 //   2. Node's global `fetch` (undici) - price lookups, token metadata,
 //      chain-registry sync. undici ignores http.Agent entirely and takes
 //      a custom `connect` instead.
-//   3. Chromium's own stack, for renderer fetches and explicit partition
-//      sessions such as electron-updater - `session.setProxy` on each one.
+//   3. Chromium's own stack, for anything the renderer fetches and for
+//      electron-updater - `session.setProxy`.
 //
 // TURNING IT OFF PUTS EVERYTHING BACK. Each path has an explicit
 // restore, because a half-reverted proxy is a wallet that quietly stops
@@ -171,7 +171,7 @@ async function applyNow({ settings, sdkRegistry, session, extraSessions = () => 
         if (!originalDispatcher) originalDispatcher = getGlobalDispatcher();
         setGlobalDispatcher(new UndiciAgent({ connect }));
 
-        // 3. Chromium default session; extraSessions covers isolated partitions.
+        // 3. Chromium (renderer + electron-updater)
         if (session?.setProxy) {
             await session.setProxy({
                 proxyRules: `socks5://${proxy.host}:${proxy.port}`,

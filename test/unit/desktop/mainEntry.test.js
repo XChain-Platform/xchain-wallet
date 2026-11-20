@@ -145,10 +145,7 @@ const permissions = vi.hoisted(() => ({
 }));
 
 const runtime = vi.hoisted(() => ({
-    instance: {
-        sessionBackend: { clear: vi.fn(async () => {}) },
-        metaBackend: { load: vi.fn(async () => null) },
-    },
+    instance: { sessionBackend: { clear: vi.fn(async () => {}) } },
     createRuntime: vi.fn(),
     enforceIdleAutoLock: vi.fn(),
     enforceLaunchAutoLock: vi.fn(),
@@ -167,10 +164,6 @@ const updater = vi.hoisted(() => ({
     downloadAndInstall: vi.fn(),
     restartAndInstall: vi.fn(),
 }));
-const torRouting = vi.hoisted(() => ({
-    applyTorRouting: vi.fn(async () => {}),
-    applyProxyToSession: vi.fn(async () => {}),
-}));
 
 // Pass-through fs whose synchronous write the bounds tests can watch and fail.
 const fsControl = vi.hoisted(() => ({ failSyncWrite: false, writeFileSync: null }));
@@ -186,10 +179,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 vi.mock('electron', () => electron);
 vi.mock('@xchain-wallet/core', () => ({
-    registry: {
-        defaultRegistry: vi.fn(() => ({})),
-        syncChainRegistryFromHub: vi.fn(async () => ({ ok: true })),
-    },
+    registry: { defaultRegistry: vi.fn(() => ({})) },
     sdk: {
         adaptXChainSDK: vi.fn(() => vi.fn()),
         SDKRegistry: class SDKRegistry {},
@@ -229,7 +219,7 @@ vi.mock('../../../packages/desktop/main/updater.js', () => ({
     attachUpdater: updater.attachUpdater,
     desktopInstallChannel: updater.desktopInstallChannel,
 }));
-vi.mock('../../../packages/desktop/main/torRouting.js', () => torRouting);
+vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn(), applyProxyToSession: vi.fn(async () => {}) }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -449,52 +439,6 @@ describe('desktop main entry point', () => {
         expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] updater wiring failed');
         expect(error.mock.calls.flat().join(' ')).not.toContain('private updater path');
         error.mockRestore();
-    });
-
-    it('proxies the updater session before a no-wallet launch check', async () => {
-        const netSession = { setProxy: vi.fn() };
-        updater.attachUpdater.mockResolvedValueOnce({
-            checkForUpdates: updater.checkForUpdates,
-            downloadUpdate: updater.downloadAndInstall,
-            restartAndInstall: updater.restartAndInstall,
-            isActive: true,
-            netSession,
-        });
-        electron.app.whenReady.mockResolvedValueOnce();
-
-        await import('../../../packages/desktop/main/index.js');
-        await vi.waitFor(() => expect(updater.checkForUpdates).toHaveBeenCalledOnce());
-
-        expect(torRouting.applyProxyToSession).toHaveBeenCalledExactlyOnceWith(netSession);
-        expect(torRouting.applyProxyToSession.mock.invocationCallOrder[0])
-            .toBeLessThan(updater.checkForUpdates.mock.invocationCallOrder[0]);
-    });
-
-    it('holds update traffic on a locked wallet until routing succeeds', async () => {
-        const netSession = { setProxy: vi.fn() };
-        runtime.enforceLaunchAutoLock.mockResolvedValueOnce({ locked: true });
-        runtime.instance.metaBackend.load.mockResolvedValueOnce({ kdfParams: {} });
-        updater.attachUpdater.mockResolvedValueOnce({
-            checkForUpdates: updater.checkForUpdates,
-            downloadUpdate: updater.downloadAndInstall,
-            restartAndInstall: updater.restartAndInstall,
-            isActive: true,
-            netSession,
-        });
-        electron.app.whenReady.mockResolvedValueOnce();
-        await import('../../../packages/desktop/main/index.js');
-        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:updater-install')).toBe(true));
-
-        expect(updater.checkForUpdates).not.toHaveBeenCalled();
-        const event = { senderFrame: { url: appIndex } };
-        await expect(electron.ipcHandlers.get('xchain:updater-install')(event, 'check')).resolves.toEqual({
-            ok: false,
-            reason: 'desktop: unlock the wallet to check for updates',
-        });
-        const deps = runtime.createRuntime.mock.calls[0][0];
-        await deps.onPrivacySettingsChanged({}, { sdkRegistry: {} });
-        await vi.waitFor(() => expect(updater.checkForUpdates).toHaveBeenCalledOnce());
-        expect(torRouting.applyTorRouting.mock.calls[0][0].extraSessions()).toContain(netSession);
     });
 
     it('returns a committed message result when a sibling closes during notification', async () => {

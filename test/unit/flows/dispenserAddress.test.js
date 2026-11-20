@@ -181,9 +181,7 @@ describe('dispenserAddress (§16)', () => {
             role: 'receive',
         })];
         const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hwAddrs });
-        // The account is device-owned, so only a device signer may extend it.
-        const owner = { ...signer, id: 'trezor-test', kind: 'trezor' };
-        const rec = await dispenserAddress(base(vault, owner));
+        const rec = await dispenserAddress(base(vault, signer));
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
     });
 

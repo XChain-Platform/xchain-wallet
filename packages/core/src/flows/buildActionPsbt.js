@@ -40,9 +40,6 @@ import { capRbfToDescriptor } from './rbfCap.js';
 import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 import { withDefaultFeePerKb } from './feeEstimate.js';
-import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
-import { indexerWatermark } from './balances.js';
-import { assertXbridgeLive } from './protocolActivations.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
@@ -132,26 +129,6 @@ export async function buildActionPsbt(opts) {
     }
 
     const createResult = sdk.actions.createAction(opts.actionData);
-    const actionName = String(createResult?.action ?? opts.actionData.action).toUpperCase();
-    if (CHAIN_GATED_ACTIONS.includes(actionName)) {
-        const version = Number(createResult?.version);
-        if (!Number.isInteger(version)) {
-            throw new Error(`buildActionPsbt: ${actionName} version is unreadable; refusing to build`);
-        }
-        // Every watcher-built action reaches this point before the encoder can
-        // produce a fee-bearing PSBT.
-        assertActionAllowedOnChain(opts.chainRegistry, opts.chainId, actionName, version, 'buildActionPsbt');
-    }
-    await assertXbridgeLive({
-        chainId: opts.chainId,
-        action: actionName,
-        actionString: createResult?.actionString,
-        getBlockHeight: async () => (await indexerWatermark({
-            sdkRegistry: opts.sdkRegistry,
-            chainId: opts.chainId,
-        })).watermark,
-        where: 'buildActionPsbt',
-    });
 
     // Native-coin fee pre-flight: size the FEE_DESTINATION output and refuse a doomed
     // (unpriceable) native-fee tx. No-op unless encoderOpts.payFeeInNativeCoin is set.

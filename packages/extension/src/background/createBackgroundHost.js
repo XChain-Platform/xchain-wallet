@@ -3378,34 +3378,22 @@ export function createBackgroundHost(deps) {
 
     // §17.6: confirm a persisted hardware receive address on the device's
     // trusted screen and cross-check it against what the wallet holds. The
-    // Receive screen's "Verify on your device" action resolves the paired
-    // hardware signer from the stored address, which is authoritative.
-    host.register('receive.verifyAddress', async (req, { vault, chainRegistry }) => {
-        const walletId = req?.walletId;
-        const addressId = req?.addressId;
-        if (typeof walletId !== 'string' || walletId.length === 0) {
-            throw new Error('receive.verifyAddress: walletId is required');
+    // Receive screen's "Verify on your device" action calls this; requires
+    // the paired HW signer (RemoteSigner) named by req.signerId.
+    host.register('receive.verifyAddress', async (req, { vault, chainRegistry, signerPool }) => {
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId: req?.walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        if (!signer) {
+            throw new Error('receive.verifyAddress: a connected hardware wallet is required');
         }
-        if (typeof addressId !== 'string' || addressId.length === 0) {
-            throw new Error('receive.verifyAddress: addressId is required');
-        }
-        const address = await vault.addresses.get(addressId);
-        if (!address) throw new Error(`receive.verifyAddress: address "${addressId}" not found`);
-        await assertAddressInWallet(vault, address, walletId);
-        const descriptor = await resolveSigner({ vault, address });
-        if (!schemas.isDeviceSignerKind(descriptor.kind)) {
-            throw new Error('receive.verifyAddress: address is not a hardware address');
-        }
-        if (typeof req?.signerId === 'string' && req.signerId.length > 0
-            && req.signerId !== descriptor.signerRecord.id) {
-            throw new Error('receive.verifyAddress: signerId does not match the device that owns this address');
-        }
-        const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
-        const signer = buildRemoteSigner(descriptor, transport);
         return verifyReceiveAddress({
             vault,
             chainId: req?.chainId,
-            addressId,
+            addressId: req?.addressId,
             signer,
             chainRegistry,
         });
@@ -4611,32 +4599,21 @@ export function createBackgroundHost(deps) {
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
             : (broadcast?.txid ?? broadcast?.tx_hash ?? null);
-        const queueAmbiguousReplacement = async (error) => {
-            await settleOrJournalPatch(vault, walletId, pending.id, { status: 'queued', error });
-            await enqueueSignedBroadcast(walletId, {
-                chainId,
-                signedTxHex: signed.txHex,
-                summary: pending.actionSummary,
-                txid: signed.txid,
-                pendingTxId: pending.id,
-                rbfReplacesPendingTxId: conflictRecord.id,
-                resumedClaim: true,
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
+            await settleOrJournalPatch(vault, walletId, pending.id, {
+                status: 'failed',
+                error: 'SDK did not return a txid',
             });
             await flushOwedSettlements(vault);
-        };
-        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
-            await queueAmbiguousReplacement('SDK did not return a txid');
-            const err = new Error('tx.replace: SDK did not return a txid');
-            err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
-            throw err;
+            throw new Error('tx.replace: SDK did not return a txid');
         }
         if (lowerHash(replacementTxHash) !== lowerHash(signed.txid)) {
-            await queueAmbiguousReplacement(
-                `broadcast txid did not match signed transaction (${replacementTxHash})`,
-            );
-            const err = new Error('tx.replace: broadcast txid did not match signed transaction');
-            err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
-            throw err;
+            await settleOrJournalPatch(vault, walletId, pending.id, {
+                status: 'failed',
+                error: 'broadcast txid did not match signed transaction',
+            });
+            await flushOwedSettlements(vault);
+            throw new Error('tx.replace: broadcast txid did not match signed transaction');
         }
 
         const broadcastedAt = new Date().toISOString();

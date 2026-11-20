@@ -25,10 +25,11 @@ import { Checkbox, Spinner } from '@xchain-wallet/core/ui';
 // this component is rendered by the extension approval root, so it pulls in
 // nothing but the key function.
 import {
+    consensusRefusalMessage,
     isHardPreflightFinding,
     preflightFindingKey,
 } from '../utils/preflightFindingKey.js';
-import { errorText, unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
+import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 import { isNetworkApprovalFinding, networkApprovalIsPartial } from '../utils/preflightCheckState.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
@@ -393,12 +394,9 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge, b
                         duplicate React key is a dropped row. The override
                         identity deliberately does not: see
                         utils/preflightFindingKey.js. */}
-                    {errors.map((f, i) => {
-                        const { headline, detail } = errorText(f);
-                        return (
+                    {errors.map((f, i) => (
                         <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
-                            <span className={styles.findingMsg}>{headline}</span>
-                            {detail ? <span className={styles.noticeDetail}>{detail}</span> : null}
+                            <span className={styles.findingMsg}>{consensusRefusalMessage(f) || f.message}</span>
                             {preflightFindingHasOverride(f) ? (
                                 <Checkbox
                                     className={styles.ack}
@@ -410,8 +408,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge, b
                                 />
                             ) : null}
                         </li>
-                        );
-                    })}
+                    ))}
                 </ul>
             ) : null}
 

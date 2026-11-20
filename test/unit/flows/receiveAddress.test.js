@@ -135,8 +135,8 @@ describe('receiveAddress (§29.7)', () => {
 
     it('hardware parity: continues past existing trezor/ledger addresses instead of colliding at 0', async () => {
         // The account's first three external addresses came from a Trezor
-        // (source 'trezor'). A subsequent generate from a device must
-        // continue at index 3, not re-derive index 0.
+        // (source 'trezor'). A subsequent generate, even via software,
+        // must continue at index 3, not re-derive index 0.
         const hwAddrs = [0, 1, 2].map((i) => createAddress({
             accountId: 'acct-a',
             chain: 'bitcoin',

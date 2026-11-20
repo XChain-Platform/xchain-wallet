@@ -112,39 +112,6 @@ describe('previewCoSignRequest', () => {
         expect(preview.needsConfirmation).toBe(true);
     });
 
-    it('reports an unreadable spending window as a policy refusal', async () => {
-        await vault.coSignerAccounts.put({ ...account, window: { version: 999, entries: [] } });
-        const { sdkRegistry, calls } = mkSdkRegistry({
-            decoded: { ok: true, action: 'SEND', params: { TICK: 'XCHAIN' } },
-            verdict: { ok: true, violation: null, evaluation: {} },
-        });
-        const preview = await previewCoSignRequest({
-            vault, sdkRegistry, accountId: account.id, request: { psbt: 'aabb' },
-        });
-        expect(preview).toMatchObject({
-            decodeOk: true, policyOk: false, policyReason: 'WINDOW_STATE_CORRUPT',
-            clockWarnings: [],
-        });
-        expect(calls.policy).toHaveLength(0);
-    });
-
-    it('keeps allowed-token refusal precedence when the window is unreadable', async () => {
-        await vault.coSignerAccounts.put({
-            ...account,
-            policy: { ...account.policy, allowedTicks: ['XCHAIN'] },
-            window: { version: 999, entries: [] },
-        });
-        const { sdkRegistry, calls } = mkSdkRegistry({
-            decoded: { ok: true, action: 'SEND', params: { TICK: 'PEPECASH' } },
-            verdict: { ok: true, violation: null, evaluation: {} },
-        });
-        const preview = await previewCoSignRequest({
-            vault, sdkRegistry, accountId: account.id, request: { psbt: 'aabb' },
-        });
-        expect(preview.policyReason).toBe('POLICY_TOKEN_NOT_ALLOWED');
-        expect(calls.policy).toHaveLength(0);
-    });
-
     it('throws for an unknown account and bad input', async () => {
         const { sdkRegistry } = mkSdkRegistry({ decoded: { ok: true, action: 'SEND', params: {} }, verdict: { ok: true, evaluation: {} } });
         await expect(previewCoSignRequest({ vault, sdkRegistry, accountId: 'nope', request: { psbt: 'aa' } }))

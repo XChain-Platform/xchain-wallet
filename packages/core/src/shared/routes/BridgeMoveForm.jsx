@@ -63,7 +63,6 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
-import { xbridgeScheduledHeight } from '../../flows/protocolActivations.js';
 import {
     GAS_TICK,
     bridgeLegFor,
@@ -433,9 +432,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const memoError = memo.includes('|') || memo.includes(';')
         ? 'Memo cannot contain "|" or ";".'
         : memoLengthError(memo.trim());
-    const activationError = sourceChainId && xbridgeScheduledHeight(sourceChainId, leg.version) === null
-        ? 'Moving tokens across networks is not live on this network yet.'
-        : null;
 
     const feeWarning = useMemo(
         () => belowFeeWarning({ amount, fee: feeQuote, tick: shown.label }),
@@ -443,7 +439,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     );
 
     const blockingError = leg.reason
-        || activationError
         || sourceAddressError
         || destinationAddressError
         || tokenError
@@ -537,7 +532,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 ? 'No usable source address is available. Choose another source address.' : null),
             'form:dest-network': !destChainId
                 ? 'Pick a destination network for this bridge move.' : destinationError,
-            'bridge-token': tokenError || leg.reason || activationError,
+            'bridge-token': tokenError || leg.reason,
             'bridge-dest-address': !destAddress
                 ? 'Enter a destination address to receive the transfer.'
                 : destinationAddressError,

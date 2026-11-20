@@ -218,19 +218,6 @@ describe('every code the handlers emit is translated to a published one', () => 
 });
 
 describe('the transport carries the structured error fields', () => {
-    it('preserves encoder RPC classification fields', () => {
-        const source = Object.assign(new Error('Encoder RPC error: unavailable'), {
-            name: 'SDKEncoderError',
-            code: 'ENCODER_RPC_ERROR',
-            details: { rpcError: { code: -32010, data: { reason: 'NODE_REJECTED' } } },
-        });
-        const { error } = serializeError(source);
-        expect(error).toMatchObject({ rpcCode: -32010, rpcReason: 'NODE_REJECTED' });
-        expect(hydrateEnvelopeError(error)).toMatchObject({
-            rpcCode: -32010, rpcReason: 'NODE_REJECTED',
-        });
-    });
-
     it('serializeError keeps code and the THROTTLED hints', () => {
         const err = Object.assign(new Error('slow down'), {
             name: 'BridgeError', code: 'THROTTLED', retryAfterMs: 1500, burst: 5, windowMs: 60000,
