@@ -43,6 +43,20 @@ electron-builder reads asset files from this directory.
   finds nothing, which is exactly how this went unnoticed. Deleting one
   now fails the build.
 
+- `icons/` - **Linux hicolor sizes, committed for v0.343.1.**
+  `16x16.png` through `512x512.png` (16, 32, 48, 64, 128, 256, 512), and
+  this directory, not `icon.png`, is `linux.icon`. Given the single
+  1024 master, electron-builder installs `hicolor/1024x1024` alone, and
+  GTK's icon lookup at the sizes menus and docks ask for (48 to 256)
+  finds nothing: v0.343.0 drew a generic icon on Linux for that reason.
+  The files must be named `NxN.png`, which is how electron-builder reads
+  the size of each.
+
+  Scaled from `icon.png` with `sips -z N N icon.png --out icons/NxN.png`,
+  which keeps the alpha channel. Unlike the `.ico`'s, the 16 and 32
+  entries are downscaled rather than rendered from the vector; Linux
+  launchers and docks ask for 48 and up, so they are rarely shown.
+
 - `appx/` - **Microsoft Store tile assets, committed 2026-08-01
   (§15).** Four PNGs, and their absence is the same silent defect
   as the missing app icon above: `AppxTarget` substitutes its own

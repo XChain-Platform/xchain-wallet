@@ -22,5 +22,17 @@
         "ruled_by": "operator (J-Dog)",
         "ruled_at": "2026-11-18",
         "note": "verdict only classifies the other jobs and is waived because it reports the waived e2e-regtest result"
+    },
+    {
+        "version": "0.343.1",
+        "workflow": "ci.yml",
+        "jobs": [
+            "e2e-regtest (rolling shard)",
+            "verdict"
+        ],
+        "reason": "the rolling regtest shard on the release head stalled for over an hour opening its tunnel to the CI regtest venue (the venue host was under heavy load), and 0.343.1 is a hotfix of the v0.343.0 tag, so its regtest specs are the same stale copies the 0.343.0 waiver covers; no release-code bug is known; every other ci.yml job passed on the release head and must pass on the release merge commit",
+        "ruled_by": "operator (J-Dog)",
+        "ruled_at": "2026-11-19",
+        "note": "verdict only classifies the other jobs and is waived because it reports the waived e2e-regtest result"
     }
 ]

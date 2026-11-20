@@ -885,6 +885,37 @@ const config = {
         provisioningProfile: process.env.MAS_PROVISIONING_PROFILE || null,
         // The store lists by category; this mirrors mac.category.
         category: 'public.app-category.finance',
+        // App Store Connect asks every upload whether the app uses
+        // non-exempt encryption; declaring it in Info.plist answers it once
+        // per build instead of in a dialog per version. The same answer the
+        // iOS app gives in packages/mobile/ios/App/App/Info.plist: the
+        // wallet uses only standard, exempt cryptography. deepAssign merges
+        // this into mac.extendInfo, so the camera text stays.
+        extendInfo: {
+            ITSAppUsesNonExemptEncryption: false,
+        },
+        // NO UNIVERSAL ASAR MERGE. With the merge on, the v0.343.0 store
+        // build hung inside @electron/universal and electron-builder exited
+        // 0 with no .pkg (MAS-RESULT.txt, builds 2 and 3): the security
+        // override `glob: ^14.0.6` in pnpm-workspace.yaml gives
+        // @electron/asar 3.4.1 glob 14, whose API asar's promisify(glob)
+        // never settles on. The override is a security floor and stays.
+        // Off is sound because the store build carries no native module
+        // (files below), so both arch halves hold the same app.asar, and
+        // @electron/universal refuses the build, loudly, if they ever
+        // differ.
+        mergeASARs: false,
+        // tiny-secp256k1's compiled binding stays out of the store build.
+        // A Mac install compiles it for the host arch only, so the x64 half
+        // of a universal app would carry an arm64 Mach-O, which
+        // @electron/universal refuses (v0.343.0 build-1). Its index.js
+        // falls back to the pure-JS implementation when the binding is
+        // absent, which is what the v0.342.1 and v0.343.0 store builds
+        // shipped after moving build/ aside by hand. Store build only: the
+        // Linux packages ship the binding their install compiles.
+        files: [
+            '!**/node_modules/tiny-secp256k1/build{,/**/*}',
+        ],
     },
 
     // --- Windows -------------------------------------------------------
@@ -967,6 +998,15 @@ const config = {
         allowToChangeInstallationDirectory: true,
         perMachine: false,
         deleteAppDataOnUninstall: false,
+        // The installer and uninstaller hooks: shortcuts rewritten on every
+        // install so an update repairs the v0.343.0 ones, an arm64
+        // all-users install placed in Program Files, and the URL handlers
+        // the app registered removed on uninstall. Named explicitly for the
+        // same reason as the icons: app-builder-lib also finds
+        // build/installer.nsh by default, but that lookup says nothing
+        // when the file is missing, and a named one that is missing
+        // fails the build. desktop-nsis-hooks.smoke.js holds the macros.
+        include: 'build/installer.nsh',
         // Deterministic uninstaller name; the default injects a timestamp.
         uninstallDisplayName: '${productName}',
         // Differential updates are a non-goal (§7), so do not emit
@@ -1062,10 +1102,16 @@ const config = {
         // on the same path. Pinned explicitly here rather than left to a
         // default that reads the npm scope of a private workspace package.
         executableName: 'xchain-wallet',
-        // See the mac.icon comment: explicit on every platform. Linux
-        // takes the PNG master and electron-builder derives the sizes the
-        // .desktop entry and the AppImage need.
-        icon: 'build/icon.png',
+        // See the mac.icon comment: explicit on every platform. A DIRECTORY
+        // of sizes, not the PNG master. Given the single 1024x1024 file,
+        // electron-builder derives nothing: through v0.343.0 the .deb
+        // installed hicolor/1024x1024 alone, and GTK's lookup of
+        // `xchain-wallet` at 48, 64, 128 and 256 came back NOT FOUND, so
+        // menus and docks drew a generic icon. build/icons holds NxN.png
+        // from 16 to 512, each scaled from build/icon.png (recipe in
+        // build/README.md); desktop-linux-integration.smoke.js checks
+        // every size.
+        icon: 'build/icons',
         // The store target is appended OUTSIDE the staging ternary, same
         // reasoning as win/appx: inside the production branch, buildSnap's
         // own `&& !isStaging` would be unreachable and would read as
@@ -1081,13 +1127,23 @@ const config = {
             // aimed at it (see buildSnap).
             ...(buildSnap ? [{ target: 'snap', arch: ARCHES }] : []),
         ],
-        category: 'Finance',
+        // A registered MAIN category first. `Finance` is an additional
+        // category in the freedesktop menu spec, and alone it drew two
+        // desktop-file-validate hints on v0.343.0 and could file the app
+        // under a catch-all menu section. Office is the main category the
+        // validator itself names for Finance.
+        category: 'Office;Finance',
         maintainer: 'Dankest, LLC <support@xchain.io>',
         synopsis: 'Self-custodial multi-chain XChain Platform wallet',
-        description:
-            'Self-custodial wallet for the XChain Platform (Bitcoin, Dogecoin, '
-                + 'Litecoin). Supports token issuance, hardware wallets (Ledger + '
-                + 'Trezor via WebHID), and the full XChain action surface.',
+        // NO `description` HERE, on purpose. app-builder-lib uses one value
+        // for the .desktop entry's Comment (the menu tooltip) AND the deb and
+        // snap long descriptions (LinuxTargetHelper.getDescription), so the
+        // multi-sentence text this key once held became a 184-character
+        // tooltip. Unset, all of them read package.json's one-line
+        // `description`, the same sentence the Windows shortcuts carry.
+        // A `desktop.entry.Comment` override is no fix: computeDesktopEntry
+        // assigns Comment from the description after merging desktop.entry.
+        // test/smoke/audits/desktop-shortcut-text.smoke.js holds the limits.
     },
     appImage: {
         // Named like every other artifact (§7.1). Forcing it here is also
