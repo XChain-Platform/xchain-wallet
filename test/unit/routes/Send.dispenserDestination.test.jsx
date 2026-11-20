@@ -22,6 +22,10 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
+vi.mock('../../../packages/core/src/shared/hooks/usePriceAlertPrices.js', () => ({
+    usePriceAlertPrices: () => () => 0.058,
+}));
+
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const DISPENSER_ADDR = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -43,6 +47,7 @@ const TOKEN_DISPENSER_ROW = {
     escrow_remaining: '10',
 };
 const ORACLE_ADDRESS = 'bc1qoracleoracleoracleoracleoracleoracle01';
+const BRIDGE_ESCROW = '17BridgeLtcXChainXXXXXXXXXXa5uRRy';
 
 function mount(extraMessaging = {}, sendProps = {}) {
     const base = {
@@ -117,7 +122,7 @@ afterEach(() => {
 // Single's one recipient (1 XCHAIN to `first`) opens as Multi's first row, and
 // the dispenser's pay-to address is added as the second (9 XCHAIN, the asset
 // the last row used).
-async function addDispenserAsSecondRecipient(first) {
+async function addDispenserAsSecondRecipient(first, second = DISPENSER_ADDR) {
     fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: first } });
     fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
     await flushTimers();
@@ -125,7 +130,7 @@ async function addDispenserAsSecondRecipient(first) {
     await flushTimers();
     expect(screen.getAllByTestId('send-multi-row')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
-    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: DISPENSER_ADDR } });
+    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: second } });
     fireEvent.change(screen.getByLabelText(/^Amount/, { selector: 'input' }), { target: { value: '9' } });
     fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
     await flushTimers();
@@ -138,6 +143,31 @@ async function lookupSettled(messaging) {
 }
 
 describe('Send review: destination matches an open dispenser', () => {
+    it('warns that a regular Send to bridge escrow is unrecoverable', async () => {
+        mount();
+        await fillAndReview({ to: BRIDGE_ESCROW, amount: '0.02' });
+
+        expect(screen.getByText(/address is only for moving tokens between networks/i)).toBeInTheDocument();
+        expect(screen.getByText(/use Move across chains instead/i)).toBeInTheDocument();
+    });
+
+    it('names an added recipient whose destination is bridge escrow', async () => {
+        const ordinary = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+        mount({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '1000000000', divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: '100', divisibility: 0 }],
+            }),
+        }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
+        await flushTimers();
+        await addDispenserAsSecondRecipient(ordinary, BRIDGE_ESCROW);
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await flushTimers();
+
+        expect(screen.getByText(/Recipient 2: This address is only for moving tokens between networks/i))
+            .toBeInTheDocument();
+    });
+
     it('states which dispenser and what the sender would receive', async () => {
         const messaging = mount({
             getDispensersForAddress: vi.fn().mockResolvedValue({ data: [COIN_DISPENSER_ROW] }),
@@ -246,6 +276,29 @@ describe('Send review: destination matches an open dispenser', () => {
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
         expect(screen.getByText(/This pays dispenser #9001/)).toBeInTheDocument();
         expect(screen.queryByText(/oracle has no current price/)).toBeNull();
+    });
+
+    it('warns when the current fiat value of a coin payment is below one oracle-priced fill', async () => {
+        const oracleRow = {
+            ...COIN_DISPENSER_ROW,
+            get_amount: '0',
+            give_amount: '2',
+            oracle_address: ORACLE_ADDRESS,
+        };
+        mount({
+            getDispensersForAddress: vi.fn().mockResolvedValue({ data: [oracleRow] }),
+            getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                ...oracleRow, fiat_code: 'USD', fiat_amount: null,
+            }),
+            oracleFeeds: vi.fn().mockResolvedValue([{
+                coin: 'BTC', tick: 'DOGI', fiat: 'USD', live: { value: '0.1' },
+            }]),
+        });
+        await fillAndReview({ to: DISPENSER_ADDR, amount: '2.5' });
+
+        expect(screen.getByText(/worth about 0\.145 USD, below the 0\.2 USD needed for one fill/i))
+            .toBeInTheDocument();
+        expect(screen.getByText(/payment isn't returned/i)).toBeInTheDocument();
     });
 
     // Each send in a multi-recipient action triggers the open dispensers at its own
