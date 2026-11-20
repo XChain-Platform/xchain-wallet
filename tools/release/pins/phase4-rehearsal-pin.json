@@ -8,11 +8,11 @@
     "reached": "manifest-written",
     "reachedSignature": false,
     "blocker": "gpg: signing failed: No secret key",
-    "scriptRef": "990ff1a3ed30368e9aff2d877811094e7dfad366",
+    "scriptRef": "a841d4c3a340f151dfb504b65a380c14808bcfbd",
     "repoRef": "3e550d05e913e29e5c3cf24527bf504f1a4fe942",
     "scriptPath": {
         "tools/release/sign.sh": "53f45042a0f54a597feb0cf3f8496da4c2605f262aab0a781944a7e63ba7c54c",
-        "tools/release/verify.sh": "b2f3bcfedc26d5c808b491c99b43675cb10a4944c0a6517ee7b13a8aea7e948e",
+        "tools/release/verify.sh": "212f3965897bfb6e6978647fbba373edd8cd6c185c1915adb2464927814175bc",
         "tools/release/lib.sh": "33333e51cac3e0bbbad5963251500e987559b790ecd5f92810b17f15d256c8b0",
         "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
         "tools/release/store-profile-status.txt": "93b13279e4c068394889b9fbe1862d4491dd91d17fbe9d840dbe0598f18f8c59"
@@ -24,5 +24,5 @@
         "tools/release/verify-signatures.mjs": "5aa1c30f370723c02b3b58787587a41447ad80f794ed1216db19d54d2864bcfc",
         "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
     },
-    "observedAt": "2026-11-17T07:49:17.435Z"
+    "observedAt": "2026-11-20T02:11:50.858Z"
 }
