@@ -13,6 +13,10 @@
       "version": "0.343.1",
       "url": "https://downloads.xchain.io/wallet/android/xchain-wallet-v0.343.1.apk"
     },
+    "android-play": {
+      "version": "0.343.0",
+      "url": "https://play.google.com/store/apps/details?id=io.xchain.wallet.android"
+    },
     "desktop-direct": {
       "version": "0.343.1",
       "url": "https://downloads.xchain.io/wallet/desktop/"
