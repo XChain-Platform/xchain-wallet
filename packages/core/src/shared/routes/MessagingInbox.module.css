@@ -20,7 +20,6 @@
 /* A counterparty with no contact: Dispenser explorer's unnamed-seller mark
    (the person icon on a muted circle at the list avatar size). */
 .unknownAvatar {
-    composes: sellerAvatar from './DispenserExplorer.module.css';
     flex: 0 0 auto;
 }
 

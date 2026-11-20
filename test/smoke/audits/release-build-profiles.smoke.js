@@ -563,6 +563,7 @@ const configImports = [
     ['./buildProfile.js', join(repo, 'packages', 'web', 'buildProfile.js')],
     ['./bundleBudget.js', join(repo, 'packages', 'web', 'bundleBudget.js')],
     ['./cssFallbacks.js', join(repo, 'packages', 'web', 'cssFallbacks.js')],
+    ['./cssDeterminism.js', join(repo, 'packages', 'web', 'cssDeterminism.js')],
     ['./i18nNamespaces.js', join(repo, 'packages', 'web', 'i18nNamespaces.js')],
     ['./src/surfaces/registry.js', hiddenRegistry],
     ['./regtestSidecar.js', join(repo, 'packages', 'web', 'regtestSidecar.js')],
