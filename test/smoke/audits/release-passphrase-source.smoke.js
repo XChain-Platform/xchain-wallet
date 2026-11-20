@@ -154,7 +154,7 @@ try {
     // is about.
     for (const f of ['lib.sh', 'sign.sh', 'expected-artifacts.txt', 'shipped-lanes.txt',
         'update-info.mjs', 'verify-signatures.mjs', 'launch-probe.mjs',
-        'store-profile-status.txt']) {
+        'is-invoked-directly.mjs', 'store-profile-status.txt']) {
         cpSync(join(root, 'tools/release', f), join(repo, 'tools/release', f));
     }
     git(repo, ['init', '-q', '.']);
