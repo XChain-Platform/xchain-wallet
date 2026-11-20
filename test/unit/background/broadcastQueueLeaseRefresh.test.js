@@ -195,6 +195,38 @@ function buildTab() {
     return { store, queue };
 }
 
+function splitStorageTab() {
+    const copy = (value) => JSON.parse(JSON.stringify(value));
+    let blob = { queues: {}, settlements: [] };
+    let cached = [];
+    const faults = { failLoad: false, failSettlements: false, refuseWrites: false };
+    const storage = {
+        async load() {
+            if (faults.failLoad) throw new Error('queue read failed');
+            const read = copy(blob);
+            cached = read.settlements;
+            return read.queues;
+        },
+        async loadSettlements() {
+            if (faults.failSettlements) throw new Error('journal read failed');
+            return copy(cached);
+        },
+        async save(queues) {
+            if (faults.refuseWrites) throw new Error('queue write failed');
+            blob = { queues: copy(queues), settlements: copy(cached) };
+        },
+        async saveSettlements(owed) {
+            if (faults.refuseWrites) throw new Error('journal write failed');
+            cached = copy(owed);
+            blob = { ...blob, settlements: copy(cached) };
+        },
+        async clear() { blob = { queues: {}, settlements: [] }; },
+    };
+    const store = createBroadcastQueueStore({ storage, prunedLedger: null });
+    const queue = createBroadcastQueueEngine({ store, importedAddressIdsFor: async () => new Set(), discardQueuedBroadcast: async () => {} });
+    return { store, queue, faults, blob: () => copy(blob), writeBlob: (value) => { blob = copy(value); } };
+}
+
 describe('reloading the web queue store on a fresh lease', () => {
     afterEach(() => {
         vi.unstubAllGlobals();
@@ -423,5 +455,46 @@ describe('reloading the web queue store on a fresh lease', () => {
         expect(blob.queues[V]).toBeUndefined();
         expect(blob.queues[W].some((e) => e.id === x.id)).toBe(false);
         expect(blob.settlements.map((s) => s.pendingTxId)).toEqual(['ptx-new']);
+    });
+
+    it('does not adopt a queue baseline when the refresh journal read fails', async () => {
+        const tab = splitStorageTab();
+        await tab.queue.ensureQueueLoaded();
+        tab.queue.pushQueueEntry(W, entry('saved'));
+        await tab.queue.persistQueue();
+        tab.faults.refuseWrites = true;
+        tab.queue.pushQueueEntry(W, entry('memory-only'));
+        await tab.queue.persistQueue();
+        tab.faults.refuseWrites = false;
+        tab.writeBlob({ queues: {}, settlements: [] });
+
+        tab.faults.failSettlements = true;
+        expect(await refreshBroadcastQueueStore(tab.store)).toBe(false);
+        tab.faults.failSettlements = false;
+        await tab.queue.ensureQueueLoaded();
+        await settle();
+
+        expect(hexes(tab.queue.getQueue(W))).toEqual(['memory-only']);
+        expect(hexes(tab.blob().queues[W])).toEqual(['memory-only']);
+    });
+
+    it('does not adopt a queue baseline when the engine journal read fails', async () => {
+        const tab = splitStorageTab();
+        await tab.queue.ensureQueueLoaded();
+        tab.queue.pushQueueEntry(W, entry('saved'));
+        await tab.queue.persistQueue();
+        tab.writeBlob({ queues: {}, settlements: [] });
+
+        tab.faults.failLoad = true;
+        expect(await refreshBroadcastQueueStore(tab.store)).toBe(false);
+        tab.faults.failLoad = false;
+        tab.faults.failSettlements = true;
+        await tab.queue.ensureQueueLoaded();
+        expect(tab.store.loaded).toBe(false);
+        tab.faults.failSettlements = false;
+        await tab.queue.ensureQueueLoaded();
+
+        expect(tab.queue.getQueue(W)).toEqual([]);
+        expect(tab.blob().queues[W]).toBeUndefined();
     });
 });

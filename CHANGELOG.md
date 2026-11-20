@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Mac App Store build is produced straight from the repository and declares its encryption use.
 - A donation that rode along on a send is no longer paid again on the next send when the confirmation wait times out.
 - Locking the desktop wallet just after launch or unlock keeps it locked, with no signing keys left live.
+- A discarded signed transaction in the extension can no longer be broadcast again after a storage read error.
 
 ## [0.343.0] - 2026-11-18
 
