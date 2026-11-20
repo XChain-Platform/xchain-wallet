@@ -107,10 +107,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // After a web lease reload whose read failed, the map also holds what this
     // store saved before it went dormant, and another writer may have removed
     // some of it since. `queueStore.persisted` tells the two apart: it records
-    // what the key held at the last load or save that resolved, so a live entry
-    // it names that the snapshot lacks was removed and is dropped, and one it
-    // does not name never reached storage and stays. Before the first load the
-    // record is empty, so that window keeps every live entry.
+    // what the key held at the last save that resolved or read adopted into live
+    // state, so a live entry it names that the snapshot lacks was removed and is
+    // dropped, and one it does not name never reached storage and stays. Before
+    // the first load the record is empty, so that window keeps every live entry.
     //
     // The one removal that can run in that window is `pruneWalletFromQueue`,
     // so it records the walletId in `queueStore.prunedWallets`; the merge skips
@@ -268,6 +268,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 mergeQueueSnapshot(snapshot, knownQueues);
                 mergeOwedSettlements(persistedOwed, knownOwed);
                 queueStore.loaded = true;
+                queueStore.storage.adoptRead?.();
                 // Once `loaded` latches no merge runs again, so the live map is
                 // the whole truth and the pending prunes have nothing left to skip.
                 queueStore.prunedWallets?.clear();
