@@ -130,6 +130,10 @@ const npmrc = parseNpmrc(read('.npmrc'));
         'ip-address is pinned at the first release that fixes the advisory');
 
     const expectedSecurityOverrides = {
+        '@electron/asar>glob': '^7.2.3',
+        '@electron/asar>minimatch': '^3.1.5',
+        'glob@7>minimatch': '^3.1.5',
+        'minimatch@3>brace-expansion': '^1.1.21',
         minimatch: '^11.0.9',
         glob: '^14.0.6',
         'xcode>uuid': '^11.1.1',
