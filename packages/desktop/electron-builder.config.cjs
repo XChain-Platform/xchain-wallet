@@ -894,16 +894,12 @@ const config = {
         extendInfo: {
             ITSAppUsesNonExemptEncryption: false,
         },
-        // NO UNIVERSAL ASAR MERGE. With the merge on, the v0.343.0 store
-        // build hung inside @electron/universal and electron-builder exited
-        // 0 with no .pkg (MAS-RESULT.txt, builds 2 and 3): the security
-        // override `glob: ^14.0.6` in pnpm-workspace.yaml gives
-        // @electron/asar 3.4.1 glob 14, whose API asar's promisify(glob)
-        // never settles on. The override is a security floor and stays.
-        // Off is sound because the store build carries no native module
-        // (files below), so both arch halves hold the same app.asar, and
-        // @electron/universal refuses the build, loudly, if they ever
-        // differ.
+        // Keep the v0.343.1 store-build behavior until ASAR merging is
+        // deliberately re-enabled. pnpm-workspace.yaml now keeps
+        // @electron/asar on glob's callback-compatible, patched 7.x line, so
+        // the universal merge no longer hangs. Off remains sound because the
+        // store build carries no native module (files below), so both arch
+        // halves hold the same app.asar.
         mergeASARs: false,
         // tiny-secp256k1's compiled binding stays out of the store build.
         // A Mac install compiles it for the host arch only, so the x64 half

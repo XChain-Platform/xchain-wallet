@@ -15,6 +15,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { estimateNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 
 vi.mock('../../../packages/core/src/flows/uploadMethod.js', async (importOriginal) => {
     const actual = await importOriginal();
@@ -122,6 +123,20 @@ describe('AttachContentForm upload method', () => {
         await ready(client);
         await pickFile(900_000);
         await waitFor(() => expect(trigger()).toHaveTextContent(/\d+ parts, \d+ transactions/), { timeout: 15_000 });
+    });
+
+    it('shows the failed quote copy when the fee source answers with no rate', async () => {
+        const client = messagingFor();
+        mount(client);
+        await ready(client);
+        await pickFile(900_000);
+        await waitFor(() => expect(trigger()).toHaveTextContent(/\d+ parts, \d+ transactions/), { timeout: 15_000 });
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
+        await typeCustomRate('');
+        await waitFor(() => expect(trigger()).toHaveTextContent(
+            "The wallet couldn't work out the parts and the fee. Choose the file again.",
+        ));
+        expect(trigger()).not.toHaveTextContent('Working out the parts and the fee.');
     });
 
     it('offers Taproot upload first, marked Cheapest and picked by default, then Standard, each with its fee', async () => {

@@ -165,9 +165,8 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create Dispenser' });
-        await waitFor(() => expect(create).toBeEnabled());
-        fireEvent.click(create);
+        await screen.findByRole('button', { name: /^From.*bc1qso/ });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Dispenser' }));
         await waitFor(() => expect(messaging.generateDispenserAddress).toHaveBeenCalledOnce());
 
         view.rerender(form('wallet-b'));

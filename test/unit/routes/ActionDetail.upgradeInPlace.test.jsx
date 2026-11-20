@@ -21,6 +21,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, act, fireEvent, within } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
 import { fact } from '../../helpers/detailFacts.js';
@@ -134,7 +135,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
         // exactly as a real chain does while the page is open.
         // Installed BEFORE the mount: fake timers only govern intervals
         // created after they are in place, and the poll starts on mount.
-        vi.useFakeTimers({ shouldAdvanceTime: true });
+        useFakeTimeouts({ shouldAdvanceTime: true });
         let landed = false;
         const { messaging } = mount(() => (landed ? [confirmedRow()] : []));
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
@@ -155,7 +156,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
     it('matches the confirmed row case-insensitively', async () => {
         // The merge lowercases the hash because it is the merge key; the
         // explorer is under no obligation to.
-        vi.useFakeTimers({ shouldAdvanceTime: true });
+        useFakeTimeouts({ shouldAdvanceTime: true });
         let landed = false;
         mount(() => (landed ? [confirmedRow({ tx_hash: HASH.toUpperCase() })] : []));
         await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
@@ -187,7 +188,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
     });
 
     it('does not poll at all for an already-confirmed entry', async () => {
-        vi.useFakeTimers();
+        useFakeTimeouts();
         const messaging = {
             getAddressHistory: vi.fn().mockResolvedValue([]),
             getActionByIndex: vi.fn().mockResolvedValue(null),

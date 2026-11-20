@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 
 const { MessagingProvider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
 const { AirdropForm } = await import('../../../packages/core/src/shared/routes/AirdropForm.jsx');
@@ -110,7 +111,7 @@ async function submitReview() {
     await flush(50);
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { useFakeTimeouts(); });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm step 2 waits for the stored-list read', () => {

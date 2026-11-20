@@ -1,0 +1,21 @@
+{
+  "latest": "0.343.1",
+  "channels": {
+    "web": {
+      "version": "0.343.0",
+      "url": "https://wallet.xchain.io/"
+    },
+    "chrome": {
+      "version": "0.341.2",
+      "url": "https://chromewebstore.google.com/detail/hpgekccmlajjbeckcjbldjinajmhchfp"
+    },
+    "android-direct": {
+      "version": "0.343.1",
+      "url": "https://downloads.xchain.io/wallet/android/xchain-wallet-v0.343.1.apk"
+    },
+    "desktop-direct": {
+      "version": "0.343.1",
+      "url": "https://downloads.xchain.io/wallet/desktop/"
+    }
+  }
+}

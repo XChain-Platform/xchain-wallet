@@ -13,6 +13,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import historyStyles from '../../../packages/core/src/shared/routes/History.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { userEvent } from '../../helpers/userEvent.js';
 import {
     EXPORT_ITEM,
@@ -273,7 +274,7 @@ describe('large History export', () => {
         await screen.findByRole('button', { name: MORE_ACTIONS });
         await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
         chooseHistoryMenuItem(EXPORT_ITEM);
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
         expect(screen.getByText('Preparing 0 of 501 rows…')).toBeInTheDocument();

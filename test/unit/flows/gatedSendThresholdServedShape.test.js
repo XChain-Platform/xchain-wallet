@@ -57,9 +57,7 @@ describe('splitGroupsByThreshold reads the served /balances/ row shape', () => {
         expect(out.belowThresholdKeyHashes).toEqual([]);
     });
 
-    it('keeps every pack required when the row amount cannot be read', async () => {
-        const out = await split({ tick: 'GATED', amount: 'garbage', decimals: 8 });
-        expect(out.belowThresholdKeyHashes).toEqual([]);
-        expect(out.requiredGroups).toHaveLength(1);
+    it('refuses when the row amount cannot be read instead of keeping every pack required (18909)', async () => {
+        await expect(split({ tick: 'GATED', amount: 'garbage', decimals: 8 })).rejects.toThrow(Error);
     });
 });

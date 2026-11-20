@@ -35,6 +35,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act as domAct } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeouts } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 
@@ -115,7 +116,7 @@ async function tick(ms) {
 }
 
 describe('BetFeedsList refresh', () => {
-    beforeEach(() => { vi.useFakeTimers(); });
+    beforeEach(() => { useFakeTimeouts(); });
     afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); });
 
     it('re-reads the chain while it is on screen, so a market that closes leaves the list', async () => {

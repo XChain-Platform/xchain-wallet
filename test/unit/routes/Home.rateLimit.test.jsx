@@ -39,6 +39,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, act, cleanup, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
+import { useFakeTimeoutsAndDate } from '../../helpers/fakeTimeouts.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
@@ -163,7 +164,7 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
     });
 
     it('shows an uncached failure with Retry instead of an empty wallet', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_WITH_SECONDS));
 
@@ -178,7 +179,7 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
     });
 
     it('keeps saved funded balances and marks them stale when refresh fails', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         writeBalanceCache(WALLET.id, null, {
             balances: funded,
             activeByChain: {},
@@ -218,7 +219,7 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
 
 describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     it('does not re-render the portfolio while only the countdown changes', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         homeTabsRender.mockClear();
         writeBalanceCache(WALLET.id, null, {
             balances: funded,
@@ -240,7 +241,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     });
 
     it('counts the named seconds down and re-loads by itself at zero', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances
             .mockResolvedValueOnce(refused(RATE_LIMITED_WITH_SECONDS))
@@ -276,7 +277,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         // the regex could ever get out of it); 42 can only have come from the
         // field. Strip the field or stop passing it and this goes red while
         // every string-only case above stays green.
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(
             refusedTyped(RATE_LIMITED_NO_SECONDS, 'RATE_LIMITED', 42),
@@ -296,7 +297,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         // minted it or the "Explorer returned HTTP 429" opener; the aggregator
         // states the service, since a balance read is always an explorer read.
         // A reworded SDK message must therefore still produce the countdown.
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(
             refusedTyped('The explorer refused this read', 'RATE_LIMITED', 42),
@@ -310,7 +311,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     });
 
     it('says "a moment" when nothing named a number, and does not invent one', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_NO_SECONDS));
 
@@ -327,7 +328,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     });
 
     it('clears the banner as soon as a later load lands', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         messaging.getWalletBalances
             .mockResolvedValueOnce(refused(RATE_LIMITED_WITH_SECONDS))
@@ -350,7 +351,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         // discards the balances it just asked for, and the banner it promised
         // to clear stays up for good - invisible with an instantly-resolved
         // mock, certain with a real read that takes longer than the commit.
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         /** @type {(v: unknown) => void} */
         let answerTheReload = () => {};
         const messaging = baseMessaging();
@@ -370,7 +371,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     });
 
     it('does not start a second load while the first is still in flight', async () => {
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         // A load that never answers: exactly the shape of one waiting out a
         // 60 s Retry-After inside the SDK.
@@ -393,7 +394,7 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         // the previous beat, the window is keyed on when that load LANDED,
         // so at beat time the window is younger than the interval by the
         // previous load's latency and a bare `start()` marks nothing.
-        vi.useFakeTimers();
+        useFakeTimeoutsAndDate();
         const messaging = baseMessaging();
         let landFirst;
         messaging.getWalletBalances
