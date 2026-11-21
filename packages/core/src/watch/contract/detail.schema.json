@@ -1,0 +1,41 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["v", "tokenId"],
+    "additionalProperties": false,
+    "properties": {
+        "v": { "const": 1 },
+        "tokenId": { "type": "string" },
+        "artworkHash": { "type": "string" },
+        "changeText": { "type": "string" },
+        "priceSourceText": { "type": "string" },
+        "chart": {
+            "type": "object",
+            "required": ["points", "up"],
+            "additionalProperties": false,
+            "properties": {
+                "points": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 48,
+                    "items": { "type": "number" }
+                },
+                "up": { "type": "boolean" }
+            }
+        },
+        "facts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+                "type": "object",
+                "required": ["label", "value"],
+                "additionalProperties": false,
+                "properties": {
+                    "label": { "type": "string" },
+                    "value": { "type": "string" }
+                }
+            }
+        },
+        "description": { "type": "string", "maxLength": 280 }
+    }
+}
