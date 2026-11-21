@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const flowMocks = vi.hoisted(() => ({
-    signMessageFlow: vi.fn(),
+    signSignInChallengeFlow: vi.fn(),
 }));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
@@ -127,8 +127,8 @@ const call = (host, request) => host.handle({
 });
 
 beforeEach(() => {
-    flowMocks.signMessageFlow.mockReset();
-    flowMocks.signMessageFlow.mockResolvedValue({ signature: 'sig-1' });
+    flowMocks.signSignInChallengeFlow.mockReset();
+    flowMocks.signSignInChallengeFlow.mockResolvedValue({ signature: 'sig-1' });
 });
 
 describe('bridge.signIn refuses an expiry window that cannot yield a valid challenge', () => {
@@ -147,7 +147,7 @@ describe('bridge.signIn refuses an expiry window that cannot yield a valid chall
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('INVALID_PARAMS');
         expect(signIn).not.toHaveBeenCalled();
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('a window that rounds to an expiry equal to now is refused as expired, after the prompt', async () => {
@@ -156,7 +156,7 @@ describe('bridge.signIn refuses an expiry window that cannot yield a valid chall
         const resp = await call(host, { expiresInMs: 1e-9 });
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('CHALLENGE_EXPIRED');
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 });
 
@@ -176,7 +176,7 @@ describe('bridge.signIn refuses an invalid appId before prompting', () => {
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('INVALID_PARAMS');
         expect(signIn).not.toHaveBeenCalled();
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 });
 

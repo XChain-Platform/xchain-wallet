@@ -1224,7 +1224,7 @@ export function ExecuteContractForm({
             <TargetField
                 label={t('execute.contract')}
                 help={t('execute.contractHelp')}
-                name={contractFieldName(contractRow)}
+                targetName={contractFieldName(contractRow)}
                 detail={`#${contractActionIndex}`}
                 onPick={contractTarget.openPicker}
                 pickLabel={t('execute.pickContract')}

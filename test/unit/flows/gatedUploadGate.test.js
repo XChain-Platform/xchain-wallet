@@ -96,7 +96,7 @@ function harness(seed = null) {
         })),
         getAction: vi.fn(async () => ({ data: [{ multipart: { status: 'complete' } }] })),
     };
-    const signer = { signPsbt: vi.fn(async ({ psbtHex }) => {
+    const signer = { kind: 'software', signPsbt: vi.fn(async ({ psbtHex }) => {
         signedNumber += 1;
         return { psbtHex, txid: txid(signedNumber), txHex: `${signedNumber}0aa` };
     }) };

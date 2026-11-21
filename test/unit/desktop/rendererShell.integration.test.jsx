@@ -207,6 +207,8 @@ vi.mock('@xchain-wallet/core/shared/components/ReachabilityBanner.jsx', () => ({
 }));
 
 import { App } from '../../../packages/desktop/renderer/App.jsx';
+import { serializeError } from '../../../packages/extension/src/background/MessageHost.js';
+import { VaultIncompleteError } from '../../../packages/core/src/storage/backend.js';
 
 function createPreloadBridge() {
     let sessionState = 'locked';
@@ -493,6 +495,48 @@ describe('desktop renderer shell', () => {
             type: 'wallet.unlock',
             request: { password: 'secret' },
         });
+    });
+
+    it('opens the vault-unavailable screen when the unlock finds the vault gone', async () => {
+        const sendMessage = vi.fn(async ({ type }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { hasWallet: true, hasSession: false, state: 'locked' } };
+            }
+            if (type === 'wallet.unlock') return serializeError(new VaultIncompleteError());
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await screen.findByRole('form', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'not-my-password' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+
+        expect(await screen.findByRole('heading', { name: "Your wallet couldn't be opened" })).toBeInTheDocument();
+        expect(screen.queryByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeNull();
+        expect(screen.queryByRole('form', { name: 'Unlock wallet' })).toBeNull();
+    });
+
+    it('keeps the wrong-password message when the vault is present', async () => {
+        const sendMessage = vi.fn(async ({ type }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { hasWallet: true, hasSession: false, state: 'locked' } };
+            }
+            if (type === 'wallet.unlock') {
+                return serializeError(Object.assign(new Error('invalid password'), { name: 'InvalidPasswordError' }));
+            }
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await screen.findByRole('form', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'not-my-password' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+
+        expect(await screen.findByText('Incorrect password.')).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: "Your wallet couldn't be opened" })).toBeNull();
     });
 
     it('applies an active-wallet event received while the wallet list is loading', async () => {

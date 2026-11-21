@@ -1,0 +1,83 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
+
+def mainManifest = file('src/main/AndroidManifest.xml')
+def manifestTask = null
+if (!mainManifest.exists()) {
+    mainManifest = layout.buildDirectory.file('generated/fallback-manifest/AndroidManifest.xml').get().asFile
+    manifestTask = tasks.register('generateFallbackManifest') {
+        outputs.file mainManifest
+        doLast {
+            mainManifest.parentFile.mkdirs()
+            mainManifest.text = '<manifest xmlns:android="http://schemas.android.com/apk/res/android" />\n'
+        }
+    }
+}
+
+android {
+    namespace = 'io.xchain.wallet.android.wear'
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId 'io.xchain.wallet.android'
+        minSdk = 30
+        targetSdk = rootProject.ext.targetSdkVersion
+        versionCode 1
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+        }
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    sourceSets {
+        main.manifest.srcFile mainManifest
+        test.resources.srcDir '../../../../test/fixtures/watch'
+    }
+}
+
+if (manifestTask != null) {
+    tasks.matching { it.name.startsWith('process') && it.name.endsWith('MainManifest') }.configureEach {
+        dependsOn manifestTask
+    }
+}
+
+dependencies {
+    implementation "com.google.android.gms:play-services-wearable:$wearPlayServicesVersion"
+    implementation "androidx.wear.compose:compose-material3:$wearComposeVersion"
+    implementation "androidx.wear.compose:compose-foundation:$wearComposeVersion"
+    implementation "androidx.wear.compose:compose-navigation:$wearComposeVersion"
+    implementation "androidx.compose.ui:ui:$wearComposeUiVersion"
+    implementation "androidx.wear:wear:$wearCoreVersion"
+    implementation "androidx.wear:wear-remote-interactions:$wearRemoteInteractionsVersion"
+    implementation "androidx.activity:activity-compose:$wearActivityComposeVersion"
+    implementation "androidx.wear.tiles:tiles:$wearTilesVersion"
+    implementation "androidx.wear.protolayout:protolayout:$wearProtoLayoutVersion"
+    implementation "androidx.wear.watchface:watchface-complications-data-source-ktx:$wearWatchfaceVersion"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:$wearSerializationVersion"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:$wearCoroutinesVersion"
+
+    testImplementation "org.robolectric:robolectric:$wearRobolectricVersion"
+    testImplementation "androidx.compose.ui:ui-test-junit4:$wearComposeUiVersion"
+    debugImplementation "androidx.compose.ui:ui-test-manifest:$wearComposeUiVersion"
+    testImplementation "junit:junit:$wearJunitVersion"
+    androidTestImplementation "androidx.test:runner:$wearTestRunnerVersion"
+    androidTestImplementation "androidx.test.ext:junit:$wearAndroidxJunitVersion"
+}

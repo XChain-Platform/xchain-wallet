@@ -36,5 +36,48 @@ export function createWatchBridge({ getPlugin = getNativePlugin } = {}) {
                 return { paired: false, installed: false, reachable: false };
             }
         },
+
+        onIntent(handler) {
+            if (typeof handler !== 'function') {
+                throw new TypeError('Watch intent handler must be a function');
+            }
+
+            let handle = null;
+            let unsubscribed = false;
+            let removed = false;
+
+            const remove = () => {
+                if (!unsubscribed || removed || !handle) return;
+                try {
+                    if (typeof handle.remove !== 'function') return;
+                    removed = true;
+                    Promise.resolve(handle.remove()).catch(() => {});
+                } catch {}
+            };
+            const listener = (event) => {
+                if (unsubscribed) return;
+                try {
+                    Promise.resolve(handler(event)).catch(() => {});
+                } catch {}
+            };
+
+            try {
+                const plugin = getPlugin('XChainWatch', { method: 'addListener' });
+                if (typeof plugin?.addListener === 'function') {
+                    Promise.resolve(plugin.addListener('intent', listener))
+                        .then((listenerHandle) => {
+                            handle = listenerHandle;
+                            remove();
+                        })
+                        .catch(() => {});
+                }
+            } catch {}
+
+            return () => {
+                if (unsubscribed) return;
+                unsubscribed = true;
+                remove();
+            };
+        },
     };
 }

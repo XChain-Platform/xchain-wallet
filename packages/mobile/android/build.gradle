@@ -1,6 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
+    apply from: "variables.gradle"
     
     repositories {
         google()
@@ -8,6 +9,9 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${rootProject.ext.wearKotlinVersion}"
+        classpath "org.jetbrains.kotlin:compose-compiler-gradle-plugin:${rootProject.ext.wearKotlinVersion}"
+        classpath "org.jetbrains.kotlin:kotlin-serialization:${rootProject.ext.wearKotlinVersion}"
         // The google-services classpath the Capacitor template ships is gone
         // with the block that used it in app/build.gradle: FCM is a non-goal
         // (§1), and an unused plugin is still a build-time dependency we would
@@ -17,8 +21,6 @@ buildscript {
         // in the individual module build.gradle files
     }
 }
-
-apply from: "variables.gradle"
 
 allprojects {
     repositories {

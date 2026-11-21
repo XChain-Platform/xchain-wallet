@@ -213,6 +213,19 @@ describe('AlertsRoute', () => {
         expect(screen.queryByText('Payment due')).toBeNull();
     });
 
+    it('lists a capped payments scan with no returned rows as a partial-list item', async () => {
+        messaging = {
+            listAlertInbox: vi.fn(async () => []),
+            getAddressesByChain: vi.fn(async () => ({ 'bitcoin-mainnet': [{ address: 'bc1qcapped' }] })),
+            getCoinpayObligationsForAddress: vi.fn(async () => ({ data: [], total: 2000, truncated: true })),
+        };
+        const onResumeCoinpay = vi.fn();
+        mount({ walletId: 'wallet-capped-scan', alerts: [], onResumeCoinpay });
+
+        expect(await screen.findByText('Some payments did not load')).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'No notifications' })).toBeNull();
+    });
+
     it('shows one plain empty state and has no serious accessibility violations', async () => {
         const { container } = mount({ alerts: [] });
         expect(screen.getByRole('heading', { name: 'No notifications' })).toBeTruthy();

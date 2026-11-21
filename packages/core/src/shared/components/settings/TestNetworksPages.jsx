@@ -407,18 +407,23 @@ function useActivation({ walletId, descriptor, onActivated }) {
 
 /**
  * What a finished activation says, as a toast: how many addresses it made,
- * and by name each account it left alone because it already had one.
+ * by name each account it left alone because it already had one, and each
+ * account it left without one because another signer holds its keys.
  */
 export function activationMessage(descriptor, result) {
     const created = Array.isArray(result?.addresses) ? result.addresses.length : 0;
     const skipped = Array.isArray(result?.skippedAccountDetails) ? result.skippedAccountDetails : [];
+    const heldElsewhere = Array.isArray(result?.custodySkippedAccountDetails) ? result.custodySkippedAccountDetails : [];
     const name = networkName(descriptor);
-    const lead = created > 0
+    const names = (accounts) => accounts.map((account) => account?.name || account?.accountId).filter(Boolean).join(', ');
+    const parts = [created > 0 || heldElsewhere.length > 0
         ? t('settings.testNetworks.activated', { name, count: created })
-        : t('settings.testNetworks.alreadyActive', { name });
-    if (skipped.length === 0 || created === 0) return lead;
-    const names = skipped.map((account) => account?.name || account?.accountId).filter(Boolean).join(', ');
-    return `${lead} ${t('settings.testNetworks.skippedAccounts', { names })}`;
+        : t('settings.testNetworks.alreadyActive', { name })];
+    if (skipped.length > 0 && created > 0) parts.push(t('settings.testNetworks.skippedAccounts', { names: names(skipped) }));
+    if (heldElsewhere.length > 0) {
+        parts.push(t('settings.testNetworks.custodySkippedAccounts', { names: names(heldElsewhere) }));
+    }
+    return parts.join(' ');
 }
 
 function ActivateInPlace({ activation, descriptor, walletId }) {

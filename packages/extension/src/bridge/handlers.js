@@ -65,6 +65,7 @@ const {
     sendToken,
     sweepToken,
     signMessageFlow,
+    signSignInChallengeFlow,
     signPsbtFlow,
     submitAction,
     createSignThrottle,
@@ -140,6 +141,9 @@ export function registerBridgeHandlers(host, opts = {}) {
     const signThrottleReady = opts.signThrottleReady ?? (async () => {});
     const events = opts.events ?? noopBridgeEvents;
     const getAssetUrl = opts.getAssetUrl ?? defaultAssetUrl;
+    // The host's queue-on-failure hook factory. A host without a queue passes
+    // none, and a failed broadcast then stays a failure.
+    const enqueueOnBroadcastFailure = opts.enqueueOnBroadcastFailure ?? (() => undefined);
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Holds a
     // password captured by a real sign approval so a later localhost sign
     // request can reuse it instead of prompting. Lives in SW memory only;
@@ -474,6 +478,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             chainId: req.chainId,
             address: req.address,
             vault: deps.vault,
+            netPending: false,
         });
         const current = await requireCurrentReadSite(deps, req, site.id);
         assertChainPermitted(current, req.chainId);
@@ -486,6 +491,13 @@ export function registerBridgeHandlers(host, opts = {}) {
             deps.chainRegistry,
         )) {
             throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
+        }
+        if (Array.isArray(balances?.unavailable) && balances.unavailable.length > 0) {
+            const reason = balances.unavailableReason || 'balance service unavailable';
+            throw bridgeError(
+                'BALANCES_UNAVAILABLE',
+                `${req.address}: incomplete ${balances.unavailable.join(' and ')} balance read (${reason})`,
+            );
         }
         return balanceRecordsFrom(balances);
     });
@@ -635,6 +647,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             settings,
             signPasswordCache,
             rememberSignPassword,
+            enqueueOnBroadcastFailure,
         });
     });
 
@@ -850,6 +863,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                     // user is not prompted N more times after approving once.
                     decision: groupDecision,
                     resolved: slot.resolved ?? undefined,
+                    enqueueOnBroadcastFailure,
                 }));
             } catch (err) {
                 // Same translation the register() wrapper applies to a
@@ -956,7 +970,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
         // Sign with the chosen address's own wallet; the window defaults walletId to the first one.
         const walletId = await walletIdForAddress(deps.vault, decision.address);
-        const { signature } = await signMessageFlow({
+        const { signature } = await signSignInChallengeFlow({
             vault: deps.vault,
             walletId,
             password: decision.password,
@@ -1012,6 +1026,7 @@ async function executeSignAction(req, deps, ctx) {
         settings,
         signPasswordCache,
         rememberSignPassword,
+        enqueueOnBroadcastFailure,
     } = ctx;
     assertChainPermitted(site, req.chainId);
     const actionName = req.action;
@@ -1194,6 +1209,12 @@ async function executeSignAction(req, deps, ctx) {
     // ahead of USER_REJECTED and break the batch gate order pinned by
     // test/unit/bridge/parallel.test.js.
     fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
+    // Trusted like trackPendingTx: signed bytes whose broadcast failed
+    // transiently join the host's queue beside their 'queued' PendingTx, so
+    // they stay listable and discardable and their coins stay held.
+    const onBroadcastFailure = typeof enqueueOnBroadcastFailure === 'function'
+        ? enqueueOnBroadcastFailure(walletId)
+        : undefined;
     if (actionName === 'SEND') {
         const submitted = await sendToken({
             ...pickFlowParams(actionName, params),
@@ -1211,6 +1232,7 @@ async function executeSignAction(req, deps, ctx) {
             verifyBuiltTx: true,
             beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
             adsPayout: false,
+            onBroadcastFailure,
         });
         return finish(submitted);
     }
@@ -1231,6 +1253,7 @@ async function executeSignAction(req, deps, ctx) {
             adsPayout: false,
             chainId: req.chainId,
             beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
+            onBroadcastFailure,
         });
         return finish(submitted);
     }
@@ -1477,6 +1500,12 @@ async function decimalAmountFromBaseUnits({ deps, chainId, address, tick, amount
         ? shape.native
         : (Array.isArray(shape?.tokens) ? shape.tokens.find((t) => same(t?.tick)) : null);
     if (!row || row.divisibility === undefined || row.divisibility === null) {
+        if (Array.isArray(shape?.unavailable) && shape.unavailable.length > 0) {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                `cannot scale amountRaw: the balance read for ${address} was incomplete (${shape.unavailableReason || 'unknown reason'}), so ${asset}'s divisibility is unknown`,
+            );
+        }
         throw bridgeError(
             'INVALID_PARAMS',
             `cannot scale amountRaw: ${address} holds no ${asset}, so its divisibility is unknown`,
@@ -1625,11 +1654,9 @@ function signActionSuccess(chainId, submitted) {
  * The dApp-visible `Balance[]` for one address, from the wallet-internal
  * `{ native, tokens }` shape.
  *
- * `unconfirmedRaw` / `unconfirmed` are reported as zero, not omitted: the
- * fields are required by the published type, and the explorer reads this
- * wallet uses (`/address/` + `/balances/`) carry only a confirmed figure. A
- * dApp that treats them as authoritative sees "nothing pending", which is what
- * the wallet's own UI shows for the same address from the same data.
+ * Confirmed values come from the explorer before wallet-local pending debits.
+ * The native unconfirmed value is the tracker's signed net mempool delta.
+ * Token rows have no pending ledger and report zero.
  */
 function balanceRecordsFrom(shape) {
     const rows = [];
@@ -1641,14 +1668,25 @@ function balanceRecordsFrom(shape) {
             ? Number(row.divisibility)
             : 0;
         const confirmedRaw = String(row.quantity ?? '0');
+        let unconfirmedRaw = '0';
+        if (assetType === 'native' && /^\d+$/.test(String(row.pendingQuantity ?? ''))) {
+            unconfirmedRaw = String(row.pendingQuantity);
+        } else if (assetType === 'native' && /^[1-9]\d*$/.test(String(row.pendingOutgoingQuantity ?? ''))) {
+            unconfirmedRaw = `-${row.pendingOutgoingQuantity}`;
+        }
+        const pendingNegative = unconfirmedRaw.startsWith('-');
+        const unconfirmed = decimalFromBaseUnits(
+            pendingNegative ? unconfirmedRaw.slice(1) : unconfirmedRaw,
+            divisibility,
+        ) ?? '0';
         rows.push({
             asset,
             assetType,
             divisibility,
             confirmedRaw,
-            unconfirmedRaw: '0',
+            unconfirmedRaw,
             confirmed: decimalFromBaseUnits(confirmedRaw, divisibility) ?? '0',
-            unconfirmed: decimalFromBaseUnits('0', divisibility) ?? '0',
+            unconfirmed: pendingNegative && unconfirmed !== '0' ? `-${unconfirmed}` : unconfirmed,
         });
     };
     push(shape?.native, 'native');

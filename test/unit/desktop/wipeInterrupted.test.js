@@ -19,6 +19,11 @@ import { createRuntime, wipeRuntimeStores } from '../../../packages/desktop/main
 import { handleSessionStatus } from '../../../packages/extension/src/background/sessionMeta.js';
 import { applyExternalPanicModeState, isSigningFrozen } from '../../../packages/core/src/flows/panicMode.js';
 import { assertFreshVault } from '../../../packages/extension/src/background/walletCreate.js';
+import {
+    BUNDLED_DESCRIPTORS,
+    ChainRegistry,
+    hydrateCustomChainsFromSettings,
+} from '../../../packages/core/src/registry/index.js';
 
 /**
  * Two backends whose first clear lands and whose second never returns,
@@ -153,5 +158,30 @@ describe('desktop reset whose meta file refuses to unlink', () => {
         } finally {
             applyExternalPanicModeState(null);
         }
+    });
+
+    it('clears erased-wallet chains and endpoint clients from the live runtime', async () => {
+        const chainRegistry = new ChainRegistry();
+        const bundled = BUNDLED_DESCRIPTORS.find((entry) => entry.id === 'bitcoin-regtest');
+        const custom = { ...bundled, id: 'erased-regtest', displayName: 'Erased' };
+        hydrateCustomChainsFromSettings(chainRegistry, { customChains: [custom] });
+        const sdkRegistry = {
+            applyEndpointOverridesFromSettings: vi.fn(() => ({ changed: ['erased-regtest'] })),
+            invalidate: vi.fn(),
+        };
+        const runtime = createRuntime({
+            storageBackend: store(new Uint8Array([1])),
+            metaBackend: store({ kdfParams: {} }),
+            sessionBackend: sessionBackend(),
+            chainRegistry,
+            sdkRegistry,
+        });
+
+        await wipeRuntimeStores(runtime);
+
+        expect(chainRegistry.has('erased-regtest')).toBe(false);
+        expect(chainRegistry.get('bitcoin-regtest').isUserAdded).toBe(false);
+        expect(sdkRegistry.applyEndpointOverridesFromSettings).toHaveBeenCalledWith({});
+        expect(sdkRegistry.invalidate).toHaveBeenCalledWith('erased-regtest');
     });
 });

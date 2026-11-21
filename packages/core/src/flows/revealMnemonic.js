@@ -32,6 +32,7 @@ import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob
 import { WalletNotFoundError } from './unlockWallet.js';
 import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { assertWalletUnlockedForReveal } from './revealAccess.js';
+import { usesBip39Passphrase } from '../schemas/wallet.js';
 
 export class NoMnemonicForWifOnlyError extends Error {
     constructor() {
@@ -80,7 +81,8 @@ export async function revealMnemonic({ vault, walletId, password }) {
     refuseHardwareWallet(wallet, 'a recovery phrase');
     // Only a wallet with a stored passphrase needs the derived master key
     // kept around past the seed decrypt; every other wallet lets it go.
-    const hasStoredPassphrase = Boolean(wallet.passphraseEnabled && wallet.encryptedPassphrase);
+    const passphraseEnabled = usesBip39Passphrase(wallet);
+    const hasStoredPassphrase = Boolean(passphraseEnabled && wallet.encryptedPassphrase);
     let masterKey = null;
     const plaintext = await decryptWalletSeed({
         password,
@@ -102,7 +104,7 @@ export async function revealMnemonic({ vault, walletId, password }) {
         return {
             mnemonic,
             format,
-            passphraseEnabled: Boolean(wallet.passphraseEnabled),
+            passphraseEnabled,
             bip39Passphrase,
         };
     } finally {

@@ -177,6 +177,8 @@ export {
     TAPSCRIPT_CAPABLE_SOURCES,
     signerSupportsChunkReveal,
     CHUNK_REVEAL_CAPABLE_SIGNER_KINDS,
+    signerSupportsEnvelopeReveal,
+    ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS,
 } from './signerCapability.js';
 export { storedSizeSummary, storedSizeLine } from './storedSizeSummary.js';
 export { getProjectForTick } from './projectQueries.js';
@@ -476,6 +478,7 @@ export {
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
+    SignerInUseError,
     findSigner,
 } from './registerSigner.js';
 export {
@@ -603,7 +606,7 @@ export {
     LABEL_SYNC_AUTO_DEBOUNCE_MS,
     LABEL_SYNC_AUTO_MAX_WAIT_MS,
 } from './labelSync.js';
-export { signMessageFlow, signPsbtFlow } from './signFlows.js';
+export { signMessageFlow, signSignInChallengeFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
     adsSettingsOf,

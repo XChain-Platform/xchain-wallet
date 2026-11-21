@@ -670,6 +670,18 @@ function classifyByExtension(url) {
     return null;
 }
 
+// Same grammar as an on-chain TIS document pointer. File entries tolerate
+// surrounding whitespace, but only a conforming reference can override data.
+export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
+
+export function parseTisActionRef(value) {
+    if (typeof value !== 'string') return null;
+    const ref = value.trim();
+    const match = ref.match(TIS_ACTION_REF_RE);
+    if (!match) return null;
+    return { ref, coin: match[1] || null, index: match[2] };
+}
+
 function tisEntryToMedia(entry) {
     if (!entry) return null;
     const objectEntry = entry && typeof entry === 'object' ? entry : null;
@@ -678,9 +690,7 @@ function tisEntryToMedia(entry) {
     // preferred over `data` when both are present (TIS File Entry
     // Fields). Carried as `dataRef`; tokenInfoFor resolves unlocked entries
     // to the configured explorer's raw FILE URL.
-    const dataRef = (objectEntry
-        && typeof objectEntry.data_ref === 'string' && objectEntry.data_ref)
-        ? objectEntry.data_ref : null;
+    const dataRef = parseTisActionRef(objectEntry?.data_ref)?.ref ?? null;
     const normalizedUrl = dataRef ? null : normalizeMediaUrl(data);
     const source = typeof data === 'string' ? data : null;
     if (!normalizedUrl && !dataRef && !source) return null;
@@ -772,9 +782,9 @@ export function tisToMediaBundle(doc) {
                 return { url, source: f, name: null, title: null, type: null, dataRef: null, hash: null, size: null, locked: false, packId: null };
             }
             // Object form supports: { data: <url>, data_ref: 'action:<index>',
-            // name, type, locked, pack_id }. data_ref takes precedence over data
-            // when both are present (on-chain reference wins over off-chain URL).
-            const dataRef = typeof f.data_ref === 'string' && f.data_ref ? f.data_ref : null;
+            // name, type, locked, pack_id }. A valid data_ref takes precedence
+            // over data (on-chain reference wins over off-chain URL).
+            const dataRef = parseTisActionRef(f.data_ref)?.ref ?? null;
             const normalizedUrl = dataRef ? null : normalizeMediaUrl(f.data);
             const source = typeof f.data === 'string' ? f.data : null;
             if (!dataRef && !normalizedUrl && !source) return null;
@@ -1334,15 +1344,6 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal, sd
     }
 }
 
-// On-chain TIS document pointer: DESCRIPTION = "action:<index>" (same
-// chain) or "action:<COIN>:<index>" (sibling chain, base ticker, network
-// tier implied by the token's network) naming a FILE action whose raw
-// bytes are the TIS JSON
-// (xchain-documentation/protocol/token-information-standard.md#on-chain-format-action-index).
-// Same syntax as a file entry's `data_ref`, one level up.
-// Match groups: [1] = optional base coin, [2] = action index.
-export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
-
 /**
  * Fetch + parse an on-chain TIS document via the explorer's raw FILE
  * endpoint. A FILE holding a bare image instead of JSON yields a bundle
@@ -1534,9 +1535,9 @@ export function resolveMediaDataRefs(bundle, sdk) {
         if (!Array.isArray(arr)) continue;
         for (const entry of arr) {
             if (!entry || entry.locked || entry.url || !(entry.dataRef)) continue;
-            const m = String(entry.dataRef).match(TIS_ACTION_REF_RE);
-            if (!m) continue;
-            try { entry.url = sdk.fileRawUrl(m[2], m[1] || null); } catch { /* leave unresolved */ }
+            const parsed = parseTisActionRef(entry.dataRef);
+            if (!parsed) continue;
+            try { entry.url = sdk.fileRawUrl(parsed.index, parsed.coin); } catch { /* leave unresolved */ }
         }
     }
     return bundle;

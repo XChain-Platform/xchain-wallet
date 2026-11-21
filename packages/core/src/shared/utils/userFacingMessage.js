@@ -46,7 +46,13 @@ const MAX_REFUSAL_REASON_LENGTH = 500;
 // (the confirm page's refusals, a cosigner reply whose signature or step 1
 // nonce does not check out); the code names the case and is not developer
 // output, so it must not hide that sentence.
-const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT', 'MULTISIG_SIGNATURE_INVALID', 'MULTISIG_NONCE_INVALID']);
+export const USER_COPY_CODES = new Set([
+    'NATIVE_FEE_CHANGED',
+    'INPUTS_SPENT',
+    'ADS_DONATION_STALE',
+    'MULTISIG_SIGNATURE_INVALID',
+    'MULTISIG_NONCE_INVALID',
+]);
 // A rejected private key carries the SDK's machine code beside a sentence the
 // flow already wrote for the user (wifFailureMessage), so the code must not
 // hide that sentence.

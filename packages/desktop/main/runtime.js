@@ -54,6 +54,7 @@ import {
     storage as storageLib,
     flows as flowsLib,
     notifications as notificationsLib,
+    registry as registryLib,
     signers as signersLib,
 } from '@xchain-wallet/core';
 import {
@@ -895,6 +896,7 @@ export async function wipeRuntimeStores(runtime) {
     // The vault being erased is the one locked auto pay holds.
     try { await runtime.lockedAutopay?.end('wallet-wipe'); } catch { /* the wipe goes on */ }
     tearDownHost(runtime);
+    clearErasedWalletRuntimeState(runtime);
     // The session key outlives the teardown until its turn below, so no host
     // may be built from it while the wipe runs.
     runtime.hostClosedHolds += 1;
@@ -902,6 +904,25 @@ export async function wipeRuntimeStores(runtime) {
         return await clearRuntimeStores(runtime);
     } finally {
         runtime.hostClosedHolds -= 1;
+    }
+}
+
+function clearErasedWalletRuntimeState(runtime) {
+    let removed = [];
+    try {
+        ({ removed } = registryLib.clearUserAddedChains(runtime.chainRegistry));
+    } catch (err) {
+        console.error('[xchain] custom-chain reset failed:', err);
+    }
+    try {
+        if (typeof runtime.sdkRegistry?.applyEndpointOverridesFromSettings === 'function') {
+            runtime.sdkRegistry.applyEndpointOverridesFromSettings({});
+        }
+    } catch (err) {
+        console.error('[xchain] endpoint reset failed:', err);
+    }
+    for (const id of removed) {
+        try { runtime.sdkRegistry?.invalidate?.(id); } catch (_err) { /* wipe continues */ }
     }
 }
 

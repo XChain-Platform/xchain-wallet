@@ -77,14 +77,14 @@ async function openTransport(loader, generation) {
     const mod = await loader();
     const TransportWebHID = mod?.default ?? mod;
     if (!TransportWebHID || typeof TransportWebHID.create !== 'function') {
-        throw new Error('desktop ledgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
+        throw new Error('desktopLedgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
     }
     const transport = await TransportWebHID.create();
     // A lock or wallet switch that lands while the device is opening ends that
     // session; caching the late transport would hand it to the next wallet.
     if (generation !== transportGeneration) {
         closeQuietly(transport);
-        throw new Error('desktop ledgerFactory: Ledger transport reset while opening');
+        throw new Error('desktopLedgerFactory: Ledger transport reset while opening');
     }
     cacheTransport(transport);
     return transport;

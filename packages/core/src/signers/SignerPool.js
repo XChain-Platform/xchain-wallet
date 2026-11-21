@@ -39,6 +39,7 @@ import { PassphraseMismatchError, unlockWalletRecord } from '../flows/unlockWall
 import { encryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { kdfParamsEqual } from '../crypto/kdf.js';
 import { isHardwareWallet } from '../flows/hardwareWallet.js';
+import { usesBip39Passphrase } from '../schemas/wallet.js';
 
 /**
  * @typedef {Object} PopulateSummary
@@ -165,7 +166,7 @@ export class SignerPool {
             // hold none yet. A passphrase supplied by the caller still pools one:
             // that is the extension's marker-slot re-pool after a worker restart,
             // and the only path that still hands a 25th word to an unlock.
-            const awaitingCapture = w.passphraseEnabled && w.encryptedPassphrase === null;
+            const awaitingCapture = usesBip39Passphrase(w) && w.encryptedPassphrase === null;
             // A legacy §15.6 25th-word passphrase wallet (nothing captured
             // yet) needs the right secret here. Left out of the pool without
             // it, the per-op prompt then explains (PassphraseRequiredError)
@@ -271,6 +272,9 @@ export class SignerPool {
         if (!wallet) throw new Error('SignerPool.captureOne: wallet is required');
         if (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0) {
             throw new Error('SignerPool.captureOne: bip39Passphrase is required');
+        }
+        if (!usesBip39Passphrase(wallet)) {
+            throw new Error('SignerPool.captureOne: this wallet format does not use a BIP39 passphrase');
         }
         const token = this._beginMutation(wallet.id);
         const signer = await unlockWalletRecord({

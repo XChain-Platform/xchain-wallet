@@ -1328,20 +1328,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             id="contacts-publish-nudge"
                             recovery={typeof onOpenBackup === 'function'
                                 ? { label: 'Open Backup', onAction: onOpenBackup }
-                                : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
+                                : undefined}
+                            onDismiss={() => setNudgeDismissed(true)}
+                            dismissLabel="Dismiss contacts backup note"
                         >
                             {unpublished === 1
                                 ? 'One contact change is only on this device.'
                                 : `${unpublished} contact changes are only on this device.`}
                             {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
-                            {typeof onOpenBackup === 'function' ? (
-                                <>
-                                    {' '}
-                                    <Button type="button" variant="link" size="sm" onClick={() => setNudgeDismissed(true)}>
-                                        Not now
-                                    </Button>
-                                </>
-                            ) : null}
                         </StatusMessage>
                     ) : null}
                 </>

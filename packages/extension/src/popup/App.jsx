@@ -193,6 +193,7 @@ import {
     trackHardwareFactories, useHardwareReconnect, useHardwareSessionReset,
 } from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
 import { openHardwareSigner } from '@xchain-wallet/core/signers/hardwareReconnect.js';
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
 import {
@@ -720,6 +721,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             });
     }, [extensionHandoff, resetNav]);
     useDemoAutoWipe(activeWalletId, refresh);
+    // An unlock that finds the encrypted vault gone lands on the screen a
+    // start-up read shows for the same state, and outranks any read in flight.
+    const showVaultUnavailable = useCallback((next) => {
+        refreshRequestId.current += 1;
+        setStatus({ state: 'error', ...next });
+    }, []);
 
     // The background announces every unlock to every surface, this one
     // included, and a session refresh moves a no-wallet window to Home. Two
@@ -1091,12 +1098,17 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // Manage, Reconnect: open the device inside the click and hand it to the bridge.
     const handleHardwareReconnect = (wallet, signer) => {
         if (!signer?.id) return;
-        openHardwareSigner(signer)
+        // The outcome goes back to the card, whose badge follows it.
+        return openHardwareSigner(signer)
             .then((live) => {
                 registerLocalSigner(signer.id, live);
                 showToast({ message: `${wallet?.name || 'Hardware wallet'} is connected.`, variant: 'success' });
+                return true;
             })
-            .catch((err) => showToast({ message: err?.message || 'Could not connect the hardware wallet.', variant: 'error' }));
+            .catch((err) => {
+                showToast({ message: userFacingMessage(err, 'Could not connect the hardware wallet.'), variant: 'error' });
+                return false;
+            });
     };
 
     // A hardware wallet's Accounts row opens the shared My Accounts page (G131),
@@ -1519,6 +1531,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 <Locked
                     lockReason={lockReason}
                     onUnlocked={() => { setLockReason(null); refresh(); }}
+                    onVaultUnavailable={showVaultUnavailable}
                 />
             );
         case 'unlocked': {

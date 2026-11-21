@@ -75,6 +75,32 @@ describe('DesktopUpdateBanner', () => {
         expect(screen.queryByRole('button', { name: /restart to update/i })).toBeNull();
     });
 
+    it('closes with the Notice corner X, never a Dismiss text button (U100)', async () => {
+        const bridge = installBridge({ install: vi.fn(() => new Promise(() => {})) });
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const buttonTexts = [...container.querySelectorAll('button')].map((b) => b.textContent.trim());
+        expect(buttonTexts).not.toContain('Dismiss');
+        const close = screen.getByRole('button', { name: 'Dismiss update notice' });
+        expect(close.hasAttribute('data-notice-dismiss')).toBe(true);
+        expect(close.textContent.trim()).toBe('');
+        expect(container.querySelector('[data-tone="info"]')).not.toBeNull();
+
+        // No X while the download runs: closing it there would hide work in flight.
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
+        expect(screen.getByRole('status').textContent).toContain('Downloading update');
+        expect(screen.queryByRole('button', { name: 'Dismiss update notice' })).toBeNull();
+    });
+
+    it('hides when its corner X is pressed', () => {
+        const bridge = installBridge();
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+        act(() => { screen.getByRole('button', { name: 'Dismiss update notice' }).click(); });
+        expect(container.textContent).toBe('');
+    });
+
     it('floats over the page with side margins instead of spanning the full width', () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));
@@ -127,6 +153,23 @@ describe('DesktopUpdateBanner', () => {
         expect(text).toContain("couldn't be downloaded or verified");
         expect(text).toContain('wallet is untouched');
         expect(text).not.toContain('manifest says');
+    });
+
+    it('shows the current state without a download retry when the lane has no update', async () => {
+        const bridge = installBridge({
+            install: vi.fn(async () => ({
+                ok: false,
+                reason: 'no update available for this install',
+                cause: 'no-update',
+            })),
+        });
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
+
+        expect(screen.getByRole('status').textContent).toContain('XChain Wallet is up to date');
+        expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
     });
 
     it('shows manual check progress and the up-to-date result', () => {

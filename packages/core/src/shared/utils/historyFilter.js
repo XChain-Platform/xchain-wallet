@@ -111,8 +111,9 @@ export function classifyEntryAction(entry, walletAddresses) {
     if (a === 'SWEEP') return 'sweep';
     if (a === 'DISPENSER') return 'dispenser';
     if (a === 'DISPENSE') return 'dispense';
-    if (a === 'ORDER') return 'order';
-    if (a === 'ORDER_MATCH' || a === 'ORDERFILL' || a === 'ORDER_FILL') return 'swap';
+    if (['ORDER', 'ORDER_MATCH', 'ORDERFILL', 'ORDER_FILL', 'ORDER_CANCEL', 'ORDER_EDIT', 'ORDER_EXPIRE']
+        .includes(a)) return 'order';
+    if (['SWAP', 'SWAP_MATCH', 'SWAP_CANCEL', 'SWAP_EDIT', 'SWAP_EXPIRE'].includes(a)) return 'swap';
     if (a === 'DIVIDEND') return 'dividend';
     if (a === 'BROADCAST') return 'broadcast';
     if (a === 'MESSAGE') return 'message';

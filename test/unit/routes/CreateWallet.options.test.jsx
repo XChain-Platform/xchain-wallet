@@ -103,8 +103,8 @@ describe('CreateWallet security options', () => {
         draw();
 
         // G44: the word count is the icon dropdown, not a radio group.
-        const lengthSelect = screen.getByRole('button', { name: 'Recovery phrase length: 12 words' });
-        expect(screen.getByText('Recommended: secure and easier to back up')).toBeTruthy();
+        const lengthSelect = screen.getByRole('button', { name: 'Recovery phrase length: 12 words (recommended)' });
+        expect(screen.getByText('Secure and easier to back up')).toBeTruthy();
         expect(document.getElementById('create-password-hint')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('At least 8 characters; use a unique password, and longer is stronger.');
@@ -203,7 +203,7 @@ describe('CreateWallet security options', () => {
         draw();
         const lockSvg = screen.getByRole('button', { name: /^Extra Passphrase/ }).querySelector('svg');
         expect(lockSvg).not.toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Recovery phrase length: 12 words' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recovery phrase length: 12 words (recommended)' }));
         const iconOf = (re) => screen.getByRole('option', { name: re }).querySelector('svg');
         const a = iconOf(/^12 words/);
         const b = iconOf(/^24 words/);

@@ -43,6 +43,14 @@ describe('addressBalances nets unconfirmed sends', () => {
         expect(String(shape.native.quantity)).toBe('925000000');
     });
 
+    it('can return the explorer-confirmed figure without local pending netting', async () => {
+        const shape = await addressBalances({
+            sdkRegistry, chainRegistry, chainId: CHAIN_ID, address: SOURCE,
+            vault: vaultWith([sent]), netPending: false,
+        });
+        expect(String(shape.native.quantity)).toBe('1000000000');
+    });
+
     it('leaves the read alone for a terminal or indexed send', async () => {
         const shape = await addressBalances({
             sdkRegistry, chainRegistry, chainId: CHAIN_ID, address: SOURCE,

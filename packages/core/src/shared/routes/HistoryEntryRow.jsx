@@ -14,7 +14,6 @@ import { tickerForCoin, tickerForDescriptor } from '../../registry/coinTicker.js
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/pending.js';
-import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { Icon } from '../../ui/index.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
@@ -25,6 +24,7 @@ import {
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
 import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
+import { activityEntryLabel } from '../utils/homeListFilter.js';
 import styles from './History.module.css';
 import { DoubleChevron, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, historyAmountDirection, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 import { DetailCard } from './HistoryDetailCard.jsx';
@@ -305,11 +305,8 @@ export const EntryRow = memo(function EntryRow({ entry, selected, splitRow = fal
                 chainId={entry.chainId}
                 tick={tick}
                 isNative={tick === nativeTick}
-                // The filter bucket names the common verbs. An action outside every
-                // bucket is named by its own verb, so a stake or a contract call
-                // reads "Stake" or "Contract call" rather than a bare "Other".
-                label={actionDisplayLabel(actionKind === 'other' ? entry.action : actionKind)
-                    || actionDisplayLabel(entry.action)}
+                // History and Home use the same exact action label.
+                label={activityEntryLabel(entry, walletAddresses)}
                 actionIcon={actionIconForAction(
                     actionKind === 'send' || actionKind === 'receive' ? actionKind : entry.action,
                 )}

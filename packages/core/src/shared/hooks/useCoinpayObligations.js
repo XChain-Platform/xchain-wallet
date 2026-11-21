@@ -103,12 +103,12 @@ function sharedCoinpayRead({ messaging, walletId, accountId, pollMs, force = fal
  * the whole queue), matching the CoinpayForm scan it mirrors.
  *
  * @param {{ messaging: any, walletId: string, accountId?: string }} params
- * @returns {Promise<PendingObligation[]>}
+ * @returns {Promise<{ obligations: PendingObligation[], incomplete: boolean }>}
  */
 export async function scanCoinpayObligations({ messaging, walletId, accountId }) {
     if (typeof messaging?.getCoinpayObligationsForAddress !== 'function'
         || typeof messaging?.getAddressesByChain !== 'function') {
-        return [];
+        return { obligations: [], incomplete: false };
     }
     const byChain = await messaging.getAddressesByChain(walletId, accountId);
     const pairs = [];
@@ -117,7 +117,12 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
     }
     const results = await Promise.all(pairs.map((p) =>
         messaging.getCoinpayObligationsForAddress({ chainId: p.chainId, address: p.address })
-            .then((resp) => ({ ...p, rows: extractObligationRows(resp), failed: false }))
+            .then((resp) => ({
+                ...p,
+                rows: extractObligationRows(resp),
+                failed: false,
+                truncated: resp?.truncated === true,
+            }))
             .catch((error) => ({ ...p, rows: [], failed: true, error }))));
     if (results.length > 0 && results.every((result) => result.failed)) {
         throw results[0].error || new Error('Failed to scan for payments due.');
@@ -145,7 +150,10 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
     // Soonest deadline first; rows with no usable expiration sink to
     // the bottom (they have no countdown urgency to sort by).
     found.sort((a, b) => sortKey(a.expiration) - sortKey(b.expiration));
-    return found;
+    return {
+        obligations: found,
+        incomplete: results.some((result) => !result.failed && result.truncated),
+    };
 }
 
 function sortKey(expiration) {
@@ -168,7 +176,7 @@ function sortKey(expiration) {
  *        `offline` holds the scan: no reads start while the network is
  *        unreachable, rows already found stay, and the scan runs again by
  *        itself when `offline` clears.
- * @returns {{ obligations: PendingObligation[], scanning: boolean, error: string | null, refresh: () => void, payableCount: number }}
+ * @returns {{ obligations: PendingObligation[], incomplete: boolean, scanning: boolean, error: string | null, refresh: () => void, payableCount: number }}
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
@@ -176,6 +184,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const identity = `${walletId || ''}::${accountId || ''}`;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
+    const [incomplete, setIncomplete] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const runRef = useRef(/** @type {null | ((force?: boolean) => Promise<void>)} */ (null));
@@ -191,12 +200,14 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         if (identityRef.current !== identity) {
             identityRef.current = identity;
             setObligations([]);
+            setIncomplete(false);
             setError(null);
         }
         // No wallet, or the demo wallet: nothing to owe, and the demo
         // wallet's fabricated addresses must not spam the explorer.
         if (!walletId || isDemoWallet(walletId)) {
             setObligations([]);
+            setIncomplete(false);
             setScanning(false);
             runRef.current = null;
             return undefined;
@@ -220,7 +231,8 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
             })
                 .then((found) => {
                     if (!cancelled && found) {
-                        setObligations(found);
+                        setObligations(found.obligations);
+                        setIncomplete(found.incomplete);
                         setError(null);
                     }
                 })
@@ -264,6 +276,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     }, [walletId, accountId, identity, messaging, pollMs, offline]);
 
     const visibleObligations = identityRef.current === identity ? obligations : [];
+    const visibleIncomplete = identityRef.current === identity ? incomplete : false;
     const visibleError = identityRef.current === identity ? error : null;
     const payableCount = visibleObligations.filter(
         (o) => classifyObligation(o.expiration).state !== 'expired',
@@ -271,6 +284,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
 
     return {
         obligations: visibleObligations,
+        incomplete: visibleIncomplete,
         scanning,
         error: visibleError,
         refresh,

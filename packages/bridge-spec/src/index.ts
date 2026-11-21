@@ -99,9 +99,10 @@ export interface Address {
     label: string;
 }
 
-// One balance entry: native coin OR an XChain-issued asset.
-// Raw amounts are strings to preserve precision; UI formatting is the
-// caller's responsibility.
+// One balance entry: native coin OR an XChain-issued asset. Confirmed fields
+// are the explorer's chain-confirmed amount. Native unconfirmed fields are the
+// tracker's signed net mempool delta and may be negative; token unconfirmed
+// fields are zero. Raw amounts are strings to preserve precision.
 export interface Balance {
     asset: string;
     assetType: 'native' | 'token';
@@ -158,6 +159,7 @@ export type BridgeErrorCode =
     | 'THROTTLED'
     | 'BLOCKED_BY_USER'
     | 'BRIDGE_VERSION_MISMATCH'
+    | 'BALANCES_UNAVAILABLE'
     | 'INTERNAL_ERROR';
 
 export interface BridgeErrorResult {

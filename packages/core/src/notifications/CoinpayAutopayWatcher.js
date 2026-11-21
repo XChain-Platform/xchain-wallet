@@ -392,7 +392,10 @@ export class CoinpayAutopayWatcher {
         const addresses = Array.from(byAddress.keys());
         const reads = await Promise.all(addresses.map((address) => getCoinpayObligationsForAddress({
             sdkRegistry: this._sdkRegistry, chainId, address,
-        }).then(extractCoinpayRows, (e) => {
+        }).then((resp) => {
+            this._logTruncatedRead(chainId, address, resp?.truncated === true);
+            return extractCoinpayRows(resp);
+        }, (e) => {
             this._log.warn(`CoinpayAutopayWatcher: obligation read failed for ${chainId}`, e);
             return null;
         })));
@@ -419,6 +422,18 @@ export class CoinpayAutopayWatcher {
         if (this._missingMatches.has(key)) return;
         this._missingMatches.add(key);
         this._log.warn(`CoinpayAutopayWatcher: match ${matchIndex} is not in block ${blockIndex} on ${chainId}`);
+    }
+
+    _logTruncatedRead(chainId, address, truncated) {
+        this._truncatedReads = this._truncatedReads || new Set();
+        const key = `${chainId}:${address}`;
+        if (!truncated) {
+            this._truncatedReads.delete(key);
+            return;
+        }
+        if (this._truncatedReads.has(key)) return;
+        this._truncatedReads.add(key);
+        this._log.warn(`CoinpayAutopayWatcher: obligation read for ${chainId} was capped; older obligations on this address are not being watched`);
     }
 
     async _handleObligation({ chainId, row, addrConsents, tipHeight, matchesByBlock, isPayer, pendingTxs }) {
