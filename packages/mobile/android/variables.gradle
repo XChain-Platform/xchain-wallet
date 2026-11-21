@@ -39,5 +39,7 @@ ext {
     wearSerializationVersion = '1.13.0'
     wearCoroutinesVersion = '1.11.0'
     wearRobolectricVersion = '4.18.1'
+    wearJunitVersion = '4.13.2'
     wearTestRunnerVersion = '1.7.0'
+    wearAndroidxJunitVersion = '1.3.0'
 }
