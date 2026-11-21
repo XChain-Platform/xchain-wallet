@@ -46,7 +46,7 @@ const MAX_REFUSAL_REASON_LENGTH = 500;
 // (the confirm page's refusals, a cosigner reply whose signature or step 1
 // nonce does not check out); the code names the case and is not developer
 // output, so it must not hide that sentence.
-const USER_COPY_CODES = new Set([
+export const USER_COPY_CODES = new Set([
     'NATIVE_FEE_CHANGED',
     'INPUTS_SPENT',
     'ADS_DONATION_STALE',
