@@ -692,8 +692,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 options={[
                     {
                         value: '12',
-                        label: '12 words',
-                        sub: 'Recommended: secure and easier to back up',
+                        // The closed field shows only the label, so the default reads as a
+                        // recommendation the user can change (xchain-wallet#127).
+                        label: '12 words (recommended)',
+                        sub: 'Secure and easier to back up',
                         icon: <Icon.ListIcon />,
                     },
                     {

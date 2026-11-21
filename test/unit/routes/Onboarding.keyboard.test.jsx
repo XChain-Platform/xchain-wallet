@@ -111,7 +111,7 @@ describe('create onboarding keyboard flow', () => {
             screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
             screen.getByRole('button', { name: 'About Recovery phrase length' }),
-            screen.getByRole('button', { name: 'Recovery phrase length: 12 words' }),
+            screen.getByRole('button', { name: 'Recovery phrase length: 12 words (recommended)' }),
             // The extra passphrase is a closed section, so its header is the last stop.
             screen.getByRole('button', { name: /^Extra Passphrase/ }),
         ];
@@ -177,7 +177,7 @@ describe('create onboarding keyboard flow', () => {
         renderCreate({ onBack });
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Travel wallet' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Recovery phrase length: 12 words' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recovery phrase length: 12 words (recommended)' }));
         fireEvent.click(screen.getByRole('option', { name: /^24 words/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Extra Passphrase/ }));
         fireEvent.click(screen.getByRole('switch', { name: /Use an extra passphrase/ }));
