@@ -1068,6 +1068,10 @@ jobs:
         with:
           node-version: 22.23.2
           cache: pnpm
+      - name: Select Xcode 27.2 (27B52)
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app/Contents/Developer
+          test "$(xcodebuild -version)" = $'Xcode 27.2\nBuild version 27B52'
       - run: pnpm install --frozen-lockfile
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
@@ -1095,6 +1099,10 @@ jobs:
         env:
           XCHAIN_RELEASE_TAG: ${{ github.ref_name }}
         run: pnpm --filter @xchain-wallet/mobile sync:ios
+      - name: Generate the watch targets
+        run: |
+          gem install --user-install xcodeproj --version 1.28.0 --no-document
+          ruby packages/mobile/scripts/add-watch-targets.rb
       - name: Show the version the project will build
         run: cat packages/mobile/ios/App/Version.xcconfig
       # No signing identity required, so this runs whether or not Apple
@@ -1107,6 +1115,32 @@ jobs:
              -destination 'generic/platform=iOS Simulator'
              CODE_SIGNING_ALLOWED=NO
              build
+      - name: Build WatchApp for the simulator
+        run: xcodebuild build
+             -scheme WatchApp
+             -project packages/mobile/ios/App/App.xcodeproj
+             -configuration Release
+             -destination 'generic/platform=watchOS Simulator'
+             CODE_SIGNING_ALLOWED=NO
+      - name: Test WatchApp on both watch sizes
+        run: |
+          set -euo pipefail
+          phone="$(xcrun simctl create 'XC Release iPhone' com.apple.CoreSimulator.SimDeviceType.iPhone-17)"
+          for watch_spec in \
+            '41mm:Apple-Watch-Series-9-41mm' \
+            '49mm:Apple-Watch-Ultra-4-49mm'
+          do
+            size="${watch_spec%%:*}"
+            device_type="${watch_spec#*:}"
+            watch="$(xcrun simctl create "XC Release Watch ${size}" \
+              "com.apple.CoreSimulator.SimDeviceType.${device_type}")"
+            xcrun simctl pair "$watch" "$phone"
+            xcodebuild test -scheme WatchApp \
+              -project packages/mobile/ios/App/App.xcodeproj \
+              -configuration Release \
+              -destination "platform=watchOS Simulator,id=${watch}" \
+              CODE_SIGNING_ALLOWED=NO
+          done
       - name: Resolve the published app association
         run: |
           association_domain="$(sed -n 's|.*applinks:\([^<]*\).*|\1|p' packages/mobile/ios/App/App/App.entitlements | head -1)"
