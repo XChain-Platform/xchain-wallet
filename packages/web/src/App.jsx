@@ -854,6 +854,12 @@ function AppInner() {
             });
     }, [resetNav]);
     useDemoAutoWipe(activeWalletId, refresh);
+    // An unlock that finds the encrypted vault gone lands on the screen a
+    // start-up read shows for the same state, and outranks any read in flight.
+    const showVaultUnavailable = useCallback((next) => {
+        statusRequest.current += 1;
+        setStatus({ state: 'error', ...next });
+    }, []);
 
     const finishFreshWalletCreation = useCallback(() => {
         const next = { hasWallet: true, hasSession: true, state: 'unlocked' };
@@ -1427,7 +1433,7 @@ function AppInner() {
                 </Suspense>
             );
         case 'locked':
-            return <Locked onUnlocked={refresh} />;
+            return <Locked onUnlocked={refresh} onVaultUnavailable={showVaultUnavailable} />;
         case 'unlocked': {
             // §24.2 / G053: wrap the unlocked-route render tree in
             // <FullLayoutWithNav> so the left nav is always visible at

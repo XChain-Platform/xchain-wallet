@@ -703,6 +703,12 @@ function AppInner() {
         refresh();
     }, [refresh]);
     useDemoAutoWipe(activeWalletId, refresh);
+    // An unlock that finds the encrypted vault gone lands on the screen a
+    // start-up read shows for the same state, and outranks any read in flight.
+    const showVaultUnavailable = useCallback((next) => {
+        statusRequest.current += 1;
+        setStatus({ state: 'error', ...next });
+    }, []);
 
     function clearTransientActionState() {
         resetNav('home');
@@ -1303,6 +1309,7 @@ function AppInner() {
                 <Locked
                     lockReason={lockReason}
                     onUnlocked={() => { setLockReason(null); refresh(); }}
+                    onVaultUnavailable={showVaultUnavailable}
                 />
             );
         case 'unlocked': {

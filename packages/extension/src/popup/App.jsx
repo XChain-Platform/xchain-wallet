@@ -721,6 +721,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             });
     }, [extensionHandoff, resetNav]);
     useDemoAutoWipe(activeWalletId, refresh);
+    // An unlock that finds the encrypted vault gone lands on the screen a
+    // start-up read shows for the same state, and outranks any read in flight.
+    const showVaultUnavailable = useCallback((next) => {
+        refreshRequestId.current += 1;
+        setStatus({ state: 'error', ...next });
+    }, []);
 
     // The background announces every unlock to every surface, this one
     // included, and a session refresh moves a no-wallet window to Home. Two
@@ -1520,6 +1526,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 <Locked
                     lockReason={lockReason}
                     onUnlocked={() => { setLockReason(null); refresh(); }}
+                    onVaultUnavailable={showVaultUnavailable}
                 />
             );
         case 'unlocked': {
