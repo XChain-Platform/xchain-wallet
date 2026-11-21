@@ -18,7 +18,8 @@
 //
 // Unlock sequence:
 //   1. Read kdfParams from the meta slot. Missing ⇒ no wallet to unlock.
-//   2. Derive a 32-byte master key via Argon2id.
+//   2. Derive a 32-byte master key via Argon2id. A missing blob is refused
+//      first: with nothing to decrypt, no password could be told wrong.
 //   3. Open a Vault against the encrypted blob with that key. A bad
 //      password auth-fails inside AES-GCM; `Vault.open()` throws. We
 //      translate that into `InvalidPasswordError` for the popup.
@@ -35,6 +36,7 @@
 // backends are the only place they live outside the service worker.
 
 import { crypto as cryptoLib, storage as storageLib, flows as flowsLib } from '@xchain-wallet/core';
+import { VaultIncompleteError } from '@xchain-wallet/core/storage/backend.js';
 import { clearSigningSecret, saveSigningSecret } from './signingSecretSession.js';
 import { startPhraseRecoveryReconcile } from './walletCreate.js';
 import { checkUnlockAllowed, recordFailure } from './unlockThrottle.js';
@@ -154,6 +156,13 @@ async function performWalletUnlock(request, deps) {
         }
     }
 
+    // Meta with no blob is the incomplete install the status reader reports.
+    // Opening it would decrypt nothing, so any password would pass, and the
+    // first autosave would seal a new vault under whatever was typed.
+    if (!(await deps.storageBackend.load())) {
+        throw new VaultIncompleteError();
+    }
+
     /** @type {Array<{ id: string, name: string }>} */
     let passphraseCaptureNeeded = [];
     let poolUnavailable = false;
@@ -172,7 +181,8 @@ async function performWalletUnlock(request, deps) {
             // message quotes user-chosen wallet names) or any populate fault
             // as a wrong password and charges it to the throttle.
             try {
-                await vault.open();
+                // Required again here: the blob can go during the derive.
+                await vault.open({ requireExisting: true });
             } catch (err) {
                 if (isAeadAuthFailure(err)) {
                     // Wrong password: count it against the throttle so repeated

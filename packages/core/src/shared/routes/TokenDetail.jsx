@@ -76,6 +76,7 @@ import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl, safeImageSrc } from '../utils/externalUrl.js';
+import { embeddedDataLabel, isDataUrl } from '../utils/embeddedDataLabel.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { isBalanceCacheFresh, readBalanceCache } from '../utils/balanceCache.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
@@ -2312,6 +2313,8 @@ function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerU
 
 function fileDisplayName(file, fallback = 'Untitled file') {
     if (file?.title || file?.name) return file.title || file.name;
+    // A data: URL's "path" is its payload, so it names the file by its label.
+    if (isDataUrl(file?.url)) return embeddedDataLabel(file.url);
     try {
         const path = new URL(file?.url || '').pathname.split('/').filter(Boolean);
         return decodeURIComponent(path[path.length - 1] || fallback);
@@ -2352,11 +2355,18 @@ export function tokenFileEntries(assetInfo) {
 
 export function PublicFileTile({ file, onOpenExternal }) {
     const [imageFailed, setImageFailed] = useState(false);
-    const canOpen = Boolean(file.url) && !file.locked;
+    // Only an http(s) address opens; a picture data: URL is a thumbnail source
+    // and never a link (safeImageSrc's contract).
+    const canOpen = Boolean(safeHttpUrl(file.url)) && !file.locked;
+    // A picture embedded only in the source (normalizeMediaUrl takes no data:
+    // URL as an address) still draws when safeImageSrc admits it.
+    const previewSrc = file.kind === 'image' && !file.locked
+        ? safeImageSrc(file.url) || (isDataUrl(file.source) ? safeImageSrc(file.source) : null)
+        : null;
     const body = (
         <>
             <span className={styles.fileTilePreview}>
-                {file.kind === 'image' && canOpen && safeImageSrc(file.url) && !imageFailed ? <img src={file.url} alt={file.displayName} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon.FileTypeIcon type={file.type || file.kind} aria-label={imageFailed ? `${file.displayName} unavailable` : undefined} />}
+                {previewSrc && !imageFailed ? <img src={previewSrc} alt={file.displayName} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon.FileTypeIcon type={file.type || file.kind} aria-label={imageFailed ? `${file.displayName} unavailable` : undefined} />}
                 {(file.kind === 'audio' || file.kind === 'video') ? <span className={styles.fileTilePlay}><Icon.PlayIcon /></span> : null}
             </span>
             <span className={styles.fileTileBody}>
@@ -2369,7 +2379,7 @@ export function PublicFileTile({ file, onOpenExternal }) {
                 <small>Locked: {file.locked ? 'Yes' : 'No'}</small>
                 {file.packId ? <small>Pack ID: {file.packId}</small> : null}
                 {file.dataRef ? <small>Linked action: {file.dataRef}</small> : null}
-                {file.source ? <small>URL: {file.source}</small> : null}
+                {file.source ? <small>{isDataUrl(file.source) ? embeddedDataLabel(file.source) : `URL: ${file.source}`}</small> : null}
             </span>
             {canOpen ? <Icon.ExternalLinkIcon aria-hidden="true" /> : null}
         </>
@@ -3191,7 +3201,7 @@ function GatedGroupCard({
                         return (
                             <li key={f.actionIndex}>
                                 <UnlockedFileLink
-                                    name={f.name || `Action #${f.actionIndex}`}
+                                    fileLabel={f.name || `Action #${f.actionIndex}`}
                                     type={f.type}
                                     onOpen={() => openFile(plain, f)}
                                 />
@@ -3291,7 +3301,7 @@ function GatedGroupCard({
 // as a blob href or new-tab document from here - the viewer sniffs the
 // bytes and renders through script-inert surfaces only, with download
 // as the fallback. The declared `type` is cosmetic (icon + chip).
-function UnlockedFileLink({ name, type, onOpen }) {
+function UnlockedFileLink({ fileLabel, type, onOpen }) {
     return (
         <Button
             onClick={onOpen}
@@ -3302,7 +3312,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
                 width: '100%',
                 textAlign: 'left',
             }}
-            aria-label={`Open unlocked file ${name}`}
+            aria-label={`Open unlocked file ${fileLabel}`}
             icon={null}
         >
             <span className={styles.gatedTileContent}>
@@ -3310,7 +3320,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
                     <Icon.FileTypeIcon type={type} />
                     <span className={styles.gatedTileOpen}><Icon.UnlockIcon /> Open</span>
                 </span>
-                <span className={styles.gatedTileBody}><strong>{name}</strong><small>{type || 'File'}</small></span>
+                <span className={styles.gatedTileBody}><strong>{fileLabel}</strong><small>{type || 'File'}</small></span>
             </span>
         </Button>
     );

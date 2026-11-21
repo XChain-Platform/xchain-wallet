@@ -1605,7 +1605,7 @@ export function StakingForm({
                     never a dead end. */}
                 <TargetField
                     {...targetField}
-                    name={contractMeta.name || 'Unnamed contract'}
+                    targetName={contractMeta.name || 'Unnamed contract'}
                     detail={`#${contractActionIndex}`}
                 />
             </FormPage>,
@@ -2131,14 +2131,14 @@ export function StakingForm({
                 {isContract ? (
                     <TargetField
                         {...targetField}
-                        name={contractMeta.name || 'Unnamed contract'}
+                        targetName={contractMeta.name || 'Unnamed contract'}
                         detail={`#${contractActionIndex}`}
                         hint={contractCooldownHint(currentAction, contractMeta.cooldown, descriptor?.coin)}
                     />
                 ) : (
                     <TargetField
                         {...targetField}
-                        name="Validator staking"
+                        targetName="Validator staking"
                         detail={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                         icon={<Icon.StakeIcon />}
                     />

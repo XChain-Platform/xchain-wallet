@@ -44,6 +44,7 @@ import {
     isAdsCountedSend,
     releaseAdsBookingScopes,
 } from './ads.js';
+import { assertSignerCanRevealLane } from './signerCapability.js';
 
 const TXID = /^[0-9a-f]{64}$/i;
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -660,6 +661,7 @@ function runConfig(opts, record) {
 async function prepareRun(opts, source, sdk) {
     const savedRecord = await resumeRecord(opts);
     const config = runConfig(opts, savedRecord);
+    assertSignerCanRevealLane(opts.signer, config.lane);
     const effectiveOpts = withManifestActionData({ ...opts, ...config }, sdk, source);
     const gate = planningGate(effectiveOpts, savedRecord);
     const partSource = partSourceFor(opts);

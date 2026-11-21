@@ -38,7 +38,11 @@ describe('useWaitingLinkDropped', () => {
         const notice = screen.getByTestId('waiting-link-dropped');
         expect(notice).toHaveTextContent(TEXT);
         expect(notice.getAttribute('role')).toBe('status');
-        fireEvent.click(screen.getByRole('button', { name: 'Dismiss Notice' }));
+        // Closing is the Notice's corner X (U100), never a Dismiss text button.
+        const close = screen.getByRole('button', { name: 'Dismiss Notice' });
+        expect(close.hasAttribute('data-notice-dismiss')).toBe(true);
+        expect(close.textContent.trim()).toBe('');
+        fireEvent.click(close);
         expect(screen.queryByText(TEXT)).toBeNull();
     });
 

@@ -37,6 +37,7 @@ import providerSource from '../../../packages/extension/src/inject/xchainProvide
 const flowMocks = vi.hoisted(() => ({
     sendToken: vi.fn(),
     signMessageFlow: vi.fn(),
+    signSignInChallengeFlow: vi.fn(),
     signPsbtFlow: vi.fn(),
     addressBalances: vi.fn(),
     passiveCoSignForAccount: vi.fn(),
@@ -166,6 +167,7 @@ beforeEach(() => {
     for (const mock of Object.values(flowMocks)) mock.mockReset();
     flowMocks.sendToken.mockResolvedValue({ txid: 'tx-1', actionString: 'SEND|…', encoding: 'opreturn' });
     flowMocks.signMessageFlow.mockResolvedValue({ signature: 'sig-1' });
+    flowMocks.signSignInChallengeFlow.mockResolvedValue({ signature: 'sig-1' });
     flowMocks.signPsbtFlow.mockResolvedValue({ signedPsbtHex: 'ab', txHex: 'cd', txid: 'tx-2' });
 });
 
@@ -388,6 +390,57 @@ describe('the read methods stay BARE ARRAYS', () => {
                 unconfirmed: '0',
             },
         ]);
+        expect(flowMocks.addressBalances).toHaveBeenCalledWith(expect.objectContaining({ netPending: false }));
+    });
+
+    it('publishes the native signed pending figure and keeps token pending at zero', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: {
+                tick: 'BTC', quantity: '150000000', divisibility: 8,
+                pendingOutgoingQuantity: '10000000',
+            },
+            tokens: [{ tick: 'PEPECREATURE', quantity: '99', divisibility: 0 }],
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const { result } = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(result[0]).toMatchObject({
+            confirmedRaw: '150000000', unconfirmedRaw: '-10000000', unconfirmed: '-0.1',
+        });
+        expect(result[1]).toMatchObject({ unconfirmedRaw: '0', unconfirmed: '0' });
+    });
+
+    it('publishes an incoming native pending figure', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: { tick: 'BTC', quantity: '150000000', divisibility: 8, pendingQuantity: '25000000' },
+            tokens: [],
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const { result } = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(result[0]).toMatchObject({ unconfirmedRaw: '25000000', unconfirmed: '0.25' });
+    });
+
+    it('refuses a partial balance shape instead of making an unreadable half look empty', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: null,
+            tokens: [{ tick: 'PEPECREATURE', quantity: '99', divisibility: 0 }],
+            unavailable: ['native'],
+            unavailableReason: 'balance service unavailable',
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const response = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(response).toMatchObject({
+            ok: false, error: { code: 'BALANCES_UNAVAILABLE' },
+        });
+        expect(response.error.message).toMatch(/balance service unavailable/);
     });
 
     it('omits a native row the explorer could not report rather than inventing a zero', async () => {
@@ -891,7 +944,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         const resp = await call(host, {});
         expect(resp.ok).toBe(false);
         expect(resp.error.message).toMatch(/NO_CREDENTIALS/);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('an address outside the account grant is refused even when the window returns it', async () => {
@@ -901,7 +954,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
         expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.address)).not.toContain(OUTSIDE);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('a chain the site was not granted is never offered, and is refused if returned', async () => {
@@ -911,7 +964,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
         expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.chainId)).toEqual([CHAIN, CHAIN, CHAIN]);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('an address from a second wallet signs with that wallet, not the window default', async () => {
@@ -919,7 +972,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
         const { result } = await call(host, {});
         expect(result.ok).toBe(true);
-        expect(flowMocks.signMessageFlow.mock.calls[0][0]).toMatchObject({
+        expect(flowMocks.signSignInChallengeFlow.mock.calls[0][0]).toMatchObject({
             walletId: 'wallet-2', addressType: 'p2wpkh',
         });
     });

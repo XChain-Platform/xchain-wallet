@@ -186,6 +186,7 @@ function ScopedCoinpayForm({
             const found = [];
             const pairs = [];
             const failures = [];
+            let incomplete = false;
             for (const [cId, addrs] of Object.entries(addressesByChain)) {
                 for (const addr of addrs) {
                     pairs.push({ chainId: cId, address: addr.address, addr });
@@ -197,6 +198,7 @@ function ScopedCoinpayForm({
                         chainId: pair.chainId,
                         address: pair.address,
                     });
+                    if (resp?.truncated === true) incomplete = true;
                     const rows = extractObligationRows(resp);
                     const seenMatches = new Set();
                     for (const row of rows) {
@@ -221,7 +223,7 @@ function ScopedCoinpayForm({
             setScanning(false);
             setScanError(failures.length > 0
                 ? loadFailureMessage(failures[0], 'load every payment due')
-                : null);
+                : (incomplete ? "Couldn't load every payment due. Older payments may be missing." : null));
             if (initialActionIndex) {
                 // A named payment opens only itself; when it is gone the page
                 // says so rather than offering a different one in its place.

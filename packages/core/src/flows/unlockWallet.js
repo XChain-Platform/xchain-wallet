@@ -19,6 +19,7 @@
 // shell that needs a signer.
 
 import { SoftwareSigner } from '../signers/SoftwareSigner.js';
+import { usesBip39Passphrase } from '../schemas/wallet.js';
 import { refuseHardwareWallet } from './hardwareWallet.js';
 
 export class WalletNotFoundError extends Error {
@@ -116,7 +117,8 @@ export async function unlockWalletRecord({
     // sentence reaches the screen instead of the signer's internal precondition.
     const hasStoredPassphrase = typeof wallet.encryptedPassphrase === 'string'
         && wallet.encryptedPassphrase.length > 0;
-    if (wallet.passphraseEnabled && !hasStoredPassphrase
+    const passphraseEnabled = usesBip39Passphrase(wallet);
+    if (passphraseEnabled && !hasStoredPassphrase
         && (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0)) {
         throw new PassphraseRequiredError(wallet.name);
     }
@@ -143,7 +145,7 @@ export async function unlockWalletRecord({
         await signer.unlock({
             password,
             masterKey,
-            bip39Passphrase: wallet.passphraseEnabled ? bip39Passphrase : '',
+            bip39Passphrase: passphraseEnabled ? bip39Passphrase : '',
         });
     } catch (e) {
         signer.lock();

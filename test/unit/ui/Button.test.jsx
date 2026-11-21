@@ -113,8 +113,8 @@ describe('<Button>', () => {
         // Notice's X (the Notice Standard).
         'shared/routes/BetFeedDetail.jsx',
         // Locked.jsx left this list when Forgot password became a secondary
-        // button that opens its own page.
-        'shared/routes/ContactsList.jsx',
+        // button that opens its own page. ContactsList left it when its
+        // publish nudge's Not now link became the Notice's X (U100).
     ])('%s does not suppress the link button icon', (path) => {
         const source = readFileSync(`packages/core/src/${path}`, 'utf8');
 

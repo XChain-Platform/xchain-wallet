@@ -43,6 +43,7 @@ import { hdKeyFromSeed, derive } from '../../../packages/core/src/crypto/hd.js';
 const REG = { chainRegistry: {}, sdkRegistry: {} };
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const LEGACY_MNEMONIC = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'device-password';
 const PASSPHRASE = 'correct horse battery staple';
 const STALE_PASSPHRASE = 'the string a careless caller still passes';
@@ -65,12 +66,17 @@ const FAST_KDF = { iterations: 1, memory: 8 * 1024 };
  * @param {string|null} [opts.passphrase]  the wallet's real 25th word, or null for a wallet without one
  * @param {boolean} [opts.stored]          true = the passphrase is sealed on the record; false = legacy, awaiting capture
  */
-async function makeRecord({ passphrase = null, stored = false, name = 'Cold' } = {}) {
+async function makeRecord({
+    passphrase = null,
+    stored = false,
+    name = 'Cold',
+    format = 'bip39',
+    mnemonic = MNEMONIC,
+} = {}) {
     const kdfParams = makeFreshKdfParams(FAST_KDF);
-    const mnemonicBytes = new TextEncoder().encode(MNEMONIC);
     const { encryptedSeed } = await encryptWalletSeed({
         password: PASSWORD,
-        seed: mnemonicBytes,
+        seed: new TextEncoder().encode(mnemonic),
         kdfParams,
     });
 
@@ -87,7 +93,7 @@ async function makeRecord({ passphrase = null, stored = false, name = 'Cold' } =
     return {
         id: 'w1',
         name,
-        format: 'bip39',
+        format,
         schemaVersion: 3,
         passphraseEnabled: passphrase !== null,
         encryptedSeed,
@@ -189,6 +195,25 @@ describe('flows/unlockWallet with a stored 25th-word passphrase', () => {
         expect(await signer.getStatus()).toBe('available');
         expect(await identityOf(signer)).toEqual(expectedIdentity(''));
         signer.lock();
+    });
+
+    it('ignores a stale passphrase flag on a counterwallet legacy record', async () => {
+        const legacy = await makeRecord({
+            format: 'counterwallet-legacy',
+            mnemonic: LEGACY_MNEMONIC,
+            passphrase: PASSPHRASE,
+        });
+        const withoutPassphrase = await unlockWalletRecord({ wallet: legacy, password: PASSWORD, ...REG });
+        const withPassphrase = await unlockWalletRecord({
+            wallet: legacy,
+            password: PASSWORD,
+            bip39Passphrase: STALE_PASSPHRASE,
+            ...REG,
+        });
+        expect(await withoutPassphrase.getStatus()).toBe('available');
+        expect(await withPassphrase.getStatus()).toBe('available');
+        withoutPassphrase.lock();
+        withPassphrase.lock();
     });
 
     it('copies a supplied master key and leaves ownership with its caller', async () => {

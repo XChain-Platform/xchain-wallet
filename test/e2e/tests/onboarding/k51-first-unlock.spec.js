@@ -86,7 +86,7 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
         await expect(page.getByLabel('Wallet name', { exact: true })).toHaveValue(WALLET_NAME);
         // G44: the word count is the icon dropdown; its trigger names the pick.
-        await expect(page.getByRole('button', { name: 'Recovery phrase length: 12 words' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Recovery phrase length: 12 words (recommended)' })).toBeVisible();
         const next = page.getByRole('button', { name: 'Next' });
         await expectActionReachable(page, 'wallet details', next);
         await next.click();

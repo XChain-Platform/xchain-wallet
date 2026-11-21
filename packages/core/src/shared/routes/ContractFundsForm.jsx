@@ -786,7 +786,7 @@ export function ContractFundsForm({
                 help={isDeposit
                     ? 'The contract the tokens go to. Use the list icon to pick another contract.'
                     : 'The contract the tokens come out of. Use the list icon to pick another contract.'}
-                name={contractFieldName(contractRow)}
+                targetName={contractFieldName(contractRow)}
                 detail={`#${contractActionIndex}`}
                 onPick={contractTarget.openPicker}
                 pickLabel="Choose another contract"

@@ -33,7 +33,6 @@ const messages = {
     'desktopUpdate.restart': 'Restart to Update',
     'desktopUpdate.retry': 'Retry',
     'desktopUpdate.dismissLabel': 'Dismiss update notice',
-    'desktopUpdate.dismiss': 'Dismiss',
 };
 
 addEnglish(messages);

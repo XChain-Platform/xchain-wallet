@@ -36,13 +36,14 @@ function signer(overrides = {}) {
     };
 }
 
-function mockVault(records = [], deleteResult = true) {
+function mockVault(records = [], deleteResult = true, addresses = []) {
     return {
         signers: {
             list: vi.fn(async () => records),
             put: vi.fn(async () => undefined),
             delete: vi.fn(async () => deleteResult),
         },
+        addresses: { list: vi.fn(async () => addresses) },
     };
 }
 
@@ -191,6 +192,37 @@ describe('signer registry reads and removal', () => {
         await expect(unregisterSigner(null, 'signer-1')).rejects.toThrow(/vault is required/);
         await expect(unregisterSigner(vault, '')).rejects.toThrow(/signerId is required/);
         expect(vault.signers.list).not.toHaveBeenCalled();
+        expect(vault.signers.delete).not.toHaveBeenCalled();
+    });
+});
+
+describe('unregisterSigner never leaves an address linked to a missing signer', () => {
+    const linked = (id, signerId) => ({ id, accountId: 'account-1', source: 'ledger', signerId });
+
+    it('refuses while an address still uses the signer, and deletes nothing', async () => {
+        const vault = mockVault([signer()], true, [linked('addr-1', 'signer-1'), linked('addr-2', 'signer-2')]);
+
+        await expect(unregisterSigner(vault, 'signer-1')).rejects.toMatchObject({
+            name: 'SignerInUseError',
+            code: 'SIGNER_IN_USE',
+            signerId: 'signer-1',
+            addressIds: ['addr-1'],
+        });
+        expect(vault.signers.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes when only other signers are referenced', async () => {
+        const vault = mockVault([signer()], true, [linked('addr-2', 'signer-2'), linked('addr-3', null)]);
+
+        await expect(unregisterSigner(vault, 'signer-1')).resolves.toBe(true);
+        expect(vault.signers.delete).toHaveBeenCalledWith('signer-1');
+    });
+
+    it('fails closed when the vault has no address store to check', async () => {
+        const vault = mockVault([signer()]);
+        delete vault.addresses;
+
+        await expect(unregisterSigner(vault, 'signer-1')).rejects.toThrow(/address store/);
         expect(vault.signers.delete).not.toHaveBeenCalled();
     });
 });

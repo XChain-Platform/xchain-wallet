@@ -275,6 +275,42 @@ writeFileSync(logPath, LOG);
         );
     }
 }
+{
+    let fetchCalled = false;
+    for (const value of ['abc', '0', '-1', '3000000000']) {
+        const result = await run({
+            argv: ['--no-chrome', '--no-play', '--timeout', value],
+            env: {},
+            fetchImpl: async () => { fetchCalled = true; },
+        });
+        assert.equal(result.exitCode, 2, `--timeout ${value} is a config error`);
+        assert.match(result.stderr, /--timeout/);
+    }
+    const missing = await run({
+        argv: ['--no-chrome', '--no-play', '--timeout'],
+        env: {},
+        fetchImpl: async () => { fetchCalled = true; },
+    });
+    assert.equal(missing.exitCode, 2, '--timeout without a value is a config error');
+    assert.match(missing.stderr, /--timeout/);
+    assert.equal(fetchCalled, false, 'an invalid timeout starts no fetch');
+}
+{
+    const started = Date.now();
+    const fetchImpl = async (_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), {
+            once: true,
+        });
+    });
+    const result = await run({
+        argv: ['--no-chrome', '--no-direct', '--state', join(dir, 'timeout-state.json'), '--timeout', '25'],
+        env: {},
+        fetchImpl,
+    });
+    assert.equal(result.exitCode, 3, 'a timed-out Play request is inconclusive');
+    assert.match(result.stderr, /timed out after 25ms/);
+    assert.ok(Date.now() - started < 2_000, '--timeout controls the request timer');
+}
 
 // ------------------------------- the parser against the REAL publish log
 //

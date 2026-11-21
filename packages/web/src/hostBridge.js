@@ -832,7 +832,7 @@ class WebBroadcastClaims extends Set {
 // Signing routes hand their flow a hook that queues the signed bytes when the
 // broadcast fails, so the lease has to outlive that network call the way the
 // queue routes' own claims make it outlive theirs.
-const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake(\.hw)?$|tx\.replace$|multisigSign\.finalize$)/;
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake(\.hw)?$|tx\.replace$|multisigSign\.finalize$|bridge\.(signAction|parallel)$)/;
 export const __queueWritingRouteForTests = QUEUE_WRITING_ROUTE;
 let routeClaimSeq = 0;
 
@@ -2214,6 +2214,12 @@ async function getFlows() {
     return _flowsCache;
 }
 
+// Meta with no blob, named the way getSessionStatus names it: evicted by the
+// browser on the web lane, an incomplete install on a native shell.
+function missingBlobError() {
+    return usingNativeVault() ? new VaultIncompleteError() : new VaultEvictedError();
+}
+
 /**
  * Derive the master key from `password`, open the encrypted vault,
  * and build the MessageHost in-page.
@@ -2238,6 +2244,10 @@ export async function unlockWalletLocal(req) {
     if (!meta || !meta.kdfParams) {
         throw new NoVaultError();
     }
+    // Meta with no blob opens with nothing to decrypt, so any password would
+    // pass. Refused before locked auto pay ends or the lease is taken, with
+    // the error the status reader gives the same state.
+    if (!(await createStorageBackend().load())) throw missingBlobError();
 
     // NO host-side pre-KDF throttle on this lane, by omission of a store
     // rather than by an in-page equivalent. The extension and desktop pass
@@ -2264,9 +2274,11 @@ export async function unlockWalletLocal(req) {
         const storage = createStorageBackend();
         const v = new Vault({ backend: storage, masterKey, settingsMigrationCtx: legacySettingsMigrationCtx() });
         try {
-            await v.open();
+            // Required again here: the blob can go during the derive.
+            await v.open({ requireExisting: true });
         } catch (err) {
             if (isAeadAuthFailure(err)) throw new InvalidPasswordError();
+            if (/** @type {any} */ (err)?.name === 'VaultIncompleteError') throw missingBlobError();
             throw err;
         }
         vault = v;

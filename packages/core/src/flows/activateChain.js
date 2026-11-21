@@ -19,7 +19,9 @@
 //   2. For every existing account in the wallet, derive the first address
 //      on the new chain and persist it. Mirrors the address loop inside
 //      `_persistHdWallet` / `createAccount`. Skipped for accounts that
-//      already have an address on this chain (re-running is a no-op).
+//      already have an address on this chain (re-running is a no-op), and
+//      for accounts whose addresses another signer holds (see
+//      ./addressCustody/accountCustody.js).
 //
 // Callers: Settings → Developer options → Test Networks (Add Network, and a
 // custom network's page), and a hardware wallet's Accounts tab and Add
@@ -48,6 +50,7 @@ import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import { hardwareNetworkSupport, hardwareWalletRecord, isHardwareWallet } from './hardwareWallet.js';
 import { recordLedgerIdentities } from './registerSigner.js';
 import { isWrongAppError } from '../signers/hardwareSession.js';
+import { accountCustody, signerOwnsCustody } from './addressCustody/accountCustody.js';
 
 /**
  * @typedef {Object} ActivateChainOpts
@@ -68,6 +71,7 @@ import { isWrongAppError } from '../signers/hardwareSession.js';
  * @property {Array<{ accountId: string, address: import('../schemas/address.js').Address }>} addresses   newly persisted addresses (skipped accounts are absent)
  * @property {number} skippedAccounts                              count of accounts that already had an address on chainId
  * @property {Array<{ accountId: string, name: string }>} skippedAccountDetails   accounts that already had an address on chainId
+ * @property {Array<{ accountId: string, name: string }>} [custodySkippedAccountDetails]   accounts held on another signer (a device account under the seed, the seed's accounts under a device, another device), left without an address
  * @property {'no-device' | 'unsupported-network' | 'wrong-app'} [hardwareSkipped]   set only for a hardware wallet whose address step was skipped: no device signer was supplied, the device cannot sign this chain, or (a Ledger) another app is open than the chain needs, so the network waits for that app and Try again
  */
 
@@ -179,6 +183,7 @@ export async function activateChain({
         const created = [];
         let skipped = 0;
         const skippedAccountDetails = [];
+        const custodySkippedAccountDetails = [];
         for (const account of accounts) {
             const accountAddrs = allAddresses.filter((a) => a.accountId === account.id);
             const alreadyHasOnChain = accountAddrs.some(
@@ -187,6 +192,12 @@ export async function activateChain({
             if (alreadyHasOnChain) {
                 skipped += 1;
                 skippedAccountDetails.push({ accountId: account.id, name: account.name || '' });
+                continue;
+            }
+            // One signer serves every account, but a seed wallet may also hold
+            // device accounts; derive only where this signer holds the keys.
+            if (!signerOwnsCustody(signer, accountCustody(account.id, allAddresses))) {
+                custodySkippedAccountDetails.push({ accountId: account.id, name: account.name || '' });
                 continue;
             }
             let derived;
@@ -234,6 +245,7 @@ export async function activateChain({
             addresses: created,
             skippedAccounts: skipped,
             skippedAccountDetails,
+            custodySkippedAccountDetails,
             ...(waitingForApp ? { hardwareSkipped: 'wrong-app' } : {}),
         };
     } finally {

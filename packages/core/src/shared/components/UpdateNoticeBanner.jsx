@@ -32,7 +32,7 @@ import {
     checkForUpdateNotice,
     hasDirectUpdateLane,
 } from '../../flows/directUpdate.js';
-import { Button, Icon } from '../../ui/index.js';
+import { Notice } from '../../ui/index.js';
 
 const DISMISSED_VERSION_KEY = 'xc:update-notice:dismissed-version';
 
@@ -76,47 +76,15 @@ export function UpdateNoticeBanner() {
         } catch (_err) { /* private-mode Safari */ }
     }
 
+    // An info Notice whose only control is its corner X (U100): no link, no
+    // download, and no text that came from the feed.
     return (
-        <div
-            role="status"
-            aria-live="polite"
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--xc-space-2)',
-                padding: 'var(--xc-card-pad)',
-                background: 'var(--xc-card-bg)',
-                border: 'var(--xc-card-border)',
-                borderRadius: 'var(--xc-card-radius)',
-                fontSize: 'var(--xc-text-sm)',
-                lineHeight: 1.4,
-                color: 'var(--xc-text)',
-            }}
+        <Notice
+            tone="info"
+            onDismiss={dismiss}
+            dismissLabel="Dismiss update notice"
         >
-            <span
-                aria-hidden="true"
-                style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 'var(--xc-icon-md)',
-                    height: 'var(--xc-icon-md)',
-                    fontSize: 'var(--xc-icon-md)',
-                    flexShrink: 0,
-                }}
-            >
-                ⬆
-            </span>
-            <div style={{ flex: 1 }}>{notice.notice}</div>
-            <Button
-                size="sm"
-                variant="secondary"
-                icon={<Icon.XIcon />}
-                onClick={dismiss}
-                aria-label="Dismiss update notice"
-            >
-                Dismiss
-            </Button>
-        </div>
+            {notice.notice}
+        </Notice>
     );
 }

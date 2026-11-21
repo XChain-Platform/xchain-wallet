@@ -194,11 +194,31 @@ export async function listSignersForWallet(vault, walletId, { withIdentities = f
     return own.map((r) => withLedgerIdentities(r, addresses));
 }
 
+/** A signer that stored addresses still name cannot be removed. */
+export class SignerInUseError extends Error {
+    /**
+     * @param {string} signerId
+     * @param {string[]} addressIds
+     */
+    constructor(signerId, addressIds) {
+        super(
+            `unregisterSigner: signer "${signerId}" is still used by ${addressIds.length} address(es); `
+            + 'remove those addresses, or the wallet, first',
+        );
+        this.name = 'SignerInUseError';
+        this.code = 'SIGNER_IN_USE';
+        this.signerId = signerId;
+        this.addressIds = addressIds;
+    }
+}
+
 /**
- * Remove a paired signer. Does NOT cascade. Addresses still point
- * at the old signerId until a subsequent reconciliation pass
- * rewrites them (or the user manually replaces them). Returns true
- * if a record was deleted, false if it wasn't found.
+ * Remove a paired signer that no stored address names. A re-pair mints a new
+ * record id and nothing rewrites an address's signerId, so deleting a signer
+ * an address still names would leave that address unsignable; such a call is
+ * refused with SignerInUseError. A device wallet goes together with its
+ * addresses through removeWallet. Returns true if a record was deleted,
+ * false if it wasn't found.
  *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} signerId
@@ -209,6 +229,11 @@ export async function unregisterSigner(vault, signerId) {
     if (typeof signerId !== 'string' || !signerId) {
         throw new Error('unregisterSigner: signerId is required');
     }
+    if (typeof vault.addresses?.list !== 'function') {
+        throw new Error('unregisterSigner: the vault has no address store to check');
+    }
+    const inUse = (await vault.addresses.list()).filter((a) => a?.signerId === signerId).map((a) => a.id);
+    if (inUse.length > 0) throw new SignerInUseError(signerId, inUse);
     return vault.signers.delete(signerId);
 }
 

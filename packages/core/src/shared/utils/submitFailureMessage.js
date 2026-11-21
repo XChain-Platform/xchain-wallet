@@ -57,7 +57,7 @@ import { APPROVE_REFUSAL_NAME } from './approveRefusal.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
-import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { USER_COPY_CODES, isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
 import { panicRefusalMessage } from '../safety/panicNotice.js';
 import { SIGNATURE_MISMATCH_MESSAGE } from '../../signers/verifyInputSignatures.js';
 import { t } from '../../i18n/index.js';
@@ -137,6 +137,7 @@ export function isWatcherChunkLane(err) {
     // pre-dispatch because the injected hardware/remote signer cannot sign
     // the reveal (submitWithSigner.js#HardwareChunkLaneError).
     if (e.name === 'HardwareChunkLaneError') return true;
+    if (e.name === 'MultipartSignerCapabilityError') return true;
     // Same shape: a single-encode compose refused a TAPROOT envelope it cannot
     // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
     if (e.name === 'EnvelopeConfirmLaneError') return true;
@@ -311,6 +312,11 @@ function isActiveNetworkChanged(err) {
         && /^The active network changed to [a-z]+\. /.test(String(e.message || '')));
 }
 
+function hasUserCopyCode(err) {
+    const code = err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
+    return typeof code === 'string' && USER_COPY_CODES.has(code);
+}
+
 function isBackgroundInterrupted(err) {
     const e = /** @type {any} */ (err);
     return Boolean(e && typeof e === 'object'
@@ -359,6 +365,10 @@ export function submitFailureMessage(
     // "prelaunch" in its own text, which the filters below reduce to the
     // generic line. Nothing was signed, and the remedy is a test network.
     if (isMainnetPrelaunch(err)) return MAINNET_PRELAUNCH_MESSAGE;
+    // Errors the wallet raises with a sentence written for the user (a stale
+    // donation, a changed fee, spent inputs, a refused cosigner reply) carry a
+    // code the tail would otherwise reduce to the generic line.
+    if (hasUserCopyCode(err)) return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
     if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
