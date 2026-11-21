@@ -25,7 +25,12 @@ export function cutAtWord(text, max) {
     if (codePoints.length <= max) return trimmed;
 
     const prefix = codePoints.slice(0, max - 1);
-    const whitespaceIndex = prefix.findLastIndex((character) => /\s/u.test(character));
+    let whitespaceIndex = -1;
+    for (let index = prefix.length - 1; index >= 0; index -= 1) {
+        if (!/\s/u.test(prefix[index])) continue;
+        whitespaceIndex = index;
+        break;
+    }
     const cut = whitespaceIndex === -1 ? prefix : prefix.slice(0, whitespaceIndex);
 
     return `${cut.join('').trimEnd()}…`;
