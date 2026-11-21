@@ -1,0 +1,56 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "snapshot.schema.json",
+    "title": "Watch snapshot",
+    "type": "object",
+    "x-budgetBytes": 61440,
+    "required": [
+        "v", "builtAt", "balancesAt", "pricesAt", "session", "network",
+        "fiatCode", "hidden", "unitDefault", "walletName", "totals",
+        "rows", "capped", "receive", "inbox", "settings"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "v": { "const": 1 },
+        "builtAt": { "type": "integer", "minimum": 0 },
+        "balancesAt": { "type": "integer", "minimum": 0 },
+        "pricesAt": { "type": "integer", "minimum": 0 },
+        "session": { "enum": ["unlocked", "locked"] },
+        "network": {
+            "type": "object",
+            "required": ["kind", "isTest"],
+            "additionalProperties": false,
+            "properties": {
+                "kind": { "type": "string", "minLength": 1 },
+                "isTest": { "type": "boolean" }
+            }
+        },
+        "fiatCode": { "type": "string", "minLength": 1 },
+        "hidden": { "type": "boolean" },
+        "unitDefault": { "enum": ["fiat", "units"] },
+        "walletName": { "type": "string", "maxLength": 40 },
+        "totals": {
+            "type": "object",
+            "required": ["fiatText", "unitsText"],
+            "additionalProperties": false,
+            "properties": {
+                "fiatText": { "type": "string" },
+                "unitsText": { "type": "string" }
+            }
+        },
+        "rows": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "row.schema.json" }
+        },
+        "capped": { "type": "boolean" },
+        "receive": {
+            "type": "array",
+            "$ref": "receive.schema.json",
+            "maxItems": 12
+        },
+        "inbox": { "$ref": "inbox.schema.json" },
+        "request": { "$ref": "request.schema.json" },
+        "settings": { "$ref": "settings.schema.json" }
+    }
+}
