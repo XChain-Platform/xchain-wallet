@@ -126,6 +126,21 @@ export function encoderErrorCode(err) {
 }
 
 /**
+ * True when `encoderErrorMessage` has the wallet's own sentence for this encoder
+ * refusal: an empty funding address, a lagging spendable-balance tracker, or a
+ * fee field under the relay floor. A refusal with no such sentence stays false,
+ * so the node's own verdict can still be shown as written.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function hasWalletEncoderCopy(err) {
+    const code = encoderErrorCode(err);
+    if (code === 'NO_UTXOS' || code === 'UTXO_TRACKER_STALE') return true;
+    return code === 'ENCODER_RPC_ERROR' && encoderFieldError(err) !== null;
+}
+
+/**
  * NO_UTXOS / UTXO_TRACKER_STALE carried inside an in-process ENCODER_RPC_ERROR.
  *
  * Reads the same three spellings `insufficientFundsQuote` (flows/maxSendable.js)

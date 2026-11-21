@@ -1130,7 +1130,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // verification failure. The amount error stays under its field.
     const hwVerifyNotice = isHwAddress
         ? (hwVerify.status === 'mismatch'
-            ? `${t('receive.your')} ${hwDeviceLabel} ${t('receive.showedADifferentAddressDo')}`
+            ? t('receive.deviceShowedDifferentAddress', { hwDeviceLabel })
             : hwVerify.status === 'error' ? hwVerify.message : null)
         : null;
     const pageNotice = loadError
@@ -1155,7 +1155,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 type (the newest address's type, else the chain default). */}
             {!hasReceiveAddress && descriptor && addressType ? (
                 <FormNotice variant="status">
-                    {`${t('receive.thereIsNo')} ${addressTypeLabel(addressType)} ${t('receive.addressYetCreateOneTo')}`}
+                    {t('receive.noAddressOfType', { addressType: addressTypeLabel(addressType) })}
                 </FormNotice>
             ) : null}
 
@@ -1250,11 +1250,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             </div>
                             {hwVerify.status === 'confirmed' ? (
                                 <p className={styles.hint} role="status">
-                                    {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
+                                    {t('receive.addressVerifiedOnDevice', { hwDeviceLabel })}
                                 </p>
                             ) : (
                                 <p className={styles.hint}>
-                                    {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}
+                                    {t('receive.verifyAddressOnDeviceHint', { hwDeviceLabel })}
                                 </p>
                             )}
                             <Button

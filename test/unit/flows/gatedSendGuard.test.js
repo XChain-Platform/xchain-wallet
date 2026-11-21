@@ -191,6 +191,25 @@ describe('prepareGatedSend detection', () => {
         expect(groups[0].files).toHaveLength(1);
     });
 
+    it('groups packs by publisher and key hash', async () => {
+        const rows = [
+            { ...gatedRow(HASH_A, '100'), source: 'issuer-a' },
+            { ...gatedRow(HASH_A, '101'), source: 'issuer-a' },
+            { ...gatedRow(HASH_A, '200'), source: 'issuer-b' },
+            gatedRow(HASH_A, '300'),
+            gatedRow(HASH_A, '301'),
+        ];
+        const sdk = makeSdk({ getFiles: vi.fn(async () => rows) });
+
+        const groups = await listGatedFiles({ sdk, tick: 'GATED' });
+
+        expect(groups.map((group) => [group.publisher, group.files.length])).toEqual([
+            ['issuer-a', 2],
+            ['issuer-b', 1],
+            ['', 2],
+        ]);
+    });
+
     it('matches gate tickers case-insensitively and keeps stored spelling', async () => {
         const row = { ...gatedRow(HASH_A, '100'), gate_ticker: 'MiXeD', status: 'valid' };
         const sdk = makeSdk({ getFiles: vi.fn(async () => [row]) });
@@ -488,6 +507,32 @@ describe('PC-29 unlock-threshold lane', () => {
         expect(plan.warnings).toEqual([]);
     });
 
+    it.each([
+        { thresholds: ['100', '5'], attaches: true },
+        { thresholds: ['100', '10'], attaches: false },
+        { thresholds: [null, '100'], attaches: true },
+        { thresholds: [null, null], attaches: true },
+    ])('preserves key-level handoff for publisher packs: $thresholds', async ({ thresholds, attaches }) => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => thresholds.map((threshold, index) => ({
+                ...thresholdRow(HASH_A, String(100 + index), threshold),
+                source: `issuer-${index}`,
+            }))),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault, _activationHeights: ACTIVE }));
+
+        if (!attaches) {
+            expect(plan).toBeNull();
+            return;
+        }
+        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
+        expect(plan.missingKeyHashes).toEqual([]);
+        expect(plan.warnings).toEqual([]);
+    });
+
     it('refuses the send when the destination balance cannot be read (18909)', async () => {
         const down = new Error('explorer down');
         const sdk = thresholdSdk({
@@ -545,6 +590,22 @@ describe('PC-29 unlock-threshold lane', () => {
         const mirrored = await gatedSendReadiness(base);
         expect(mirrored.state).toBe('ungated');
         expect(mirrored.belowThresholdCount).toBe(1);
+    });
+
+    it('readiness merges publisher packs that share one handoff key', async () => {
+        const sdk = thresholdSdk({
+            getFiles: vi.fn(async () => [
+                { ...gatedRow(HASH_A, '100'), source: 'issuer-a' },
+                { ...gatedRow(HASH_A, '200'), source: 'issuer-b' },
+            ]),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const readiness = await gatedSendReadiness({ ...makeArgs({ sdk, vault }), to: null, amount: null });
+
+        expect(readiness.state).toBe('ready');
+        expect(readiness.groups).toEqual([{ keyHash: HASH_A, fileCount: 2, haveKey: true }]);
     });
 
     it('gatedGroupThreshold picks the pack minimum and rejects garbage', () => {

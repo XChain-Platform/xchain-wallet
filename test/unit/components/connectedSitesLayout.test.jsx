@@ -174,6 +174,27 @@ describe('Connected Sites site detail', () => {
         expect(screen.queryByRole('radiogroup')).toBeNull();
     });
 
+    it('shows empty account and chain grants as bridge wildcards', async () => {
+        connected = [{
+            ...connected[0],
+            id: 'wildcard',
+            appName: 'Wildcard App',
+            permissions: {
+                chains: [],
+                accounts: [],
+                canSignMessage: false,
+                canSignAction: {},
+            },
+        }];
+        render(<ConnectedSitesSection />);
+        fireEvent.click(await rowFor('Wildcard App'));
+
+        const permissions = await screen.findByRole('list', { name: 'Permissions' });
+        expect(permissions).toHaveTextContent('NetworksAll networks');
+        expect(permissions).toHaveTextContent('AccountsAll accounts, including ones you add later');
+        expect(permissions).not.toHaveTextContent('None');
+    });
+
     it('disconnects through the confirm and returns to the list', async () => {
         render(<ConnectedSitesSection />);
         fireEvent.click(await rowFor('PepeSwap'));

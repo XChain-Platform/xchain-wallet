@@ -242,12 +242,20 @@ export async function splitGroupsByThreshold({ sdk, to, tick, amount, groups }) 
     }
 
     const requiredGroups = [];
-    const belowThresholdKeyHashes = [];
+    const requiredKeyHashes = new Set();
+    const belowThresholdCandidates = new Set();
     groups.forEach((g, i) => {
+        const keyHash = String(g.keyHash).toLowerCase();
         const t = thresholds[i] === null ? null : decimalToScaled(thresholds[i]);
-        if (t === null || postSendScaled >= t) requiredGroups.push(g);
-        else belowThresholdKeyHashes.push(String(g.keyHash).toLowerCase());
+        if (t === null || postSendScaled >= t) {
+            requiredGroups.push(g);
+            requiredKeyHashes.add(keyHash);
+        } else {
+            belowThresholdCandidates.add(keyHash);
+        }
     });
+    const belowThresholdKeyHashes = [...belowThresholdCandidates]
+        .filter((keyHash) => !requiredKeyHashes.has(keyHash));
     return { requiredGroups, belowThresholdKeyHashes };
 }
 
@@ -298,6 +306,8 @@ export async function resolveGatedSendKeys({ sdk, vault, walletId, chainId, tick
     const missingKeyHashes = [];
     for (const group of groups) {
         const keyHash = String(group.keyHash).toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(keysByHash, keyHash)
+            || missingKeyHashes.includes(keyHash)) continue;
         let key = null;
         if (vault?.gatedKeys && walletId) {
             const row = await vault.gatedKeys.get(gatedKeyId({
@@ -435,10 +445,11 @@ export async function prepareGatedSend({
         },
     }).actionString;
 
+    const requiredKeyCount = new Set(groups.map((g) => String(g.keyHash).toLowerCase())).size;
     const warnings = missingKeyHashes.length > 0
         ? [{
             code: 'GATED_SEND_PARTIAL_KEYS',
-            message: `Attaching ${attachedKeyHashes.length} of ${groups.length} unlock keys for ${tickUpper}; `
+            message: `Attaching ${attachedKeyHashes.length} of ${requiredKeyCount} unlock keys for ${tickUpper}; `
                 + `the recipient will not be able to open the pack(s) ${missingKeyHashes.join(', ')}.`,
         }]
         : [];
@@ -527,11 +538,15 @@ export async function gatedSendReadiness({
     const { keysByHash } = await resolveGatedSendKeys({
         sdk, vault, walletId, chainId, tick: tickUpper, sourceAddress, groups,
     });
-    const rows = groups.map((g) => ({
-        keyHash: String(g.keyHash).toLowerCase(),
-        fileCount: Array.isArray(g.files) ? g.files.length : 0,
-        haveKey: Boolean(keysByHash[String(g.keyHash).toLowerCase()]),
-    }));
+    const rowsByKeyHash = new Map();
+    for (const group of groups) {
+        const keyHash = String(group.keyHash).toLowerCase();
+        const row = rowsByKeyHash.get(keyHash) || { keyHash, fileCount: 0, haveKey: false };
+        row.fileCount += Array.isArray(group.files) ? group.files.length : 0;
+        row.haveKey = Boolean(keysByHash[keyHash]);
+        rowsByKeyHash.set(keyHash, row);
+    }
+    const rows = [...rowsByKeyHash.values()];
     const held = rows.filter((r) => r.haveKey).length;
     const state = held === rows.length ? 'ready' : (held === 0 ? 'blocked' : 'partial');
     return { state, groups: rows, ...(belowThresholdCount > 0 ? { belowThresholdCount } : {}) };

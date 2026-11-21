@@ -443,6 +443,7 @@ const messages = {
     'settings.connectedSites.httpsExampleComOrExample': 'https://example.com or *.example.com',
     'settings.connectedSites.originOrWildcardToBlock': 'Origin or wildcard to block',
     'settings.connectedSites.noPermissionRecord': 'No permission record.',
+    'settings.connectedSites.allAccounts': 'All accounts, including ones you add later',
     'settings.connectedSites.signMessages': 'Sign messages',
     'settings.connectedSites.alwaysAllow': 'Always allow',
     'settings.connectedSites.askEveryTime': 'Ask every time',

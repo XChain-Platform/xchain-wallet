@@ -127,7 +127,9 @@ export type ActionPermission = 'always' | 'ask' | 'never';
 // Permission record the dApp sees after connect(). Shape mirrors
 // ConnectedSite.permissions (§11.3.5) but is the dApp-visible subset.
 export interface SitePermissions {
+    /** An empty array permits every chain. */
     chains: ChainId[];
+    /** An empty array permits every current and future wallet account. */
     accounts: string[];
     canSignMessage: boolean;
     canSignAction: Record<string, ActionPermission>;
@@ -267,8 +269,12 @@ export interface SignActionParams<TParams = Record<string, unknown>> {
     chainId: ChainId;
     action: string;
     params: TParams;
-    // Optional site-supplied fee override; wallet treats as a hint and the
-    // user can still adjust on the sign screen.
+    /**
+     * @deprecated Accepted and ignored. Bridge actions use the wallet's fee
+     * settings; a page cannot choose the fee and the sign screen has no fee
+     * strategy picker. Kept so existing callers compile until the next major
+     * bridge-spec version.
+     */
     feeStrategyHint?: 'low' | 'normal' | 'fast';
 }
 
@@ -451,8 +457,10 @@ export interface BridgeEventMap {
     // Emitted when the set of accounts the site can see changes (e.g. user
     // revokes or grants additional accounts in Settings → Connected Sites).
     accountsChanged: (accounts: Account[]) => void;
-    // Emitted when the user switches the active chain in the wallet UI.
-    // Sites should re-read anything chain-scoped on change.
+    // Emitted when the wallet's active network changes. The argument is one
+    // representative active chain inside the site's grant, not the chain the
+    // user is on. Sites should call getActiveChains() and refresh from its
+    // result. A site with no granted chain on the new network gets no event.
     chainChanged: (chainId: ChainId) => void;
     // Emitted when the site is disconnected (user action, lock, or panic
     // mode). Sites should clear session state.

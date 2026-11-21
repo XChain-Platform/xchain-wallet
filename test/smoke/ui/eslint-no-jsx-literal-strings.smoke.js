@@ -35,7 +35,7 @@ const rule = await import(
 );
 const plugin = (await import(join(root, 'tools/eslint/plugin.js'))).default;
 
-const { isTrivialString, findViolations, USER_FACING_ATTRS } = rule;
+const { isTrivialString, findViolations, USER_FACING_ATTRS, OBJECT_COPY_ATTRS } = rule;
 
 // Trivial-string heuristic.
 assert.ok(isTrivialString(''),       'empty is trivial');
@@ -716,6 +716,56 @@ assert.strictEqual(v.length, 0, 'an object on a technical attribute stays silent
 v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)), { allow: ['Restore'] });
 assert.strictEqual(v.length, 0, 'allowlist suppresses inline object copy');
 
+// 22c. Notice's preferred `action` and ActionsDetailsToggle's `extra` tab carry
+// copy only inside an inline object, while the same names also hold shell
+// mode strings, protocol object keys and a numeric width. They are judged by
+// the inline-object judge alone, and never join the main set.
+assert.deepStrictEqual([...OBJECT_COPY_ATTRS].sort(), ['action', 'extra'], 'OBJECT_COPY_ATTRS holds exactly action and extra');
+for (const name of OBJECT_COPY_ATTRS) {
+    assert.ok(!USER_FACING_ATTRS.has(name), `${name} stays out of USER_FACING_ATTRS, so it is never reported twice`);
+}
+const actionAttr = (value) => jsxAttr('action', jsxExpr(value));
+v = findViolations(actionAttr(objectExpr(prop('label', literal('Try Again')), onAction)));
+assert.strictEqual(v.length, 1, 'flags a literal label in an inline action object');
+assert.match(v[0].message, /action/);
+assert.match(v[0].message, /Try Again/);
+assert.strictEqual(v[0].node.type, 'ObjectExpression', 'reports the action object node itself');
+v = findViolations(actionAttr(conditional(identifier('undefined'), objectExpr(prop('label', literal('Retry')), onAction))));
+assert.strictEqual(v.length, 1, 'flags an action object held in a ternary branch, once');
+v = findViolations(actionAttr(objectExpr(prop('ariaLabel', literal('Retry the import')), prop('label', identifier('lbl')))));
+assert.strictEqual(v.length, 1, 'judges every copy key inside an action object');
+v = findViolations(jsxAttr('extra', jsxExpr(objectExpr(prop('id', literal('markets')), prop('label', literal('Markets')), prop('panel', identifier('marketsPanel'))))));
+assert.strictEqual(v.length, 1, 'flags the tab label in an inline extra object, and only once');
+assert.match(v[0].message, /extra/);
+assert.match(v[0].message, /Markets/);
+// The must-stay-silent shapes for the two object-only names.
+v = findViolations(jsxAttr('action', literal('edit')));
+assert.strictEqual(v.length, 0, 'a shell mode string action="edit" stays silent');
+v = findViolations(actionAttr(literal('stake')));
+assert.strictEqual(v.length, 0, 'a container mode string stays silent');
+v = findViolations(actionAttr(conditional(literal('stake'), literal('unstake'))));
+assert.strictEqual(v.length, 0, 'a ternary of mode strings stays silent');
+v = findViolations(actionAttr(logical(identifier('initialMode'), literal('stake'))));
+assert.strictEqual(v.length, 0, 'a mode fallback stays silent');
+v = findViolations(actionAttr(template('claim-', '')));
+assert.strictEqual(v.length, 0, 'a mode template stays silent');
+v = findViolations(actionAttr(objectExpr(prop('label', identifier('retryLabel')), onAction)));
+assert.strictEqual(v.length, 0, 'a runtime action label stays silent');
+v = findViolations(actionAttr(jsxElement()));
+assert.strictEqual(v.length, 0, 'an element action stays silent');
+v = findViolations(jsxAttr('extra', jsxExpr(identifier('appliedExtra'))));
+assert.strictEqual(v.length, 0, 'a runtime extra stays silent');
+v = findViolations(jsxAttr('extra', jsxExpr(objectExpr(prop('id', literal('x')), prop('label', tCall(identifier('k')))))));
+assert.strictEqual(v.length, 0, 'a translated extra label stays silent');
+v = findViolations(recoveryAttr(objectExpr(prop('action', literal('ISSUE')), prop('label', identifier('lbl')))));
+assert.strictEqual(v.length, 0, 'an action key inside an enrolled object is not a copy key');
+v = findViolations(fn([objectPattern(defaulted('action', literal('stake')), defaulted('extra', literal('wide')))]));
+assert.strictEqual(v.length, 0, 'action and extra prop defaults stay silent');
+v = findViolations(program(constTable('ACTIONS', objectExpr(prop('retry', literal('Try again')))), sinkRef('action', member(identifier('ACTIONS'), 'retry'))));
+assert.strictEqual(v.length, 0, 'an object-only name does not open constant tables');
+v = findViolations(actionAttr(objectExpr(prop('label', literal('Try Again')), onAction)), { allow: ['Try Again'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses action object copy');
+
 // Treat translation variables as user-facing even when the enclosing t()
 // call reaches JSX through an attribute CallExpression.
 v = findViolations(tCall(logical(identifier('label'), literal('Change unavailable'), '??')));
@@ -768,7 +818,7 @@ assert.strictEqual(v.length, 0, 'a nested translation in t() variables stays sil
 // USER_FACING_ATTRS membership, so the second list could only drift.
 // Pin the surface so a dead export has to be justified here first.
 const EXPECTED_EXPORTS = [
-    'USER_FACING_ATTRS', 'create', 'default', 'findViolations',
+    'OBJECT_COPY_ATTRS', 'USER_FACING_ATTRS', 'create', 'default', 'findViolations',
     'isTrivialString', 'meta', 'propDefaultViolations', 'shouldSkipFile',
     'templateCopy',
 ];
@@ -938,6 +988,19 @@ visitors.CallExpression(tCall(literal('Ledger')));
 visitors.CallExpression(tCall(identifier('label')));
 visitors.CallExpression(tCall(tCall(identifier('nested'))));
 assert.strictEqual(reports.length, 32, 'create() keeps direct non-copy t() variable shapes silent');
+
+// Test 22c on the shipping side: the object-only names stay in step too.
+visitors.JSXAttribute(actionAttr(objectExpr(prop('label', literal('Try Again')), onAction)));
+assert.strictEqual(reports.length, 33, 'create() flags a literal label in an inline action object');
+assert.match(reports[32].message, /action object copy/);
+visitors.JSXAttribute(jsxAttr('extra', jsxExpr(objectExpr(prop('id', literal('markets')), prop('label', literal('Markets'))))));
+assert.strictEqual(reports.length, 34, 'create() flags the tab label in an inline extra object');
+visitors.JSXAttribute(jsxAttr('action', literal('stake')));
+visitors.JSXAttribute(actionAttr(conditional(literal('stake'), literal('unstake'))));
+visitors.JSXAttribute(actionAttr(objectExpr(prop('label', identifier('retryLabel')), onAction)));
+visitors.JSXAttribute(jsxAttr('extra', jsxExpr(identifier('appliedExtra'))));
+visitors.ObjectPattern(objectPattern(defaulted('action', literal('stake'))));
+assert.strictEqual(reports.length, 34, 'create() keeps action mode strings, runtime labels and defaults silent');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {
