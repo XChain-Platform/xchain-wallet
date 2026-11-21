@@ -19,6 +19,8 @@ export function applyNativeFold(payload, root = globalThis.document?.documentEle
     if (!root) return orientation;
     root.style.setProperty('--xc-fold-x', cssPixels(division?.x));
     root.style.setProperty('--xc-fold-y', cssPixels(division?.y));
+    root.style.setProperty('--xc-fold-width', cssPixels(division?.width));
+    root.style.setProperty('--xc-fold-height', cssPixels(division?.height));
     root.setAttribute('data-fold', orientation);
     return orientation;
 }
