@@ -171,6 +171,13 @@ function compareBalanceNames(a, b) {
     return `${a.chainId || ''}:${a.tick || ''}`.localeCompare(`${b.chainId || ''}:${b.tick || ''}`);
 }
 
+export function watchPublishRows(allRows, hiddenKeys, automaticHiddenKeys) {
+    return allRows.filter((row) => {
+        const key = `${row.chainId}:${row.tick}`;
+        return !hiddenKeys?.has(key) && !automaticHiddenKeys?.has(key);
+    });
+}
+
 /**
  * Sort balance rows without converting exact fiat values to floating point.
  * Missing values stay at the end, with name order as the stable fallback so

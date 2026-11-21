@@ -110,7 +110,7 @@ describe('storeVersionFromTag', () => {
         // Sampled at the slot and band boundaries rather than exhaustively:
         // a carry bug shows up at 49 -> 50 -> 51, not in the middle of a range.
         const seen = new Map();
-        for (const major of [0, 1, 209]) {
+        for (const major of [0, 1, 109]) {
             for (const minor of [0, 1, 9, 10, 99, 100, 999]) {
                 for (const patch of [0, 1, 9, 10, 99]) {
                     for (const suffix of ['', '-beta.1', '-beta.49', '-respin.1', '-respin.49']) {
@@ -124,14 +124,14 @@ describe('storeVersionFromTag', () => {
         }
     });
 
-    it("keeps the largest representable release under Play's ceiling", () => {
+    it('keeps the largest phone release within the reserved phone range', () => {
         const max = storeVersionFromTag(
             `v${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH}-respin.${MAX_LANE_N}`,
         );
-        expect(max).toBe(PLAY_VERSION_CODE_CEILING - 1);
+        expect(max).toBe(1_099_999_999);
         expect(max).toBeLessThan(PLAY_VERSION_CODE_CEILING);
-        // And the next MAJOR would not, which is why the bound is 209.
-        expect(() => storeVersionFromTag(`v${MAX_MAJOR + 1}.0.0`)).toThrow(/exceeds 209/);
+        // The next MAJOR would leave no room for the Wear versionCode offset.
+        expect(() => storeVersionFromTag(`v${MAX_MAJOR + 1}.0.0`)).toThrow(/exceeds 109/);
     });
 });
 
@@ -155,7 +155,7 @@ describe('parseTag strictness', () => {
     it('refuses tags the formula has no room for', () => {
         expect(() => parseTag('v0.1000.0')).toThrow(/MINOR 1000 exceeds 999/);
         expect(() => parseTag('v0.0.100')).toThrow(/PATCH 100 exceeds 99/);
-        expect(() => parseTag('v210.0.0')).toThrow(/MAJOR 210 exceeds 209/);
+        expect(() => parseTag('v110.0.0')).toThrow(/MAJOR 110 exceeds 109/);
         expect(() => parseTag('v0.0.0-beta.50')).toThrow(/exceeds 49/);
         expect(() => parseTag('v0.0.0-respin.50')).toThrow(/exceeds 49/);
     });

@@ -109,10 +109,12 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 // supplied --team-id when there is one; being signing-added is why no source
 // file requests it, not a reason to trust what it says.
 const SIGNING_ADDED_ENTITLEMENTS = new Set(['com.apple.developer.team-identifier']);
-const WATCH_BUNDLE_IDS = new Set([
-    'io.xchain.wallet.ios.watch',
-    'io.xchain.wallet.ios.watch.widgets',
-]);
+const WATCH_BUNDLE_ID_BY_KIND = Object.freeze({
+    app: 'io.xchain.wallet.ios.watch',
+    widgets: 'io.xchain.wallet.ios.watch.widgets',
+});
+const WATCH_BUNDLE_IDS = new Set(Object.values(WATCH_BUNDLE_ID_BY_KIND));
+const WATCH_APP_GROUPS = Object.freeze(['group.io.xchain.wallet.ios.watch']);
 
 /**
  * The facts the repo asks the artifact to carry, read out of the build inputs.
@@ -218,6 +220,109 @@ function plistArrayStrings(xml, name) {
 }
 
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Assert the identity, version and capability facts of a built watch bundle.
+ *
+ * @param {object} args
+ * @param {object} args.phoneInfo parsed Info.plist of the containing phone app
+ * @param {object} args.info parsed Info.plist of the watch app or widget bundle
+ * @param {object} [args.entitlements] entitlements read out of the bundle signature
+ * @param {'app'|'widgets'} args.kind watch bundle kind
+ * @param {'archive'|'export'} args.stage artifact stage
+ * @param {boolean} [args.unsigned] the caller declared an unsigned lane archive
+ * @returns {{failures: string[], passes: string[]}}
+ */
+export function runWatchChecks({
+    phoneInfo, info, entitlements, kind, stage, unsigned = false,
+}) {
+    const failures = [];
+    const passes = [];
+    const fail = (what, why) => { failures.push(`${what}\n    ${why}`); };
+    const pass = (what) => { passes.push(what); };
+
+    if (kind !== 'app' && kind !== 'widgets') {
+        throw new Error(`kind must be 'app' or 'widgets', not ${JSON.stringify(kind)}`);
+    }
+    if (stage !== 'archive' && stage !== 'export') {
+        throw new Error(`stage must be 'archive' or 'export', not ${JSON.stringify(stage)}`);
+    }
+
+    const phoneBundleId = phoneInfo.CFBundleIdentifier;
+    const expectedBundleId = WATCH_BUNDLE_ID_BY_KIND[kind];
+    if (info.CFBundleIdentifier === expectedBundleId) {
+        pass(`${kind} bundle id is ${expectedBundleId}`);
+    } else {
+        fail(`the watch ${kind} bundle id is ${JSON.stringify(info.CFBundleIdentifier)}, not ${expectedBundleId}`,
+            'The watch target must keep the App ID its signing and store records were created for.');
+    }
+    if (typeof phoneBundleId === 'string' && info.CFBundleIdentifier?.startsWith(`${phoneBundleId}.`)) {
+        pass(`${kind} bundle id extends the phone bundle id ${phoneBundleId}`);
+    } else {
+        fail(`the watch ${kind} bundle id ${JSON.stringify(info.CFBundleIdentifier)} does not start with `
+            + `${JSON.stringify(phoneBundleId)} and a dot`,
+            'An embedded watch bundle must be namespaced beneath the phone app that contains it.');
+    }
+
+    for (const key of ['CFBundleShortVersionString', 'CFBundleVersion']) {
+        if (info[key] === phoneInfo[key]) {
+            pass(`${kind} ${key} matches the phone app at ${JSON.stringify(phoneInfo[key])}`);
+        } else {
+            fail(`the watch ${kind} ${key} is ${JSON.stringify(info[key])}, not the phone app's `
+                + `${JSON.stringify(phoneInfo[key])}`,
+                'Every bundle in an iOS submission must carry the same release version pair.');
+        }
+    }
+
+    if (kind === 'app') {
+        if (typeof phoneBundleId === 'string' && info.WKCompanionAppBundleIdentifier === phoneBundleId) {
+            pass(`WKCompanionAppBundleIdentifier names the phone app ${phoneBundleId}`);
+        } else {
+            fail(`WKCompanionAppBundleIdentifier is ${JSON.stringify(info.WKCompanionAppBundleIdentifier)}, `
+                + `not ${JSON.stringify(phoneBundleId)}`,
+                'The watch app must identify the phone app that owns and installs it.');
+        }
+    }
+
+    if (!entitlements) {
+        if (unsigned && stage === 'archive') {
+            pass('SKIPPED: entitlement checks, because the caller declared an unsigned lane build');
+        } else {
+            fail(`the watch ${kind} carries no entitlements at all`,
+                'A signed watch bundle must expose its requested app group and distribution posture.');
+        }
+    } else {
+        const appGroups = entitlements['com.apple.security.application-groups'];
+        if (eq(appGroups, WATCH_APP_GROUPS)) {
+            pass(`application groups are exactly [${WATCH_APP_GROUPS.join(', ')}]`);
+        } else {
+            fail(`the watch ${kind} application groups are ${JSON.stringify(appGroups)}, not `
+                + `[${WATCH_APP_GROUPS.join(', ')}]`,
+                'The watch targets request one shared container, and no other app group belongs in the signature.');
+        }
+
+        const unexpected = Object.keys(entitlements)
+            .filter((key) => key.startsWith('com.apple.developer.'))
+            .filter((key) => !SIGNING_ADDED_ENTITLEMENTS.has(key));
+        if (unexpected.length > 0) {
+            fail(`the watch ${kind} holds unexpected capabilities: [${unexpected.join(', ')}]`,
+                'The watch targets request no developer capability, so every such key is signing-time creep.');
+        } else {
+            pass('no developer capability beyond the signing-added entitlements');
+        }
+
+        if (stage === 'export') {
+            if (entitlements['get-task-allow'] === true) {
+                fail(`the exported watch ${kind} is signed with get-task-allow`,
+                    'A shipped watch process must not permit a debugger to attach.');
+            } else {
+                pass('get-task-allow is not set, so the shipped watch bundle is not debuggable');
+            }
+        }
+    }
+
+    return { failures, passes };
+}
 
 /**
  * Every artifact assertion, as a pure function so the guard can be driven

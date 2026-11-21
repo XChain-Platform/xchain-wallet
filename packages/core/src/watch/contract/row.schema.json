@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "row.schema.json",
+    "title": "Watch balance row",
+    "type": "object",
+    "required": [
+        "id",
+        "chainId",
+        "tick",
+        "displayName",
+        "amountText",
+        "fiatText",
+        "noPrice",
+        "pendingText",
+        "unavailable",
+        "iconHash",
+        "tickerColor",
+        "hasDetail"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "id": { "type": "string" },
+        "chainId": { "type": "string" },
+        "tick": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 64 },
+        "amountText": { "type": "string" },
+        "fiatText": { "type": "string" },
+        "noPrice": { "type": "boolean" },
+        "pendingText": { "type": "string" },
+        "unavailable": { "type": "boolean" },
+        "iconHash": { "type": "string" },
+        "tickerColor": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+        "hasDetail": { "type": "boolean" }
+    }
+}

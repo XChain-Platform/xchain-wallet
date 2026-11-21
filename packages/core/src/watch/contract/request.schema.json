@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["id", "kind", "iconHash", "sentence", "amountText"],
+    "additionalProperties": false,
+    "oneOf": [
+        {
+            "properties": { "kind": { "const": "request" } },
+            "not": { "required": ["expiresAt"] }
+        },
+        {
+            "properties": { "kind": { "const": "paydue" } },
+            "required": ["expiresAt"]
+        }
+    ],
+    "properties": {
+        "id": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f]{32}$"
+        },
+        "kind": {
+            "enum": ["request", "paydue"]
+        },
+        "iconHash": { "type": "string" },
+        "sentence": {
+            "type": "string",
+            "maxLength": 200
+        },
+        "amountText": { "type": "string" },
+        "expiresAt": {
+            "type": "integer",
+            "minimum": 0
+        }
+    }
+}

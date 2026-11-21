@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// THE store integer, for both stores, derived from the release tag alone
-// (the release-rails spec §2 owns it; reconciled the three copies that
-// used to disagree).
+// THE store integer, for both stores, derived from the release tag alone.
+// The release-rails spec §2 defines the shared formula.
 //
 //     storeVersion = MAJOR·10⁷ + MINOR·10⁴ + PATCH·10² + BUILD
 //
@@ -62,16 +61,17 @@
 // shipped build). `v0.333.01` and `-beta.0` are refused for exactly that
 // reason: they are second spellings of a number that already has one.
 //
-// Bounds come from Play's 2,100,000,000 ceiling: MAJOR ≤ 209 keeps the largest
-// representable release (209.999.99-respin.49 → 2,099,999,999) under it.
-// MINOR ≤ 999 and PATCH ≤ 99 are the field widths.
+// Bounds reserve a 1,000,000,000 versionCode offset for Wear under Play's
+// 2,100,000,000 ceiling: MAJOR ≤ 109 keeps the largest Wear release
+// (109.999.99-respin.49 → 2,099,999,999) under it. MINOR ≤ 999 and
+// PATCH ≤ 99 are the field widths.
 
 import { realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const TAG_RE = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(beta|respin)\.(0|[1-9]\d*))?$/;
 
-export const MAX_MAJOR = 209;
+export const MAX_MAJOR = 109;
 export const MAX_MINOR = 999;
 export const MAX_PATCH = 99;
 
@@ -82,6 +82,7 @@ export const MAX_LANE_N = 49;
 
 // Play's hard ceiling on versionCode.
 export const PLAY_VERSION_CODE_CEILING = 2100000000;
+export const WEAR_VERSION_CODE_OFFSET = 1_000_000_000;
 
 // Parse a release tag into its fields. Throws on anything the grammar above
 // does not accept; callers in the release path WANT the throw, since the
@@ -163,6 +164,10 @@ export function storeVersionFromTag(tag) {
 // Android's name for the same number. Kept as its own export so the Gradle
 // side reads in Play's vocabulary without a second formula existing.
 export const versionCodeFromTag = storeVersionFromTag;
+
+export function wearVersionCodeFromTag(tag) {
+    return versionCodeFromTag(tag) + WEAR_VERSION_CODE_OFFSET;
+}
 
 // The user-visible version string on Play. Beta identity is visible (testers
 // should know they are on one); a respin is NOT, because it is the same
