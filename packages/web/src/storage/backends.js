@@ -36,6 +36,7 @@ import {
     nativeShellIsBroken,
 } from './nativeVault.js';
 import { storage as coreStorage } from '@xchain-wallet/core';
+import { getNativePlugin } from '@xchain-wallet/core/shared/nativeShell.js';
 
 const { VaultUnavailableError } = coreStorage;
 
@@ -90,6 +91,46 @@ export function createMetaBackend() {
 /** Human-readable, for diagnostics and the smoke. */
 export function storageBackendName() {
     return usingNativeVault() ? 'native-vault' : 'indexeddb';
+}
+
+/**
+ * Clear native stores owned by the phone's watch support.
+ *
+ * Missing plugins are expected in browsers and older native shells. A failure
+ * in one store must not prevent the remaining stores from being cleared.
+ *
+ * @param {{ getPlugin?: typeof getNativePlugin }} [opts]
+ * @returns {Promise<{
+ *   cleared: string[],
+ *   skipped: string[],
+ *   failed: Array<{ name: string, error: unknown }>,
+ * }>}
+ */
+export async function clearWatchNativeStores({ getPlugin = getNativePlugin } = {}) {
+    const cleared = [];
+    const skipped = [];
+    const failed = [];
+    const stores = [
+        ['XChainActivity', 'clear'],
+        ['XChainNotify', 'cancelAll'],
+        ['XChainWatch', 'removeWatchData'],
+    ];
+
+    for (const [name, method] of stores) {
+        try {
+            const plugin = getPlugin(name, { method });
+            if (!plugin) {
+                skipped.push(name);
+                continue;
+            }
+            await plugin[method]();
+            cleared.push(name);
+        } catch (error) {
+            failed.push({ name, error });
+        }
+    }
+
+    return { cleared, skipped, failed };
 }
 
 /**
