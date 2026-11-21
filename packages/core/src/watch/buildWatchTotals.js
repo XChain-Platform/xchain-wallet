@@ -30,12 +30,13 @@ export function buildWatchTotals(rows, {
     session = 'locked',
     walletName = '',
     accountId,
-    activeAccountId = accountId,
+    activeAccountId,
 } = {}) {
     const effectiveSettings = normalizeDisplayCurrency(settings).settings || {};
     const network = watchNetwork(effectiveSettings);
     const fiatCode = effectiveSettings.fiatCurrency || 'USD';
-    const activeName = accountId === activeAccountId ? watchWalletName(walletName) : undefined;
+    const activeName = typeof accountId === 'string' && accountId
+        && accountId === activeAccountId ? watchWalletName(walletName) : undefined;
 
     return {
         session: session === 'unlocked' ? 'unlocked' : 'locked',

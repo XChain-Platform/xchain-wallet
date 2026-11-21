@@ -54,7 +54,15 @@ describe('buildWatchTotals', () => {
         expect(buildWatchTotals([], {
             walletName: '😀'.repeat(21),
             accountId: 'account-1',
+            activeAccountId: 'account-1',
         }).walletName).toBe('😀'.repeat(20));
+        expect(buildWatchTotals([], {
+            walletName: 'Unscoped',
+        }).walletName).toBe('');
+        expect(buildWatchTotals([], {
+            walletName: 'Missing active account',
+            accountId: 'account-1',
+        }).walletName).toBe('');
     });
 
     it('uses safe defaults for incomplete host state without changing rows', () => {
