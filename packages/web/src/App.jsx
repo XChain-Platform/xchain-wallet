@@ -854,6 +854,12 @@ function AppInner() {
             });
     }, [resetNav]);
     useDemoAutoWipe(activeWalletId, refresh);
+    // An unlock that finds the encrypted vault gone lands on the screen a
+    // start-up read shows for the same state, and outranks any read in flight.
+    const showVaultUnavailable = useCallback((next) => {
+        statusRequest.current += 1;
+        setStatus({ state: 'error', ...next });
+    }, []);
 
     const finishFreshWalletCreation = useCallback(() => {
         const next = { hasWallet: true, hasSession: true, state: 'unlocked' };
@@ -1166,12 +1172,17 @@ function AppInner() {
     // Manage, Reconnect: open the device inside the click and hand it to the bridge.
     const handleHardwareReconnect = (wallet, signer) => {
         if (!signer?.id) return;
-        openHardwareSigner(signer)
+        // The outcome goes back to the card, whose badge follows it.
+        return openHardwareSigner(signer)
             .then((live) => {
                 registerLocalSigner(signer.id, live);
                 showToast({ message: `${wallet?.name || 'Hardware wallet'} is connected.`, variant: 'success' });
+                return true;
             })
-            .catch((err) => showToast({ message: userFacingMessage(err, 'Could not connect the hardware wallet.'), variant: 'error' }));
+            .catch((err) => {
+                showToast({ message: userFacingMessage(err, 'Could not connect the hardware wallet.'), variant: 'error' });
+                return false;
+            });
     };
 
     // A hardware wallet's Accounts row opens the shared My Accounts page (G131),
@@ -1427,7 +1438,7 @@ function AppInner() {
                 </Suspense>
             );
         case 'locked':
-            return <Locked onUnlocked={refresh} />;
+            return <Locked onUnlocked={refresh} onVaultUnavailable={showVaultUnavailable} />;
         case 'unlocked': {
             // §24.2 / G053: wrap the unlocked-route render tree in
             // <FullLayoutWithNav> so the left nav is always visible at

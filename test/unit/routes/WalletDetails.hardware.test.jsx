@@ -22,7 +22,10 @@ import { WalletDetails } from '../../../packages/core/src/shared/routes/WalletDe
 import { UnlinkHardwareWallet, unlinkNotice } from '../../../packages/core/src/shared/components/UnlinkHardwareWallet.jsx';
 import { cardStatus } from '../../../packages/core/src/shared/components/HardwareWalletDetails.jsx';
 import { removeWallet } from '../../../packages/core/src/flows/removeWallet.js';
+import { makeHardwareSessionSigner } from '../../../packages/core/src/signers/hardwareReconnect.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const wipe = vi.hoisted(() => ({ wipeWalletStorage: vi.fn(async () => {}) }));
 
@@ -237,6 +240,64 @@ describe('Unlinking the last wallet', () => {
         });
         expect(screen.getByRole('alert')).toHaveTextContent("Couldn't unlink this wallet. Try again.");
         expect(wipe.wipeWalletStorage).not.toHaveBeenCalled();
+    });
+});
+
+// The card reads its status once, from the bridge's session signer, which
+// answers 'available' while its device is not open. Reconnect is the click
+// that opens it, so the card takes the badge from how that open ended.
+describe('Reconnect and the device card badge', () => {
+    const LEDGER_SIGNER = { ...SIGNER, kind: 'ledger', vendor: 'ledger', model: 'nanoSP' };
+    const sessionMessaging = () => {
+        const session = makeHardwareSessionSigner(LEDGER_SIGNER, {
+            open: () => Promise.reject(new Error('readLedgerAppInfo: unsupported response format 2')),
+        });
+        return messagingFor({
+            listSigners: () => Promise.resolve([LEDGER_SIGNER]),
+            getSignerStatus: (opts) => session.getStatus(opts),
+        });
+    };
+    const clickReconnect = async () => {
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /^Reconnect/ }));
+            for (let i = 0; i < 8; i += 1) await Promise.resolve();
+        });
+    };
+    const card = () => document.querySelector('[data-hardware-device-card]');
+
+    it('drops the badge to Not connected when the reconnect fails', async () => {
+        await renderDetails({ onReconnect: () => Promise.resolve(false) }, sessionMessaging());
+        expect(card()).toHaveAttribute('data-status', 'connected');
+        await clickReconnect();
+        expect(card()).toHaveAttribute('data-status', 'not-connected');
+        expect(card()).toHaveTextContent('Not connected');
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
+        expect(within(screen.getByRole('tabpanel')).getByText('Not connected')).toBeInTheDocument();
+    });
+
+    it('shows Connected once a reconnect opens the device', async () => {
+        await renderDetails({ onReconnect: () => Promise.resolve(false) }, messagingFor({ getSignerStatus: () => Promise.resolve(null) }));
+        expect(card()).toHaveAttribute('data-status', 'not-connected');
+        cleanup();
+        await renderDetails({ onReconnect: () => Promise.resolve(true) }, messagingFor({ getSignerStatus: () => Promise.resolve(null) }));
+        await clickReconnect();
+        expect(card()).toHaveAttribute('data-status', 'connected');
+    });
+
+    it('leaves the badge alone when the host does not report the outcome', async () => {
+        await renderDetails({ onReconnect: () => {} }, sessionMessaging());
+        await clickReconnect();
+        expect(card()).toHaveAttribute('data-status', 'connected');
+    });
+
+    it('has every shell hand the reconnect outcome back to the card', () => {
+        for (const file of ['packages/web/src/App.jsx', 'packages/extension/src/popup/App.jsx', 'packages/desktop/renderer/App.jsx']) {
+            const source = readFileSync(join(process.cwd(), file), 'utf8');
+            const handler = /const handleHardwareReconnect = \(wallet, signer\) => \{([\s\S]*?)\n {4}\};/.exec(source)?.[1] || '';
+            expect(handler, file).toMatch(/return openHardwareSigner\(signer\)/);
+            expect(handler, file).toMatch(/return true;/);
+            expect(handler, file).toMatch(/return false;/);
+        }
     });
 });
 

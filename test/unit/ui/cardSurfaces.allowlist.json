@@ -117,10 +117,6 @@
             "count": 1,
             "reason": "Frame stepper buttons."
         },
-        "packages/desktop/renderer/DesktopUpdateBanner.jsx": {
-            "count": 1,
-            "reason": "A floating update banner over the page."
-        },
         "packages/web/src/style-guide/sections/IconsSection.jsx": {
             "count": 1,
             "reason": "Style-guide icon tile."
