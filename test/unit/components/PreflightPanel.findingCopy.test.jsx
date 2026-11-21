@@ -168,10 +168,29 @@ describe('PreflightPanel "Could not verify" copy (§5.2.4)', () => {
         expect(unverifiedText({ check: 'EXECUTE_STATE', reason: 'x' }).headline).toMatch(/still charges its fee/);
     });
 
+    it('uses version-specific copy for each known VOTE action', () => {
+        expect(UNVERIFIED_COPY).toMatchObject({
+            VOTE_CREATE_STATE: 'preflightCopy.unverified.voteCreateState',
+            VOTE_STATE: 'preflightCopy.unverified.voteState',
+            VOTE_FINALIZE_STATE: 'preflightCopy.unverified.voteFinalizeState',
+            VOTE_DELEGATION_STATE: 'preflightCopy.unverified.voteDelegationState',
+        });
+        expect(unverifiedText({ check: 'VOTE_CREATE_STATE' }).headline)
+            .toBe('Whether you can create this poll and how its rules are applied');
+        expect(unverifiedText({ check: 'VOTE_STATE' }).headline)
+            .toBe('Whether the poll is open, your ballot is valid, and how much your vote counts');
+        expect(unverifiedText({ check: 'VOTE_FINALIZE_STATE' }).headline)
+            .toBe('Whether the poll can be closed and how its result is counted');
+        expect(unverifiedText({ check: 'VOTE_DELEGATION_STATE' }).headline)
+            .toBe('Whether this token can be used for voting and how much voting power your delegation moves');
+    });
+
     it('falls back to an honest generic line for an unmapped check', () => {
         const { headline, detail } = unverifiedText({
-            check: 'NEW_ACTION_STATE', reason: 'no client-side state checks are certified for this action',
+            check: 'VOTE_FUTURE_STATE', reason: 'no client-side state checks are certified for this action',
         });
+        expect(headline).toBe(t('preflightCopy.unverified.fallback'));
+        expect(headline).not.toBe(t(UNVERIFIED_COPY.VOTE_STATE));
         expect(headline).not.toMatch(INTERNAL_TERMS);
         expect(detail).toBeNull();
     });

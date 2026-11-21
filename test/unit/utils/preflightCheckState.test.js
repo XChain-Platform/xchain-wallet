@@ -235,7 +235,11 @@ describe('preflightCheckState settle-time checks', () => {
     it('settles a PRICE publish, and keeps the rest of the per-action notes partial', () => {
         const price = { check: 'PRICE_STATE', reason: 'oracle authority (capability stake) resolves server-side' };
         expect(preflightCheckState({ verdict: 'pass', findings: [approval()], unverified: [price] })).toBe('settleChecks');
-        for (const check of ['STAKE_STATE', 'UNSTAKE_STATE', 'VOTE_STATE', 'EXECUTE_STATE', 'COINPAY_STATE', 'SLEEP_STATE']) {
+        for (const check of [
+            'STAKE_STATE', 'UNSTAKE_STATE',
+            'VOTE_CREATE_STATE', 'VOTE_STATE', 'VOTE_FINALIZE_STATE', 'VOTE_DELEGATION_STATE',
+            'EXECUTE_STATE', 'COINPAY_STATE', 'SLEEP_STATE',
+        ]) {
             expect(preflightCheckState({ verdict: 'pass', findings: [approval()], unverified: [{ check, reason: 'declared' }] })).toBe('partial');
         }
     });
