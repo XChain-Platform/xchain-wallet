@@ -13,6 +13,7 @@
         "noPrice",
         "pendingText",
         "unavailable",
+        "iconHash",
         "tickerColor",
         "hasDetail"
     ],

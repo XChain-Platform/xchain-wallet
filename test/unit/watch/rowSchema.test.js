@@ -23,17 +23,17 @@ const row = {
     noPrice: false,
     pendingText: '+0.01 BTC pending',
     unavailable: false,
+    iconHash: 'sha256:abc123',
     tickerColor: '#1A74A8',
     hasDetail: true,
 };
 
 describe('watch balance row schema', () => {
-    it('accepts a pre-formatted balance row with optional artwork', () => {
+    it('accepts a pre-formatted balance row', () => {
         expect(validate(schema, row)).toEqual([]);
-        expect(validate(schema, { ...row, iconHash: 'sha256:abc123' })).toEqual([]);
     });
 
-    it('requires every field except iconHash and rejects additions', () => {
+    it('requires every field and rejects additions', () => {
         for (const key of schema.required) {
             const value = { ...row };
             delete value[key];
