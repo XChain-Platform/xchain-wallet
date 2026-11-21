@@ -85,7 +85,7 @@
     }
 }
 
-@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 7/5) {
     .bar {
         min-height: 2.75rem;
     }
