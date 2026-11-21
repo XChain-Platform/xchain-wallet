@@ -109,6 +109,10 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 // supplied --team-id when there is one; being signing-added is why no source
 // file requests it, not a reason to trust what it says.
 const SIGNING_ADDED_ENTITLEMENTS = new Set(['com.apple.developer.team-identifier']);
+const WATCH_BUNDLE_IDS = new Set([
+    'io.xchain.wallet.ios.watch',
+    'io.xchain.wallet.ios.watch.widgets',
+]);
 
 /**
  * The facts the repo asks the artifact to carry, read out of the build inputs.
@@ -127,7 +131,7 @@ export function readExpectations(root = REPO_ROOT) {
     const bundleIds = [...new Set(
         [...pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
             .map((m) => m[1].trim())
-            .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests')),
+            .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests') && !WATCH_BUNDLE_IDS.has(id)),
     )];
     if (bundleIds.length !== 1) {
         throw new Error(

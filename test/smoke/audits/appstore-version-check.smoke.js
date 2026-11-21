@@ -40,7 +40,9 @@
 
 import { strict as assert } from 'node:assert';
 import { generateKeyPairSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
     classifyVersionRecord, credentialsFromEnv, bundleIdFromProject, shippedCapabilities,
@@ -510,6 +512,22 @@ assert.equal(pinnedListingDigests('/nonexistent-worktree'), null);
 const bundleId = bundleIdFromProject();
 assert.equal(bundleId, 'io.xchain.wallet.ios', 'the shipping bundle id comes from the Xcode project');
 assert.ok(!bundleId.endsWith('.uitests'), 'the uitests target must never be what this gate queries');
+{
+    const dir = mkdtempSync(join(tmpdir(), 'xchain-watch-bundle-'));
+    const projectDir = join(dir, 'packages/mobile/ios/App/App.xcodeproj');
+    const project = join(projectDir, 'project.pbxproj');
+    try {
+        mkdirSync(projectDir, { recursive: true });
+        writeFileSync(project, [
+            'io.xchain.wallet.ios', 'io.xchain.wallet.ios.watch', 'io.xchain.wallet.ios.watch.widgets',
+        ].map((id) => `PRODUCT_BUNDLE_IDENTIFIER = ${id};`).join('\n'));
+        assert.equal(bundleIdFromProject(dir), 'io.xchain.wallet.ios');
+        writeFileSync(project, `${readFileSync(project)}\nPRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.watch.other;`);
+        assert.throws(() => bundleIdFromProject(dir), /expected exactly one shipping bundle id/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
 
 // The capability inputs come from the same HIDDEN_SURFACES the runbook guard
 // (mobile-ios-shell.smoke.js §16) reads, so the two cannot disagree about what
