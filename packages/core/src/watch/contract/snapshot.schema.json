@@ -7,7 +7,7 @@
     "required": [
         "v", "builtAt", "balancesAt", "pricesAt", "session", "network",
         "fiatCode", "hidden", "unitDefault", "walletName", "totals",
-        "rows", "capped", "receive", "inbox", "settings"
+        "rows", "capped", "receive", "inbox", "request", "settings"
     ],
     "additionalProperties": false,
     "properties": {

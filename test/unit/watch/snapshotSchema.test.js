@@ -54,6 +54,13 @@ const snapshot = (overrides = {}) => ({
     capped: false,
     receive: [],
     inbox: [],
+    request: {
+        id: '0123456789abcdef0123456789abcdef',
+        kind: 'request',
+        iconHash: '',
+        sentence: 'Confirm payment',
+        amountText: '1.25 BTC',
+    },
     settings: { showTotal: false, enabled: true },
     ...overrides,
 });
@@ -70,7 +77,7 @@ const errors = (value) => {
 };
 
 describe('watch snapshot schema', () => {
-    it('accepts complete snapshots with or without a pending request', () => {
+    it('accepts complete snapshots with either request variant', () => {
         expect(validate(snapshot())).toBe(true);
         expect(validate(snapshot({
             session: 'locked',
@@ -87,6 +94,9 @@ describe('watch snapshot schema', () => {
     });
 
     it('requires the complete envelope and rejects additions', () => {
+        const withoutRequest = snapshot();
+        delete withoutRequest.request;
+        expect(errors(withoutRequest)).toContain('/request');
         for (const key of schema.required) {
             const value = snapshot();
             delete value[key];
