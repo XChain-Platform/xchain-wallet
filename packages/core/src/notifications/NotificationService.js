@@ -52,6 +52,7 @@
 import { isWithinQuietHours } from './quietHours.js';
 import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
+import { composeRequestAlert } from './requestAlert.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
@@ -198,6 +199,7 @@ export class NotificationService {
         this._getActiveAddresses = getActiveAddresses;
         this._getSdkForChain = getSdkForChain;
         this._getSettings = getSettings;
+        this._delivery = notify;
         this._notify = withAlertInbox(notify, { recordAlert, now });
         this._getPendingTxids = typeof getPendingTxids === 'function' ? getPendingTxids : null;
         this._onTxConfirmed = typeof onTxConfirmed === 'function' ? onTxConfirmed : null;
@@ -220,12 +222,23 @@ export class NotificationService {
         this._recent = new Map();
         /** @type {Map<string, number>} `${chainId}:${tx_hash}` already announced -> expiry ms */
         this._announced = new Map();
+        this._requestAlert = null;
+        this._requestExpiryTimer = null;
+        this._actionUnsub = null;
     }
 
     /** Connect + subscribe for every active address. Idempotent. */
     async start() {
         if (this._started) return this;
         this._started = true;
+        if (typeof this._delivery.onAction === 'function') {
+            try {
+                const unsub = this._delivery.onAction((event) => this._handleDeliveryAction(event));
+                this._actionUnsub = typeof unsub === 'function' ? unsub : null;
+            } catch (e) {
+                this._log.warn('NotificationService: action subscription failed', e);
+            }
+        }
         const generation = ++this._syncGeneration;
         await this._sync(generation);
         return this;
@@ -243,6 +256,11 @@ export class NotificationService {
     stop() {
         this._syncGeneration += 1;
         this._stopEpoch += 1;
+        if (this._actionUnsub) {
+            try { this._actionUnsub(); } catch (e) { this._log.warn('NotificationService: action unsubscribe failed', e); }
+            this._actionUnsub = null;
+        }
+        this.withdrawRequestAlert();
         for (const { unsub } of this._subs.values()) {
             try { unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
         }
@@ -255,6 +273,58 @@ export class NotificationService {
         this._recent.clear();
         this._announced.clear();
         this._started = false;
+    }
+
+    /** Post or replace the one request card shown by the native delivery surface. */
+    async postRequestAlert(request, { labels, openOnPhoneTitle, route } = {}) {
+        const plan = composeRequestAlert(request, { labels, now: this._now });
+        if (!plan || typeof openOnPhoneTitle !== 'string' || !openOnPhoneTitle || typeof route !== 'function') return false;
+
+        this.withdrawRequestAlert();
+        this._requestAlert = { id: request.id, route };
+        if (Number.isFinite(request.expiresAt)) {
+            this._requestExpiryTimer = setTimeout(
+                () => this.withdrawRequestAlert(request.id),
+                request.expiresAt - this._now(),
+            );
+            if (typeof this._requestExpiryTimer?.unref === 'function') this._requestExpiryTimer.unref();
+        }
+
+        return this._notify({
+            ...plan,
+            id: request.id,
+            category: request.kind,
+            actions: [{ id: 'openOnPhone', title: openOnPhoneTitle }],
+        });
+    }
+
+    /** Withdraw the current request card when its confirm closes or expires. */
+    withdrawRequestAlert(id) {
+        if (!this._requestAlert || (id !== undefined && id !== this._requestAlert.id)) return false;
+        const requestId = this._requestAlert.id;
+        if (this._requestExpiryTimer !== null) clearTimeout(this._requestExpiryTimer);
+        this._requestExpiryTimer = null;
+        this._requestAlert = null;
+        try {
+            Promise.resolve(this._delivery.cancel?.(requestId)).catch((e) => {
+                this._log.warn('NotificationService: request withdrawal failed', e);
+            });
+        } catch (e) {
+            this._log.warn('NotificationService: request withdrawal failed', e);
+        }
+        return true;
+    }
+
+    _handleDeliveryAction(event) {
+        if (event?.action !== 'openOnPhone' || !this._requestAlert) return;
+        if (event.id !== undefined && event.id !== this._requestAlert.id) return;
+        try {
+            Promise.resolve(this._requestAlert.route()).catch((e) => {
+                this._log.warn('NotificationService: request route failed', e);
+            });
+        } catch (e) {
+            this._log.warn('NotificationService: request route failed', e);
+        }
     }
 
     /** Reconcile live subscriptions to match the desired active-address set. */
