@@ -51,7 +51,30 @@ const snapshot = {
 };
 
 export const CONTRACT_VERSION = contract.v;
-export const schemas = { snapshot, detail: detailSchema, ...intentsSchema.$defs };
+const schemaDocuments = {
+    'snapshot.schema.json': snapshot,
+    'detail.schema.json': detailSchema,
+    'intents.schema.json': intentsSchema,
+};
+
+const resolveMessageTarget = (target) => {
+    if (typeof target !== 'string') return undefined;
+    const [file, ...fragments] = target.split('#');
+    if (fragments.length > 1 || (fragments[0] && !fragments[0].startsWith('/'))) return undefined;
+
+    let resolved = schemaDocuments[file];
+    for (const part of fragments[0]?.slice(1).split('/') ?? []) {
+        const key = part.replaceAll('~1', '/').replaceAll('~0', '~');
+        resolved = resolved && Object.hasOwn(resolved, key) ? resolved[key] : undefined;
+    }
+    return resolved;
+};
+
+export const schemas = Object.fromEntries(Object.entries(contract.messages).map(([kind, target]) => {
+    const schema = resolveMessageTarget(target);
+    if (schema === undefined) throw new TypeError(`Unknown watch contract target for ${kind}: ${target}`);
+    return [kind, schema];
+}));
 
 const snapshotQrPaths = (value) => value.receive.flatMap(({ qr }, index) => (
     checkQrBits(qr) ? [] : [`$.receive[${index}].qr`]

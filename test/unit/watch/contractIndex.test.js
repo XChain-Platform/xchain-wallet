@@ -53,12 +53,24 @@ const messages = {
     watchState: { appVersion: '1.0.0' },
 };
 
+const designTargets = {
+    snapshot: 'snapshot.schema.json',
+    detail: 'detail.schema.json',
+    refresh: 'intents.schema.json#/$defs/refresh',
+    detailRequest: 'intents.schema.json#/$defs/detailRequest',
+    openOnPhone: 'intents.schema.json#/$defs/openOnPhone',
+    markRead: 'intents.schema.json#/$defs/markRead',
+    watchState: 'intents.schema.json#/$defs/watchState',
+};
+
 describe('watch contract entry', () => {
     it('resolves and validates every message kind', () => {
         expect(CONTRACT_VERSION).toBe(entry.v);
-        expect(Object.keys(schemas)).toEqual(Object.keys(entry.messages));
-        for (const [kind, value] of Object.entries(messages)) {
-            expect(validateMessage(kind, value), kind).toBe(true);
+        expect(entry.messages).toEqual(designTargets);
+        expect(Object.keys(messages)).toEqual(Object.keys(entry.messages));
+        for (const [kind, target] of Object.entries(entry.messages)) {
+            expect(schemas[kind], target).toBeDefined();
+            expect(validateMessage(kind, messages[kind]), `${kind}: ${target}`).toBe(true);
         }
     });
 
