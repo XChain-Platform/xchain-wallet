@@ -108,6 +108,11 @@ if [ -n "$aasa" ]; then
     verify_args+=(--aasa "$aasa")
 fi
 
+if ! node "$here/tools/release/watch-embed.mjs" "$archive"; then
+    echo "ios-export: the archive is missing its watch app or widget extension; nothing was exported" >&2
+    exit 1
+fi
+
 if ! node "$here/tools/release/verify-ios-artifact.mjs" \
         "$archive/Products/Applications/App.app" --stage archive "${verify_args[@]}"; then
     echo "ios-export: the archive does not carry what the project pins; nothing was exported" >&2
@@ -197,7 +202,8 @@ mv "$exported" "$target"
 # somebody later finds on a disk and trusts, and it is the name that
 # expected-artifacts.txt and sign.sh match on. The suffix takes it out of every
 # glob that would pick it up.
-if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export "${verify_args[@]}"; then
+if ! node "$here/tools/release/watch-embed.mjs" "$target" ||
+        ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export "${verify_args[@]}"; then
     mv "$target" "$target.rejected"
     echo "ios-export: the exported ipa is not distributable; kept as $(basename "$target").rejected" >&2
     exit 1
