@@ -55,6 +55,7 @@ import {
     AddressText,
     CopyButton,
     StatusMessage,
+    NoticeList,
     QrScanner,
     PageHeader,
     ListPage,
@@ -1361,9 +1362,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             </div>
             {feeShareWarnings.length > 0 ? (
                 <StatusMessage variant="warning" role="alert" testId="psbt-fee-share-warning">
-                    {feeShareWarnings.map((line) => (
-                        <p key={line}>{line}</p>
-                    ))}
+                    <NoticeList items={feeShareWarnings.map((line) => ({ key: line, content: line }))} />
                 </StatusMessage>
             ) : null}
             <div>

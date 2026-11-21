@@ -738,7 +738,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} bullets />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>

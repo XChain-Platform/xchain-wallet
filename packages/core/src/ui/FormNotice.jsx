@@ -11,6 +11,7 @@
 import { useCallback, useContext, useEffect, useId, useRef } from 'react';
 import { StatusMessage } from './StatusMessage.jsx';
 import { FormNotices } from './formNoticeSlot.js';
+import { NoticeList } from './NoticeList.jsx';
 
 /**
  * A StatusMessage written in the middle of a form body that is shown first in
@@ -20,6 +21,9 @@ import { FormNotices } from './formNoticeSlot.js';
  * The text is a plain string so the form can hold it by value. A message of
  * several lines (one per decoder warning or per reason) passes them as
  * `lines`, an array of strings, and stays one box with a paragraph per line.
+ * Lines that are separate issues (one per decoder warning, one per blocker)
+ * also pass `bullets`, so several read as a bulleted list (U101); lines that
+ * are one message's sentences leave it off and stay plain paragraphs.
  * A notice title ("Destroy is irreversible.") passes as `title`, also a plain
  * string, and sits on its own line above the body. `lead` remains a legacy
  * alias and uses the same block title slot.
@@ -35,9 +39,10 @@ import { FormNotices } from './formNoticeSlot.js';
  * @param {string} [props.testId]                                                 data-testid on the notice box
  * @param {() => void} [props.onDismiss]                                           makes the notice dismissible (close button in its top end corner)
  * @param {readonly string[] | null} [props.lines]                               one paragraph per entry, in place of children
+ * @param {boolean} [props.bullets]                                              the lines are separate issues: several render as a bulleted list
  * @param {string | null | undefined} [props.children]
  */
-export function FormNotice({ tone, variant: variantProp = 'warning', role, lead, title, testId, lines, children, onDismiss }) {
+export function FormNotice({ tone, variant: variantProp = 'warning', role, lead, title, testId, lines, bullets = false, children, onDismiss }) {
     const variant = tone || variantProp;
     const notices = useContext(FormNotices);
     const id = useId();
@@ -59,25 +64,28 @@ export function FormNotice({ tone, variant: variantProp = 'warning', role, lead,
     const shownTitle = typeof title === 'string' && title !== '' ? title : shownLead;
     useEffect(() => {
         if (!notices) return undefined;
-        notices.report(id, text ? { text, variant, role, title: shownTitle, testId, lines: multiline ? text.split('\n') : undefined, onDismiss: dismissible ? dismiss : undefined } : null);
+        notices.report(id, text ? { text, variant, role, title: shownTitle, testId, lines: multiline ? text.split('\n') : undefined, bullets: multiline && bullets ? true : undefined, onDismiss: dismissible ? dismiss : undefined } : null);
         return () => notices.report(id, null);
-    }, [notices, id, text, variant, role, shownTitle, testId, multiline, dismissible, dismiss]);
+    }, [notices, id, text, variant, role, shownTitle, testId, multiline, bullets, dismissible, dismiss]);
     if (list ? list.length === 0 : !children) return null;
     if (notices && text) return null;
     return (
         <StatusMessage variant={variant} role={role} title={shownTitle} testId={testId} onDismiss={dismissible ? dismiss : undefined}>
-            {list ? <NoticeLines lines={list} /> : children}
+            {list ? <NoticeLines lines={list} bullets={bullets} /> : children}
         </StatusMessage>
     );
 }
 
 /**
- * The paragraphs of a notice of several lines.
+ * The lines of a notice of several lines: plain paragraphs, or with
+ * `bullets` a bulleted list of issues when there are several (U101).
  *
  * @param {object} props
  * @param {readonly import('react').ReactNode[]} props.lines
+ * @param {boolean} [props.bullets]
  */
-export function NoticeLines({ lines }) {
+export function NoticeLines({ lines, bullets = false }) {
+    if (bullets) return <NoticeList items={lines.map((line, i) => ({ key: i, content: line }))} />;
     return lines.map((line, i) => (
         <p key={i}>{line}</p>
     ));

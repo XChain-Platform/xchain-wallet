@@ -1529,7 +1529,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} bullets />
                 ) : null}
                 {outsideAddressNote}
                 {allowListSelfWarning ? (

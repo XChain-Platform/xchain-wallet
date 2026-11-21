@@ -2213,7 +2213,7 @@ export function DispenserDetail({
                     the card does not say (a missing index, a bad memo) stay. */}
                 {ownerLane.isWatcherMode ? <ActionWarningsCard ids={CANCEL_WARNING_IDS} /> : null}
                 {cancelDecoderWarnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={cancelDecoderWarnings} />
+                    <FormNotice variant="warning" role="alert" lines={cancelDecoderWarnings} bullets />
                 ) : null}
                 {closeEscrowNote}
                 {feeCard}

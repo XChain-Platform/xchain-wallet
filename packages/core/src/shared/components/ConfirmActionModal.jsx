@@ -27,7 +27,7 @@
 // top of the page (G129).
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
-import { Notice, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Notice, NoticeList, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { FEE_BEARING_ACTIONS, isFeeBearingAction } from '../../flows/feeBearingActions.js';
@@ -256,11 +256,10 @@ export function ActionWarningsCard({ ids }) {
     const title = actionWarningTitle(ids) || t('actionWarnings.title');
     return (
         <StatusMessage variant="warning" role={null} testId="confirm-action-warnings" title={title}>
-            <ul aria-label={title}>
-                {lines.map((item) => (
-                    <li key={item.key} data-testid="confirm-action-warning">{item.text}</li>
-                ))}
-            </ul>
+            <NoticeList
+                label={title}
+                items={lines.map((item) => ({ key: item.key, content: item.text, attrs: { 'data-testid': 'confirm-action-warning' } }))}
+            />
         </StatusMessage>
     );
 }

@@ -31,6 +31,8 @@ export { SectionHeader } from './SectionHeader.jsx';
 export { Notice } from './StatusMessage.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { StatusMessageGroup } from './StatusMessage.jsx';
+// A notice's issues: several are a bulleted list, one is a plain line (U101).
+export { NoticeList } from './NoticeList.jsx';
 export { PageNotice, PageNoticeHostContext } from './PageNotice.jsx';
 export { Button } from './Button.jsx';
 export { Spinner } from './Button.jsx';
