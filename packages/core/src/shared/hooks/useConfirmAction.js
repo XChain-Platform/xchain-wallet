@@ -106,6 +106,19 @@ export function isConfirmOpenPhase(phase) {
 }
 
 /**
+ * Describe the watch request update caused by a confirm phase transition.
+ *
+ * @param {ConfirmPhase | string | null | undefined} previousPhase
+ * @param {ConfirmPhase | string | null | undefined} nextPhase
+ * @returns {'publish' | 'withdraw' | null}
+ */
+export function watchRequestTransition(previousPhase, nextPhase) {
+    if (nextPhase === 'ready' && previousPhase !== 'ready') return 'publish';
+    if (isConfirmOpenPhase(previousPhase) && !isConfirmOpenPhase(nextPhase)) return 'withdraw';
+    return null;
+}
+
+/**
  * Is a confirmation running in this window, from its compose through its
  * terminal state? A shell that would remount the open screen for an
  * unrelated reason asks first, since a remount ends the review.
