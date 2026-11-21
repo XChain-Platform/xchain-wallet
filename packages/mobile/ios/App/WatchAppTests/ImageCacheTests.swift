@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import XCTest
+@testable import WatchApp
 
 final class ImageCacheTests: XCTestCase {
     private var directory: URL!
