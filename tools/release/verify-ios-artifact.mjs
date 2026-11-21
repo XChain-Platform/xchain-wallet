@@ -805,6 +805,40 @@ function locateApp(target, scratch) {
     return join(payload, apps[0]);
 }
 
+/** Check every watch app and extension embedded beneath the phone bundle. */
+function readWatchChecks(appDir, phoneInfo, scratch, stage, unsigned) {
+    const results = [];
+    const bundles = (directory, suffix) => (existsSync(directory)
+        ? readdirSync(directory).filter((name) => name.endsWith(suffix))
+        : []);
+    for (const name of bundles(join(appDir, 'Watch'), '.app')) {
+        const watchDir = join(appDir, 'Watch', name);
+        results.push(runWatchChecks({
+            phoneInfo,
+            info: readPlist(join(watchDir, 'Info.plist')),
+            entitlements: readEntitlements(watchDir, scratch),
+            kind: 'app',
+            stage,
+            unsigned,
+        }));
+        for (const plugin of bundles(join(watchDir, 'PlugIns'), '.appex')) {
+            const pluginDir = join(watchDir, 'PlugIns', plugin);
+            results.push(runWatchChecks({
+                phoneInfo,
+                info: readPlist(join(pluginDir, 'Info.plist')),
+                entitlements: readEntitlements(pluginDir, scratch),
+                kind: 'widgets',
+                stage,
+                unsigned,
+            }));
+        }
+    }
+    return {
+        failures: results.flatMap((result) => result.failures),
+        passes: results.flatMap((result) => result.passes),
+    };
+}
+
 const VALUE_FLAGS = new Set(['stage', 'tag', 'marketing-version', 'build-number', 'team-id', 'aasa']);
 
 // The tag is what the release lane actually holds, and rails §2 owns the
@@ -919,7 +953,7 @@ async function main(argv) {
         const { expected, versionSource } = resolveVersionExpectations(
             readExpectations(), values['marketing-version'], values['build-number']);
 
-        const { failures, passes } = runChecks({
+        const phoneResult = runChecks({
             info,
             entitlements,
             profile,
@@ -932,6 +966,10 @@ async function main(argv) {
             taggedVersion: values['marketing-version'] ?? derived.taggedVersion,
             taggedBuild: values['build-number'] ?? derived.taggedBuild,
         });
+        const watchResult = readWatchChecks(
+            appDir, info, scratch, stage, values.unsigned === true);
+        const failures = [...phoneResult.failures, ...watchResult.failures];
+        const passes = [...phoneResult.passes, ...watchResult.passes];
 
         for (const p of passes) console.log(`  ok  ${p}`);
         if (failures.length > 0) {
