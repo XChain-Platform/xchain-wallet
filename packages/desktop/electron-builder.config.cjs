@@ -563,12 +563,28 @@ const config = {
     // any umask, still hands fpm and mksquashfs the same modes. The
     // mksquashfs wrapper applies the rule once more to the AppImage stage,
     // which also holds files this hook never sees (AppRun, the .desktop).
+    //
+    // IT ALSO REFUSES A WRONG-ARCH NATIVE ADDON. npmRebuild is off, so a
+    // `.node` is packed as the install compiled it, for the host arch, into
+    // every target arch; v0.343.1's arm64 packages shipped an x86-64
+    // secp256k1.node that way and silently ran the JS fallback. Every `.node`
+    // in the packed tree must be an ELF for this tree's arch, or the build
+    // stops here, before fpm, mksquashfs or snapcraft wraps it. No addon at
+    // all is the current, deliberate outcome; scripts/linux-native-arch.cjs
+    // has the rule.
     afterPack: async (context) => {
         if (context.electronPlatformName !== 'linux') {
             return;
         }
         const { normalizeTreeModes } = require('./scripts/deterministic-modes.cjs');
         normalizeTreeModes(context.appOutDir);
+        const {
+            assertLinuxNativeAddonsMatchArch,
+        } = require('./scripts/linux-native-arch.cjs');
+        const { arch, addons } = assertLinuxNativeAddonsMatchArch(context.appOutDir, context.arch);
+        process.stdout.write(`[linux-native-arch] ${arch}: ${addons.length === 0
+            ? 'no native addon'
+            : addons.map((a) => a.file).join(', ')}\n`);
     },
 
     // --- The store package lands where nothing looks ---------

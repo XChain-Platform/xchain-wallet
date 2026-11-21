@@ -446,7 +446,7 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
     // The config's linux afterPack over a stand-in packed app.
     const appOut = join(work, 'linux-unpacked');
     const appOutSandboxMode = makeUmask002Tree(appOut);
-    await config.afterPack({ electronPlatformName: 'linux', appOutDir: appOut });
+    await config.afterPack({ electronPlatformName: 'linux', arch: ARCH_X64, appOutDir: appOut });
     assertCanonical(appOut, 'afterPack (linux)', appOutSandboxMode);
 
     // The config's linux beforePack over stand-in build resources. It also
