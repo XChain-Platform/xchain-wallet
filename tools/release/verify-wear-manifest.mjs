@@ -50,3 +50,77 @@ export function metaData(xml) {
         attribute(tag, 'android:value'),
     ]));
 }
+
+export function checkWearManifest(xml, { components, permissions }) {
+    const failures = [];
+    const passes = [];
+    const actualComponents = listComponents(xml);
+    const actualPermissions = new Set(listPermissions(xml));
+    const expectedPermissions = new Set(permissions);
+    const watchFeature = usesFeatures(xml)
+        .find(({ name }) => name === 'android.hardware.type.watch');
+    const standalone = metaData(xml)['com.google.android.wearable.standalone'];
+
+    if (!watchFeature) {
+        failures.push('feature android.hardware.type.watch is missing');
+    } else if (!watchFeature.required) {
+        failures.push('feature android.hardware.type.watch has android:required="false"');
+    } else {
+        passes.push('feature android.hardware.type.watch is required');
+    }
+
+    if (standalone !== 'false') {
+        failures.push(
+            `metadata com.google.android.wearable.standalone is ${JSON.stringify(standalone)}, not "false"`,
+        );
+    } else {
+        passes.push('metadata com.google.android.wearable.standalone is "false"');
+    }
+
+    for (const component of actualComponents) {
+        if (component.exported === 'absent') {
+            failures.push(
+                `component ${component.type} ${JSON.stringify(component.name)} has no android:exported value`,
+            );
+        }
+    }
+
+    for (const expected of components) {
+        const actual = actualComponents.find(({ type, name }) => (
+            type === expected.type && name === expected.name
+        ));
+        const label = `${expected.type} ${JSON.stringify(expected.name)}`;
+        if (!actual) {
+            failures.push(`expected component ${label} is missing`);
+        } else if (actual.exported !== expected.exported) {
+            failures.push(
+                `component ${label} has android:exported=${JSON.stringify(actual.exported)}, `
+                + `expected ${JSON.stringify(expected.exported)}`,
+            );
+        } else {
+            passes.push(`component ${label} has android:exported=${JSON.stringify(expected.exported)}`);
+        }
+    }
+
+    for (const actual of actualComponents) {
+        if (!components.some(({ type, name }) => type === actual.type && name === actual.name)) {
+            failures.push(`component ${actual.type} ${JSON.stringify(actual.name)} is not expected`);
+        }
+    }
+
+    for (const permission of expectedPermissions) {
+        if (actualPermissions.has(permission)) {
+            passes.push(`permission ${permission} is present`);
+        } else {
+            failures.push(`expected permission ${permission} is missing`);
+        }
+    }
+
+    for (const permission of actualPermissions) {
+        if (!expectedPermissions.has(permission)) {
+            failures.push(`permission ${permission} is not expected`);
+        }
+    }
+
+    return { failures, passes };
+}
