@@ -101,7 +101,8 @@ import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit
 
 const chainRegistry = registryLib.defaultRegistry();
 const NO_ACKNOWLEDGMENTS = new Set();
-const POLL_INTERVAL_MS = 10_000;
+// 30 s: BTC blocks are 10 min apart, so an index check changes at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 // How long step 2 waits for the stored-list read-back before it treats the
 // read as failed, so a hung read cannot lock a paid-for airdrop.
 const RECONCILE_READ_CAP_MS = 15_000;

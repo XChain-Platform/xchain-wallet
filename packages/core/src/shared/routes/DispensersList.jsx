@@ -40,7 +40,8 @@ import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const DISPENSER_REFRESH_MS = 20000;
+// 2 min: BTC blocks are 10 min apart, so dispensers change at most once per block.
+const DISPENSER_REFRESH_MS = 120_000;
 
 /**
  * Dispensers marketplace and owner-facing list view.

@@ -98,7 +98,7 @@ describe('DispensersList lifecycle badges', () => {
         expect(screen.getByText('Open')).toBeInTheDocument();
 
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(20000);
+            await vi.advanceTimersByTimeAsync(120_000);
         });
         expect(getDispensersForSource).toHaveBeenCalledTimes(2);
         expect(screen.getByText('Closing')).toBeInTheDocument();

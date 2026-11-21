@@ -128,7 +128,7 @@ describe('BetFeedsList refresh', () => {
         expect(container.textContent).toContain('Market 1252');
         const before = calls.length;
 
-        await tick(30_000);
+        await tick(120_000);
 
         expect(calls.length,
             'the list never re-read the chain: a market that closes stays under "Taking bets"')
@@ -155,7 +155,7 @@ describe('BetFeedsList refresh', () => {
         const { container } = await renderList(messaging);
         expect(container.textContent).not.toContain('Loading markets');
 
-        await tick(30_000);   // the refresh is now in flight and unresolved
+        await tick(120_000);   // the refresh is now in flight and unresolved
         expect(container.textContent,
             'the whole list flashes "Loading markets…" on every refresh')
             .not.toContain('Loading markets');
@@ -176,7 +176,7 @@ describe('BetFeedsList refresh', () => {
         const { container } = await renderList(messaging);
         expect(container.textContent).toContain('Market 1248');
 
-        await tick(30_000);
+        await tick(120_000);
 
         expect(container.textContent,
             'a failed refresh threw away markets that were still the best thing known')
@@ -197,8 +197,8 @@ describe('BetFeedsList refresh', () => {
         const { container } = await renderList(messaging);
         expect(container.textContent).toContain('Market 1248');
 
-        await tick(30_000);
-        await tick(30_000);
+        await tick(120_000);
+        await tick(120_000);
         expect(container.textContent).toContain('Market 1300');
 
         releaseOlder({ data: [market(1252, 'open')] });
@@ -264,7 +264,7 @@ describe('BetFeedsList refresh', () => {
         const before = calls.length;
 
         unmount();
-        await tick(90_000);
+        await tick(360_000);
 
         expect(calls.length, 'the timer outlived the route and kept polling the explorer')
             .toBe(before);

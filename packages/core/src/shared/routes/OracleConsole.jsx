@@ -28,6 +28,7 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { FeeSection } from '../components/formStandard/index.js';
 import {
     customFeeEstimate,
@@ -41,6 +42,8 @@ import styles from './IssueTokenForm.module.css';
 import consoleStyles from './OracleConsole.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+// 2 min: BTC blocks are 10 min apart, so markets change at most once per block.
+const ORACLE_REFRESH_MS = 120_000;
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -195,9 +198,10 @@ export function useOracleMarkets({ walletId, accountId, messaging }) {
 
     useEffect(() => {
         reload(false);
-        const timer = setInterval(() => reload(true), 30_000);
+        // Paused while hidden.
+        const stopTimer = startVisibleInterval(() => reload(true), ORACLE_REFRESH_MS);
         return () => {
-            clearInterval(timer);
+            stopTimer();
             loadSequence.current += 1;
         };
     }, [reload]);

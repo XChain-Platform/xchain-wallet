@@ -41,7 +41,8 @@ import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
-const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
+// 15 min: BTC blocks are 10 min apart, so new polls appear at most once per block.
+const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 const SEEN_CAP_PER_CHAIN = 500; // prune guard; open polls per chain stay far below this
 
 export class GovernancePollWatcher {

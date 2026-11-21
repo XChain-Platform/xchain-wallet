@@ -105,8 +105,8 @@ assert.ok(/messaging\.getOrderbook\(/.test(src),
     'OrderbookPanel fetches via messaging.getOrderbook');
 assert.ok(/normalizeOrderbook/.test(src),
     'OrderbookPanel normalises via the shared helper');
-assert.ok(/POLL_INTERVAL_MS\s*=\s*5000/.test(src),
-    'OrderbookPanel polls every 5s');
+assert.ok(/POLL_INTERVAL_MS\s*=\s*30_?000/.test(src),
+    'OrderbookPanel polls every 30s');
 assert.ok(/document\.visibilityState === 'hidden'/.test(src),
     'OrderbookPanel pauses polling when the tab is hidden');
 assert.ok(/onPickPrice\b/.test(src),
