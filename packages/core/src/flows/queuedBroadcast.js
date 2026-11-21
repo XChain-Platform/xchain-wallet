@@ -47,12 +47,10 @@ async function releaseAdsClaim(vault, pendingTxId) {
     }
 }
 
-// In-flight drain guard. `broadcastTx` is an irreversible effector, so two
-// concurrent drains of the same record (double-click, or popup + background
-// racing) must not both reach the network. A drain claims its id here
-// synchronously before its first await, so a second call started in the same
-// context sees the claim and short-circuits. Cross-context / crash recovery is
-// handled by the persisted 'broadcasting' status transition.
+// In-flight send guard. `broadcastTx` is an irreversible effector, so drains
+// and discards of the same record must exclude each other. Each operation
+// claims its id synchronously before its first await. Cross-context / crash
+// recovery is handled by the persisted 'broadcasting' status transition.
 const inFlightDrains = new Set();
 
 export class NoQueuedTxError extends Error {
@@ -194,11 +192,11 @@ export async function drainQueuedBroadcast({
         throw new Error('drainQueuedBroadcast: pendingTxId is required');
     }
 
-    // Claim the drain synchronously, before any await, so a concurrent call in
-    // the same context short-circuits instead of double-broadcasting.
+    // Claim the id synchronously, before any await, so a concurrent drain or
+    // discard in the same context cannot race this irreversible operation.
     if (inFlightDrains.has(pendingTxId)) {
         throw new Error(
-            `drainQueuedBroadcast: PendingTx "${pendingTxId}" is already being broadcast`,
+            `drainQueuedBroadcast: PendingTx "${pendingTxId}" is already being broadcast or discarded`,
         );
     }
     inFlightDrains.add(pendingTxId);
@@ -391,7 +389,7 @@ async function settleDrainFailure(vault, pendingTxId, record, err) {
  * Removes a record in either status a drain will send: 'queued', or
  * 'broadcasting' left behind by an interrupted claim. A claimed record left in
  * place keeps netting its spend and is rebuilt into the queue on the next boot.
- * A claim this context is draining right now is kept: that drain settles it.
+ * A live claim is kept: the operation holding that claim settles it.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
  * @returns {Promise<boolean>}   true if a record left the queue (removed, or kept as commit-landed)
@@ -401,20 +399,25 @@ export async function discardQueuedBroadcast({ vault, pendingTxId }) {
     if (typeof pendingTxId !== 'string' || !pendingTxId) {
         throw new Error('discardQueuedBroadcast: pendingTxId is required');
     }
-    const existing = await vault.pendingTxs.get(pendingTxId);
-    if (!existing) return false;
-    if (existing.status !== 'queued' && existing.status !== 'broadcasting') return false;
     if (inFlightDrains.has(pendingTxId)) return false;
-    // Keep a discarded reveal whose commit landed, so the commit's spend stays netted.
-    if (existing.commitLanded === true) {
-        await vault.pendingTxs.put(commitLandedRecord(existing, 'reveal discarded; its commit is already on the network'));
+    inFlightDrains.add(pendingTxId);
+    try {
+        const existing = await vault.pendingTxs.get(pendingTxId);
+        if (!existing) return false;
+        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return false;
+        // Keep a discarded reveal whose commit landed, so the commit's spend stays netted.
+        if (existing.commitLanded === true) {
+            await vault.pendingTxs.put(commitLandedRecord(existing, 'reveal discarded; its commit is already on the network'));
+            await releaseAdsClaim(vault, pendingTxId);
+            return true;
+        }
+        const removed = await vault.pendingTxs.delete(pendingTxId);
+        // Discarded bytes never pay the donation, so the next send may carry it.
         await releaseAdsClaim(vault, pendingTxId);
-        return true;
+        return removed;
+    } finally {
+        inFlightDrains.delete(pendingTxId);
     }
-    const removed = await vault.pendingTxs.delete(pendingTxId);
-    // Discarded bytes never pay the donation, so the next send may carry it.
-    await releaseAdsClaim(vault, pendingTxId);
-    return removed;
 }
 
 /**

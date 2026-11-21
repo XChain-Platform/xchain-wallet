@@ -65,6 +65,7 @@ import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { destroyRefusalFor } from '../../registry/destroyPolicy.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NO_ACKNOWLEDGMENTS = new Set();
@@ -413,6 +414,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         const tickerError = tickerReferenceError(ticker);
         if (tickerError) {
             setFormError(tickerError);
+            return;
+        }
+        const destroyRefusal = destroyRefusalFor({
+            tick: ticker,
+            sourceCoin: chainRegistry.get(chainId)?.coin,
+        });
+        if (destroyRefusal) {
+            setFormError(destroyRefusal.reason);
             return;
         }
         const amt = String(amount).trim();

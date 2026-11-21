@@ -66,4 +66,14 @@ describe('destroyToken pending debit', () => {
         await destroyToken(base({ trackPendingTx: false }));
         expect(submitAction.mock.calls[0][0].pendingTxMeta).toBeUndefined();
     });
+
+    it('refuses XCHAIN off Bitcoin before submission', async () => {
+        const chainRegistry = { get: () => ({ coin: 'litecoin' }) };
+        await expect(destroyToken(base({
+            chainRegistry,
+            chainId: 'litecoin-regtest',
+            params: { VERSION: '0', TICK: 'XCHAIN', AMOUNT: '1' },
+        }))).rejects.toThrow(/Use Move/);
+        expect(submitAction).not.toHaveBeenCalled();
+    });
 });

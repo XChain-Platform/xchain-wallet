@@ -148,10 +148,11 @@ describe('signer flow hardening', () => {
     });
 
     it('does not persist earlier matches when a later address is ambiguous', async () => {
-        const addresses = [address('0', 'first'), address('1', 'second')];
+        const ledger = { source: 'ledger' };
+        const addresses = [address('0', 'first', ledger), address('1', 'second', ledger)];
         const records = [
-            { id: 'signer-a1', walletId: 'wallet-a' },
-            { id: 'signer-a2', walletId: 'wallet-a' },
+            { id: 'signer-a1', walletId: 'wallet-a', kind: 'ledger' },
+            { id: 'signer-a2', walletId: 'wallet-a', kind: 'ledger' },
         ];
         const vault = reconcileVault(addresses, records);
         const signers = [
@@ -201,9 +202,9 @@ describe('signer flow hardening', () => {
     });
 
     it('persists a same-wallet match using the address chain and stored path', async () => {
-        const candidate = address('7', 'same-key');
+        const candidate = address('7', 'same-key', { source: 'ledger' });
         const vault = reconcileVault([candidate], [
-            { id: 'signer-a', walletId: 'wallet-a' },
+            { id: 'signer-a', walletId: 'wallet-a', kind: 'ledger' },
         ]);
         const signer = {
             id: 'signer-a',

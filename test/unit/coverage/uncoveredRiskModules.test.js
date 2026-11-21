@@ -63,6 +63,10 @@ vi.mock('../../../packages/extension/src/storage/index.js', () => ({
         load() { return bg.sessionLoad(); }
     },
     ChromeStorageBackend: class ChromeStorageBackend {},
+    createSessionSaveFence: vi.fn(() => ({
+        track: (task) => task,
+        beforeSave: vi.fn(async () => {}),
+    })),
 }));
 
 vi.mock('../../../packages/extension/src/background/index.js', () => ({

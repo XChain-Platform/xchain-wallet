@@ -44,15 +44,17 @@ function hwAddress(overrides = {}) {
         addressType: 'p2wpkh',
         derivationPath: "m/84'/0'/0'/0/3",
         address: 'addr_real',
+        signerId: 'signer-1',
         ...overrides,
     };
 }
 
 // Signer that echoes a chosen address on a verify:true derivation.
-function makeSigner(deviceAddress) {
+function makeSigner(deviceAddress, { kind = 'trezor', id = 'signer-1' } = {}) {
     const calls = [];
     return {
-        kind: 'trezor',
+        kind,
+        id,
         calls,
         async getAddresses(params) {
             calls.push(params);
@@ -95,5 +97,42 @@ describe('verifyReceiveAddress (§17.6)', () => {
         await expect(
             verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
         ).rejects.toThrow(/does not match/i);
+    });
+});
+
+describe('verifyReceiveAddress asks only the device the address is linked to', () => {
+    it('refuses a software signer that derives the same address', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress()] });
+        const signer = makeSigner('addr_real', { kind: 'software' });
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/not the hardware wallet this address belongs to/);
+        expect(signer.calls).toHaveLength(0);
+    });
+
+    it('refuses a device signer the address is not linked to', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress()] });
+        const signer = makeSigner('addr_real', { id: 'signer-other' });
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/not the device this address is linked to/);
+        expect(signer.calls).toHaveLength(0);
+    });
+
+    it('refuses an address with no device link', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress({ signerId: null })] });
+        const signer = makeSigner('addr_real');
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/not linked to a paired hardware wallet/);
+        expect(signer.calls).toHaveLength(0);
+    });
+
+    it('refuses a device signer of another kind than the address', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT], addresses: [hwAddress()] });
+        const signer = makeSigner('addr_real', { kind: 'ledger' });
+        await expect(
+            verifyReceiveAddress({ vault, chainId: 'bitcoin', addressId: 'addr-1', signer, chainRegistry }),
+        ).rejects.toThrow(/not the hardware wallet this address belongs to/);
     });
 });

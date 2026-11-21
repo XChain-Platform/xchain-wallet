@@ -78,6 +78,84 @@ const LANES = [
 const checks = [];
 function check(name, fn) { checks.push([name, fn]); }
 
+// Invocation lines are matched, not first mentions: the extension lane names
+// the preflight in its usage text long before it calls it, so a raw indexOf
+// lands on prose (the same trap release-launch-probe.smoke.js documents).
+const PREFLIGHT_CALL = /^\s*bash "\$\{REPO_ROOT\}\/tools\/release\/emulation-preflight\.sh"/;
+// The call line is allowlisted whole rather than denylisted: the script path,
+// the lane's build platform, and nothing else. Any operator after it (`||`,
+// `&&`, `&`, `;`, a pipe, a redirect, a continuation) or another argument
+// (`--help` exits 0 without checking anything) lets the lane carry on past
+// exit 3. This is a line-shape check, not a shell parse.
+const PREFLIGHT_STATEMENT =
+    /^bash "\$\{REPO_ROOT\}\/tools\/release\/emulation-preflight\.sh" "\$\{BUILD_PLATFORM\}"[ \t]*$/;
+const DOCKER_BUILD = /^\s*(?:\w+=\S*\s+)*docker\s+(?:buildx\s+|image\s+)?build\b/;
+const ERREXIT_ON = /^set -euo pipefail$/;
+const ERREXIT_OFF = /^\s*set\s+(?:\+[a-z]*e[a-z]*|\+o\s+errexit)\b/;
+const OVERRIDE = /XCHAIN_REPRODUCE_ALLOW_EMULATION/;
+
+function assertLaneGuarded(src, lane) {
+    const lines = src.split('\n');
+    const lineOf = (pattern) => lines.findIndex((line) => pattern.test(line));
+    const callAt = lineOf(PREFLIGHT_CALL);
+    assert.notEqual(callAt, -1, `${lane} does not call the preflight`);
+    const buildAt = lineOf(DOCKER_BUILD);
+    assert.notEqual(buildAt, -1, `${lane} has no docker build to guard`);
+    assert.ok(callAt < buildAt,
+        `${lane} calls the preflight AFTER docker build, which is after the failure it prevents`);
+    // It has to abort the run, not decorate it: `set -e` in force at the call
+    // plus an unguarded statement is what makes exit 3 stop the lane.
+    const errexitAt = lineOf(ERREXIT_ON);
+    assert.ok(errexitAt !== -1 && errexitAt < callAt,
+        `${lane} must run under set -e for exit 3 to stop it`);
+    assert.ok(!lines.slice(errexitAt + 1, callAt).some((line) => ERREXIT_OFF.test(line)),
+        `${lane} turns set -e off before the preflight`);
+    assert.match(lines[callAt], /^\S/,
+        `${lane} runs the preflight inside a block that may not execute it`);
+    assert.doesNotMatch(lines[callAt - 1] ?? '', /\\\s*$/,
+        `${lane} joins the preflight onto the line above it`);
+    assert.match(lines[callAt], PREFLIGHT_STATEMENT, `${lane} swallows the preflight's refusal`);
+    // The override is the operator's call on a single run; a lane that sets
+    // it turns the refusal off for every verifier.
+    assert.doesNotMatch(src, OVERRIDE, `${lane} sets the emulation override itself`);
+}
+
+// Shapes the statement allowlist must refuse. Under `set -e`, `|| true`, `|| :`,
+// `&& ...` and `&` carry the lane on past exit 3, and `|| exit 0` stops it but
+// reports success. `; true` and `| cat` are inert only while `set -e` and
+// `pipefail` both hold, so they are refused too rather than argued case by case.
+const SWALLOW_SUFFIXES = [' || true', ' || :', ' && echo continued', ' &', '; true', ' | cat',
+    ' 2>/dev/null || exit 0'];
+
+function brokenLanes(source) {
+    const lines = source.split('\n');
+    const callAt = lines.findIndex((line) => PREFLIGHT_CALL.test(line));
+    const buildAt = lines.findIndex((line) => DOCKER_BUILD.test(line));
+    const errexitAt = lines.findIndex((line) => ERREXIT_ON.test(line));
+    const call = lines[callAt];
+    const swap = (at, replacement) => [...lines.slice(0, at), ...replacement, ...lines.slice(at + 1)].join('\n');
+    const moved = lines.filter((_, index) => index !== callAt);
+    moved.splice(buildAt, 0, call);
+    return [
+        ['call removed', swap(callAt, []), /does not call the preflight/],
+        ['call after docker build', moved.join('\n'), /calls the preflight AFTER docker build/],
+        ['buildx before call', swap(callAt, ['docker buildx build .', call]), /AFTER docker build/],
+        ...SWALLOW_SUFFIXES.map((suffix) => [`suffix ${suffix.trim()}`, swap(callAt, [call + suffix]),
+            /swallows the preflight's refusal/]),
+        ['continued onto || true', swap(callAt, [`${call} \\`, '    || true']), /swallows the preflight's refusal/],
+        ['inside an if block', swap(callAt, ['if [ -n "${CI:-}" ]; then', `    ${call}`, 'fi']),
+            /inside a block that may not execute it/],
+        ['set +e before call', swap(callAt, ['set +e', call]), /turns set -e off before the preflight/],
+        ['set +euo before call', swap(callAt, ['set +euo pipefail', call]), /turns set -e off before the preflight/],
+        ['no set -e', swap(errexitAt, ['set -uo pipefail']), /must run under set -e/],
+        ['joined onto true ||', swap(callAt, ['true || \\', call]), /joins the preflight onto the line above it/],
+        ['--help argument', swap(callAt, [call.replace('"${BUILD_PLATFORM}"', '--help')]),
+            /swallows the preflight's refusal/],
+        ['override exported', swap(callAt, ['export XCHAIN_REPRODUCE_ALLOW_EMULATION=1', call]),
+            /sets the emulation override itself/],
+    ];
+}
+
 // A binfmt_misc entry, in the kernel's own shape: state on line 1, then the
 // interpreter and the ELF magic. The preflight reads line 1 and the name, so
 // both have to be real for the test to mean anything.
@@ -204,23 +282,17 @@ check('9. the override proceeds, and warns what it is overriding', () => {
 
 check('10. every reproduce lane runs the preflight before its first docker build', () => {
     for (const lane of LANES) {
-        const src = readFileSync(join(wsRoot, lane), 'utf8');
-        const callIdx = src.indexOf('tools/release/emulation-preflight.sh');
-        assert.notEqual(callIdx, -1, `${lane} does not call the preflight`);
-        const buildIdx = src.indexOf('docker build');
-        assert.notEqual(buildIdx, -1, `${lane} has no docker build to guard`);
-        assert.ok(
-            callIdx < buildIdx,
-            `${lane} calls the preflight AFTER docker build, which is after the failure it prevents`,
-        );
-        // It has to abort the run, not decorate it: `set -e` plus an
-        // unguarded call is what makes exit 3 stop the lane.
-        assert.match(src, /^set -euo pipefail$/m, `${lane} must run under set -e for exit 3 to stop it`);
-        assert.doesNotMatch(
-            src.slice(callIdx, callIdx + 200),
-            /\|\||true\s*$/m,
-            `${lane} swallows the preflight's refusal`,
-        );
+        assertLaneGuarded(readFileSync(join(wsRoot, lane), 'utf8'), lane);
+    }
+});
+
+check('10a. the lane-order check fails on broken invocation wiring', () => {
+    for (const lane of LANES) {
+        const source = readFileSync(join(wsRoot, lane), 'utf8');
+        assert.doesNotThrow(() => assertLaneGuarded(source, lane));
+        for (const [label, broken, refusal] of brokenLanes(source)) {
+            assert.throws(() => assertLaneGuarded(broken, `${lane} (${label})`), refusal, `${lane}: ${label} passed`);
+        }
     }
 });
 

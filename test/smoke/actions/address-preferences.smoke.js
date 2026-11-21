@@ -52,7 +52,8 @@ for (const shell of [['web', 'src'], ['desktop', 'renderer'], ['extension', 'src
 const form = core('shared', 'routes', 'AddressPreferencesForm.jsx');
 assert.match(form, /getAddressPreferences\(\{ chainId, address: editedAddress \}\)/, 'form reads current values');
 assert.match(form, /handleReview/, 'form has a review gate');
-assert.match(form, /Could not re-check the current on-chain values/, 'review is blocked without a fresh re-fetch (stale-read rail)');
+assert.match(form, /explorerReadFailure\(err, 'load the current preferences'\)/, 'review translates a failed fresh re-fetch');
+assert.match(form, /Review needs a live read, because every write resets all three preferences/, 'review is blocked without a fresh re-fetch (stale-read rail)');
 assert.match(form, /reviewBaseline/, 'review compares against the re-fetched baseline');
 assert.match(
     form,

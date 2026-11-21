@@ -14,6 +14,7 @@ import {
     AmbiguousSignerMatchError,
     reconcileAddressSigners,
 } from '../../../packages/core/src/flows/reconcileAddressSigners.js';
+import { resolveSigner } from '../../../packages/core/src/flows/resolveSigner.js';
 
 const address = (id, overrides = {}) => ({
     id,
@@ -22,13 +23,14 @@ const address = (id, overrides = {}) => ({
     network: 'regtest',
     derivationPath: "m/84'/1'/0'/0/0",
     publicKey: `pub-${id}`,
+    source: 'ledger',
     signerId: null,
     ...overrides,
 });
 
 // A signer may only claim addresses in its own wallet, so every signer these
-// tests use is recorded in wallet-1.
-const SIGNER_RECORDS = ['signer-1', 's', 'a', 'b'].map((id) => ({ id, walletId: 'wallet-1' }));
+// tests use is recorded in wallet-1, as a device of the addresses' kind.
+const SIGNER_RECORDS = ['signer-1', 's', 'a', 'b'].map((id) => ({ id, walletId: 'wallet-1', kind: 'ledger' }));
 
 function harness(
     addresses,
@@ -131,5 +133,62 @@ describe('reconcileAddressSigners', () => {
         [{ vault: {}, chainRegistry: {}, signers: null }, 'signers must be a non-empty array'],
     ])('validates required collaborators', async (args, message) => {
         await expect(reconcileAddressSigners(args)).rejects.toThrow(message);
+    });
+});
+
+describe('reconcileAddressSigners links only a signer whose kind fits the address source', () => {
+    const keyed = (id, kind) => ({ id, kind, getPublicKey: vi.fn(async () => ({ publicKey: 'pub-x' })) });
+    const run = (rows, signers, records = SIGNER_RECORDS) => {
+        const h = harness(rows, undefined, records);
+        return { put: h.put, done: reconcileAddressSigners({ vault: h.vault, chainRegistry: h.chainRegistry, signers }) };
+    };
+    const trezorRecord = [{ id: 't', walletId: 'wallet-1', kind: 'trezor' }];
+
+    it('leaves a ledger address matched only by a trezor signer unlinked as kind-mismatch', async () => {
+        const { put, done } = run([address('x')], [keyed('t')], trezorRecord);
+        await expect(done).resolves.toEqual({ scanned: 1, reconciled: 0, skipped: [{ id: 'x', reason: 'kind-mismatch' }] });
+        expect(put).not.toHaveBeenCalled();
+    });
+
+    it('leaves an hd address matched only by a hardware signer unlinked', async () => {
+        const { put, done } = run([address('x', { source: 'hd' })], [keyed('a')]);
+        await expect(done).resolves.toMatchObject({ reconciled: 0, skipped: [{ id: 'x', reason: 'kind-mismatch' }] });
+        expect(put).not.toHaveBeenCalled();
+    });
+
+    it('links the one kind-compatible signer when another kind also derives the key', async () => {
+        const records = [...SIGNER_RECORDS, ...trezorRecord];
+        const { put, done } = run([address('x')], [keyed('t'), keyed('a')], records);
+        await expect(done).resolves.toMatchObject({ reconciled: 1, skipped: [] });
+        expect(put).toHaveBeenCalledWith(expect.objectContaining({ id: 'x', signerId: 'a' }));
+    });
+
+    it('does not link a signer with no known kind', async () => {
+        const { put, done } = run([address('x')], [keyed('wallet-1')], []);
+        await expect(done).resolves.toMatchObject({ reconciled: 0, skipped: [{ id: 'x', reason: 'kind-mismatch' }] });
+        expect(put).not.toHaveBeenCalled();
+    });
+
+    it('does not link a signer whose live kind contradicts its record', async () => {
+        const { put, done } = run([address('x')], [keyed('a', 'trezor')]);
+        await expect(done).resolves.toMatchObject({ reconciled: 0 });
+        expect(put).not.toHaveBeenCalled();
+    });
+
+    it('saves a link that resolveSigner accepts', async () => {
+        const { put, done } = run([address('x')], [keyed('a')]);
+        await done;
+        const saved = put.mock.calls[0][0];
+        const vault = {
+            signers: { get: async (id) => SIGNER_RECORDS.find((r) => r.id === id) ?? null },
+            accounts: { get: async (id) => (id === 'account-1' ? { id, walletId: 'wallet-1' } : null) },
+        };
+        await expect(resolveSigner({ vault, address: saved })).resolves.toMatchObject({ kind: 'ledger' });
+    });
+
+    it('links an hd address to the wallet software signer', async () => {
+        const { put, done } = run([address('x', { source: 'hd' })], [keyed('wallet-1', 'software')], []);
+        await expect(done).resolves.toMatchObject({ reconciled: 1 });
+        expect(put).toHaveBeenCalledWith(expect.objectContaining({ id: 'x', signerId: 'wallet-1' }));
     });
 });

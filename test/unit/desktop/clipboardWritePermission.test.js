@@ -10,8 +10,8 @@
 
 // Receive's Copy QR writes an image through navigator.clipboard.write,
 // which Electron routes to the permission REQUEST handler as
-// `clipboard-sanitized-write`. The app's page gets it, a remote frame does
-// not, and clipboard reads and every prompting permission stay refused.
+// `clipboard-sanitized-write`. The app's page gets the explicit clipboard
+// and notification capabilities it needs, while a remote frame does not.
 
 import { describe, expect, it } from 'vitest';
 import { join, dirname } from 'node:path';
@@ -48,7 +48,11 @@ describe('desktop permission request handler', () => {
 
     it('keeps clipboard reads and prompting permissions refused', () => {
         const ask = requestHandler();
-        for (const permission of ['clipboard-read', 'media', 'notifications', 'geolocation']) {
+        for (const permission of ['clipboard-read', 'notifications']) {
+            expect([permission, ask(permission, appIndex)]).toEqual([permission, true]);
+            expect([permission, ask(permission, 'data:text/html,frame')]).toEqual([permission, false]);
+        }
+        for (const permission of ['media', 'geolocation']) {
             expect([permission, ask(permission, appIndex)]).toEqual([permission, false]);
         }
     });

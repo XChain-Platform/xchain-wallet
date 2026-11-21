@@ -78,6 +78,7 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
  * @property {(snapshot: QueueSnapshot) => Promise<void>} save
  * @property {() => Promise<OwedSettlement[]>} loadSettlements
  * @property {(owed: OwedSettlement[]) => Promise<void>} saveSettlements
+ * @property {(snapshot: QueueSnapshot, owed: OwedSettlement[]) => Promise<void>} [savePair]
  * @property {() => Promise<void>} clear
  */
 
@@ -163,6 +164,11 @@ export function createBroadcastQueueStorageAdapter(io) {
             await persist();
         },
         async saveSettlements(owed) {
+            cached.settlements = Array.isArray(owed) ? owed : [];
+            await persist();
+        },
+        async savePair(snapshot, owed) {
+            cached.queues = snapshot;
             cached.settlements = Array.isArray(owed) ? owed : [];
             await persist();
         },

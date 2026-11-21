@@ -90,6 +90,12 @@ export const EXECUTABLE_GATES = [
     'tools/release/launch-probe.mjs',
 ];
 
+// Files imported from beside each gate follow the same tag or fallback tree as that gate.
+export const GATE_LOCAL_IMPORTS = {
+    'tools/release/verify-signatures.mjs': ['tools/release/is-invoked-directly.mjs'],
+    'tools/release/launch-probe.mjs': ['tools/release/is-invoked-directly.mjs'],
+};
+
 // List the files lib.sh loads from its own directory (`$here/...`), always the invoking checkout's copy.
 export const LIB_SH_DEPENDENCIES = [
     'tools/release/update-info.mjs',
@@ -97,9 +103,10 @@ export const LIB_SH_DEPENDENCIES = [
 ];
 
 // Read a pin with no pinFormat with the fixed legacy split, which is what recorded it.
-// Format 3 adds the executable gates and format 4 lib.sh's own-directory files;
-// older formats keep the lists they were recorded with.
-export const PIN_FORMAT = 4;
+// Format 3 adds the executable gates, format 4 lib.sh's own-directory files,
+// and format 5 the gates' own-directory imports. Older formats keep the lists
+// they were recorded with.
+export const PIN_FORMAT = 5;
 
 /**
  * The script-side and repo-side files for a release set, mirroring lib.sh's
@@ -112,6 +119,7 @@ export const PIN_FORMAT = 4;
  *
  * From format 4 the files lib.sh loads from its own directory join the script
  * side for both release sets, since lib.sh is always the invoking checkout's.
+ * From format 5 each executable gate's local imports join the gate's side.
  *
  * @param {string} releaseSet  'release' or 'staging'
  * @param {number} [pinFormat] the pin format to read; below 2 is the fixed legacy split
@@ -131,9 +139,13 @@ export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT, { gateFallb
         : { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, ...SIGNING_CONTROLS] };
     if (pinFormat < 3) return split;
     const ownDir = pinFormat < 4 ? [] : LIB_SH_DEPENDENCIES;
+    const fallbackGates = EXECUTABLE_GATES.filter((p) => gateFallback.includes(p));
+    const tagGates = EXECUTABLE_GATES.filter((p) => !gateFallback.includes(p));
+    const localImports = (gates) => [...new Set(gates.flatMap((p) => GATE_LOCAL_IMPORTS[p] ?? []))];
     return {
-        script: [...split.script, ...ownDir, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
-        repo: [...split.repo, ...EXECUTABLE_GATES.filter((p) => !gateFallback.includes(p))],
+        script: [...split.script, ...ownDir, ...fallbackGates,
+            ...(pinFormat < 5 ? [] : localImports(fallbackGates))],
+        repo: [...split.repo, ...tagGates, ...(pinFormat < 5 ? [] : localImports(tagGates))],
     };
 }
 
@@ -676,7 +688,7 @@ export function uncoveredByPin(pin) {
     const current = signingPathFiles(pin.releaseSet ?? 'release', PIN_FORMAT,
         { gateFallback: pin.gateFallback ?? [] });
     const had = new Set([...pinned.script, ...pinned.repo]);
-    return [...current.script, ...current.repo].filter((p) => !had.has(p));
+    return [...new Set([...current.script, ...current.repo])].filter((p) => !had.has(p));
 }
 
 // Say which files an older pin cannot cover, so an OK line never implies it watched them.

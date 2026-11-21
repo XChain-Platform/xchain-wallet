@@ -972,8 +972,9 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         const [record] = await vault.pendingTxs.list();
         expect(record.status).toBe('queued');
         expect(payload.pendingTxId).toBe(record.id);
-        // The verdict names the claim these bytes hold, so the queue settles it.
-        expect(payload.adsCommit).toEqual({ ...PAID, mainnet: true, reservationId: record.id });
+        // The verdict names the claim these bytes hold, so the queue settles it,
+        // and books under the record id, the key every booking of this send shares.
+        expect(payload.adsCommit).toEqual({ ...PAID, mainnet: true, reservationId: record.id, bookingKey: record.id });
         // Nothing books on the failed attempt (the queued tx is what donates),
         // but the claim stays held while the bytes wait in the queue.
         expect(settings.ads).toMatchObject({ queued: '30', donated: '0', donationCount: 0 });

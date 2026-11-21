@@ -27,6 +27,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 // FormSection is the collapsible standard one, not ui/FormSection.jsx.
 import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, useFormSections } from '../components/formStandard/index.js';
 import { SummaryAddress } from '../components/formStandard/SummaryAddress.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -57,6 +58,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -108,6 +110,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const [stage, setStage] = useState(/** @type {'form'|'review'|'submitting'|'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [formErrorDetail, setFormErrorDetail] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
     // Section open state, held above the picker page and the review
@@ -154,6 +157,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         setRequireMemo(false);
         setDispPref('1');
         setFormError(null);
+        setFormErrorDetail(null);
     }
 
     useEffect(() => {
@@ -251,6 +255,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     async function handleReview(event) {
         event.preventDefault();
         if (reviewPending.current) return;
+        setFormErrorDetail(null);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); markError('fee'); return; }
         setFormError(null);
@@ -277,9 +282,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             setReviewBaseline(fresh);
             setStage('review');
         } catch (err) {
-            setFormError('Could not re-check the current on-chain values: '
-                + (err?.message || 'unknown error')
-                + '. Review needs a live read, because every write resets all three preferences.');
+            const lead = explorerReadFailure(err, 'load the current preferences')?.message
+                || "Couldn't load the current preferences. Try again in a moment.";
+            setFormError(lead + ' Review needs a live read, because every write resets all three preferences.');
+            setFormErrorDetail(typeof err?.message === 'string' && err.message.trim()
+                ? err.message.trim() : null);
         } finally {
             reviewPending.current = false;
         }
@@ -482,7 +489,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             label="Address preferences"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+                <>
+                    <StatusMessage variant="error">{formError}</StatusMessage>
+                    {formErrorDetail ? (
+                        <DiagnosticDetails summary="Technical details" items={[formErrorDetail]} />
+                    ) : null}
+                </>
             ) : null}
             action={(
                 <FormAction icon={<Icon.PencilIcon />}>Update Preferences</FormAction>

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Skeleton, StatusMessage, Notice, Icon, EmptyState } from '@xchain-wallet/core/ui';
+import { DiagnosticDetails } from '@xchain-wallet/core/shared/components/DiagnosticDetails.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function StatesSection() {
@@ -96,6 +97,13 @@ showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
                 >
                     Insufficient balance. You have 0.001 BTC available.
                 </StatusMessage>
+            </LiveExample>
+
+            <LiveExample label="DiagnosticDetails: collapsed technical context">
+                <DiagnosticDetails
+                    summary="Technical details"
+                    items={['Explorer returned an invalid response.', 'Request can be retried safely.']}
+                />
             </LiveExample>
 
             <LiveExample label="StatusMessage: inline success after action">

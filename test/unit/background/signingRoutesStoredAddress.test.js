@@ -77,11 +77,12 @@ const ADDRESSES = [
     row({ id: 'wo-in-wallet', source: 'watch-only', derivationPath: "m/84'/1'/0'/0/7", address: 'bcrt1qwatched' }),
     row({ id: 'mixed-hd', source: 'hd', address: 'bcrt1qmixed' }),
     row({ id: 'mixed-led', source: 'ledger', signerId: 'dev-1', address: 'bcrt1qmixed' }),
+    row({ id: 'imp-1', source: 'imported-wif', accountId: null, derivationPath: null, address: 'bcrt1qimported' }),
 ];
 
 function makeHost() {
     const vault = {
-        wallets: memCollection([{ id: 'w1', schemaVersion: 1, name: 'W', format: 'bip39', importedKeys: [] }]),
+        wallets: memCollection([{ id: 'w1', schemaVersion: 1, name: 'W', format: 'bip39', importedKeys: [{ addressId: 'imp-1' }] }]),
         accounts: memCollection([
             { schemaVersion: 2, id: 'acct-1', walletId: 'w1', index: 0, name: 'One', activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z' },
             { schemaVersion: 2, id: 'acct-2', walletId: 'w2', index: 0, name: 'Two', activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z' },
@@ -228,12 +229,12 @@ describe('a software route signs only with the signer the stored address calls f
     });
 });
 
-describe('a software route resolves a request with no usable address id by its address string', () => {
-    const idless = (address, extra = {}) => {
-        const stored = ADDRESSES.find((entry) => entry.address === address);
-        return { from: { address, publicKey: stored?.publicKey ?? 'pub', derivationPath: stored?.derivationPath ?? null, ...extra } };
-    };
+const idless = (address, extra = {}) => {
+    const stored = ADDRESSES.find((entry) => entry.address === address);
+    return { from: { address, publicKey: stored?.publicKey ?? 'pub', derivationPath: stored?.derivationPath ?? null, ...extra } };
+};
 
+describe('a software route resolves a request with no usable address id by its address string', () => {
     it('refuses a stored device address named only by string, whatever source the request claims', async () => {
         sendTokenMock.mockReset();
         const res = await send(makeHost(), idless('bcrt1qled', { source: 'hd' }));
@@ -278,6 +279,33 @@ describe('a software route resolves a request with no usable address id by its a
         expect(res.ok).toBe(false);
         expect(res.error.message).toMatch(/different kinds/);
         expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('an address named only by string follows the same ownership rule as one named by id', () => {
+    it('refuses an ownerless watch-only address named only by string', async () => {
+        sendTokenMock.mockReset();
+        const bare = await send(makeHost(), idless('bcrt1qwo', { source: 'hd' }));
+        const withPath = await send(makeHost(), idless('bcrt1qwo', { source: 'hd', derivationPath: "m/84'/1'/0'/0/0" }));
+        expect(bare.ok).toBe(false);
+        expect(bare.error.message).toMatch(/watch-only/);
+        expect(withPath.ok).toBe(false);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('checks an imported key named only by string against its stored record', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), idless('bcrt1qimported', { source: 'hd', derivationPath: "m/84'/1'/0'/0/0" }));
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/derivationPath does not match stored address "imp-1"/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('signs an imported key named only by string with its stored null path', async () => {
+        sendTokenMock.mockReset().mockResolvedValue({ txid: 't' });
+        const res = await send(makeHost(), idless('bcrt1qimported', { source: 'imported-wif' }));
+        expect(res.ok, JSON.stringify(res.error)).toBe(true);
+        expect(sendTokenMock).toHaveBeenCalledTimes(1);
     });
 });
 

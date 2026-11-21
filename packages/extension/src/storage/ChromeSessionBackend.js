@@ -29,8 +29,25 @@ import { ChromeStorageBackend } from './ChromeStorageBackend.js';
 
 export const DEFAULT_SESSION_STORAGE_KEY = 'xchain-wallet:session';
 
+export function createSessionSaveFence(invalidate) {
+    let inFlight = null;
+    return {
+        track(task) {
+            const tracked = Promise.resolve(task);
+            inFlight = tracked;
+            return tracked.finally(() => {
+                if (inFlight === tracked) inFlight = null;
+            });
+        },
+        async beforeSave() {
+            invalidate();
+            if (inFlight) await inFlight;
+        },
+    };
+}
+
 export class ChromeSessionBackend extends ChromeStorageBackend {
-    /** @param {import('./ChromeStorageBackend.js').ChromeStorageBackendOpts} [opts] */
+    /** @param {import('./ChromeStorageBackend.js').ChromeStorageBackendOpts & { beforeSave?: () => Promise<void> | void }} [opts] */
     constructor(opts = {}) {
         const resolved =
             opts.chromeStorage ??
@@ -46,5 +63,11 @@ export class ChromeSessionBackend extends ChromeStorageBackend {
             key: opts.key ?? DEFAULT_SESSION_STORAGE_KEY,
             chromeStorage: resolved,
         });
+        this.beforeSave = opts.beforeSave;
+    }
+
+    async save(blob, options) {
+        await this.beforeSave?.();
+        return super.save(blob, options);
     }
 }

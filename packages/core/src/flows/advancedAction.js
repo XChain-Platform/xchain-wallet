@@ -28,6 +28,7 @@ import { submitAction } from './submitAction.js';
 import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
 import { normalizeSource } from './sendToken.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import { assertDestroyAllowedOnChain } from '../registry/destroyPolicy.js';
 
 /**
  * @typedef {Object} AdvancedActionOpts
@@ -66,6 +67,9 @@ export async function advancedAction(opts) {
     }
     const source = normalizeSource(opts.from, 'advancedAction');
     const actionName = String(opts.action).toUpperCase();
+    if (actionName === 'DESTROY') {
+        assertDestroyAllowedOnChain(opts.chainRegistry, opts.chainId, opts.params.TICK, 'advancedAction');
+    }
     if (CHAIN_GATED_ACTIONS.includes(actionName)) {
         const sdk = opts.sdkRegistry.get(opts.chainId);
         const { version } = sdk.actions.composeActionString({ action: actionName, params: opts.params }, { validate: false });

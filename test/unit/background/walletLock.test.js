@@ -21,8 +21,15 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     handleWalletLock,
     WalletLockIncompleteError,
+    checkAutoLockDeadline,
     createHostBuildFlight,
+    gateRestoredSession,
 } from '../../../packages/extension/src/background/walletLock.js';
+import { shouldAutoLock } from '../../../packages/extension/src/background/autoLockState.js';
+import {
+    ChromeSessionBackend,
+    createSessionSaveFence,
+} from '../../../packages/extension/src/storage/ChromeSessionBackend.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -127,6 +134,125 @@ describe('handleWalletLock', () => {
     });
 });
 
+describe('checkAutoLockDeadline', () => {
+    const check = (state, now = 5_000) => checkAutoLockDeadline({
+        readAutoLockState: async () => state,
+        shouldAutoLock,
+        now: () => now,
+    });
+
+    it('admits missing, disarmed and unexpired records', async () => {
+        await expect(check(null)).resolves.toBe('valid');
+        await expect(check({ armed: false })).resolves.toBe('valid');
+        await expect(check({ armed: true, lastActivity: 4_500, idleMs: 1_000 })).resolves.toBe('valid');
+    });
+
+    it('rejects expired records without deferring to an active request', async () => {
+        await expect(checkAutoLockDeadline({
+            readAutoLockState: async () => ({ armed: true }),
+            shouldAutoLock: () => true,
+            isRequestActive: () => true,
+            now: () => 5_000,
+        })).resolves.toBe('expired');
+    });
+
+    it('rejects a record that storage cannot read', async () => {
+        await expect(checkAutoLockDeadline({
+            readAutoLockState: async () => { throw new Error('unreadable'); },
+            shouldAutoLock: () => false,
+        })).resolves.toBe('unreadable');
+    });
+});
+
+describe('restored-session deadline gate', () => {
+    const deferred = () => {
+        let resolve;
+        const promise = new Promise((done) => { resolve = done; });
+        return { promise, resolve };
+    };
+
+    it('locks and zeroes an expired restore that is still current', async () => {
+        const masterKey = new Uint8Array([1, 2, 3]);
+        const lockWalletNow = vi.fn(async () => {});
+        await expect(gateRestoredSession({
+            masterKey,
+            checkDeadline: async () => 'expired',
+            isCurrent: () => true,
+            lockWalletNow,
+        })).resolves.toBe('expired');
+        expect(lockWalletNow).toHaveBeenCalledOnce();
+        expect([...masterKey]).toEqual([0, 0, 0]);
+    });
+
+    it('does not let an older expired restore lock a fresh unlock', async () => {
+        const deadline = deferred();
+        const masterKey = new Uint8Array([1, 2, 3]);
+        const lockWalletNow = vi.fn(async () => {});
+        let epoch = 0;
+        const fence = createSessionSaveFence(() => { epoch += 1; });
+        const restoreEpoch = epoch;
+        const restoring = fence.track(gateRestoredSession({
+            masterKey,
+            checkDeadline: () => deadline.promise,
+            isCurrent: () => restoreEpoch === epoch,
+            lockWalletNow,
+        }));
+        const chromeStorage = {
+            get: vi.fn(async () => ({})),
+            set: vi.fn(async () => {}),
+            remove: vi.fn(async () => {}),
+        };
+        const freshSession = new ChromeSessionBackend({
+            chromeStorage,
+            beforeSave: () => fence.beforeSave(),
+        });
+        const saving = freshSession.save(new Uint8Array([9]));
+        expect(chromeStorage.set).not.toHaveBeenCalled();
+        deadline.resolve('expired');
+
+        await expect(restoring).resolves.toBe('superseded');
+        await saving;
+        expect(lockWalletNow).not.toHaveBeenCalled();
+        expect(chromeStorage.set).toHaveBeenCalledOnce();
+        expect([...masterKey]).toEqual([0, 0, 0]);
+    });
+
+    it('waits for an already-started stale lock before saving a fresh key', async () => {
+        const lock = deferred();
+        const lockStarted = deferred();
+        let epoch = 0;
+        const fence = createSessionSaveFence(() => { epoch += 1; });
+        const restoring = fence.track(gateRestoredSession({
+            masterKey: new Uint8Array([1]),
+            checkDeadline: async () => 'expired',
+            isCurrent: () => true,
+            lockWalletNow: async () => {
+                lockStarted.resolve();
+                await lock.promise;
+            },
+        }));
+        await lockStarted.promise;
+        const chromeStorage = {
+            get: vi.fn(async () => ({})),
+            set: vi.fn(async () => {}),
+            remove: vi.fn(async () => {}),
+        };
+        const session = new ChromeSessionBackend({
+            chromeStorage,
+            beforeSave: () => fence.beforeSave(),
+        });
+
+        const saving = session.save(new Uint8Array([9]));
+        await Promise.resolve();
+        expect(chromeStorage.set).not.toHaveBeenCalled();
+        lock.resolve();
+        await restoring;
+        await saving;
+        expect(chromeStorage.set).toHaveBeenCalledOnce();
+        expect(epoch).toBe(1);
+    });
+});
+
 // Boot, keepalive and unlock overlap in a waking worker; each extra build orphans a Vault.
 describe('createHostBuildFlight', () => {
     const deferred = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return { p, resolve }; };
@@ -164,5 +290,15 @@ describe('createHostBuildFlight', () => {
         const bg = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/extension/src/background.js'), 'utf8');
         expect(bg).toMatch(/const ensureHost = createHostBuildFlight\(buildHost\);/);
         expect(bg).not.toMatch(/function ensureHost\(/);
+    });
+
+    it('validates a restored deadline before constructing or publishing a host', () => {
+        const bg = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/extension/src/background.js'), 'utf8');
+        const deadline = bg.indexOf('await sessionSaveFence.track(gateRestoredSession({');
+        const vault = bg.indexOf('buildVault = new storageLib.Vault');
+        const publish = bg.indexOf('detachHost = attachChromeRuntime');
+        expect(deadline).toBeGreaterThan(-1);
+        expect(deadline).toBeLessThan(vault);
+        expect(vault).toBeLessThan(publish);
     });
 });

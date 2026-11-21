@@ -216,6 +216,47 @@ describe('discardQueuedBroadcast idempotency and in-flight branches', () => {
         expect(await pendingTxs.get('queued-1')).toBeNull();
     });
 
+    it('blocks a drain that starts while a discard is deleting', async () => {
+        let continueDelete;
+        let signalDelete;
+        const deleteStarted = new Promise((resolve) => { signalDelete = resolve; });
+        const pendingTxs = collection([queued()]);
+        pendingTxs.delete = vi.fn(async (id) => {
+            signalDelete();
+            await new Promise((resolve) => { continueDelete = resolve; });
+            return pendingTxs.records.delete(id);
+        });
+        const broadcastTx = vi.fn(async () => ({ txid: 'tx-1' }));
+        const args = {
+            vault: { pendingTxs },
+            sdkRegistry: { get: () => ({ encoder: { broadcastTx } }) },
+            chainRegistry,
+            pendingTxId: 'queued-1',
+        };
+        const discarding = discardQueuedBroadcast({ vault: args.vault, pendingTxId: 'queued-1' });
+        await deleteStarted;
+
+        try {
+            await expect(drainQueuedBroadcast(args)).rejects.toThrow(/already being broadcast or discarded/);
+        } finally {
+            continueDelete();
+        }
+        await expect(discarding).resolves.toBe(true);
+        expect(broadcastTx).not.toHaveBeenCalled();
+        expect(await pendingTxs.get('queued-1')).toBeNull();
+    });
+
+    it('releases the discard claim when deletion fails', async () => {
+        const h = drainHarness();
+        h.pendingTxs.delete.mockRejectedValueOnce(new Error('write failed'));
+        await expect(discardQueuedBroadcast({
+            vault: h.args.vault, pendingTxId: 'queued-1',
+        })).rejects.toThrow('write failed');
+
+        await expect(drainQueuedBroadcast(h.args)).resolves.toMatchObject({ broadcast: true });
+        expect(h.broadcastTx).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps a record while its network broadcast is in flight', async () => {
         let resolveBroadcast;
         let signalEntered;

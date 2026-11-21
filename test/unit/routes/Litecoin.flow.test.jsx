@@ -204,7 +204,7 @@ describe('Litecoin native protocol fee flow', () => {
             options: { network: CHAIN },
             actions: {
                 createAction: vi.fn(() => ({
-                    actionString: 'DESTROY|0|XCHAIN|1',
+                    actionString: 'DESTROY|0|FEELSS|1',
                     action: 'DESTROY',
                     version: 0,
                 })),
@@ -230,7 +230,7 @@ describe('Litecoin native protocol fee flow', () => {
             getSignerStatus: vi.fn().mockResolvedValue({ status: 'locked' }),
             getTokenInfo: vi.fn().mockResolvedValue({
                 chainId: CHAIN,
-                tick: 'XCHAIN',
+                tick: 'FEELSS',
                 divisibility: 8,
                 locks: {},
             }),
@@ -239,7 +239,7 @@ describe('Litecoin native protocol fee flow', () => {
                     address: SOURCE.address,
                     balances: {
                         native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
-                        tokens: [{ tick: 'XCHAIN', quantity: '200000000', divisibility: 8 }],
+                        tokens: [{ tick: 'FEELSS', quantity: '200000000', divisibility: 8 }],
                     },
                 }],
             }),
@@ -263,7 +263,7 @@ describe('Litecoin native protocol fee flow', () => {
                     networkFeeSats: 1000,
                     protocolFeeSats: 0,
                     decoded: {
-                        summary: 'Destroy 1 XCHAIN',
+                        summary: 'Destroy 1 FEELSS',
                         details: [],
                         warnings: ['Destroy is irreversible.'],
                     },
@@ -276,13 +276,13 @@ describe('Litecoin native protocol fee flow', () => {
             <DestroyForm
                 walletId={WALLET_ID}
                 initialChainId={CHAIN}
-                initialTick="XCHAIN"
+                initialTick="FEELSS"
                 initialFromAddress={SOURCE.address}
                 onBack={() => {}}
             />
         )));
 
-        await waitFor(() => expect(document.body.textContent).toContain('2 XCHAIN available'));
+        await waitFor(() => expect(document.body.textContent).toContain('2 FEELSS available'));
         expect(screen.queryByText('Protocol fees are paid in LTC')).not.toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: 'Destroy' }));

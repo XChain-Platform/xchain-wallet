@@ -38,6 +38,7 @@ import {
     ChromeMetaBackend,
     ChromeSessionBackend,
     ChromeStorageBackend,
+    createSessionSaveFence,
 } from './storage/index.js';
 import { createVaultKeyring } from './background/vaultKeyring.js';
 import {
@@ -78,6 +79,7 @@ import {
     createHostBuildFlight,
     createKeepaliveTick,
     createUiRequestTracker,
+    gateRestoredSession,
     sequenceUnlockedSession,
 } from './background/walletLock.js';
 import {
@@ -349,6 +351,7 @@ const ensureHost = createHostBuildFlight(buildHost);
 // Bumped by every teardown. A build that finds it moved since it started was
 // overtaken by a lock or a wipe and must not install its host.
 let hostEpoch = 0;
+const sessionSaveFence = createSessionSaveFence(() => { hostEpoch += 1; });
 
 // The session slot a host build reads while a refused lock's clear is pending.
 const LOCK_PENDING_SESSION = Object.freeze({ load: async () => null });
@@ -370,6 +373,17 @@ async function buildHost() {
     }
     if (!masterKey) {
         // No unlocked session. The popup must unlock + re-init the host.
+        return null;
+    }
+    const restoreDeadline = await sessionSaveFence.track(gateRestoredSession({
+        masterKey,
+        checkDeadline: () => lockBackstop.checkRestoreDeadline(),
+        isCurrent: () => epoch === hostEpoch,
+        lockWalletNow,
+        logger: console,
+    }));
+    if (restoreDeadline !== 'valid' || epoch !== hostEpoch) {
+        masterKey.fill(0);
         return null;
     }
     // Zero the loaded buffer once the Vault has taken its private copy; the
@@ -865,6 +879,7 @@ attachSessionMetaListener({
     // gets swapped on tearDownHost so the reference can change between
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
+    beforeSessionSave: () => sessionSaveFence.beforeSave(),
     onUnlocked: () => {
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
@@ -956,8 +971,8 @@ attachBridgeBootGate({
         : sendResponse(WALLET_LOCKED_ENVELOPE)),
 });
 
-// A restarted worker checks its idle deadline at once rather than at the
-// first keepalive alarm, so a record it cannot read locks before any request.
+// Restored hosts validate their idle deadline before publication. This pass
+// keeps enforcing the deadline for an already-warm host at worker boot.
 ensureHost()
     .catch((err) => {
         console.error('[xchain] background init failed:', err);

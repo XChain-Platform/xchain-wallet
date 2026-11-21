@@ -49,6 +49,7 @@
 // time.
 
 import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
+import { assertDestroyAllowedOnChain } from '../registry/destroyPolicy.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
 /** Actions a BATCH can never contain (SDK BatchBuilder + validator). */
@@ -335,6 +336,14 @@ export async function buildBatchCommand({ sdkRegistry, chainRegistry, chainId, s
     }
     const builder = sdk.batch();
     for (const entry of subActions) {
+        if (chainRegistry && String(entry?.action || '').toUpperCase() === 'DESTROY') {
+            assertDestroyAllowedOnChain(
+                chainRegistry,
+                chainId,
+                entry?.params?.TICK,
+                'buildBatchCommand',
+            );
+        }
         builder.add(entry.action, entry.params || {});
     }
     // No encoder opts -> command-only build (no pubkey, so no PSBT is

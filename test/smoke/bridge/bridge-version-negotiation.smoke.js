@@ -142,6 +142,35 @@ for (const pass of ['0.1.0', '^0.1.0', '~0.1.0', '>=0.1.0', '>0.0.9', '*', '^0.1
 for (const fail of ['^1.2.0', '~0.2.0', '0.2.0', '>=0.2.0', '<0.1.0', 'not-a-range']) {
     assert.equal(isBridgeVersionSupported(fail), false, `${fail} is not satisfied by 0.1.0`);
 }
+// Multi-comparator ranges, spaced and unspaced: an operator separated from its
+// version by whitespace is still one comparator, so each spaced form must give
+// the same answer as its unspaced twin.
+const spacedTwins = [
+    ['>=0.1.0 <0.2.0', '>= 0.1.0 < 0.2.0', true],
+    ['>=0.1.0,<0.2.0', '>= 0.1.0, < 0.2.0', true],
+    ['^0.1.0', '^ 0.1.0', true],
+    ['~0.1.0', '~ 0.1.0', true],
+    ['=0.1.0', '= 0.1.0', true],
+    ['>=v0.1.0', '>= v0.1.0', true],
+    ['>=0.0.1 <=0.1.0', '>= 0.0.1 <= 0.1.0', true],
+    ['>=0.2.0 || >=0.1.0 <0.2.0', '>= 0.2.0 || >= 0.1.0 < 0.2.0', true],
+    ['>=0.2.0', '>= 0.2.0', false],
+    ['>0.1.0', '> 0.1.0', false],
+    ['<0.1.0', '< 0.1.0', false],
+    ['>=0.1.0 <0.1.0', '>= 0.1.0 < 0.1.0', false],
+    ['>=0.0.1 <0.1.0', '>= 0.0.1 < 0.1.0', false],
+    ['^1.0.0', '^ 1.0.0', false],
+    ['~0.2.0', '~ 0.2.0', false],
+];
+for (const [unspaced, spaced, expected] of spacedTwins) {
+    assert.equal(isBridgeVersionSupported(unspaced), expected, `${unspaced} gives ${expected}`);
+    assert.equal(isBridgeVersionSupported(spaced), expected, `${spaced} matches its unspaced twin`);
+}
+// Malformed ranges still fail closed: a dangling or doubled operator is never
+// skipped as noise, and hyphen ranges stay outside the grammar.
+for (const fail of ['>= 0.1.0 <', '>=', '>= ', '> = 0.1.0', '>= <= 0.1.0', '0.1.0 - 0.2.0', '0.1.0>= 9.9.9', '0.1.0< 0.0.1']) {
+    assert.equal(isBridgeVersionSupported(fail), false, `${fail} fails closed`);
+}
 // Unchanged pass-through: no requirement means no negotiation to fail.
 for (const skip of ['', undefined, null, 42]) {
     assert.equal(isBridgeVersionSupported(skip), true, 'absent requirement passes through');

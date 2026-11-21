@@ -810,6 +810,44 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
 }
 
 /**
+ * The stored hardware address a receive.verifyAddress request names and a
+ * RemoteSigner for the device that address is linked to. A request's own
+ * `signerId` may only repeat that link; an address with no device link
+ * (a migrated record whose signerId is still null) is refused, not handed
+ * to another signer.
+ *
+ * @param {any} req
+ * @param {import('@xchain-wallet/core').storage.Vault} vault
+ * @returns {Promise<{ address: any, signer: import('@xchain-wallet/core').signers.Signer }>}
+ */
+async function linkedDeviceSignerForVerify(req, vault) {
+    const walletId = req?.walletId;
+    const addressId = req?.addressId;
+    if (typeof walletId !== 'string' || !walletId) throw new Error('receive.verifyAddress: walletId is required');
+    if (typeof addressId !== 'string' || !addressId) throw new Error('receive.verifyAddress: addressId is required');
+    const address = await vault.addresses.get(addressId);
+    if (!address) throw new Error(`receive.verifyAddress: address "${addressId}" not found`);
+    await assertAddressInWallet(vault, address, walletId);
+    if (!isDeviceSource(address.source)) {
+        throw new Error('receive.verifyAddress: on-device verification is only for hardware addresses');
+    }
+    if (!address.signerId) {
+        throw new Error('receive.verifyAddress: this address is not linked to a paired hardware wallet; re-pair it');
+    }
+    const descriptor = await resolveSigner({ vault, address });
+    if (!schemas.isDeviceSignerKind(descriptor.kind)) {
+        throw new Error('receive.verifyAddress: on-device verification is only for hardware addresses');
+    }
+    const requested = req?.signerId;
+    if (typeof requested === 'string' && requested.length > 0 && requested !== descriptor.signerRecord.id) {
+        throw new Error('receive.verifyAddress: the request names a different device than this address is linked to');
+    }
+    // Throws with code HW_NOT_CONNECTED when the device has no live transport.
+    const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
+    return { address, signer: buildRemoteSigner(descriptor, transport) };
+}
+
+/**
  * The unlocked session's software signer for a wallet and its vault master
  * key, when the request carries no password and the pool holds that signer;
  * null otherwise (a typed password always wins). The label-sync routes use
@@ -899,6 +937,10 @@ const SPENDING_ROUTES_OUTSIDE_ACTIONS = ['messaging.handshake', 'wallet.publishL
  * request that omits or misstates the id cannot dodge the checks below. Records
  * of one kind sharing the string (a network copy) resolve to the first; records
  * that disagree on source or device are refused rather than picked between.
+ * The string lookup applies the id lookup's ownership rule: an account-linked
+ * record belongs to its account's wallet, an imported key to the wallet whose
+ * importedKeys lists it, and a watch-only record with no account to no wallet,
+ * so it is returned for the caller to refuse.
  *
  * @param {any} req
  * @param {any} vault
@@ -928,8 +970,18 @@ async function storedRecordForSigning(req, vault) {
     if (typeof walletId !== 'string' || walletId.length === 0) return null;
     if (typeof text !== 'string' || text.length === 0) return null;
     const matches = [];
+    let importedIds = null;
     for (const a of await vault.addresses.list()) {
-        if (a.address === text && (await addressInWallet(vault, a, walletId))) matches.push(a);
+        if (a.address !== text) continue;
+        if (typeof a.accountId === 'string' && a.accountId.length > 0) {
+            if (await addressInWallet(vault, a, walletId)) matches.push(a);
+        } else if (a.source === 'watch-only') {
+            // Owned by no wallet, so no wallet may sign for it: returning it is what refuses it.
+            matches.push(a);
+        } else {
+            importedIds ??= await importedAddressIdsFor(vault, walletId);
+            if (importedIds.has(a.id)) matches.push(a);
+        }
     }
     if (matches.every((m) => m.source === matches[0].source && m.signerId === matches[0].signerId)) {
         const record = matches[0] ?? null;
@@ -3378,22 +3430,16 @@ export function createBackgroundHost(deps) {
 
     // §17.6: confirm a persisted hardware receive address on the device's
     // trusted screen and cross-check it against what the wallet holds. The
-    // Receive screen's "Verify on your device" action calls this; requires
-    // the paired HW signer (RemoteSigner) named by req.signerId.
-    host.register('receive.verifyAddress', async (req, { vault, chainRegistry, signerPool }) => {
-        const signer = await pickSignerFromRequest({
-            vault,
-            walletId: req?.walletId,
-            signerId: req?.signerId,
-            signerPool,
-        });
-        if (!signer) {
-            throw new Error('receive.verifyAddress: a connected hardware wallet is required');
-        }
+    // Receive screen's "Verify on your device" action calls this. The signer
+    // is the device the stored address record is linked to, never the pooled
+    // software key: a software derivation of the same seed matches without
+    // any device showing the address.
+    host.register('receive.verifyAddress', async (req, { vault, chainRegistry }) => {
+        const { address, signer } = await linkedDeviceSignerForVerify(req, vault);
         return verifyReceiveAddress({
             vault,
             chainId: req?.chainId,
-            addressId: req?.addressId,
+            addressId: address.id,
             signer,
             chainRegistry,
         });
@@ -4226,6 +4272,7 @@ export function createBackgroundHost(deps) {
     const {
         ensureQueueLoaded,
         persistQueue,
+        persistQueueAndSettlements,
         recordOwedSettlement,
         flushOwedSettlements,
         sealBroadcastQueue,
@@ -4740,7 +4787,11 @@ export function createBackgroundHost(deps) {
         };
         const cur = q.findIndex((e) => e.id === entry.id);
         if (cur >= 0) q[cur] = advanced;
-        await persistQueue();
+        recordOwedSettlement(walletId, advanced, 'reveal', {
+            txid: advanced.txid ?? null,
+            commitTxid: entry.txid ?? null,
+        }, { persist: false });
+        const checkpointSaved = await persistQueueAndSettlements();
         const patch = {
             status: 'broadcasting',
             txHex: reveal.txHex,
@@ -4749,11 +4800,10 @@ export function createBackgroundHost(deps) {
             commitTxid: entry.txid ?? null,
             error: null,
         };
-        if (await settleQueuedPendingTx(vault, advanced, patch) === 'unreachable') {
-            recordOwedSettlement(walletId, advanced, 'reveal', {
-                txid: advanced.txid ?? null,
-                commitTxid: entry.txid ?? null,
-            });
+        const settlement = await settleQueuedPendingTx(vault, advanced, patch);
+        if (settlement !== 'unreachable') {
+            await flushOwedSettlements(vault);
+            if (!checkpointSaved) await persistQueue();
         }
         return advanced;
     }
@@ -4788,6 +4838,7 @@ export function createBackgroundHost(deps) {
             // Reassigned once a two-phase entry's commit lands: from then on the
             // entry is its reveal, and every settlement below describes that.
             let entry = q[idx];
+            await flushOwedSettlements(vault);
             // A queue save a refused write left behind the vault must not resend the commit.
             if (await syncEntryToDurableRecord(vault, entry)) await persistQueue();
             // The coins this entry spends, held once it goes out (see ownSpends.js).

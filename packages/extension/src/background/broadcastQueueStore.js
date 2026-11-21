@@ -76,6 +76,21 @@ const PRUNED_PREFIX = BROADCAST_QUEUE_PRUNED_PREFIX;
 /** Journal length cap, shared by the engine and the lease reload. */
 export const OWED_SETTLEMENT_LIMIT = 50;
 
+/** Keep the newest ordinary records without ever trimming a reveal repair. */
+export function capOwedSettlementRecords(records) {
+    const kept = Array.isArray(records) ? records.slice() : [];
+    const revealCount = kept.filter((entry) => entry?.op === 'reveal').length;
+    let remove = kept.length - Math.max(OWED_SETTLEMENT_LIMIT, revealCount);
+    if (remove <= 0) return kept;
+    return kept.filter((entry) => {
+        if (remove > 0 && entry?.op !== 'reveal') {
+            remove -= 1;
+            return false;
+        }
+        return true;
+    });
+}
+
 /**
  * The key a journal record is known by in a `PersistedRecord`.
  *
@@ -211,6 +226,17 @@ function withPersistedRecord(storage, persisted) {
             const queues = pair.queues;
             pair.owed = owed;
             await storage.saveSettlements(records);
+            commit(ticket, queues, owed);
+        };
+    }
+    if (typeof storage.savePair === 'function') {
+        wrapped.savePair = async (snapshot, records) => {
+            const ticket = ++issued;
+            const queues = queueKeysOf(snapshot);
+            const owed = owedKeysOf(records);
+            pair.queues = queues;
+            pair.owed = owed;
+            await storage.savePair(snapshot, records);
             commit(ticket, queues, owed);
         };
     }
@@ -368,6 +394,16 @@ function withLedger(storage, pruned) {
             // A stale entry only skips a wallet the blob no longer holds.
         }
     };
+    if (typeof storage.savePair === 'function') {
+        wrapped.savePair = async (snapshot, owed) => {
+            await storage.savePair(snapshot, owed);
+            try {
+                await pruned.queue(() => pruned.forget(snapshot));
+            } catch (_e) {
+                // A stale entry only skips a wallet the blob no longer holds.
+            }
+        };
+    }
     return wrapped;
 }
 
@@ -456,12 +492,12 @@ function adoptStoredState(store, snapshot, settlements, known) {
             foldedCarried.set(later, folded);
         }
     }
-    store.owed = [
+    store.owed = capOwedSettlementRecords([
         ...keptStored,
         ...carriedOwed
             .filter((entry) => foldedCarried.get(entry) !== null)
             .map((entry) => foldedCarried.get(entry) ?? entry),
-    ].slice(-OWED_SETTLEMENT_LIMIT);
+    ]);
     return carried;
 }
 
@@ -519,10 +555,15 @@ export async function refreshBroadcastQueueStore(store) {
 
         if (carried || pruned?.size > 0) {
             const queues = toStoredQueueSnapshot(store.queues);
+            const owed = store.owed.map((entry) => ({ ...entry }));
             try {
-                await store.storage.save(queues);
-                if (typeof store.storage.saveSettlements === 'function') {
-                    await store.storage.saveSettlements(store.owed.map((entry) => ({ ...entry })));
+                if (typeof store.storage.savePair === 'function') {
+                    await store.storage.savePair(queues, owed);
+                } else {
+                    if (typeof store.storage.saveSettlements === 'function') {
+                        await store.storage.saveSettlements(owed);
+                    }
+                    await store.storage.save(queues);
                 }
                 pruned?.clear();
             } catch (_err) {

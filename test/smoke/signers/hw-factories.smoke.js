@@ -543,14 +543,17 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
         false,
         'hid check denied to a local file outside the app dir when a frame URL is supplied',
     );
-    // Non-hid permissions are granted on the check path, which the shared
-    // UI's clipboard writes and its Notification.permission read rely on.
-    // Anything that must prompt is refused by the request handler instead.
+    // Explicit app capabilities remain available on the check path.
     for (const permission of ['clipboard-read', 'clipboard-sanitized-write', 'media', 'notifications']) {
         assert.equal(
             checkHandler(null, permission, 'file://', { isMainFrame: true, requestingUrl: appIndex }),
             true,
             `${permission} check is granted`,
+        );
+        assert.equal(
+            checkHandler(null, permission, 'null', { requestingUrl: appIndex }),
+            false,
+            `${permission} check is refused to an opaque origin`,
         );
     }
     // WebUSB and Web Serial are refused on the check path, as the bridge session refuses them.
@@ -561,6 +564,11 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
             `${permission} check is refused even to the app's own frame`,
         );
     }
+    assert.equal(
+        checkHandler(null, 'made-up-permission', 'file://', { requestingUrl: appIndex }),
+        false,
+        'an unknown permission is refused by default',
+    );
 
     // select-hid-device is the only callback that names the REQUESTING
     // frame, so it is the only one that can split these three apart. The

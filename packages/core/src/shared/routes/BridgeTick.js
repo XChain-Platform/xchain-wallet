@@ -34,37 +34,12 @@
 //      the rule protocolFeeDisclosure.js already states for the fee line.
 
 import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.js';
+import { GAS_TICK, parseBridgedTick } from '../../registry/destroyPolicy.js';
 
-/** The gas tick, which is bare on every chain and therefore never origin-rooted (token-bridge D35). */
-export const GAS_TICK = 'XCHAIN';
+export { GAS_TICK, parseBridgedTick } from '../../registry/destroyPolicy.js';
 
 /** The longest tick the indexer stores, which bounds a bridged copy's rooted name too. */
 export const MAX_TICK_LENGTH = 250;
-
-/**
- * Split an origin-rooted bridged tick into its origin chain and bare name.
- *
- * @param {string|null|undefined} tick        the stored tick, e.g. 'BTC.PEPECASH'
- * @param {string|null|undefined} [localCoin] this chain's native ticker ('DOGE'),
- *   or a descriptor `coin` ('dogecoin'). When supplied, a tick rooted at THIS
- *   chain's own coin is not bridged (it would be an ordinary subasset), which is
- *   the third clause of the spec's rule. Omit to parse the name alone.
- * @returns {{ origin: string, name: string } | null}
- */
-export function parseBridgedTick(tick, localCoin) {
-    const raw = String(tick || '').trim();
-    if (!raw) return null;
-    // Exactly one dot: `BTC.PEPE.CASH` is a subasset of a bridged row, and
-    // milestone 1 refuses to bridge dotted names at all, so it is not one.
-    const parts = raw.split('.');
-    if (parts.length !== 2) return null;
-    const origin = parts[0].toUpperCase();
-    const name = parts[1];
-    if (!name) return null;
-    if (!isProtocolCoinTicker(origin)) return null;
-    if (localCoin && origin === normalizeCoinTicker(localCoin)) return null;
-    return { origin, name };
-}
 
 /**
  * What a bridged row is CALLED on screen: the bare name, with the origin

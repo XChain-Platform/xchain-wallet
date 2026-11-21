@@ -136,6 +136,47 @@ export function requestHoldsAutoLock(type) {
 }
 
 /**
+ * Read the persisted idle deadline before a restored host is published.
+ * Missing, disarmed and unexpired records are valid; unreadable and expired
+ * records require the caller to lock the restored session.
+ *
+ * @param {{ readAutoLockState: () => Promise<unknown>, shouldAutoLock: (state: unknown, now: number) => boolean, now?: () => number }} deps
+ * @returns {Promise<'valid' | 'expired' | 'unreadable'>}
+ */
+export async function checkAutoLockDeadline(deps) {
+    let state;
+    try {
+        state = await deps.readAutoLockState();
+    } catch {
+        return 'unreadable';
+    }
+    return deps.shouldAutoLock(state, (deps.now ?? Date.now)()) ? 'expired' : 'valid';
+}
+
+/**
+ * Finish a restored-session deadline check without letting a superseded
+ * result lock a newer session.
+ *
+ * @param {{ masterKey: Uint8Array, checkDeadline: () => Promise<string>, isCurrent: () => boolean, lockWalletNow: () => Promise<void>, logger?: { error: Function } }} deps
+ * @returns {Promise<string>}
+ */
+export async function gateRestoredSession(deps) {
+    const deadline = await deps.checkDeadline();
+    if (!deps.isCurrent()) {
+        deps.masterKey.fill(0);
+        return 'superseded';
+    }
+    if (deadline === 'valid') return deadline;
+    deps.masterKey.fill(0);
+    try {
+        await deps.lockWalletNow();
+    } catch (err) {
+        (deps.logger ?? console).error('[xchain] restored-session auto-lock failed:', err);
+    }
+    return deadline;
+}
+
+/**
  * Track the trusted UI requests in flight that hold a due idle lock. `begin`
  * runs once per request and returns its completion callback. A request holds
  * the lock from its start until it ends or `ceilingMs` passes, whichever
@@ -244,6 +285,12 @@ export function createLockBackstop(deps) {
         }
     }
 
+    const checkRestoreDeadline = () => checkAutoLockDeadline({
+        readAutoLockState: deps.readAutoLockState,
+        shouldAutoLock: deps.shouldAutoLock,
+        now,
+    });
+
     async function maybeAutoLock() {
         if (cleanupPending) return retryPendingClear();
         // Already locked; nothing to do.
@@ -252,15 +299,13 @@ export function createLockBackstop(deps) {
         }
         // A record storage cannot read is a deadline this worker cannot
         // enforce, so it locks rather than leaving the session open for good.
-        let unreadable = false;
-        let state;
-        try { state = await deps.readAutoLockState(); } catch { unreadable = true; }
-        if (!unreadable && !deps.shouldAutoLock(state, now())) return 'skipped';
+        const deadline = await checkRestoreDeadline();
+        if (deadline === 'valid') return 'skipped';
         // A due lock waits for in-flight signing work. The request tracker
         // stops counting a request after its ceiling, so a hung one cannot
         // hold the wallet open for good.
         if (deps.isRequestActive?.()) return 'deferred';
-        logger.log(unreadable
+        logger.log(deadline === 'unreadable'
             ? '[xchain] auto-lock: record unreadable, locking wallet'
             : '[xchain] auto-lock: idle timeout reached, locking wallet');
         try {
@@ -293,6 +338,7 @@ export function createLockBackstop(deps) {
     }
 
     return {
+        checkRestoreDeadline,
         lockWalletNow,
         maybeAutoLock,
         onLocked,

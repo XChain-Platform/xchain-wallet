@@ -15,7 +15,7 @@
 import { probeTxInclusion } from '@xchain-wallet/core/flows/txInclusionProbe.js';
 import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import {
-    OWED_SETTLEMENT_LIMIT,
+    capOwedSettlementRecords,
     foldOwedSettlement,
     owedRecordKey,
     sealBroadcastQueueStore,
@@ -361,17 +361,36 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             return false;
         }
     }
+    /** Save the queue and its repair journal as one checkpoint when supported. */
+    async function persistQueueAndSettlements() {
+        if (queueStore.sealed || queueStore.dormant || !queueStore.storage) return false;
+        if (!queueStore.loaded) {
+            await ensureQueueLoaded();
+            if (queueStore.sealed || queueStore.dormant || !queueStore.loaded) return false;
+        }
+        const snapshot = toStoredQueueSnapshot(queuedBroadcasts);
+        const owed = queueStore.owed.map((entry) => ({ ...entry }));
+        try {
+            if (typeof queueStore.storage.savePair === 'function') {
+                await queueStore.storage.savePair(snapshot, owed);
+                return true;
+            }
+            if (typeof queueStore.storage.saveSettlements !== 'function') return false;
+            await queueStore.storage.saveSettlements(owed);
+            await queueStore.storage.save(snapshot);
+            return true;
+        } catch (_e) {
+            return false;
+        }
+    }
     // Hold a PendingTx write the vault refused until a vault takes it. Leaving
     // the queue is what makes an entry unretriable, and a record left 'queued'
     // after its bytes landed keeps netting the spend out of the balance.
     // The journal is `queueStore.owed`, shared like the map, so a record a
     // torn-down host writes is the one the next host's open vault drains.
-    // Cap the journal so a vault that never reopens cannot grow the stored blob
-    // without bound. Positional: the array is kept oldest-first, so the front goes.
+    // Cap ordinary records while retaining every reveal repair record.
     function capOwedSettlements() {
-        if (queueStore.owed.length > OWED_SETTLEMENT_LIMIT) {
-            queueStore.owed = queueStore.owed.slice(-OWED_SETTLEMENT_LIMIT);
-        }
+        queueStore.owed = capOwedSettlementRecords(queueStore.owed);
     }
     function mergeOwedSettlements(persisted, known) {
         if (!Array.isArray(persisted)) return;
@@ -424,11 +443,13 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // PendingTx and the write to apply, never signed bytes, and never enters
     // `queuedBroadcasts`, so no route can list or broadcast one. Reveal records
     // rebuild their transaction bytes from the PendingTx during replay.
-    function recordOwedSettlement(walletId, pendingTx, op, payload) {
+    function recordOwedSettlement(walletId, pendingTx, op, payload, options = {}) {
         const pendingTxIds = typeof pendingTx === 'string' ? [pendingTx] : pendingTxIdsOf(pendingTx);
-        for (const pendingTxId of pendingTxIds) recordOneOwedSettlement(walletId, pendingTxId, op, payload);
+        for (const pendingTxId of pendingTxIds) {
+            recordOneOwedSettlement(walletId, pendingTxId, op, payload, options);
+        }
     }
-    function recordOneOwedSettlement(walletId, pendingTxId, op, payload) {
+    function recordOneOwedSettlement(walletId, pendingTxId, op, payload, options) {
         if (!pendingTxId) return;
         const record = {
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -445,7 +466,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         queueStore.owed = queueStore.owed.filter((s) => s.pendingTxId !== pendingTxId);
         queueStore.owed.push(folded);
         capOwedSettlements();
-        void persistOwedSettlements();
+        if (options.persist !== false) void persistOwedSettlements();
     }
     /**
      * Replay every owed write against an open vault. Each record is applied,
@@ -1218,6 +1239,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     return {
         ensureQueueLoaded,
         persistQueue,
+        persistQueueAndSettlements,
         persistOwedSettlements,
         recordOwedSettlement,
         flushOwedSettlements,

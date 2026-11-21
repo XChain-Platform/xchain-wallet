@@ -130,14 +130,11 @@
 // The main renderer CSP (renderer/index.html) admits no remote origin:
 // `script-src 'self'` and `frame-src 'none'`.
 //
-// Outside `hid`, the app's top-level renderer may request its video camera
-// for QR scanning and its sanitized clipboard write. Other prompting
-// permissions stay refused. The check handler applies the same app-origin
-// gate to `media` and refuses the WebUSB and Web Serial device classes
-// outright, with their pickers cancelled, as the bridge session does; the
-// other check-path permissions the shared UI reads stay granted.
+// Outside `hid`, the app's top-level renderer may request its video camera,
+// clipboard access and notifications. Both permission paths apply the same
+// app-origin gate and refuse every capability that is not explicitly needed.
 
-import { isRemoteFrameUrl } from './security.js';
+import { isAppUrl, isRemoteFrameUrl } from './security.js';
 
 export const HID_VENDOR_ALLOWLIST = Object.freeze({
     LEDGER: 0x2C97,
@@ -152,6 +149,25 @@ const BRIDGE_DENIED_DEVICE_CLASSES = new Set(['hid', 'usb', 'serial']);
 
 // List the device permissions the default session refuses on the check path (`hid` is origin-gated instead).
 const DEFAULT_SESSION_DENIED_DEVICE_CLASSES = new Set(['usb', 'serial']);
+
+// Non-device capabilities used by the app renderer and no other origin.
+const APP_SESSION_PERMISSIONS = new Set([
+    'clipboard-read',
+    'clipboard-sanitized-write',
+    'notifications',
+]);
+
+function isAppPermissionCheck(details, requestingOrigin, appRoot) {
+    const isLocalOrigin = (value) => value === 'file://' || value === 'file:///';
+    if (!isLocalOrigin(requestingOrigin)) return false;
+    for (const value of [details?.securityOrigin, details?.embeddingOrigin]) {
+        if (value !== undefined && !isLocalOrigin(value)) return false;
+    }
+    if (details?.requestingUrl !== undefined) {
+        return isAppUrl(details.requestingUrl, appRoot);
+    }
+    return true;
+}
 
 /**
  * Session-wide record of which webContents have been seen hosting a
@@ -285,14 +301,9 @@ export function attachHidPermissions(session, opts) {
             callback(!isRemoteFrameUrl(url, appRoot));
             return;
         }
-        // Writing an image to the clipboard (Receive's Copy QR) asks for
-        // `clipboard-sanitized-write` on this path, and the default deny
-        // turned every desktop Copy QR into "Copy failed". It is write-only
-        // and sanitized, so the app's own page gets it and a remote frame
-        // does not; clipboard reads stay refused.
-        if (permission === 'clipboard-sanitized-write') {
+        if (APP_SESSION_PERMISSIONS.has(permission)) {
             const url = requestingFrameUrl(webContents, details);
-            callback(!isRemoteFrameUrl(url, appRoot));
+            callback(isAppUrl(url, appRoot));
             return;
         }
         if (permission === 'media') {
@@ -304,13 +315,16 @@ export function attachHidPermissions(session, opts) {
 
     session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
         if (permission === 'media') {
-            return isAppHidCheck(details, requestingOrigin, appRoot);
+            return isAppPermissionCheck(details, requestingOrigin, appRoot);
         }
         // Refuse WebUSB and Web Serial outright, to every frame and origin.
         if (DEFAULT_SESSION_DENIED_DEVICE_CLASSES.has(permission)) return false;
-        // Grant the remaining non-device check-path permissions the shared UI reads (clipboard, notifications).
-        if (permission !== 'hid') return true;
-        return isAppHidCheck(details, requestingOrigin, appRoot);
+        if (permission === 'hid') return isAppHidCheck(details, requestingOrigin, appRoot);
+        if (!APP_SESSION_PERMISSIONS.has(permission)) return false;
+        // The check callback identifies only the embedder. Once a subframe
+        // exists, it cannot safely grant a clipboard read to either frame.
+        if (permission === 'clipboard-read' && guard.hasSubframe()) return false;
+        return isAppPermissionCheck(details, requestingOrigin, appRoot);
     });
 
     session.setDevicePermissionHandler((details) => {

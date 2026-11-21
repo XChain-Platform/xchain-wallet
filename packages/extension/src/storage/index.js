@@ -14,6 +14,7 @@ export {
 } from './ChromeStorageBackend.js';
 export {
     ChromeSessionBackend,
+    createSessionSaveFence,
     DEFAULT_SESSION_STORAGE_KEY,
 } from './ChromeSessionBackend.js';
 export {

@@ -58,7 +58,9 @@ describe('HID permission wiring guards', () => {
         const session = fakeSession();
         attachHidPermissions(session, { appRoot, guard: createHidFrameGuard() });
 
-        expect(session.handlers.check({}, 'notifications', 'https://remote.example', {})).toBe(true);
+        for (const permission of ['clipboard-read', 'notifications', 'geolocation', 'made-up-permission']) {
+            expect(session.handlers.check({}, permission, 'remote', {})).toBe(false);
+        }
         expect(session.handlers.check({}, 'hid', 'https://remote.example', {})).toBe(false);
         expect(session.handlers.check({}, 'hid', 'file://', {
             securityOrigin: 'https://remote.example',
@@ -76,7 +78,8 @@ describe('HID permission wiring guards', () => {
 
     it('refuses WebUSB and Web Serial on the default session, even to the app origin', () => {
         const session = fakeSession();
-        attachHidPermissions(session, { appRoot, guard: createHidFrameGuard() });
+        const guard = createHidFrameGuard();
+        attachHidPermissions(session, { appRoot, guard });
 
         for (const permission of ['usb', 'serial']) {
             expect(session.handlers.check({}, permission, 'file://', {})).toBe(false);
@@ -84,10 +87,14 @@ describe('HID permission wiring guards', () => {
             expect(session.handlers.check({}, permission, 'file:///', { securityOrigin: 'file:///' })).toBe(false);
             expect(session.handlers.check({}, permission, 'https://remote.example', {})).toBe(false);
         }
-        // Only the device classes narrow: the shared UI's check-path grants stay.
+        // The shared UI's explicit app-origin grants stay available.
         for (const permission of ['notifications', 'clipboard-read', 'clipboard-sanitized-write']) {
             expect(session.handlers.check({}, permission, 'file://', { requestingUrl: appUrl })).toBe(true);
+            expect(session.handlers.check({}, permission, 'null', { requestingUrl: appUrl })).toBe(false);
+            expect(session.handlers.check({}, permission, undefined, {})).toBe(false);
         }
+        guard.noteSubframe('window');
+        expect(session.handlers.check({}, 'clipboard-read', 'file://', { requestingUrl: appUrl })).toBe(false);
     });
 
     it('cancels the WebUSB and Web Serial pickers on the default session', () => {

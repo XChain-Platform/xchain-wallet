@@ -77,6 +77,7 @@ import { VaultIncompleteError, vaultErrorKind } from '@xchain-wallet/core/storag
  * @property {{ status: () => object, end: (reason: string) => Promise<boolean> }} [lockedAutopay]   PC-16 Phase B controller: plain status and Stop for the Locked screen
  * @property {(type: string) => Promise<unknown> | unknown} [beforeSessionStart]   runs before an unlock, create or import opens a vault (ends locked auto pay first)
  * @property {() => Promise<void> | void} [onUnlocked]
+ * @property {() => Promise<void> | void} [beforeSessionSave]   invalidates a restore before a new session key becomes visible
  * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
  * @property {() => boolean} [isLockPending]   true while a refused lock's secret clear awaits its retry; status then reads locked
  * @property {(opts: object) => string} [startLabelSyncRestore]
@@ -163,7 +164,7 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
             try {
                 const result = await dispatchPreHost(type, message.request, {
                     storageBackend: new ChromeStorageBackend(),
-                    sessionBackend: new ChromeSessionBackend(),
+                    sessionBackend: new ChromeSessionBackend({ beforeSave: deps.beforeSessionSave }),
                     signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
                     metaBackend: new ChromeMetaBackend(),
                     unlockThrottleStore: new ChromeUnlockThrottleStore(),

@@ -93,15 +93,21 @@ function compareVersions(a, b) {
  * Match one concrete version against one range. Supported grammar: exact,
  * `^` (caret, 0.x-aware: the leftmost non-zero component is the one pinned),
  * `~` (patch-level), and the `>= > <= <` comparators. Whitespace- or
- * comma-separated terms are ANDed; `||` alternatives are ORed. An unparseable
- * range fails closed, which surfaces as BRIDGE_VERSION_MISMATCH rather than a
- * silent accept.
+ * comma-separated terms are ANDed; `||` alternatives are ORed. As in semver,
+ * an operator may be separated from its version by whitespace (`>= 0.1.0`).
+ * An unparseable range fails closed, which surfaces as BRIDGE_VERSION_MISMATCH
+ * rather than a silent accept.
  */
 function satisfiesRange(version, range) {
     const target = parseVersion(version);
     if (!target) return false;
     return range.split('||').some((alternative) => {
-        const terms = alternative.split(/[\s,]+/).filter(Boolean);
+        // Bind an operator to the version after it before splitting into terms.
+        // Only an operator that starts a term is joined, and only onto a
+        // version-shaped token, so a dangling operator or one trailing a
+        // version stays its own malformed term and fails closed.
+        const bound = alternative.replace(/(^|[\s,])(\^|~|>=|<=|>|<|=)\s+(?=v?\d)/g, '$1$2');
+        const terms = bound.split(/[\s,]+/).filter(Boolean);
         if (terms.length === 0) return false;
         return terms.every((term) => satisfiesTerm(target, term));
     });

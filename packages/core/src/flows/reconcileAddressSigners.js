@@ -30,6 +30,54 @@
 // is treated as an error. It shouldn't happen in practice (distinct
 // seeds produce distinct child keys) and silently picking one signer
 // could misroute future operations.
+//
+// A signer is linked only when its kind maps to the address's source, the
+// same rule resolveSigner enforces, so every saved link is one it accepts.
+// The same seed restored onto another device kind derives the same keys;
+// such an address is left unlinked and reported as 'kind-mismatch'.
+
+import { addressSourceForSignerKind } from '../schemas/constants.js';
+
+/**
+ * True when the signer's kind maps to the address source. The vault's
+ * SignerRecord kind is the authority (resolveSigner checks it); the live
+ * signer's own kind stands in only when there is no record, and a live kind
+ * that contradicts the record, or no known kind at all, fails closed.
+ */
+function signerFitsSource(signer, signerKinds, source) {
+    let liveKind;
+    try { liveKind = signer.kind; } catch { liveKind = undefined; }
+    const recordKind = signerKinds.get(signer.id);
+    if (recordKind !== undefined && liveKind !== undefined && liveKind !== recordKind) return false;
+    const kind = recordKind ?? liveKind;
+    try {
+        return addressSourceForSignerKind(kind) === source;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The ids of this wallet's signers that derive the address's public key and
+ * fit its source, and whether any signer derived the key at all.
+ */
+async function matchingSigners(signers, addr, cid, { signerWalletIds, signerKinds, addressWalletId }) {
+    const matches = [];
+    let keyMatched = false;
+    for (const signer of signers) {
+        const signerWalletId = signerWalletIds.get(signer.id) ?? signer.id;
+        if (!addressWalletId || signerWalletId !== addressWalletId) continue;
+        const derived = await signer.getPublicKey({
+            chainId: cid,
+            path: addr.derivationPath,
+        });
+        if (derived.publicKey && derived.publicKey === addr.publicKey) {
+            keyMatched = true;
+            if (signerFitsSource(signer, signerKinds, addr.source)) matches.push(signer.id);
+        }
+    }
+    return { matches, keyMatched };
+}
 
 export class AmbiguousSignerMatchError extends Error {
     constructor(addressId, signerIds) {
@@ -45,7 +93,7 @@ export class AmbiguousSignerMatchError extends Error {
 /**
  * @typedef {Object} ReconcileSkip
  * @property {string} id
- * @property {'no-path' | 'unknown-chain' | 'no-match'} reason
+ * @property {'no-path' | 'unknown-chain' | 'no-match' | 'kind-mismatch'} reason
  */
 
 /**
@@ -97,6 +145,7 @@ export async function reconcileAddressSigners({
     const accountWalletIds = new Map(accounts.map((account) => [account.id, account.walletId]));
     const signerRecords = await vault.signers.list();
     const signerWalletIds = new Map(signerRecords.map((record) => [record.id, record.walletId]));
+    const signerKinds = new Map(signerRecords.map((record) => [record.id, record.kind]));
 
     const addresses = await vault.addresses.list();
 
@@ -123,21 +172,10 @@ export async function reconcileAddressSigners({
             continue;
         }
 
-        const matches = [];
-        for (const signer of signers) {
-            const signerWalletId = signerWalletIds.get(signer.id) ?? signer.id;
-            if (!addressWalletId || signerWalletId !== addressWalletId) continue;
-            const derived = await signer.getPublicKey({
-                chainId: cid,
-                path: addr.derivationPath,
-            });
-            if (derived.publicKey && derived.publicKey === addr.publicKey) {
-                matches.push(signer.id);
-            }
-        }
-
+        const owners = { signerWalletIds, signerKinds, addressWalletId };
+        const { matches, keyMatched } = await matchingSigners(signers, addr, cid, owners);
         if (matches.length === 0) {
-            skipped.push({ id: addr.id, reason: 'no-match' });
+            skipped.push({ id: addr.id, reason: keyMatched ? 'kind-mismatch' : 'no-match' });
             continue;
         }
         if (matches.length > 1) {

@@ -43,6 +43,9 @@ import {
     withoutAdsPayout,
 } from './ads.js';
 import {
+    ADS_DELIVERY_BOOKING_SCOPE, accrueOnlyVerdict, bookLandedCommit, donationRidesCommit,
+} from './adsDelivery.js';
+import {
     classifyBroadcastFailure,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
@@ -277,6 +280,9 @@ export async function submitAction({
             ? { donationIncluded: true, donatedFiat: adsPlan.donationFiat, currency: adsPlan.currency, ...booking }
             : { donationIncluded: false, donatedFiat: null, currency: null, ...booking };
     };
+    // The verdict a durable copy of these bytes carries. Its key is the record id,
+    // which stays fixed while a two-phase record's txid moves to the reveal.
+    const checkpointAdsCommit = () => ({ chainId, ...adsVerdict(), bookingKey: pending?.id ?? null });
     // Let the claim go: these bytes will never broadcast, or no longer carry
     // the donation, so the next send may carry the payout. Never fails the send.
     // `toReview` hands a taken-over claim back to its confirm screen instead
@@ -384,12 +390,20 @@ export async function submitAction({
     let signingStarted = false;
     // The landed commit's txid, kept apart from the record's txid, which a queued reveal overwrites.
     let commitTxid = null;
+    // A two-phase commit that landed (the progress it emitted, and the signed
+    // encoding), booked as its own transaction once.
+    let commitLegPhase = null;
+    let signedEncoding = null;
+    let commitLegBooked = false;
+    let commitLegSettled = false;
 
     // Chain the caller's onProgress with our lifecycle-tracking callback
     // so both fire for every phase.
     const composedOnProgress = async (phase, data) => {
         // Record the landing before any await: most progress calls are not awaited.
         if (phase === 'signing') signingStarted = true;
+        if (phase === 'signing' && typeof data?.encoding === 'string') signedEncoding = data.encoding;
+        if (phase === 'envelope_revealing' || phase === 'p2sh_spending') commitLegPhase = phase;
         if (phase === 'waiting') broadcastComplete = true;
         if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
             phase1Landed = true;
@@ -418,6 +432,9 @@ export async function submitAction({
                 ...(typeof data?.revealTxHex === 'string' && data.revealTxHex
                     ? { revealTxHex: data.revealTxHex, revealTxid: data.revealTxid ?? null }
                     : {}),
+                // The verdict these bytes were composed under, so a restart that
+                // resumes them books the send rather than only settling its claim.
+                adsCommit: checkpointAdsCommit(),
             });
         } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
             // The reveal is the action's identity; the row moves off the commit txid.
@@ -713,6 +730,10 @@ export async function submitAction({
                         broadcastAt: pending?.broadcastAt ?? new Date().toISOString(),
                         error: err && err.message ? String(err.message) : String(err),
                     });
+                    await bookCommitLeg();
+                    // An envelope's landed commit paid the payout, so its claim is never
+                    // let go; one a refused write left held is settled by reconciliation.
+                    if (commitLegPhase && commitLegCarries()) adsReservationId = null;
                 } else if (permanence === 'permanent') {
                     await stampPending({
                         status: 'failed',
@@ -731,7 +752,11 @@ export async function submitAction({
                     const revealMark = !phase1Landed && err.revealTxHex
                         ? { revealTxHex: err.revealTxHex, revealTxid: err.revealTxid ?? null }
                         : {};
-                    const queuedAdsCommit = { chainId, ...adsVerdict() };
+                    // A landed commit is booked now; once it settled the payout,
+                    // the queued reveal only accrues.
+                    const queuedAdsCommit = await bookCommitLeg()
+                        ? accrueOnlyVerdict(checkpointAdsCommit())
+                        : checkpointAdsCommit();
                     const pendingSaved = await stampPending({
                         status: 'queued',
                         txid: err.txid,
@@ -817,23 +842,59 @@ export async function submitAction({
         if (postBroadcastBooked) return;
         postBroadcastBooked = true;
         try { invalidateTokenInfoForAction(chainId, actionData); } catch { /* cache invalidation is best effort */ }
+        // Every landed transaction accrues: a two-phase send books its commit
+        // first, and its final leg then pays only a payout the commit did not.
+        const settledOnCommit = await bookCommitLeg();
         try {
-            const { booking } = await commitAdsStepWithBooking({ vault, ...adsVerdict() });
+            // A counted send with a record books under the key its checkpoint
+            // carries, so a restart that resumes the same bytes books nothing more.
+            const keyed = Boolean(pending) && adsCounts;
+            const { booking } = await commitAdsStepWithBooking({
+                vault,
+                ...(settledOnCommit ? accrueOnlyVerdict(adsVerdict()) : adsVerdict()),
+                ...(keyed ? { bookingScope: ADS_DELIVERY_BOOKING_SCOPE, bookingKey: pending.id } : {}),
+            });
             if (pending && booking) {
                 await writePending({
                     adsBooking: { id: pending.id, ...booking, paid: true, booked: true },
                 });
             }
         } catch (e) {
-            if (onProgress) {
-                try {
-                    onProgress('ads-commit-failed', {
-                        chainId,
-                        error: e && e.message ? String(e.message) : String(e),
-                    });
-                } catch { /* swallow */ }
-            }
+            reportAdsCommitFailure(e);
         }
+    }
+
+    function reportAdsCommitFailure(e) {
+        if (!onProgress) return;
+        try {
+            onProgress('ads-commit-failed', { chainId, error: e && e.message ? String(e.message) : String(e) });
+        } catch { /* swallow */ }
+    }
+
+    function commitLegCarries() {
+        return donationRidesCommit({ encoding: signedEncoding, landedPhase: commitLegPhase });
+    }
+
+    // A landed two-phase commit is a transaction of its own, booked once under
+    // its own key. It settles the payout only when it carried it; resolves true
+    // then, so the final leg only accrues.
+    async function bookCommitLeg() {
+        if (!commitLegPhase || commitLegBooked) return commitLegSettled;
+        commitLegBooked = true;
+        try {
+            const { carries, booking } = await bookLandedCommit({
+                vault, verdict: adsVerdict(), encoding: signedEncoding, landedPhase: commitLegPhase, pendingTxId: pending?.id ?? null,
+            });
+            if (!carries) return false;
+            commitLegSettled = true;
+            adsReservationId = null;
+            if (pending && booking) {
+                await writePending({ adsBooking: { id: pending.id, ...booking, paid: true, booked: true } });
+            }
+        } catch (e) {
+            reportAdsCommitFailure(e);
+        }
+        return commitLegSettled;
     }
 
     // Cache invalidation and ADS booking are run once after the final leg lands,

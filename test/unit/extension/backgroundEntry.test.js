@@ -42,6 +42,10 @@ vi.mock('../../../packages/extension/src/storage/index.js', () => ({
         async load() { return null; }
     },
     ChromeStorageBackend: class ChromeStorageBackend {},
+    createSessionSaveFence: vi.fn(() => ({
+        track: (task) => task,
+        beforeSave: vi.fn(async () => {}),
+    })),
 }));
 vi.mock('../../../packages/extension/src/background/index.js', () => ({
     ApprovalBroker: class ApprovalBroker {

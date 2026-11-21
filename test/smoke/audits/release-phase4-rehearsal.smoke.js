@@ -44,10 +44,30 @@ import { fileURLToPath } from 'node:url';
 
 import {
     ancestry, announcedGateFallback, argConflicts, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
-    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probe, probeEnv, scopeMismatch,
-    signingPathFiles, STEPS, timeoutFromArgs, uncoveredByPin,
+    gateFallbackMismatch, GATE_LOCAL_IMPORTS, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probe,
+    probeEnv, scopeMismatch, signingPathFiles, STEPS, timeoutFromArgs, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 import { mirrorInput, SIGNING_OUTPUTS } from '../../../tools/release/probe-mirror.mjs';
+
+function localImportClosure(root, entries) {
+    const pending = [...entries];
+    const scanned = new Set();
+    const imported = new Set();
+    const importPattern = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"](\.\/[^'"]+)['"]/g;
+    while (pending.length) {
+        const source = pending.pop();
+        if (scanned.has(source)) continue;
+        scanned.add(source);
+        const text = readFileSync(join(root, source), 'utf8');
+        for (const match of text.matchAll(importPattern)) {
+            const dependency = join(dirname(source), match[1]).split(sep).join('/');
+            assert.ok(existsSync(join(root, dependency)), `${source} imports missing local file ${dependency}`);
+            if (!imported.has(dependency)) pending.push(dependency);
+            imported.add(dependency);
+        }
+    }
+    return [...imported].sort();
+}
 
 assert.ok(existsSync(PIN_PATH),
     `no Phase 4 rehearsal pin at ${PIN_PATH}. Nothing would record which commit the signing path was `
@@ -416,8 +436,11 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     const legacy = uncoveredByPin({ releaseSet: 'release' });
     assert.ok(EXECUTABLE_GATES.every((g) => legacy.includes(g)), 'check must name the gates a legacy pin never covered');
     assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }),
-        LIB_SH_DEPENDENCIES, 'a format-3 pin predates exactly the files lib.sh loads from its own directory');
-    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 4, gateFallback: [] }), []);
+        [...LIB_SH_DEPENDENCIES, 'tools/release/is-invoked-directly.mjs'],
+        'a format-3 pin predates the local files loaded by lib.sh and the executable gates');
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 4, gateFallback: [] }),
+        ['tools/release/is-invoked-directly.mjs']);
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 5, gateFallback: [] }), []);
 
     const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const work = mkdtempSync(join(tmpdir(), 'phase4-gates-'));
@@ -443,6 +466,87 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         const stale = drift({ pinFile });
         assert.ok(!stale.ok && stale.moved.some((m) => m.path === probeGate),
             'a pin must go STALE when a fallback gate, which the run executed from this checkout, moves');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// Gate-local imports stay on the same tree side as every gate that imports them.
+{
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const importedByGate = Object.fromEntries(EXECUTABLE_GATES.map((gate) => [gate,
+        localImportClosure(walletRoot, [gate])]));
+    assert.ok(Object.values(importedByGate).some((files) => files.length > 0),
+        'found no local gate import, so this guard scans nothing');
+    for (const gate of EXECUTABLE_GATES) {
+        assert.deepEqual([...GATE_LOCAL_IMPORTS[gate]].sort(), importedByGate[gate],
+            `${gate} has a local import phase4-rehearsal does not track`);
+    }
+
+    const fallbacks = [[], [EXECUTABLE_GATES[0]], [EXECUTABLE_GATES[1]], [...EXECUTABLE_GATES]];
+    for (const set of ['release', 'staging']) {
+        for (const gateFallback of fallbacks) {
+            const files = signingPathFiles(set, 5, { gateFallback });
+            for (const gate of EXECUTABLE_GATES) {
+                const side = gateFallback.includes(gate) ? files.script : files.repo;
+                assert.ok(importedByGate[gate].every((dependency) => side.includes(dependency)),
+                    `${set} does not track ${gate}'s local imports on the gate's tree side`);
+            }
+            const dependencies = [...new Set(Object.values(importedByGate).flat())];
+            for (const dependency of dependencies) {
+                const scriptExpected = EXECUTABLE_GATES.some((gate) => gateFallback.includes(gate)
+                    && importedByGate[gate].includes(dependency));
+                const repoExpected = EXECUTABLE_GATES.some((gate) => !gateFallback.includes(gate)
+                    && importedByGate[gate].includes(dependency));
+                assert.equal(files.script.includes(dependency), scriptExpected,
+                    `${dependency} is on the wrong script side for ${set}`);
+                assert.equal(files.repo.includes(dependency), repoExpected,
+                    `${dependency} is on the wrong repo side for ${set}`);
+            }
+        }
+        for (const fmt of [1, 2, 3, 4]) {
+            const files = signingPathFiles(set, fmt);
+            assert.ok(Object.values(GATE_LOCAL_IMPORTS).flat().every(
+                (dependency) => !files.script.includes(dependency) && !files.repo.includes(dependency)),
+                `format ${fmt} must keep the file lists it was recorded with`);
+        }
+    }
+    const libImports = localImportClosure(walletRoot, LIB_SH_DEPENDENCIES.filter((p) => p.endsWith('.mjs')));
+    assert.ok(libImports.every((dependency) => signingPathFiles('release', 5).script.includes(dependency)),
+        'a local import of a lib.sh dependency is missing from the script-side signing path');
+}
+
+// A format-5 pin must notice the helper changing on either tree side.
+{
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const helper = 'tools/release/is-invoked-directly.mjs';
+    const probeGate = 'tools/release/launch-probe.mjs';
+    const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const hashes = (paths) => Object.fromEntries(paths.map((p) => [p,
+        createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
+    const work = mkdtempSync(join(tmpdir(), 'phase4-gate-imports-'));
+    try {
+        const pinFile = join(work, 'pin.json');
+        const write = (gateFallback, scriptPath, repoPath) => writeFileSync(pinFile, JSON.stringify({
+            pinFormat: 5, releaseSet: 'release', gateFallback, tag: 'v0.0.0',
+            reached: 'manifest-written', scriptRef: head, repoRef: head, scriptPath, repoPath,
+        }));
+        const mixed = signingPathFiles('release', 5, { gateFallback: [probeGate] });
+        const mixedScript = hashes(mixed.script);
+        const mixedRepo = hashes(mixed.repo);
+        write([probeGate], mixedScript, mixedRepo);
+        const clean = drift({ pinFile });
+        assert.ok(clean.ok && clean.moved.length === 0 && clean.repoDiverged.length === 0,
+            'a format-5 pin of today\'s gate helper bytes must read clean');
+        write([probeGate], { ...mixedScript, [helper]: 'f'.repeat(64) }, mixedRepo);
+        assert.ok(drift({ pinFile }).moved.some((m) => m.path === helper),
+            'a fallback-side helper change must make the pin stale');
+
+        const tagged = signingPathFiles('release', 5);
+        const taggedRepo = hashes(tagged.repo);
+        write([], hashes(tagged.script), { ...taggedRepo, [helper]: 'f'.repeat(64) });
+        assert.ok(drift({ pinFile }).repoDiverged.some((m) => m.path === helper),
+            'a tag-side helper change must be reported as repo divergence');
     } finally {
         rmSync(work, { recursive: true, force: true });
     }

@@ -31,10 +31,10 @@ import { AddressPreferencesForm } from '../../../packages/core/src/shared/routes
 
 afterEach(() => cleanup());
 
-function mount() {
-    const getAddressPreferences = vi.fn(({ address }) => Promise.resolve(address === ADDR_B.address
+function mount(readPreferences) {
+    const getAddressPreferences = vi.fn(readPreferences || (({ address }) => Promise.resolve(address === ADDR_B.address
         ? { onChain: true, feePreference: 1, requireMemo: 1, dispenserPreference: 2 }
-        : { onChain: false, feePreference: 0, requireMemo: 0, dispenserPreference: 0 }));
+        : { onChain: false, feePreference: 0, requireMemo: 0, dispenserPreference: 0 })));
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDR_A, ADDR_B] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: ADDR_A }),
@@ -126,6 +126,31 @@ describe('AddressPreferencesForm rulings', () => {
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
+    });
+
+    it('keeps raw explorer failures in a closed technical disclosure', async () => {
+        let reads = 0;
+        mount(() => {
+            reads += 1;
+            if (reads === 1) {
+                return Promise.resolve({ feePreference: 0, requireMemo: 0, dispenserPreference: 0 });
+            }
+            return Promise.reject(Object.assign(
+                new Error('Explorer returned HTTP 502 for /api/addresses/example/preferences'),
+                { name: 'SDKExplorerError' },
+            ));
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Update Preferences' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load the current preferences.");
+        expect(alert).toHaveTextContent('temporarily unavailable (error 502)');
+        expect(alert).toHaveTextContent('Try again in a moment');
+        expect(alert).toHaveTextContent('Review needs a live read');
+        expect(alert).not.toHaveTextContent(/Explorer returned HTTP|\/api\//);
+        const raw = screen.getByText(/Explorer returned HTTP 502/);
+        expect(raw.closest('details')).not.toBeNull();
+        expect(raw.closest('details').open).toBe(false);
     });
 
     it('picking another own address edits that address and reloads its values', async () => {
