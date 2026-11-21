@@ -1,0 +1,10 @@
+{
+  "w3.title": "Alerts",
+  "w3.empty": "No alerts",
+  "w4.title": "Alert detail",
+  "w4.requestSentence": "Request",
+  "w4.requestAmount": "Amount",
+  "w4.requestExpiry": "Expires",
+  "w4.requestExpired": "This request expired.",
+  "w4.openOnPhone": "Open on phone"
+}
