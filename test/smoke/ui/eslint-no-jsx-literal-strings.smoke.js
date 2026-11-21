@@ -65,7 +65,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'aria-label', 'aria-description', 'aria-roledescription', 'aria-valuetext',
     'alt', 'title', 'placeholder', 'label', 'hint', 'help', 'caption', 'tooltip', 'data-label',
     'heading', 'emptyText', 'actionLabel', 'backLabel',
-    'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
+    'text', 'body', 'ariaLabel', 'iconLabel', 'aria', 'dismissLabel',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',

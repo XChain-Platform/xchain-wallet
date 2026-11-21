@@ -34,14 +34,16 @@
 // getting that wrong silences the next one too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Icon, Notice } from '@xchain-wallet/core/ui';
 import { t } from '../../core/src/i18n/index.js';
 import '@xchain-wallet/core/i18n/locales/en/desktopUpdate.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 // A floating card over the current page, with side margins, rather than a
-// full-width bar that pushes the scroll area down.
+// full-width bar that pushes the scroll area down. The wrapper only places it
+// and paints the opaque raised surface under the Notice, whose tone tint is
+// see-through; the Notice draws the box, its one action and its close X.
 const WRAP = {
     position: 'fixed',
     // Fixed content does not inherit the body's safe-area padding, so each
@@ -53,15 +55,8 @@ const WRAP = {
     maxInlineSize: '480px',
     margin: '0 auto',
     boxShadow: 'var(--xc-shadow-popover)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
     background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-    color: 'var(--xc-text)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 
 /**
@@ -213,10 +208,31 @@ export function DesktopUpdateBanner() {
 
     if (dismissed || state === 'idle') return null;
 
+    // The one action this state offers, if any: Download, Restart or Retry.
+    let action = null;
+    if (state === 'available') {
+        action = { label: t('desktopUpdate.download'), onAction: () => runAction('download'), icon: <Icon.DownloadIcon /> };
+    } else if (state === 'ready' || state === 'restart-blocked') {
+        action = { label: t('desktopUpdate.restart'), onAction: () => runAction('restart'), icon: <Icon.RefreshIcon /> };
+    } else if (state === 'install-failed' && installCause !== 'read-only') {
+        action = { label: t('desktopUpdate.retry'), onAction: () => runAction('restart') };
+    } else if (state === 'error') {
+        action = { label: t('desktopUpdate.retry'), onAction: () => runAction(retryAction.current) };
+    }
+    // Closing is the Notice's corner X (U100), offered except while work runs.
+    const closable = !['checking', 'downloading', 'verifying'].includes(state);
+    const failed = state === 'error' || state === 'install-failed';
+
     return (
         <div role="status" aria-live="polite" style={WRAP}>
-            <span aria-hidden="true">⬆</span>
-            <div style={{ flex: 1 }}>
+            <Notice
+                tone={failed ? 'danger' : 'info'}
+                role={null}
+                flush
+                action={action}
+                onDismiss={closable ? () => setDismissed(true) : undefined}
+                dismissLabel={t('desktopUpdate.dismissLabel')}
+            >
                 {state === 'checking' ? t('desktopUpdate.checking') : null}
                 {state === 'current' ? t('desktopUpdate.current') : null}
                 {state === 'available' ? (
@@ -249,38 +265,7 @@ export function DesktopUpdateBanner() {
                 {state === 'error' && retryAction.current !== 'check' ? (
                     t('desktopUpdate.installError')
                 ) : null}
-            </div>
-            {state === 'available' ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('download')}>
-                    {t('desktopUpdate.download')}
-                </Button>
-            ) : null}
-            {state === 'ready' || state === 'restart-blocked' ? (
-                <Button type="button" variant="ghost" size="sm" icon={<Icon.RefreshIcon />} onClick={() => runAction('restart')}>
-                    {t('desktopUpdate.restart')}
-                </Button>
-            ) : null}
-            {state === 'install-failed' && installCause !== 'read-only' ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
-                    {t('desktopUpdate.retry')}
-                </Button>
-            ) : null}
-            {state === 'error' ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction(retryAction.current)}>
-                    {t('desktopUpdate.retry')}
-                </Button>
-            ) : null}
-            {['checking', 'downloading', 'verifying'].includes(state) ? null : (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDismissed(true)}
-                    aria-label={t('desktopUpdate.dismissLabel')}
-                >
-                    {t('desktopUpdate.dismiss')}
-                </Button>
-            )}
+            </Notice>
         </div>
     );
 }

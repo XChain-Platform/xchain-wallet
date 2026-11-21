@@ -242,3 +242,47 @@ describe('ContactsList Undo after a refused restore', () => {
         expect(await screen.findByRole('button', { name: 'Alice' })).toBeTruthy();
     });
 });
+
+describe('ContactsList publish nudge', () => {
+    function nudgeMessaging() {
+        return {
+            listContacts: vi.fn(async () => [contactAt(OLD_VERSION)]),
+            saveContact: vi.fn(async () => {}),
+            deleteContact: vi.fn(async () => {}),
+            labelSyncStatusRequest: vi.fn(async () => ({ pending: true, changeCount: 2 })),
+        };
+    }
+
+    it('offers Open Backup and closes with the Notice corner X, not a text button (U100)', async () => {
+        const onOpenBackup = vi.fn();
+        render(
+            <MessagingProvider shell="web" messaging={nudgeMessaging()}>
+                <ContactsList walletId="w1" onBack={() => {}} onOpenBackup={onOpenBackup} />
+            </MessagingProvider>,
+        );
+        const nudge = await waitFor(() => {
+            const element = document.getElementById('contacts-publish-nudge');
+            expect(element).toHaveTextContent('2 contact changes are only on this device.');
+            return element;
+        });
+        const texts = within(nudge).getAllByRole('button').map((b) => b.textContent.trim());
+        expect(texts).toEqual(['Open Backup', '']);
+        const close = within(nudge).getByRole('button', { name: 'Dismiss contacts backup note' });
+        expect(close.hasAttribute('data-notice-dismiss')).toBe(true);
+
+        fireEvent.click(close);
+        expect(document.getElementById('contacts-publish-nudge')).toBeNull();
+    });
+
+    it('keeps the X as the only control when no Backup route is wired', async () => {
+        render(contactsTree(nudgeMessaging()));
+        const nudge = await waitFor(() => {
+            const element = document.getElementById('contacts-publish-nudge');
+            expect(element).not.toBeNull();
+            return element;
+        });
+        const buttons = within(nudge).getAllByRole('button');
+        expect(buttons).toHaveLength(1);
+        expect(buttons[0].hasAttribute('data-notice-dismiss')).toBe(true);
+    });
+});
