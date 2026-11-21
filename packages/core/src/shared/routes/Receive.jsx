@@ -47,6 +47,11 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { loadSupportedAddressTypes, offeredAddressType } from '../utils/supportedAddressTypes.js';
+import {
+    RECEIVE_QR_ERROR_CORRECTION,
+    receiveQrUri,
+    requestLabelFor,
+} from '../utils/receiveQrUri.js';
 import { Settings } from './Settings.jsx';
 import {
     hasAvailableChain,
@@ -69,28 +74,12 @@ const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
 const TOKEN_AMOUNT_MAX_DECIMALS = 18;
 const QR_FALLBACK_PIXEL_SIZE = 512;
-// The label a request carries is bounded by the limit the parser applies to a
-// scanned link, so a long label never becomes a code this wallet's own Send
-// screen refuses.
-const REQUEST_LABEL_MAX = uriLib.URI_PARAMETER_LIMITS.label;
+
+export { requestLabelFor };
 
 /** A leading decimal mark is a zero whole part (".5" is 0.5), never a dropped key that leaves the "5" to read as five coins. */
 export function withLeadingZero(typed) {
     return typed.startsWith('.') ? `0${typed}` : typed;
-}
-
-/**
- * The address label as it travels in a payment request: control characters
- * replaced and the text cut, on a whole character, to the URI label limit.
- */
-export function requestLabelFor(label) {
-    const clean = String(label || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
-    let out = '';
-    for (const character of clean) {
-        if (out.length + character.length > REQUEST_LABEL_MAX) break;
-        out += character;
-    }
-    return out.trim();
 }
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
@@ -675,7 +664,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
                     : m.address;
                 const dataUrl = await QRCode.toDataURL(uri, {
-                    errorCorrectionLevel: 'M',
+                    errorCorrectionLevel: RECEIVE_QR_ERROR_CORRECTION,
                     margin: 4,
                     width: qrPixelSize,
                     color: { dark: '#0F172A', light: '#FFFFFF' },
@@ -836,21 +825,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // The QR and text-copy paths share one BIP21-style payment request. The
     // optional chain extension distinguishes testnet from regtest, whose
     // address formats and URI schemes are otherwise identical.
-    const qrUri = useMemo(() => {
-        if (!hasReceiveAddress || !descriptor || !activeChainId) return null;
-        const amount = reqAmount.trim();
-        const tick = reqTick.trim().toUpperCase();
-        return uriLib.encodeBip21Uri({
-            scheme: descriptor.uriScheme,
-            address: address.address,
-            amount,
-            label: requestLabelFor(address.label) || undefined,
-            params: {
-                chain: activeChainId,
-                ...(tick ? { tick } : {}),
-            },
-        });
-    }, [address, hasReceiveAddress, descriptor, activeChainId, reqAmount, reqTick]);
+    const qrUri = useMemo(() => receiveQrUri({
+        descriptor,
+        chainId: activeChainId,
+        address: hasReceiveAddress ? address.address : null,
+        label: address?.label,
+        amount: reqAmount,
+        tick: reqTick,
+    }), [address, hasReceiveAddress, descriptor, activeChainId, reqAmount, reqTick]);
 
     useEffect(() => {
         if (!qrUri) {
@@ -859,7 +841,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         let cancelled = false;
         QRCode.toDataURL(qrUri, {
-            errorCorrectionLevel: 'M',
+            errorCorrectionLevel: RECEIVE_QR_ERROR_CORRECTION,
             margin: 4,
             width: qrPixelSize,
             color: { dark: '#0F172A', light: '#FFFFFF' },
