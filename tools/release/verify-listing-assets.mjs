@@ -435,6 +435,41 @@ function resolveSet(set) {
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
+export function pngHeader(buf) {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    if (buf.length < signature.length || !buf.subarray(0, signature.length).equals(signature)) return null;
+
+    let offset = signature.length;
+    let header = null;
+    let hasAlpha = false;
+    while (offset < buf.length) {
+        if (buf.length - offset < 12) return null;
+        const length = buf.readUInt32BE(offset);
+        const end = offset + 12 + length;
+        if (end > buf.length) return null;
+
+        const type = buf.toString('ascii', offset + 4, offset + 8);
+        if (!header) {
+            if (type !== 'IHDR' || length !== 13) return null;
+            const colorType = buf.readUInt8(offset + 17);
+            header = {
+                width: buf.readUInt32BE(offset + 8),
+                height: buf.readUInt32BE(offset + 12),
+                bitDepth: buf.readUInt8(offset + 16),
+                colorType,
+            };
+            hasAlpha = colorType === 4 || colorType === 6;
+        } else if (type === 'tRNS') {
+            hasAlpha = true;
+        }
+
+        if (type === 'IDAT') return { ...header, hasAlpha };
+        offset = end;
+    }
+
+    return header ? { ...header, hasAlpha } : null;
+}
+
 /** PNG dimensions straight out of the IHDR, no image library needed. */
 function pngSize(buf) {
     if (buf.length < 24 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
