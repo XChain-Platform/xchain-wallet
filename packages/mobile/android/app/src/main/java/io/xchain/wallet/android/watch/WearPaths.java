@@ -1,13 +1,40 @@
 package io.xchain.wallet.android.watch;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 public final class WearPaths {
 
     public static final String PREFIX = "/xc/";
+    public static final String INTENT_PREFIX = "/xc/intent/";
+    public static final List<String> INTENT_KINDS = Collections.unmodifiableList(Arrays.asList(
+            "refresh",
+            "detailRequest",
+            "openOnPhone",
+            "markRead",
+            "watchState"
+    ));
     public static final String SNAPSHOT = "/xc/snapshot";
     public static final String STATE = "/xc/state";
     public static final int CHANNEL_THRESHOLD_BYTES = 100000;
 
     private WearPaths() {}
+
+    public static String intentPath(String kind) {
+        if (!INTENT_KINDS.contains(kind)) {
+            throw new IllegalArgumentException("unknown intent kind");
+        }
+        return INTENT_PREFIX + kind;
+    }
+
+    public static String intentKind(String path) {
+        if (path == null || !path.startsWith(INTENT_PREFIX)) {
+            return null;
+        }
+        String kind = path.substring(INTENT_PREFIX.length());
+        return INTENT_KINDS.contains(kind) ? kind : null;
+    }
 
     public static String detailPath(String id) {
         if (id == null || id.isEmpty()) {
