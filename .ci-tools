@@ -24,3 +24,8 @@ unzip
 # behind a `process.platform === 'darwin'` guard. No Linux venue has it or
 # reaches it.
 -codesign
+# plutil is the same class of FALSE POSITIVE as ditto and codesign: Apple's
+# plist tool, macOS only, and the one spawn in
+# test/unit/mobile/watchEntitlements.test.js sits behind a darwin check that
+# skips with a printed reason elsewhere. No Linux venue has it or reaches it.
+-plutil
