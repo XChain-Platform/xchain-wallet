@@ -10,6 +10,17 @@
 
 import { isValidAddressAnyNetwork } from '../shared/utils/addressValidation.js';
 
+export function watchInboxKind(alertId, kinds) {
+    if (typeof alertId !== 'string') return null;
+
+    const match = alertId.match(/^notification:([^:]+):/);
+    if (!match) return null;
+
+    const kind = match[1];
+    const family = Object.keys(kinds).find((key) => kinds[key].kinds.includes(kind));
+    return family ? { kind, family } : null;
+}
+
 export function redactAddresses(text, replacement) {
     const redacted = String(text).replace(/\S+/g, (word) => {
         const leading = word.match(/^[^A-Za-z0-9]*/)[0];
