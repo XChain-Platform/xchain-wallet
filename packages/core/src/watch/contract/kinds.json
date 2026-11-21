@@ -1,0 +1,17 @@
+{
+    "txConfirmations": { "icon": "SendIcon", "kinds": ["tx-confirmed"] },
+    "incomingReceipts": {
+        "icon": "DownloadIcon",
+        "kinds": ["incoming-receipt", "coinpay-required", "coinpay-autopaid", "coinpay-autopay-manual"]
+    },
+    "incomingPending": { "icon": "ClockIcon", "kinds": ["incoming-pending"] },
+    "messages": { "icon": "MessageIcon", "kinds": ["incoming-message"] },
+    "governancePolls": { "icon": "ListIcon", "kinds": ["governance-poll"] },
+    "deadlines": { "icon": "BellIcon", "kinds": ["deadline", "deadline-summary"] },
+    "dispenserEscrow": { "icon": "CoinsIcon", "kinds": ["dispenser-escrow"] },
+    "dispenserFills": { "icon": "TokenIcon", "kinds": ["dispenser-fill"] },
+    "orderFills": { "icon": "LineChartIcon", "kinds": ["order-fill"] },
+    "priceAlerts": { "icon": "BellIcon", "kinds": ["price-alert"] },
+    "request": { "icon": "DocumentIcon", "kinds": ["request"] },
+    "paydue": { "icon": "ClockIcon", "kinds": ["paydue"] }
+}
