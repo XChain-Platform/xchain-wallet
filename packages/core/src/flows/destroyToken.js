@@ -22,7 +22,6 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
-import { assertDestroyAllowedOnChain } from '../registry/destroyPolicy.js';
 
 /**
  * @typedef {Object} DestroyTokenOpts
@@ -60,7 +59,6 @@ export async function destroyToken(opts) {
     if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.length === 0) {
         throw new Error('destroyToken: params.AMOUNT is required');
     }
-    assertDestroyAllowedOnChain(opts.chainRegistry, opts.chainId, opts.params.TICK, 'destroyToken');
     const source = normalizeSource(opts.from, 'destroyToken');
 
     const tick = opts.params.TICK;

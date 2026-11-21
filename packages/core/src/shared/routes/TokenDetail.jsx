@@ -58,7 +58,6 @@ import { prepareValuation } from '../utils/portfolioValuation.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
-import { destroyRefusalFor } from '../../registry/destroyPolicy.js';
 import {
     decimalFromBaseUnits,
     expandDecimalNotation,
@@ -950,7 +949,6 @@ function TokenDetailContent({
         isSignerMode,
         isWatcherMode,
         tick,
-        sourceCoin: coinFromChainId(chainId),
         atomicQuantity,
         networkActionsAvailable,
         core: [
@@ -1504,7 +1502,6 @@ function buildAssetActionTiles({
     isSignerMode,
     isWatcherMode,
     tick,
-    sourceCoin,
     atomicQuantity,
     networkActionsAvailable,
     core,
@@ -1522,8 +1519,6 @@ function buildAssetActionTiles({
         else if (!networkActionsAvailable) reason = t('tokenDetail.actions.needsNetwork');
         else if (NEEDS_BALANCE_ACTION_IDS.has(entry.id) && atomicQuantity != null && atomicQuantity <= 0n) {
             reason = t('tokenDetail.actions.needsBalance', { tick });
-        } else if (entry.id === 'destroy') {
-            reason = destroyRefusalFor({ tick, sourceCoin })?.reason || null;
         }
         const descriptionKey = ACTION_DESCRIPTION_KEYS[entry.id];
         return {

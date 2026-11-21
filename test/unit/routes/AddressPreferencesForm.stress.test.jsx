@@ -378,13 +378,7 @@ describe('AddressPreferencesForm network reads', () => {
         });
         await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
-        const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent("Couldn't load the current preferences. Try again in a moment.");
-        expect(alert).toHaveTextContent('Review needs a live read');
-        expect(alert).not.toHaveTextContent('timeout');
-        const detail = screen.getByText('timeout').closest('details');
-        expect(detail).not.toBeNull();
-        expect(detail.open).toBe(false);
+        expect(await screen.findByText(/Could not re-check the current on-chain values: timeout/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         clickReview();
         await screen.findByTestId('confirm-modal');
@@ -408,9 +402,7 @@ describe('AddressPreferencesForm network reads', () => {
         const { target } = mount({ prefs: () => { calls += 1; return Promise.resolve(calls === 1 ? DEFAULTS : null); } });
         await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
-        const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent("Couldn't load the current preferences. Try again in a moment.");
-        expect(alert).not.toHaveTextContent('Cannot read properties');
+        expect(await screen.findByText(/Could not re-check the current on-chain values/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
 

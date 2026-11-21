@@ -26,7 +26,7 @@
 // calls); the PRIMARY protection is the human comparing the device screen
 // to the address the wallet shows. The caller must surface both.
 
-import { isDeviceAddressSource, isDeviceSignerKind } from '../schemas/constants.js';
+import { isDeviceAddressSource } from '../schemas/constants.js';
 export class HardwareAddressMismatchError extends Error {
     /**
      * @param {{ expected: string, deviceAddress: string, path?: string }} info
@@ -49,38 +49,6 @@ export class NotHardwareAddressError extends Error {
         this.name = 'NotHardwareAddressError';
         this.source = source;
     }
-}
-
-/**
- * Only the device the record is linked to can confirm it. A software signer
- * holding the same seed derives the same address without showing anything,
- * so a match from it would read as a device confirmation that never happened.
- */
-function assertLinkedDeviceSigner(signer, record) {
-    let kind;
-    try { kind = signer.kind; } catch { kind = undefined; }
-    if (!isDeviceSignerKind(kind) || kind !== record.source) {
-        throw new Error('verifyReceiveAddress: the signer is not the hardware wallet this address belongs to');
-    }
-    if (typeof record.signerId !== 'string' || record.signerId.length === 0) {
-        throw new Error('verifyReceiveAddress: this address is not linked to a paired hardware wallet');
-    }
-    if (signer.id !== record.signerId) {
-        throw new Error('verifyReceiveAddress: the signer is not the device this address is linked to');
-    }
-}
-
-/** The stored record, refused unless it is a device address and `signer` is its linked device. */
-async function loadLinkedDeviceRecord(vault, addressId, signer) {
-    const record = await vault.addresses.get(addressId);
-    if (!record) {
-        throw new Error(`verifyReceiveAddress: no address record "${addressId}"`);
-    }
-    if (!isDeviceAddressSource(record.source)) {
-        throw new NotHardwareAddressError(record.source);
-    }
-    assertLinkedDeviceSigner(signer, record);
-    return record;
 }
 
 /** BIP44-style path `m / purpose' / coin' / account' / change / index`. */
@@ -116,7 +84,13 @@ function parseChangeIndex(derivationPath) {
  * @param {VerifyReceiveAddressOpts} opts
  * @returns {Promise<{ confirmed: boolean, deviceAddress: string, expectedAddress: string, path: string }>}
  */
-export async function verifyReceiveAddress({ vault, chainId, addressId, signer, chainRegistry }) {
+export async function verifyReceiveAddress({
+    vault,
+    chainId,
+    addressId,
+    signer,
+    chainRegistry,
+}) {
     if (!vault) throw new Error('verifyReceiveAddress: vault is required');
     if (typeof addressId !== 'string' || addressId.length === 0) {
         throw new Error('verifyReceiveAddress: addressId is required');
@@ -129,7 +103,13 @@ export async function verifyReceiveAddress({ vault, chainId, addressId, signer, 
     }
     if (!chainRegistry) throw new Error('verifyReceiveAddress: chainRegistry is required');
 
-    const record = await loadLinkedDeviceRecord(vault, addressId, signer);
+    const record = await vault.addresses.get(addressId);
+    if (!record) {
+        throw new Error(`verifyReceiveAddress: no address record "${addressId}"`);
+    }
+    if (!isDeviceAddressSource(record.source)) {
+        throw new NotHardwareAddressError(record.source);
+    }
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`verifyReceiveAddress: unknown chain "${chainId}"`);

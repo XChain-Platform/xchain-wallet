@@ -200,7 +200,7 @@ export const SECTIONS = [
     { id: 'animated-qr-frames',    label: 'Animated QR frames',     Component: AnimatedQrFramesSection, primitives: ['AnimatedQrFrames'] },
     { id: 'qr-scanner',            label: 'QR scanner',             Component: QrScannerSection, primitives: ['QrScanner'] },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
-    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'Notice', 'StatusMessage', 'StatusMessageGroup'], components: ['ToastHost', 'DiagnosticDetails'] },
+    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'Notice', 'StatusMessage', 'StatusMessageGroup'], components: ['ToastHost'] },
     { id: 'privacy-mode',          label: 'Privacy mode',           Component: PrivacyModeSection },
     { id: 'action-confirm',        label: 'Action confirm',         Component: ActionConfirmSection, components: ['ActionConfirmScreen', 'ConfirmActionModal'] },
     { id: 'sign-credentials',      label: 'Sign credentials',       Component: SignCredentialsSection, components: ['SignCredentials'] },

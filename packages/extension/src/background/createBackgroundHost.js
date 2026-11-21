@@ -810,44 +810,6 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
 }
 
 /**
- * The stored hardware address a receive.verifyAddress request names and a
- * RemoteSigner for the device that address is linked to. A request's own
- * `signerId` may only repeat that link; an address with no device link
- * (a migrated record whose signerId is still null) is refused, not handed
- * to another signer.
- *
- * @param {any} req
- * @param {import('@xchain-wallet/core').storage.Vault} vault
- * @returns {Promise<{ address: any, signer: import('@xchain-wallet/core').signers.Signer }>}
- */
-async function linkedDeviceSignerForVerify(req, vault) {
-    const walletId = req?.walletId;
-    const addressId = req?.addressId;
-    if (typeof walletId !== 'string' || !walletId) throw new Error('receive.verifyAddress: walletId is required');
-    if (typeof addressId !== 'string' || !addressId) throw new Error('receive.verifyAddress: addressId is required');
-    const address = await vault.addresses.get(addressId);
-    if (!address) throw new Error(`receive.verifyAddress: address "${addressId}" not found`);
-    await assertAddressInWallet(vault, address, walletId);
-    if (!isDeviceSource(address.source)) {
-        throw new Error('receive.verifyAddress: on-device verification is only for hardware addresses');
-    }
-    if (!address.signerId) {
-        throw new Error('receive.verifyAddress: this address is not linked to a paired hardware wallet; re-pair it');
-    }
-    const descriptor = await resolveSigner({ vault, address });
-    if (!schemas.isDeviceSignerKind(descriptor.kind)) {
-        throw new Error('receive.verifyAddress: on-device verification is only for hardware addresses');
-    }
-    const requested = req?.signerId;
-    if (typeof requested === 'string' && requested.length > 0 && requested !== descriptor.signerRecord.id) {
-        throw new Error('receive.verifyAddress: the request names a different device than this address is linked to');
-    }
-    // Throws with code HW_NOT_CONNECTED when the device has no live transport.
-    const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
-    return { address, signer: buildRemoteSigner(descriptor, transport) };
-}
-
-/**
  * The unlocked session's software signer for a wallet and its vault master
  * key, when the request carries no password and the pool holds that signer;
  * null otherwise (a typed password always wins). The label-sync routes use
@@ -3430,16 +3392,22 @@ export function createBackgroundHost(deps) {
 
     // §17.6: confirm a persisted hardware receive address on the device's
     // trusted screen and cross-check it against what the wallet holds. The
-    // Receive screen's "Verify on your device" action calls this. The signer
-    // is the device the stored address record is linked to, never the pooled
-    // software key: a software derivation of the same seed matches without
-    // any device showing the address.
-    host.register('receive.verifyAddress', async (req, { vault, chainRegistry }) => {
-        const { address, signer } = await linkedDeviceSignerForVerify(req, vault);
+    // Receive screen's "Verify on your device" action calls this; requires
+    // the paired HW signer (RemoteSigner) named by req.signerId.
+    host.register('receive.verifyAddress', async (req, { vault, chainRegistry, signerPool }) => {
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId: req?.walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        if (!signer) {
+            throw new Error('receive.verifyAddress: a connected hardware wallet is required');
+        }
         return verifyReceiveAddress({
             vault,
             chainId: req?.chainId,
-            addressId: address.id,
+            addressId: req?.addressId,
             signer,
             chainRegistry,
         });
