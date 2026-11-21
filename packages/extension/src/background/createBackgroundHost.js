@@ -31,6 +31,7 @@ import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTy
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { walletHistoryBatch, walletNativeHistoryBatch } from '@xchain-wallet/core/flows/walletValueReads.js';
 import { getSignerRecord } from '@xchain-wallet/core/flows/registerSigner.js';
+import { accountDeviceSignerId } from '@xchain-wallet/core/flows/addressCustody/accountCustody.js';
 import { mintedAmountForAddress } from '@xchain-wallet/core/flows/mintedAmount.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
@@ -1052,6 +1053,20 @@ async function sessionSigner(req, vault, signerPool, { leaveToFlow = false } = {
     return signer || undefined;
 }
 
+/**
+ * sessionSigner for a route that names its addresses in `addressIds`: each
+ * one gets the stored-address check a single-address route gets, so the
+ * pooled signer is never handed out for an address the host would refuse.
+ */
+async function sessionSignerForAddressIds(req, vault, signerPool) {
+    const ids = Array.isArray(req?.addressIds) ? req.addressIds : [];
+    for (const addressId of ids) {
+        if (typeof addressId !== 'string' || addressId.length === 0) continue;
+        await checkSignerAgainstStoredAddress({ walletId: req?.walletId, signerId: req?.signerId, addressId }, vault, false);
+    }
+    return sessionSigner(req, vault, signerPool);
+}
+
 function hwId(address, deps) {
     const chainId = deps.chainRegistry.chainIdFor(address.chain, address.network);
     if (!chainId) {
@@ -1384,7 +1399,7 @@ function toSafeWallet(w) {
         createdAt: w.createdAt,
         origin: w.origin,
         format: w.format,
-        passphraseEnabled: w.passphraseEnabled,
+        passphraseEnabled: schemas.wallet.usesBip39Passphrase(w),
         // Derived, never the ciphertext itself: lets the UI tell "stored"
         // (unlock needs nothing) apart from "needs its passphrase once"
         // (passphraseEnabled but not yet captured) without ever seeing
@@ -3408,15 +3423,16 @@ export function createBackgroundHost(deps) {
 
 
     host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        // §17.6 / G023: when `req.signerId` names a paired HW signer
-        // (or signerPool has a pre-unlocked software signer for this
-        // wallet), pass it through and skip the password-based unlock
-        // inside the flow. Without either, the flow falls back to a
-        // password unlock as before.
+        // §17.6 / G023: the account's stored addresses pick the signer (see
+        // accountDeviceSignerId). A device account derives on its linked
+        // device, and a request's signerId may only repeat that link; a seed
+        // account uses the pool's pre-unlocked software signer, or the flow's
+        // password unlock without one. An account no single signer holds is
+        // refused before anything derives.
         const signer = await pickSignerFromRequest({
             vault,
             walletId: req?.walletId,
-            signerId: req?.signerId,
+            signerId: await accountDeviceSignerId(vault, req, 'receive.getAddress'),
             signerPool,
         });
         return receiveAddress({
@@ -3453,7 +3469,7 @@ export function createBackgroundHost(deps) {
         const signer = await pickSignerFromRequest({
             vault,
             walletId: req?.walletId,
-            signerId: req?.signerId,
+            signerId: await accountDeviceSignerId(vault, req, 'dispenser.getAddress'),
             signerPool,
         });
         return dispenserAddress({
@@ -4942,9 +4958,8 @@ export function createBackgroundHost(deps) {
                 throw freezeErr;
             }
             // A freeze armed after the commit is out still holds the reveal.
-            // The refusal leaves the pair advanced to its reveal and marked
-            // commit-landed, so the next attempt sends the reveal alone, and it
-            // skips the failure settlement below: nothing was rejected.
+            // The pair stays advanced, but returns to queued because the reveal
+            // was signed and never sent. The next attempt sends it alone.
             let revealFrozen = null;
             // `q` is the live array the queue Map holds and every renderer context
             // mutates it through this one host, so a discard of a lower entry or
@@ -4982,6 +4997,10 @@ export function createBackgroundHost(deps) {
                         flows.assertSigningAllowed();
                     } catch (freezeErr) {
                         revealFrozen = freezeErr;
+                        const unclaimPatch = { status: 'queued', error: null };
+                        if (await settleQueuedPendingTx(vault, entry, unclaimPatch) === 'unreachable') {
+                            recordOwedSettlement(walletId, entry, 'patch', unclaimPatch);
+                        }
                         throw freezeErr;
                     }
                 }
@@ -5946,7 +5965,7 @@ export function createBackgroundHost(deps) {
     // Per-account sweep: merge MESSAGE history across the account's
     // receive + dispenser address union (caller passes addressIds).
     host.register('messaging.inboxSweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return getMessagingInboxSweep({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return getMessagingInboxSweep({ ...req, signer: await sessionSignerForAddressIds(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // Token-gated content: list and unlock.
@@ -7323,6 +7342,7 @@ export function createBackgroundHost(deps) {
         signThrottle,
         signThrottleReady: whenSignThrottleReady,
         getAssetUrl,
+        enqueueOnBroadcastFailure,
     });
     // A dApp SEND or SWEEP builds its PSBT after the approval and claims its
     // coins there, before it signs. A page names no reviewed PSBT to claim.

@@ -15,8 +15,9 @@ import { ShellAppHeader } from '../../../packages/core/src/shared/components/She
 import { buildPendingNoticeAlerts } from '../../../packages/core/src/shared/walletAlerts.js';
 
 let obligations = [];
+let incomplete = false;
 vi.mock('../../../packages/core/src/shared/hooks/useCoinpayObligations.js', () => ({
-    useSharedCoinpayObligations: () => ({ obligations }),
+    useSharedCoinpayObligations: () => ({ obligations, incomplete }),
 }));
 
 const due = { chainId: 'bitcoin-mainnet', address: 'bc1qpayer', orderMatchActionIndex: '42', coinAmount: '0.5' };
@@ -32,7 +33,7 @@ function renderHeader(surface, props = {}) {
     );
 }
 
-afterEach(() => { cleanup(); obligations = []; });
+afterEach(() => { cleanup(); obligations = []; incomplete = false; });
 
 describe('ShellAppHeader', () => {
     it.each(['sidebar', 'tabBar', null])('shows the notification bell left of the menu button on the %s layout', (surface) => {
@@ -52,6 +53,12 @@ describe('ShellAppHeader', () => {
 
     it('shows the unread badge for a payment due on the wide layout', async () => {
         obligations = [due];
+        renderHeader('sidebar', { onResumeCoinpay: () => {} });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Notifications, 1 unread, 1 needs your action' })).toBeTruthy());
+    });
+
+    it('shows the unread badge for a capped payments scan that returned no rows', async () => {
+        incomplete = true;
         renderHeader('sidebar', { onResumeCoinpay: () => {} });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Notifications, 1 unread, 1 needs your action' })).toBeTruthy());
     });
@@ -78,5 +85,16 @@ describe('buildPendingNoticeAlerts', () => {
         alert.action.onSelect();
         expect(onResumeAirdrop).toHaveBeenCalledWith('a1');
         expect(buildPendingNoticeAlerts({ pendingAirdrops: [rec], isWatcherMode: true }, { onResumeAirdrop })).toEqual([]);
+    });
+
+    it('lists a capped payments scan as partial and opens the full payments view', () => {
+        const onResumeCoinpay = vi.fn();
+        const alerts = buildPendingNoticeAlerts({ pendingCoinpays: [due], coinpaysIncomplete: true }, { onResumeCoinpay });
+        expect(alerts.map((a) => a.id)).toEqual(['payment-due:incomplete', 'payment-due:bitcoin-mainnet:42']);
+        expect(alerts[0]).toMatchObject({ type: 'payments', title: 'Some payments did not load', read: false });
+        alerts[0].action.onSelect();
+        expect(onResumeCoinpay).toHaveBeenCalledWith({});
+        expect(buildPendingNoticeAlerts({ pendingCoinpays: [], coinpaysIncomplete: false }, { onResumeCoinpay })).toEqual([]);
+        expect(buildPendingNoticeAlerts({ coinpaysIncomplete: true }, {})).toEqual([]);
     });
 });

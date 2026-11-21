@@ -18,6 +18,7 @@ import {
     classifyEntryStatus,
     isCrossChainLink,
 } from '../../../packages/core/src/shared/utils/historyFilter.js';
+import { activityEntryLabel } from '../../../packages/core/src/shared/utils/homeListFilter.js';
 
 const BTC = 'bitcoin-mainnet';
 const WALLET_ADDR = 'bc1qself';
@@ -90,9 +91,14 @@ describe('shared/utils/historyFilter', () => {
             expect(classifyEntryAction(entry({ action: 'ISSUANCE' }), wallet)).toBe('issue');
         });
 
-        it('maps ORDER_MATCH / ORDER_FILL to swap', () => {
-            expect(classifyEntryAction(entry({ action: 'ORDER_MATCH' }), wallet)).toBe('swap');
-            expect(classifyEntryAction(entry({ action: 'ORDER_FILL' }), wallet)).toBe('swap');
+        it.each(['ORDER', 'ORDER_MATCH', 'ORDERFILL', 'ORDER_FILL', 'ORDER_CANCEL', 'ORDER_EDIT', 'ORDER_EXPIRE'])
+        ('maps %s to order', (action) => {
+            expect(classifyEntryAction(entry({ action }), wallet)).toBe('order');
+        });
+
+        it.each(['SWAP', 'SWAP_MATCH', 'SWAP_CANCEL', 'SWAP_EDIT', 'SWAP_EXPIRE'])
+        ('maps %s to swap', (action) => {
+            expect(classifyEntryAction(entry({ action }), wallet)).toBe('swap');
         });
 
         it('maps LINK to crosschain', () => {
@@ -183,6 +189,20 @@ describe('shared/utils/historyFilter', () => {
             expect(out.map((e) => e.actionIndex)).toEqual(['4', '3']);
         });
 
+        it('keeps order and swap lifecycle filters separate', () => {
+            const rows = [
+                entry({ actionIndex: 10, action: 'ORDER' }),
+                entry({ actionIndex: 11, action: 'ORDER_MATCH' }),
+                entry({ actionIndex: 12, action: 'SWAP' }),
+                entry({ actionIndex: 13, action: 'SWAP_MATCH' }),
+            ];
+            const options = { walletAddresses: wallet };
+            expect(applyHistoryFilters(rows, { ...options, actionTypes: new Set(['order']) })
+                .map((row) => row.actionIndex)).toEqual(['10', '11']);
+            expect(applyHistoryFilters(rows, { ...options, actionTypes: new Set(['swap']) })
+                .map((row) => row.actionIndex)).toEqual(['12', '13']);
+        });
+
         it('discriminates send vs receive via wallet addresses', () => {
             const sendOnly = applyHistoryFilters(all, {
                 actionTypes: new Set(['send']),
@@ -253,6 +273,22 @@ describe('shared/utils/historyFilter', () => {
             });
             expect(out).toHaveLength(1);
             expect(out[0].actionIndex).toBe('4');
+        });
+    });
+
+    describe('activityEntryLabel', () => {
+        it.each([
+            ['ORDER_MATCH', 'Order matched'],
+            ['SWAP_CANCEL', 'Swap cancelled'],
+            ['ISSUANCE', 'Issue'],
+            ['BURN', 'Destroy'],
+        ])('labels %s as %s', (action, label) => {
+            expect(activityEntryLabel(entry({ action }), new Set())).toBe(label);
+        });
+
+        it('keeps send direction in the label', () => {
+            expect(activityEntryLabel(entry({ action: 'SEND', source: WALLET_ADDR }), new Set([WALLET_ADDR])))
+                .toBe('Send');
         });
     });
 });

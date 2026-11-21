@@ -146,6 +146,15 @@ describe('CoinpayForm opens one payment with no picker', () => {
         expect(screen.queryByText('Payment not found')).toBeNull();
     });
 
+    it('shows an incomplete-read warning instead of claiming a named payment is gone', async () => {
+        mount(
+            { chainId: CHAIN, address: PAYER, orderMatchActionIndex: '700' },
+            makeMessaging({ data: [], total: 500, truncated: true }),
+        );
+        await screen.findByText(/Couldn't load every payment due/);
+        expect(screen.queryByText('Payment not found')).toBeNull();
+    });
+
     it('says the named payment is gone instead of opening a different one', async () => {
         mount(
             { chainId: CHAIN, address: PAYER, orderMatchActionIndex: '700' },

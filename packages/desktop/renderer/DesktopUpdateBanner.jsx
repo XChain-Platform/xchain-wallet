@@ -132,6 +132,11 @@ export function DesktopUpdateBanner() {
             }
             if (type === 'rejected') {
                 operationInProgress.current = null;
+                if (event?.info?.cause === 'no-update') {
+                    retryAction.current = 'check';
+                    setState('current');
+                    return;
+                }
                 retryAction.current = 'download';
                 setState('error');
                 return;
@@ -180,6 +185,11 @@ export function DesktopUpdateBanner() {
             .then((result) => {
                 operationInProgress.current = null;
                 if (result?.ok) return;
+                if (result?.cause === 'no-update') {
+                    retryAction.current = 'check';
+                    setState('current');
+                    return;
+                }
                 if (action === 'restart') {
                     const cause = result?.cause;
                     if (cause === 'read-only' || cause === 'permission') {

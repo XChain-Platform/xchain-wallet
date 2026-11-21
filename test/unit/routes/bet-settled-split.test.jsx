@@ -355,21 +355,27 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
 
     // A bound that is not stated reads as "this is all of them".
     it('admits it when the bet read was capped instead of implying a complete total', async () => {
-        const many = Array.from({ length: 500 }, (_, i) => ({
+        const many = Array.from({ length: 100 }, (_, i) => ({
             action_index: String(2000 + i), outcome: i % 2, amount: '1', bet_status: 'lost',
         }));
-        const { messaging } = harness({ bets: () => Promise.resolve({ data: many }) });
+        const bets = vi.fn(() => Promise.resolve({ data: many, total: 250, truncated: true }));
+        const { messaging } = harness({ bets });
         const utils = await openMarket(messaging);
         const text = utils.container.textContent;
 
-        expect(text).toContain('more than 500 positions');
-        expect(text).toContain('250 positions');   // the split it could see, still shown
+        expect(bets).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'feed', allPages: true, opts: { limit: 100 },
+        }));
+        expect(text).toContain('most recent 100 of 250 positions');
+        expect(text).toContain('50 positions');   // the split it could see, still shown
+        expect(text).toContain('Your position may be incomplete');
     });
 
     it('says nothing about a cap when the whole market fits in one read', async () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
-        expect(utils.container.textContent).not.toContain('more than 500 positions');
+        expect(utils.container.textContent).not.toContain('Not every position');
+        expect(utils.container.textContent).not.toContain('may be incomplete');
     });
 
     it('falls back to the live rows if the bet read fails, rather than blanking the screen', async () => {

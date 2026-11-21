@@ -52,6 +52,11 @@ export function walletModeOf(wallet) {
         : WALLET_MODE_DEFAULT;
 }
 
+/** The passphrase flag applies only to BIP39 seeds. */
+export function usesBip39Passphrase(wallet) {
+    return (wallet?.format ?? 'bip39') === 'bip39' && wallet?.passphraseEnabled === true;
+}
+
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
     'demo',
@@ -222,10 +227,8 @@ export function validateWallet(record) {
         errors.push('format: a connected-hardware wallet must be "hardware"');
     }
 
-    // encryptedPassphrase (§15.6). The `format` half is carried here and not
-    // inherited from the passphraseEnabled rule above: only wif-only is
-    // guarded there, while counterwallet-legacy is refused a passphrase by
-    // the signer at runtime and is unguarded at the schema.
+    // encryptedPassphrase (§15.6). Readers use usesBip39Passphrase so a stale
+    // flag on another format cannot change seed derivation or request capture.
     if (r.format === 'bip39' && r.passphraseEnabled === true) {
         // null is the legacy state: a wallet written before the passphrase
         // was stored, awaiting its one-time capture at unlock.

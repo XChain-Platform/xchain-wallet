@@ -44,6 +44,21 @@ describe('userFacingMessage', () => {
             .toBe(FALLBACK);
     });
 
+    it.each([
+        'pairLedgerSigner: failed to read app info: TransportStatusError: UNKNOWN_ERROR',
+        'pairLedgerSigner: failed to read identity xpub: device disconnected',
+        'ledgerFactory: transport creation was reset',
+        'desktopLedgerFactory: Ledger transport reset while opening',
+    ])('replaces a hardware reconnect developer error: %s', (raw) => {
+        expect(userFacingMessage(new Error(raw), 'Could not connect the hardware wallet.'))
+            .toBe('Could not connect the hardware wallet.');
+    });
+
+    it('keeps a hardware reconnect instruction written for the user', () => {
+        const message = 'The "Ethereum" app is open on this device. Open the Bitcoin app, then try again.';
+        expect(userFacingMessage(new Error(message), 'Could not connect the hardware wallet.')).toBe(message);
+    });
+
     it('replaces a namespaced host error', () => {
         expect(userFacingMessage(new Error('addresses.newest: unknown chain "x"'), FALLBACK))
             .toBe(FALLBACK);
@@ -142,7 +157,11 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(Object.assign(new Error(message), { name }), FALLBACK)).toBe(message);
     });
 
-    it.each(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT'])('keeps the sentence a wallet refusal carries under code %s', (code) => {
+    it.each([
+        'NATIVE_FEE_CHANGED',
+        'INPUTS_SPENT',
+        'ADS_DONATION_STALE',
+    ])('keeps the sentence a wallet refusal carries under code %s', (code) => {
         const message = 'The protocol fee changed while this was on screen. Nothing was signed or sent.';
         expect(userFacingMessage(Object.assign(new Error(message), { code }), FALLBACK)).toBe(message);
     });

@@ -59,6 +59,8 @@ import { assertNoOfferCancelInFlight, assertReferencedOfferActionable } from './
 import { withDefaultFeePerKb } from './feeEstimate.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
+export const ADS_DONATION_STALE = 'ADS_DONATION_STALE';
+
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
  * pending-delta netting (§28.4 pendingTx v2 tick/amount fields). Only a
@@ -515,10 +517,12 @@ export async function submitAction({
     // review composed meanwhile already planned without the donation.
     const carriedDonation = prebuiltPsbt?.adsDonation?.included === true ? prebuiltPsbt.adsDonation : null;
     const claimFiat = prebuiltPsbt ? carriedDonation?.fiat : (adsPlan?.canSubmit ? adsPlan.donationFiat : null);
+    let adsDonationStale = false;
     // Only a mainnet chain's bytes can pay the queue, so only they claim it.
     if (typeof claimFiat === 'string' && claimFiat && descriptor.networkKind === 'mainnet') {
         const claimId = pending?.id ?? newAdsReservationId();
         let claimed = false;
+        let claimChecked = false;
         try {
             claimed = await reserveAdsPayout({
                 vault,
@@ -529,6 +533,7 @@ export async function submitAction({
                 pendingTxId: pending?.id ?? null,
                 takeOver: adsReviewId,
             });
+            claimChecked = true;
         } catch {
             claimed = false;
         }
@@ -537,6 +542,8 @@ export async function submitAction({
             adsClaimId = claimId;
         } else if (!prebuiltPsbt) {
             adsPlan = withoutAdsPayout(adsPlan, 'reserved');
+        } else if (claimChecked) {
+            adsDonationStale = true;
         }
     }
     adsAtEncode = adsPlan?.canSubmit ? withAdsAtEncode(sdkRegistry, adsPlan, chainId) : null;
@@ -637,6 +644,13 @@ export async function submitAction({
     let result;
     try {
         try {
+            if (adsDonationStale) {
+                const err = new Error(
+                    'The automatic donation changed while this was on screen. Nothing was signed or sent. Review the action again.',
+                );
+                err.code = ADS_DONATION_STALE;
+                throw err;
+            }
             result = await submitWithSigner({
                 sdkRegistry: effectiveSdkRegistry,
                 chainRegistry,

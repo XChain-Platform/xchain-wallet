@@ -66,15 +66,17 @@ describe('regression/cross-chain-key-collisions', () => {
         const addressRecords = {
             doge: {
                 address: 'doge-owner', chain: 'dogecoin', network: 'regtest',
-                derivationPath: "m/44'/3'/0'/0/0", source: 'hd',
+                derivationPath: "m/44'/3'/0'/0/0", source: 'hd', accountId: 'account-1',
             },
             btc: {
                 address: 'btc-owner', chain: 'bitcoin', network: 'regtest',
-                derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
+                derivationPath: "m/84'/0'/0'/0/0", source: 'hd', accountId: 'account-1',
             },
         };
         const vault = {
             addresses: { get: vi.fn(async (id) => addressRecords[id] || null) },
+            accounts: { get: async (id) => (id === 'account-1' ? { id, walletId: 'wallet-1' } : null) },
+            wallets: { get: async (id) => (id === 'wallet-1' ? { id, importedKeys: [] } : null) },
         };
         const chainRegistry = {
             chainIdFor: (chain, network) => `${chain}-${network}`,
@@ -93,6 +95,7 @@ describe('regression/cross-chain-key-collisions', () => {
             }),
         };
         const signer = {
+            id: 'wallet-1',
             exportWifForPath: () => 'WIF',
             exportWifForAddressId: () => 'WIF',
         };

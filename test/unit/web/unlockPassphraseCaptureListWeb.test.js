@@ -84,7 +84,8 @@ vi.mock('../../../packages/core/src/notifications/DispenserEscrowWatcher.js', as
 }));
 
 vi.mock('../../../packages/web/src/storage/backends.js', () => ({
-    createStorageBackend: () => ({ load: async () => null, save: async () => {} }),
+    // A sealed blob is on disk; the scripted Vault never reads it.
+    createStorageBackend: () => ({ load: async () => new Uint8Array([1]), save: async () => {} }),
     createMetaBackend: () => ({ load: async () => ({ kdfParams: { algorithm: 'argon2id' } }) }),
     installNativeWipeHook: () => {},
     installNativeScreenGuard: () => {},

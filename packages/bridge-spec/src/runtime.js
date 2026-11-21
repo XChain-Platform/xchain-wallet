@@ -166,6 +166,7 @@ export const BRIDGE_ERROR_CODES = Object.freeze([
     'THROTTLED',
     'BLOCKED_BY_USER',
     'BRIDGE_VERSION_MISMATCH',
+    'BALANCES_UNAVAILABLE',
     'INTERNAL_ERROR',
 ]);
 

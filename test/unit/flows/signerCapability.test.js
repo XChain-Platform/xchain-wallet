@@ -23,7 +23,11 @@ import {
     TAPSCRIPT_CAPABLE_SOURCES,
     signerSupportsChunkReveal,
     CHUNK_REVEAL_CAPABLE_SIGNER_KINDS,
+    signerSupportsEnvelopeReveal,
+    ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS,
 } from '../../../packages/core/src/flows/signerCapability.js';
+import { SoftwareSigner } from '../../../packages/core/src/signers/SoftwareSigner.js';
+import { RemoteSigner } from '../../../packages/core/src/signers/RemoteSigner.js';
 
 describe('signerSupportsTapscript', () => {
     it('accepts the two sources that actually hand over a private key', () => {
@@ -100,5 +104,37 @@ describe('signerSupportsChunkReveal', () => {
     it('the allow-list is frozen', () => {
         expect(() => CHUNK_REVEAL_CAPABLE_SIGNER_KINDS.push('trezor')).toThrow();
         expect(signerSupportsChunkReveal({ kind: 'trezor' })).toBe(false);
+    });
+});
+
+describe('signerSupportsEnvelopeReveal', () => {
+    it('accepts only the software signer', () => {
+        expect(signerSupportsEnvelopeReveal({ kind: 'software' })).toBe(true);
+        for (const kind of ['ledger', 'trezor', 'airgap', '', undefined]) {
+            expect(signerSupportsEnvelopeReveal({ kind })).toBe(false);
+        }
+    });
+
+    it('fails closed on malformed signers and keeps its allow-list frozen', () => {
+        for (const signer of [null, undefined, {}, 'software']) {
+            expect(signerSupportsEnvelopeReveal(signer)).toBe(false);
+        }
+        expect(signerSupportsEnvelopeReveal({ get kind() { throw new Error('abstract'); } })).toBe(false);
+        expect(() => ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS.push('ledger')).toThrow();
+    });
+
+    it('sorts the real signer classes the host hands the multipart flow', () => {
+        // SignerPool caches the SoftwareSigner unlockWallet builds; a paired
+        // device arrives as a RemoteSigner carrying the vendor kind.
+        const software = new SoftwareSigner({
+            id: 'w1', displayName: 'Wallet', chainRegistry: {}, walletEncryption: {},
+        });
+        const device = new RemoteSigner({
+            id: 'd1', displayName: 'Device', kind: 'ledger', transport: async () => ({}),
+        });
+        expect(signerSupportsEnvelopeReveal(software)).toBe(true);
+        expect(signerSupportsChunkReveal(software)).toBe(true);
+        expect(signerSupportsEnvelopeReveal(device)).toBe(false);
+        expect(signerSupportsChunkReveal(device)).toBe(false);
     });
 });

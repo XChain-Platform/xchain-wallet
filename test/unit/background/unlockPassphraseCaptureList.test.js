@@ -57,7 +57,8 @@ let lockAll;
 function deps(over = {}) {
     return {
         metaBackend: { load: async () => ({ kdfParams: { algorithm: 'argon2id' } }) },
-        storageBackend: { load: async () => null },
+        // A sealed blob is on disk; the scripted Vault never reads it.
+        storageBackend: { load: async () => new Uint8Array([1]) },
         sessionBackend: { save: async () => {} },
         signerPool: { populate, lockAll },
         chainRegistry: {},

@@ -81,6 +81,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'payBalance', 'amountLabel', 'give', 'get',
     'clearLabel', 'inputLabel', 'chooseLabel', 'pickLabel', 'viewLabel',
     'winnerLabel', 'chartRegionLabel', 'tabsLabel', 'infoLabel',
+    'infoAria', 'pill', 'tag', 'notice', 'noneOption', 'walletName', 'targetName', 'fileLabel',
     'getNote', 'valueText', 'statusText', 'subLeft', 'subRight', 'badgeTitle',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
@@ -562,6 +563,17 @@ assert.strictEqual(v.length, 1, 'flags a labelPrefix = "Status" prop default');
 v = findViolations(jsxAttr('accessibleLabel', jsxExpr({ type: 'CallExpression', callee: identifier('t'), arguments: [literal('k')] })));
 assert.strictEqual(v.length, 0, 'a translated accessibleLabel stays silent');
 
+v = findViolations(jsxAttr('infoAria', literal('How the usage fee works')));
+assert.strictEqual(v.length, 1, 'flags an infoAria literal');
+v = findViolations(jsxAttr('walletName', jsxExpr(logical(identifier('walletName'), literal('Wallet')))));
+assert.strictEqual(v.length, 1, 'flags a walletName literal fallback');
+v = findViolations(jsxAttr('tag', jsxExpr(conditional(literal('Detected'), identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags copy in a tag ternary');
+v = findViolations(jsxAttr('walletName', jsxExpr(identifier('walletName'))));
+assert.strictEqual(v.length, 0, 'a runtime walletName stays silent');
+v = findViolations(jsxAttr('notice', jsxExpr(jsxElement())));
+assert.strictEqual(v.length, 0, 'an element notice stays silent');
+
 // 19e. The style guide's note and kicker stay out of the set only while no
 // shipped file passes them as an attribute; this walk keeps that true.
 const STYLE_GUIDE_DIR = join('packages', 'web', 'src', 'style-guide');
@@ -586,10 +598,11 @@ assert.ok(!NOTE_OR_KICKER_ATTR.test('<div role="note" />'), 'the note/kicker pat
 
 // 19j. A copy prop the set does not name ships its English unseen, one hop
 // before the attribute that renders it. Any JSX attribute named *Label,
-// *Help, *Hint, *Reason, *Placeholder or *Message that holds a string literal
+// *Help, *Hint, *Reason, *Placeholder, *Message, *Aria, *Notice, *Text or
+// *Title that holds a string literal
 // must therefore be in the set, unless it is a DOM attribute for a keyboard
 // or a technical id.
-const COPY_SUFFIX_LITERAL_ATTR = /(?:^|\s)([A-Za-z]+(?:Label|Help|Hint|Reason|Placeholder|Message))=(?:"[^"]*[A-Za-z]{2}[^"]*"|'[^']*[A-Za-z]{2}[^']*')/gm;
+const COPY_SUFFIX_LITERAL_ATTR = /(?:^|\s)([A-Za-z]+(?:Label|Help|Hint|Reason|Placeholder|Message|Aria|Notice|Text|Title))=(?:"[^"]*[A-Za-z]{2}[^"]*"|'[^']*[A-Za-z]{2}[^']*')/gm;
 const NON_COPY_SUFFIX_ATTRS = new Set(['enterKeyHint']);
 const unenrolled = new Set();
 for (const file of packageSrcDirs.flatMap(sourceFiles)) {
@@ -601,6 +614,7 @@ assert.deepStrictEqual([...unenrolled].sort(), [],
     'every *Label / *Help / *Hint / *Reason / *Placeholder / *Message attribute with a literal is in USER_FACING_ATTRS');
 const probeAttr = (source) => [...source.matchAll(COPY_SUFFIX_LITERAL_ATTR)].map((m) => m[1]);
 assert.deepStrictEqual(probeAttr('<Row fooHelp="Some help text" />'), ['fooHelp'], 'the sweep pattern matches a copy-suffixed literal attribute');
+assert.deepStrictEqual(probeAttr('<Row fooAria="Some words" />'), ['fooAria'], 'the sweep pattern matches an Aria-suffixed literal attribute');
 assert.deepStrictEqual(probeAttr('<Row fooHelp={t("k")} inputMode="numeric" />'), [], 'the sweep pattern ignores a translated value and other attributes');
 
 // 22. Copy hoisted into a module-scope constant table reaches a sink
@@ -668,6 +682,8 @@ assert.strictEqual(v.length, 1, 'flags a literal label in an inline recovery obj
 assert.match(v[0].message, /recovery/);
 assert.match(v[0].message, /Restore/);
 assert.strictEqual(v[0].node.type, 'ObjectExpression', 'reports the object node itself');
+v = findViolations(jsxAttr('noneOption', jsxExpr(objectExpr(prop('label', literal('None, coin-paid'))))));
+assert.strictEqual(v.length, 1, 'flags a literal label in an inline noneOption object');
 v = findViolations(recoveryAttr(conditional(objectExpr(prop('label', literal('Try again')), onAction), identifier('undefined'))));
 assert.strictEqual(v.length, 1, 'flags an object held in a ternary branch, once');
 assert.match(v[0].message, /Try again/);
@@ -722,6 +738,28 @@ v = findViolations(tCall(conditional(literal('Trezor'), literal('Ledger'))));
 assert.strictEqual(v.length, 0, 'brand names no language translates stay silent in a t() variable');
 v = findViolations(tCall(logical(identifier('unit'), literal('BTC'), '||')));
 assert.strictEqual(v.length, 0, 'a ticker fallback stays silent in a t() variable');
+v = findViolations(tCall(literal('How Many Dispenses')));
+assert.strictEqual(v.length, 1, 'flags direct literal copy passed into t() variables');
+v = findViolations(tCall(template('About ', '')));
+assert.strictEqual(v.length, 1, 'flags direct template copy passed into t() variables');
+v = findViolations(tCall(callOn(literal('How Many Dispenses'), 'trim')));
+assert.strictEqual(v.length, 1, 'flags trimmed direct copy passed into t() variables');
+v = findViolations(tCall(literal('')));
+assert.strictEqual(v.length, 0, 'an empty direct t() variable stays silent');
+v = findViolations(tCall(template('', '/', '')));
+assert.strictEqual(v.length, 0, 'a pure-interpolation direct t() variable stays silent');
+for (const word of ['RECALL', 'DESTROY', 'WIPE', 'SWEEP', 'LOCK']) {
+    v = findViolations(tCallKey('word', literal(word)));
+    assert.strictEqual(v.length, 0, `typed confirmation word ${word} stays silent`);
+}
+v = findViolations(tCallKey('countState', literal('number')));
+assert.strictEqual(v.length, 0, 'a direct ICU select argument stays silent');
+v = findViolations(tCall(literal('Ledger')));
+assert.strictEqual(v.length, 0, 'a direct brand name stays silent');
+v = findViolations(tCall(identifier('label')));
+assert.strictEqual(v.length, 0, 'a runtime t() variable stays silent');
+v = findViolations(tCall(tCall(identifier('nested'))));
+assert.strictEqual(v.length, 0, 'a nested translation in t() variables stays silent');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -886,6 +924,20 @@ assert.strictEqual(reports.length, 29, 'create() flags ternary copy passed into 
 visitors.CallExpression(tCallKey('sideState', conditional(literal('bid'), literal('ask'))));
 visitors.CallExpression(tCall(conditional(literal('Trezor'), literal('Ledger'))));
 assert.strictEqual(reports.length, 29, 'create() skips select arguments and brand names in t() variables');
+visitors.CallExpression(tCall(literal('How Many Dispenses')));
+visitors.CallExpression(tCall(template('About ', '')));
+visitors.CallExpression(tCall(callOn(literal('How Many Dispenses'), 'trim')));
+assert.strictEqual(reports.length, 32, 'create() flags direct literal, template and trimmed t() variables');
+visitors.CallExpression(tCall(literal('')));
+visitors.CallExpression(tCall(template('', '/', '')));
+for (const word of ['RECALL', 'DESTROY', 'WIPE', 'SWEEP', 'LOCK']) {
+    visitors.CallExpression(tCallKey('word', literal(word)));
+}
+visitors.CallExpression(tCallKey('countState', literal('number')));
+visitors.CallExpression(tCall(literal('Ledger')));
+visitors.CallExpression(tCall(identifier('label')));
+visitors.CallExpression(tCall(tCall(identifier('nested'))));
+assert.strictEqual(reports.length, 32, 'create() keeps direct non-copy t() variable shapes silent');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

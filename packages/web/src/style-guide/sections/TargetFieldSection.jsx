@@ -44,7 +44,7 @@ export function TargetFieldSection() {
 
 <TargetField
     label="Stake On"
-    name="Yield Vault"
+    targetName="Yield Vault"
     detail="#868"
     hint="Unstaking takes about 2 days (288 blocks)"
     onPick={openTargetPicker}
@@ -56,7 +56,7 @@ export function TargetFieldSection() {
                 <TargetField
                     label="Stake On"
                     help="The contract this stake is locked in."
-                    name={CONTRACTS[picked].name}
+                    targetName={CONTRACTS[picked].name}
                     detail={CONTRACTS[picked].detail}
                     hint="Unstaking takes about 2 days (288 blocks)"
                     onPick={next}
@@ -67,7 +67,7 @@ export function TargetFieldSection() {
             <LiveExample label="Contract on Execute, Deposit and Withdraw: no hint.">
                 <TargetField
                     label="Contract"
-                    name="Yield Vault"
+                    targetName="Yield Vault"
                     detail="#868"
                     onPick={next}
                     pickLabel="Choose another contract"

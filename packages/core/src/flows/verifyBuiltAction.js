@@ -74,7 +74,9 @@ export function assertBuiltActionMatchesIntent({
     // phase-1 expected set drops them all, exactly as composeForConfirm drops
     // its deferred outputs.
     const chunk = !bareNativePayment && isChunkEncoding(encoded.encoding);
-    const envelopePair = Boolean(encoded.revealPsbt || encoded.envelope);
+    // The TAPROOT label alone makes a pair: the lane check admits TAPROOT only
+    // because its reveal is checked below, so a label with no reveal is refused.
+    const envelopePair = Boolean(encoded.revealPsbt || encoded.envelope || encoded.encoding === 'TAPROOT');
     if (envelopePair && !(encoded.revealPsbt && encoded.envelope)) {
         throw new TamperDetectedError(MISMATCH, { reason: 'envelope-incomplete' });
     }

@@ -17,7 +17,7 @@ import { buildPendingNoticeAlerts } from '../walletAlerts.js';
  */
 export function usePendingNoticeAlerts({ walletId, accountId, isWatcherMode = false, onResumeCoinpay, onResumeAirdrop } = {}) {
     const { messaging } = useMessaging();
-    const { obligations } = useSharedCoinpayObligations(walletId, accountId);
+    const { obligations, incomplete } = useSharedCoinpayObligations(walletId, accountId);
     const [airdrops, setAirdrops] = useState(/** @type {any[]} */ ([]));
 
     useEffect(() => {
@@ -47,7 +47,8 @@ export function usePendingNoticeAlerts({ walletId, accountId, isWatcherMode = fa
 
     return useMemo(() => buildPendingNoticeAlerts({
         pendingCoinpays: walletId ? obligations : [],
+        coinpaysIncomplete: Boolean(walletId) && incomplete === true,
         pendingAirdrops: airdrops,
         isWatcherMode,
-    }, { onResumeCoinpay, onResumeAirdrop }), [walletId, obligations, airdrops, isWatcherMode, onResumeCoinpay, onResumeAirdrop]);
+    }, { onResumeCoinpay, onResumeAirdrop }), [walletId, obligations, incomplete, airdrops, isWatcherMode, onResumeCoinpay, onResumeAirdrop]);
 }

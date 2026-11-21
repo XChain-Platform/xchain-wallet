@@ -24,6 +24,7 @@ import { importMnemonic } from '../../../packages/core/src/flows/importMnemonic.
 import { unlockWallet } from '../../../packages/core/src/flows/unlockWallet.js';
 import { _resetBatchSupportMemo } from '../../../packages/core/src/flows/balances.js';
 import {
+    addressUsedFromReads,
     DISCOVERY_GAP_LIMIT,
     discoverWalletAddresses,
 } from '../../../packages/core/src/flows/walletAddressDiscovery.js';
@@ -119,6 +120,25 @@ async function deriveAt(signer, addressType, change, index) {
 }
 
 beforeEach(() => _resetBatchSupportMemo());
+
+describe('addressUsedFromReads', () => {
+    it('accepts a signed pending net without accepting negative confirmed or received figures', () => {
+        const reads = unusedBody('addr');
+        reads.address.balances.pending = '-0.5';
+        expect(addressUsedFromReads('addr', { balResp: reads.balances, addrResp: reads.address })).toBe(true);
+        for (const pending of ['abc', '--1', '-', '1e5']) {
+            reads.address.balances.pending = pending;
+            expect(() => addressUsedFromReads('addr', {
+                balResp: reads.balances, addrResp: reads.address,
+            })).toThrow(/unreadable pending figure/);
+        }
+        reads.address.balances.pending = '0';
+        reads.address.balances.received = '-1';
+        expect(() => addressUsedFromReads('addr', {
+            balResp: reads.balances, addrResp: reads.address,
+        })).toThrow(/unreadable received figure/);
+    });
+});
 
 describe('discoverWalletAddresses', () => {
     it('scans every encoding in a legacy shared index space and counts one gap per index', async () => {

@@ -44,8 +44,9 @@
 //     resizeLabel, resizeHint, listLabel, detailLabel, searchPlaceholder,
 //     disabledReason, fallbackMessage, payBalance, amountLabel, give, get,
 //     clearLabel, inputLabel, chooseLabel, pickLabel, viewLabel, winnerLabel,
-//     chartRegionLabel, tabsLabel, infoLabel, getNote, valueText, statusText,
-//     subLeft, subRight, badgeTitle (the USER_FACING_ATTRS set below
+//     chartRegionLabel, tabsLabel, infoLabel, infoAria, pill, tag, notice,
+//     noneOption, walletName, targetName, fileLabel, getNote, valueText,
+//     statusText, subLeft, subRight, badgeTitle (the USER_FACING_ATTRS set below
 //     is the authority; keep this list in step with it). The names from `heading` on are component props
 //     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
@@ -87,12 +88,11 @@
 //     (`T.file` judges only `file`), a computed key reaches every entry,
 //     and only string-shaped values count, so an id or a nested object
 //     beside the copy stays silent. A table no sink reads is never judged.
-//   - Fallbacks and branches in translation variables:
-//     t('key', { value: label ?? 'Unavailable' }), a `||` fallback or a
-//     ternary whose branch is copy → flagged. Passing a second t() call
-//     or a runtime value as the fallback stays silent, and
-//     so do a variable named `...State` (an ICU select argument) and a
-//     fallback to Ledger, Trezor or BTC, which no language translates.
+//   - Copy in translation variables: direct strings and templates, plus a
+//     `??` / `||` fallback or ternary branch, are flagged. For example,
+//     t('key', { label: 'How Many Dispenses' }) is copy. Empty strings,
+//     pure-interpolation templates, runtime or translated values, `...State`
+//     ICU ids, brand names, tickers and typed-confirmation words stay silent.
 //
 // What the rule cannot see, so a clean run is not proof a screen has no
 // untranslated copy:
@@ -411,6 +411,18 @@ const USER_FACING_ATTRS = new Set([
     'chartRegionLabel',
     'tabsLabel',
     'infoLabel',
+    // StopSlider forwards infoAria to InfoTip and renders pill; IconSelect and
+    // FormSection render tag; NetworksPickerScreen renders notice;
+    // FiatCurrencyPicker renders noneOption's copy; walletName, targetName and
+    // fileLabel are visible identity text in their respective components.
+    'infoAria',
+    'pill',
+    'tag',
+    'notice',
+    'noneOption',
+    'walletName',
+    'targetName',
+    'fileLabel',
     // Visible copy forwarded through component-specific props. SwapTicket
     // turns getNote into balanceText, ListField renders valueText as text and
     // title, DispenserHero renders the three status props in spans, and
@@ -543,15 +555,17 @@ function branchCopy(node, allow = [], minLength = 2) {
 // inside a translated template is not English copy.
 const UNTRANSLATED_NAMES = ['BTC', 'Ledger', 'Trezor'];
 
+// These are exact destructive-action tokens the user must type, not copy.
+const TYPED_CONFIRMATION_WORDS = ['RECALL', 'DESTROY', 'WIPE', 'SWEEP', 'LOCK'];
+
 // A variable named `...State` is the argument of an ICU `select`: its value
 // picks a branch whose text lives in the dictionary, so it is an id, not copy.
 const SELECT_ARGUMENT_KEY = /State$/;
 
 /**
- * Return untranslated copy passed as a t() variable through a `??`, `||` or
- * `&&` fallback or a ternary. The English lands inside an otherwise
- * translated template, so it reaches no other gate: the enclosing attribute
- * or content container holds a call, which they do not open.
+ * Return untranslated copy passed as a direct t() variable or through a
+ * `??`, `||`, `&&` or ternary branch. The enclosing attribute or content
+ * container holds a call, so no other gate opens these values.
  */
 function translationVarViolations(node, allow = [], minLength = 2) {
     if (node?.type !== 'CallExpression' || node.callee?.type !== 'Identifier' || node.callee.name !== 't') {
@@ -560,15 +574,27 @@ function translationVarViolations(node, allow = [], minLength = 2) {
     const vars = node.arguments?.[1];
     if (vars?.type !== 'ObjectExpression') return [];
     const out = [];
+    const mergedAllow = [...allow, ...UNTRANSLATED_NAMES, ...TYPED_CONFIRMATION_WORDS];
     for (const prop of vars.properties ?? []) {
         if ((prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') || prop.computed) continue;
-        if (prop.value?.type !== 'LogicalExpression' && prop.value?.type !== 'ConditionalExpression') continue;
         if (prop.key?.type === 'Identifier' && SELECT_ARGUMENT_KEY.test(prop.key.name)) continue;
-        const copy = branchCopy(prop.value, [...allow, ...UNTRANSLATED_NAMES], minLength);
+        const value = unwrapTrim(prop.value);
+        const branched = value?.type === 'LogicalExpression' || value?.type === 'ConditionalExpression';
+        let copy = null;
+        if (value?.type === 'Literal' && typeof value.value === 'string'
+            && !isTrivialString(value.value, mergedAllow, minLength)) {
+            copy = value.value;
+        } else if (value?.type === 'TemplateLiteral') {
+            copy = templateCopy(value, mergedAllow, minLength);
+        } else if (branched) {
+            copy = branchCopy(value, mergedAllow, minLength);
+        }
         if (copy === null) continue;
         out.push({
             node: prop.value,
-            message: `Translation variable fallback "${truncate(copy)}" should use t('key').`,
+            message: branched
+                ? `Translation variable fallback "${truncate(copy)}" should use t('key').`
+                : `Translation variable "${truncate(copy)}" should use t('key').`,
         });
     }
     return out;

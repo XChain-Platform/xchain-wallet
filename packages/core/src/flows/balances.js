@@ -680,6 +680,7 @@ async function demoWalletOwning({ vault, chainRegistry, chainId, address }) {
  * @property {string} address
  * @property {import('../storage/Vault.js').Vault} [vault]  lets the read recognise a demo wallet's address and answer from its fixture instead of the explorer; callers without a vault read the explorer as before
  * @property {object} [opts]                  passed through to `sdk.getBalances`
+ * @property {boolean} [netPending]           subtract live pending sends from quantity; defaults true
  */
 
 /**
@@ -692,7 +693,9 @@ async function demoWalletOwning({ vault, chainRegistry, chainId, address }) {
  * @param {AddressBalancesOpts} params
  * @returns {Promise<unknown>}
  */
-export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, vault, opts }) {
+export async function addressBalances({
+    sdkRegistry, chainRegistry, chainId, address, vault, opts, netPending = true,
+}) {
     if (!sdkRegistry) throw new Error('addressBalances: sdkRegistry is required');
     if (!chainId) throw new Error('addressBalances: chainId is required');
     if (!address) throw new Error('addressBalances: address is required');
@@ -736,7 +739,7 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
     const shape = indexed.size > 0
         ? await explorerFreshScope(sdk, readShape)
         : await readShape();
-    if (!vault || !chainRegistry || !shape || typeof shape !== 'object') return shape;
+    if (!vault || !chainRegistry || !shape || typeof shape !== 'object' || !netPending) return shape;
     // Net this address's unconfirmed sends the way Home does, so the Send form's
     // available amount and Max never offer coins an earlier send already spent.
     let pendingTxs = [];

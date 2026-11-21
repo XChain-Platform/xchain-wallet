@@ -584,6 +584,7 @@ export async function attachUpdater({
     let downloaded = null;
     let prepared = false;
     let downloadInFlight = null;
+    let downloadCheckInFlight = false;
 
     const emit = (event) => {
         try {
@@ -593,9 +594,15 @@ export async function attachUpdater({
         }
     };
 
-    autoUpdater.on('checking-for-update', () => emit({ type: 'checking' }));
-    autoUpdater.on('update-available', (info) => emit({ type: 'available', info }));
-    autoUpdater.on('update-not-available', (info) => emit({ type: 'not-available', info }));
+    autoUpdater.on('checking-for-update', () => {
+        if (!downloadCheckInFlight) emit({ type: 'checking' });
+    });
+    autoUpdater.on('update-available', (info) => {
+        if (!downloadCheckInFlight) emit({ type: 'available', info });
+    });
+    autoUpdater.on('update-not-available', (info) => {
+        if (!downloadCheckInFlight) emit({ type: 'not-available', info });
+    });
     autoUpdater.on('error', (err) => emit({ type: 'error', info: { message: String(err?.message || err) } }));
     autoUpdater.on('download-progress', (info) => emit({ type: 'progress', info }));
     autoUpdater.on('update-downloaded', (info) => {
@@ -677,6 +684,16 @@ export async function attachUpdater({
         prepared = false;
         let artifactPath = null;
         try {
+            downloadCheckInFlight = true;
+            let check;
+            try {
+                check = await autoUpdater.checkForUpdates();
+            } finally {
+                downloadCheckInFlight = false;
+            }
+            if (check?.isUpdateAvailable !== true) {
+                return reject('no update available for this install', 'no-update');
+            }
             const { path, version } = await runDownload();
             artifactPath = path;
             if (!artifactPath) {
@@ -737,12 +754,12 @@ export async function attachUpdater({
         // Refusing is not enough on its own: the rejected bytes are
         // sitting in the updater's cache, where a later run can find
         // them already downloaded. Delete them, then say why.
-        async function reject(reason) {
+        async function reject(reason, cause) {
             if (artifactPath) {
                 await rm(artifactPath, { force: true }).catch(() => { /* best effort */ });
             }
-            emit({ type: 'rejected', info: { reason } });
-            return { ok: false, reason };
+            emit({ type: 'rejected', info: { reason, ...(cause ? { cause } : {}) } });
+            return { ok: false, reason, ...(cause ? { cause } : {}) };
         }
     }
 }

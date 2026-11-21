@@ -135,6 +135,7 @@ function harness({
         getAction: (index) => chain.sdk().getAction(Number(index)),
     };
     const signer = {
+        kind: 'software',
         signPsbt: vi.fn(async ({ psbtHex }) => {
             signed += 1;
             const id = txid(signed);

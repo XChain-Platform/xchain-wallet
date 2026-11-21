@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     ChainRegistry,
     BUNDLED_DESCRIPTORS,
+    clearUserAddedChains,
     hydrateCustomChainsFromSettings,
     reconcileCustomChainsFromSettings,
 } from '../../../packages/core/src/registry/index.js';
@@ -130,6 +131,19 @@ describe('reconcileCustomChainsFromSettings', () => {
         const version = reg.getVersion();
         reconcileCustomChainsFromSettings(reg, { customChains: [custom, second] });
         expect(reg.getVersion()).toBe(version);
+    });
+});
+
+describe('clearUserAddedChains', () => {
+    it('removes user-added chains, keeps bundled chains and tolerates incomplete registries', () => {
+        const reg = new ChainRegistry();
+        hydrateCustomChainsFromSettings(reg, { customChains: [custom] });
+
+        expect(clearUserAddedChains(reg)).toEqual({ removed: ['my-fork-regtest'] });
+        expect(reg.has('my-fork-regtest')).toBe(false);
+        expect(reg.get('bitcoin-regtest').isUserAdded).toBe(false);
+        expect(clearUserAddedChains({})).toEqual({ removed: [] });
+        expect(clearUserAddedChains(null)).toEqual({ removed: [] });
     });
 });
 

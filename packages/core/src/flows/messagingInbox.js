@@ -72,25 +72,14 @@ async function fetchInboxForAddress({
     vault, walletId, password, bip39Passphrase,
     chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner, queryChainIds,
 }) {
-    let wif; let address; let chainId;
-    if (injectedSigner) {
-        const addressRecord = await vault.addresses.get(addressId);
-        if (!addressRecord) throw new Error(`getMessagingInbox: address "${addressId}" not found`);
-        chainId = chainRegistry.chainIdFor(addressRecord.chain, addressRecord.network);
-        if (!chainId) {
-            throw new Error(
-                `getMessagingInbox: no registered chain for ${addressRecord.chain}/${addressRecord.network}`,
-            );
-        }
-        address = addressRecord.address;
-        wif = addressRecord.source === 'imported-wif'
-            ? injectedSigner.exportWifForAddressId(addressId)
-            : injectedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath });
-    } else {
-        ({ wif, address, chainId } = await exportPrivateKey({
-            vault, walletId, password, bip39Passphrase, chainRegistry, sdkRegistry, addressId,
-        }));
-    }
+    // A session signer takes the same key rules as a password: no key for a
+    // watch-only or device address, another wallet's address, or a signer
+    // that is not this wallet's. The password is left out on that path so it
+    // does not force a fresh unlock per address.
+    const credentials = injectedSigner ? { signer: injectedSigner } : { password, bip39Passphrase };
+    const { wif, address, chainId } = await exportPrivateKey({
+        vault, walletId, chainRegistry, sdkRegistry, addressId, ...credentials,
+    });
 
     // A MESSAGE addressed to this address can be broadcast on any chain (the
     // wallet routes sends over Dogecoin for cheap fees; see messageAction.js +

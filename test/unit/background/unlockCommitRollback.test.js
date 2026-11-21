@@ -42,7 +42,8 @@ function slotBackend(saveError = null, clearError = null) {
 
 function makeDeps({ sessionBackend = slotBackend(), signingSecretBackend = slotBackend() } = {}) {
     return {
-        storageBackend: {},
+        // A sealed blob is on disk; the scripted Vault never reads it.
+        storageBackend: { load: async () => new Uint8Array([1]) },
         sessionBackend,
         signingSecretBackend,
         metaBackend: { load: async () => ({ kdfParams: { algorithm: 'argon2id' } }) },

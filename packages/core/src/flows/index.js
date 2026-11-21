@@ -177,6 +177,8 @@ export {
     TAPSCRIPT_CAPABLE_SOURCES,
     signerSupportsChunkReveal,
     CHUNK_REVEAL_CAPABLE_SIGNER_KINDS,
+    signerSupportsEnvelopeReveal,
+    ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS,
 } from './signerCapability.js';
 export { storedSizeSummary, storedSizeLine } from './storedSizeSummary.js';
 export { getProjectForTick } from './projectQueries.js';
@@ -476,6 +478,7 @@ export {
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
+    SignerInUseError,
     findSigner,
 } from './registerSigner.js';
 export {

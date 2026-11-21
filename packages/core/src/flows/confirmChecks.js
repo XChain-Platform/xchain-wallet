@@ -113,7 +113,7 @@ export function sameSats(a, b) {
  * @param {string} args.encoding   'OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN'
  * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the automatic donation the build kept, when present (named on its own confirm line)
  * @param {number} [args.payloadByteLen]   byte length of the compiled action+rawData push, which decides the carrier allowance
- * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string, carrierAllowance: number, carrierExactCount: number|null }}
+ * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string, reportedEncoding: unknown, carrierAllowance: number, carrierExactCount: number|null }}
  */
 export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, payloadByteLen }) {
     // Values are carried through UNCOERCED: pre-rounding the expected side with Number()
@@ -129,6 +129,8 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
     return {
         addressed,
         encoding: enc,
+        // Unnormalised, for the known-lane check in assertNoTamper.
+        reportedEncoding: encoding ?? null,
         carrierAllowance: expectedCarrierAllowance(enc, payloadByteLen),
         carrierExactCount: exactChunkCarrierCount(enc, payloadByteLen),
     };
@@ -394,6 +396,27 @@ export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionStri
     });
 }
 
+/** The carrier lanes the encoder can answer with, in the exact case it writes them. */
+export const ACTION_ENCODINGS = Object.freeze(['OP_RETURN', 'P2SH', 'P2WSH', 'MULTISIGN', 'TAPROOT']);
+
+// Each content check skips the lanes it does not own, so an action whose lane
+// is none of them would clear every check while carrying nothing. The raw
+// value is matched by exact case because the submit path routes on exact
+// equality (the envelope pair, the phase-2 reveal). TAPROOT is safe to admit
+// only because both callers refuse an incomplete envelope before this runs,
+// and its carrier is checked as an addressed slot and by the reveal check.
+// OP_RETURN and the chunk lanes read their carrier out of the PSBT in their
+// own checks; MULTISIGN has none, so its carrier must at least be present.
+function assertKnownActionLane(expected, actionString, carrierCount) {
+    if (typeof actionString !== 'string' || actionString.length === 0) return;
+    const reported = expected.reportedEncoding !== undefined ? expected.reportedEncoding : expected.encoding;
+    const mismatch = (reason) => new TamperDetectedError(
+        'The action encoded in the transaction does not match what you approved.',
+        { reason, encoding: reported });
+    if (!ACTION_ENCODINGS.includes(reported)) throw mismatch('unknown-encoding');
+    if (reported === 'MULTISIGN' && carrierCount < 1) throw mismatch('carrier-missing');
+}
+
 /**
  * Run ALL THREE checks and THROW a TamperDetectedError on any failure. This
  * is the action-variant hook's blocking path; the PSBT variant calls the
@@ -425,6 +448,7 @@ export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt,
             `The transaction spends ${inputs.foreign.length} coin(s) this wallet does not hold.`,
             { inputs: inputs.foreign, reason: 'foreign-input' });
     }
+    assertKnownActionLane(expected, actionString, outputSet.carrierCount);
     const actionBytes = checkActionByteMatch({ psbtHex, actionString, encoding: expected.encoding, decodeActionFromPsbt });
     if (!actionBytes.ok) {
         throw new TamperDetectedError(

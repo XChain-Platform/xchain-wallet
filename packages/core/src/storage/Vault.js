@@ -75,7 +75,7 @@ import { validateAutopayOrder } from '../schemas/autopayOrder.js';
 import { validateAutopayLease } from '../schemas/autopayLease.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
-import { VaultConflictError } from './backend.js';
+import { VaultConflictError, VaultIncompleteError } from './backend.js';
 
 export { VaultConflictError } from './backend.js';
 
@@ -317,12 +317,20 @@ export class Vault {
     /**
      * Load the persisted blob (or initialize an empty document if there
      * is none) and put the vault into the "open" state. Idempotent.
+     *
+     * An empty backend opens with no decryption, so it proves nothing about
+     * the key. A caller that treats a successful open as proof of the
+     * password passes `requireExisting`, and a missing blob then throws
+     * VaultIncompleteError with the vault left unopened.
+     *
+     * @param {{ requireExisting?: boolean }} [opts]
      */
-    async open() {
+    async open({ requireExisting = false } = {}) {
         if (this._opened) return;
         if (!this._opening) {
             this._opening = (async () => {
                 const blob = await this._backend.load();
+                if (!blob && requireExisting) throw new VaultIncompleteError();
                 this._doc = blob
                     ? await decodeDocument(this._masterKey, blob, this._aad)
                     : emptyDocument();

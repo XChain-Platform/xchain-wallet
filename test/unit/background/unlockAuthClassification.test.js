@@ -52,7 +52,8 @@ function makeThrottleStore() {
 
 function makeDeps(throttle, extra = {}) {
     return {
-        storageBackend: {},
+        // A sealed blob is on disk; the scripted Vault never reads it.
+        storageBackend: { load: async () => new Uint8Array([1]) },
         sessionBackend: { save: vi.fn(async () => { }) },
         signingSecretBackend: { save: vi.fn(async () => { }) },
         metaBackend: { load: async () => ({ kdfParams: { salt: 'x', memory: 1, iterations: 1, parallelism: 1 } }) },

@@ -129,6 +129,23 @@ describe('DesktopUpdateBanner', () => {
         expect(text).not.toContain('manifest says');
     });
 
+    it('shows the current state without a download retry when the lane has no update', async () => {
+        const bridge = installBridge({
+            install: vi.fn(async () => ({
+                ok: false,
+                reason: 'no update available for this install',
+                cause: 'no-update',
+            })),
+        });
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
+
+        expect(screen.getByRole('status').textContent).toContain('XChain Wallet is up to date');
+        expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+    });
+
     it('shows manual check progress and the up-to-date result', () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));

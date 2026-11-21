@@ -120,6 +120,27 @@ describe('signers/SignerPool', () => {
             expect(pool.has('w1')).toBe(true);
         });
 
+        it('pools a counterwallet legacy record without requesting passphrase capture', async () => {
+            const wallet = {
+                id: 'w1',
+                name: 'Legacy',
+                format: 'counterwallet-legacy',
+                passphraseEnabled: true,
+                encryptedPassphrase: null,
+            };
+            const signer = fakeSigner('legacy');
+            unlockWalletRecord.mockResolvedValue(signer);
+            const pool = new SignerPool();
+            const summary = await pool.populate({
+                vault: { wallets: { list: async () => [wallet] } },
+                password: 'pw',
+                ...REG,
+            });
+
+            expect(pool.get('w1')).toBe(signer);
+            expect(summary.passphraseCaptureNeeded).toEqual([]);
+        });
+
         it('skips a wallet whose unlock throws (bad password) without failing the rest', async () => {
             const vault = { wallets: { list: async () => [{ id: 'w1' }, { id: 'w2' }] } };
             unlockWalletRecord
@@ -302,6 +323,18 @@ describe('signers/SignerPool', () => {
             s.getMasterKey = () => MASTER_KEY;
             return s;
         }
+
+        it('refuses capture for a counterwallet legacy record', async () => {
+            const wallet = { ...LEGACY, format: 'counterwallet-legacy' };
+            await expect(new SignerPool().captureOne({
+                vault: memoryVault(),
+                wallet,
+                password: 'pw',
+                bip39Passphrase: 'unused',
+                ...REG,
+            })).rejects.toThrow(/does not use a BIP39 passphrase/);
+            expect(unlockWalletRecord).not.toHaveBeenCalled();
+        });
 
         it('stores the passphrase and pools the signer when it owns the wallet', async () => {
             const vault = memoryVault();

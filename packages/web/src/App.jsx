@@ -109,6 +109,7 @@ import {
     trackHardwareFactories, useHardwareReconnect, useHardwareSessionReset,
 } from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
 import { openHardwareSigner } from '@xchain-wallet/core/signers/hardwareReconnect.js';
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { claimedDeepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
@@ -1170,7 +1171,7 @@ function AppInner() {
                 registerLocalSigner(signer.id, live);
                 showToast({ message: `${wallet?.name || 'Hardware wallet'} is connected.`, variant: 'success' });
             })
-            .catch((err) => showToast({ message: err?.message || 'Could not connect the hardware wallet.', variant: 'error' }));
+            .catch((err) => showToast({ message: userFacingMessage(err, 'Could not connect the hardware wallet.'), variant: 'error' }));
     };
 
     // A hardware wallet's Accounts row opens the shared My Accounts page (G131),

@@ -32,7 +32,9 @@
 // The picker is purely presentational beyond its initial fetch: parents
 // own the active `value` state, listen on `onChange`, and pass the
 // selected `signerId` (or undefined for software) into
-// `messaging.createAccount` / `messaging.generateReceiveAddress`.
+// `messaging.createAccount` / `messaging.activateChainRequest`. A new
+// receive or dispenser address needs no picker: the host derives it on the
+// device the account's addresses are linked to.
 
 import { useEffect, useState } from 'react';
 // Under the Wallet Form Standard this is a field group placed inside
