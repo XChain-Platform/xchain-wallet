@@ -247,4 +247,3 @@ case "${1:-}" in
     --stop-wear) [ "$#" -eq 1 ] || exit 2; stop_wear ;;
     *) echo 'usage: watch-sim-setup.sh [--check [duo]|--boot-wear small|large|--stop-wear]' >&2; exit 2 ;;
 esac
-

@@ -439,4 +439,3 @@ function put(path, contents, mode) {
     writeFileSync(path, contents);
     if (mode) chmodSync(path, mode);
 }
-
