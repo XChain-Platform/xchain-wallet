@@ -28,6 +28,11 @@ describe('redactAddresses', () => {
         )).toBe('Send to [redacted].');
     });
 
+    it('redacts a validator-accepted address below the fallback length', () => {
+        expect(redactAddresses('Send to 1devmock now', replacement))
+            .toBe('Send to [redacted] now');
+    });
+
     it('redacts a 26-character ASCII alphanumeric run', () => {
         expect(redactAddresses('Token abcdefghijklmnopqrstuvwxyz.', replacement))
             .toBe('Token [redacted].');
