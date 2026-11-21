@@ -30,7 +30,8 @@ import { classifyObligation, extractObligationRows, isPendingForPayer } from '..
 // when a sweep actually fails instead of riding in the startup bundle.
 const loadSubmitFailureMessage = () => import('../utils/submitFailureMessage.js');
 
-const DEFAULT_POLL_MS = 60_000;
+// 5 min: BTC blocks are 10 min apart, so obligations change at most once per block.
+const DEFAULT_POLL_MS = 5 * 60_000;
 // Exported under its own name so the release profiler
 // (tools/release/cold-open-profile.mjs) reads the badge's cadence from the
 // hook rather than restating it.

@@ -48,7 +48,8 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/flows.js';
 
-const POLL_INTERVAL_MS = 5000;
+// 30 s: BTC blocks are 10 min apart, so the book changes at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 
 /**
  * @param {object} props

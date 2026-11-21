@@ -56,7 +56,8 @@ import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
-const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
+// 15 min: BTC blocks are 10 min apart and the warning window is 24 h, so a slower beat loses nothing.
+const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 /** How far ahead a deadline counts as "approaching". */
 const DEFAULT_WINDOW_SECONDS = 24 * 60 * 60;
 const SEEN_CAP_PER_CHAIN = 500;

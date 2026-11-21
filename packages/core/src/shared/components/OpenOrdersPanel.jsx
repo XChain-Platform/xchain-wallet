@@ -47,7 +47,8 @@ import '../../i18n/locales/en/actionDetail.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/market.js';
 
-const POLL_INTERVAL_MS = 5000;
+// 30 s: BTC blocks are 10 min apart, so orders change at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 const chainRegistry = registryLib.defaultRegistry();
 const ORDER_GRID_COLUMNS = 'minmax(3rem, 0.6fr) repeat(3, minmax(5.5rem, 1fr)) minmax(4.75rem, auto)';
 const NUMERIC_CELL_STYLE = {

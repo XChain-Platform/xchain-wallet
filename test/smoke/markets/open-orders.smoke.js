@@ -35,8 +35,8 @@ assert.ok(/<ActionConfirmScreen/.test(src) && /if \(cancelLane\.open\)/.test(src
 assert.ok(/action:\s*'ORDER'/.test(src)
     && /ORDER_ACTION_INDEX:\s*orderActionIndex/.test(src),
     'OpenOrdersPanel composes the ORDER cancel before signing');
-assert.ok(/POLL_INTERVAL_MS\s*=\s*5000/.test(src),
-    'OpenOrdersPanel polls every 5s');
+assert.ok(/POLL_INTERVAL_MS\s*=\s*30_?000/.test(src),
+    'OpenOrdersPanel polls every 30s');
 assert.ok(/document\.visibilityState === 'hidden'/.test(src),
     'OpenOrdersPanel pauses polling when the tab is hidden');
 assert.ok(/variant="danger"/.test(src),

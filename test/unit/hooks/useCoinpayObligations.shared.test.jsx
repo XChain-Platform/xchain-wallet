@@ -38,12 +38,12 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging }),
 }));
 
-const { CoinpayObligationsProvider, useCoinpayObligations, useSharedCoinpayObligations } = await import(
+const { CoinpayObligationsProvider, useCoinpayObligations, useSharedCoinpayObligations, COINPAY_BADGE_POLL_MS } = await import(
     '../../../packages/core/src/shared/hooks/useCoinpayObligations.js');
 
 const CHAIN = 'litecoin-regtest';
 const ADDRS = ['mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi', 'mg8Jz5776UdyiYcBb9Z873NTozEiADRW5H'];
-const POLL_MS = 60_000;
+const POLL_MS = COINPAY_BADGE_POLL_MS;
 let testNow = new Date('2026-02-01T00:00:00Z').getTime();
 
 /** The per-address explorer read: one call per address per scan. */

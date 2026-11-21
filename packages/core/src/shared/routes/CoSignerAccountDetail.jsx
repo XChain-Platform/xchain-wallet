@@ -63,6 +63,7 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { listDetailStyles } from '../components/PanelSplit.jsx';
@@ -89,8 +90,8 @@ import '../../i18n/locales/en/receive.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// How often the page asks for requests waiting on the owner.
-const PENDING_REFRESH_MS = 10_000;
+// How often the page asks for requests waiting on the owner. 30 s: requests are human-paced, not per block.
+const PENDING_REFRESH_MS = 30_000;
 const COSIGNER_CHAIN_IDS = new Set(chainRegistry.byCoin('bitcoin').map((descriptor) => descriptor.id));
 
 function accountMatchesScope(account, accountId, walletId) {
@@ -183,8 +184,8 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack, embedded = 
         let active = true;
         const tick = () => { if (active) refreshPending(); };
         tick();
-        const timer = setInterval(tick, PENDING_REFRESH_MS);
-        return () => { active = false; clearInterval(timer); };
+        const stopTimer = startVisibleInterval(tick, PENDING_REFRESH_MS);
+        return () => { active = false; stopTimer(); };
     }, [messaging, refreshPending]);
 
     async function refuseRequest(id) {

@@ -99,7 +99,7 @@ function mount(history) {
  */
 async function advancePoll() {
     await act(async () => {
-        vi.advanceTimersByTime(21000);
+        vi.advanceTimersByTime(61_000);
         await Promise.resolve();
         await Promise.resolve();
     });

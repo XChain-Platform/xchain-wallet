@@ -224,7 +224,7 @@ describe('Market page My Orders tab', () => {
             fireEvent.click(screen.getByRole('tab', { name: /My Orders/ }));
             await screen.findByText(/Couldn't load your orders/);
             // A few good open-order polls later the failure still shows, once.
-            await vi.advanceTimersByTimeAsync(16000);
+            await vi.advanceTimersByTimeAsync(31_000);
             expect(messaging.getMarketOrders.mock.calls.length).toBeGreaterThan(1);
             expect(screen.getByText(/Couldn't load your orders/)).toBeInTheDocument();
             expect(screen.getAllByRole('button', { name: 'Try Again' })).toHaveLength(1);

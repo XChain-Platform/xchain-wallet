@@ -139,7 +139,8 @@ export { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS };
  * (History's pending rows, a pending action's detail) reads again. Only
  * pending watching runs at this rate; settled data follows the age rule above.
  */
-export const PENDING_POLL_INTERVAL_MS = 20000;
+// 60 s: BTC blocks are 10 min apart, so pending state changes at most once per block.
+export const PENDING_POLL_INTERVAL_MS = 60_000;
 
 // D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
 // never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
