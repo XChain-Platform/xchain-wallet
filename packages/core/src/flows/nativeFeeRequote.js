@@ -41,6 +41,7 @@
 // materially for no benefit (above max).
 
 import { satsToCoinDecimal } from './feeEstimate.js';
+import { isBaseOnlyExecuteQuote } from '../sdk/nativeFeePreflight.js';
 
 /** `code` on the error a refused re-quote raises, for callers that branch on it. */
 export const NATIVE_FEE_CHANGED = 'NATIVE_FEE_CHANGED';
@@ -112,6 +113,15 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     const identityMismatch = quoteIdentityMismatch(composed, fresh);
     if (identityMismatch) {
         return { ...base, coin, verdict: 'unavailable', reason: identityMismatch };
+    }
+    // A fresh base-only EXECUTE answer (the indexer's dry run did not finish) cannot judge
+    // a metered fee, so a composed dry-run quote (`validated: true`) proceeds as for any
+    // missing quote. A composed amount that was never metered refuses: the indexer only
+    // answers this way once the metered-gas gate is armed, so base gas would not cover the call.
+    if (isBaseOnlyExecuteQuote(fresh)) {
+        return composed && composed.validated === true
+            ? { ...base, coin, verdict: 'unavailable', reason: 'quote could not estimate the contract call gas' }
+            : { ...base, coin, verdict: 'invalid', reason: 'quote could not estimate the contract call gas' };
     }
 
     const quotedExpectedSats = intOrNull(fresh.requiredFeeSats);

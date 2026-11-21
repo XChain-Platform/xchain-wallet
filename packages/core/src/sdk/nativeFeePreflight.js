@@ -143,6 +143,13 @@ export function nativeFeeErrorMessage(
     // Found live: a stake larger than the balance answered `invalid: insufficient funds
     // (AMOUNT)`, and the wallet said the LTC fee price was temporarily unavailable.
     const detail = invalidDetailFromMessage(err);
+    // A base-only EXECUTE quote is about gas, not price, and it is temporary: the next
+    // quote usually finishes its dry run.
+    if (detail === BASE_ONLY_EXECUTE_ERROR) {
+        return 'The network could not estimate the gas this contract call needs, so it quoted only '
+            + 'the base fee. Paying that could run the call out of gas and lose the fee, so nothing '
+            + 'was signed or sent. Try again in a moment.';
+    }
     // The USER-ORACLE verdicts have to be read before the price heuristic below,
     // because they are the one family that contains the words the heuristic looks
     // for while being neither temporary nor about the validator price feed
@@ -364,6 +371,9 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     if (signal && signal.aborted) throw new Error('aborted');
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
+    if (isBaseOnlyExecuteQuote(quote, actionData && actionData.action)) {
+        throw new NativeFeeForfeitError({ reason: 'invalid', quote: { ...quote, error: BASE_ONLY_EXECUTE_ERROR } });
+    }
 
     const pinned = resolvePinnedFeeDestination(sdk);
     if (!pinned) {
@@ -382,10 +392,7 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Relay policy rejects a positive output below dust, while protocol validation requires
     // only a minimum payment. Raise a small quote to the relay floor and carry both amounts so
     // approval-time re-quoting can distinguish necessary dust rounding from an accidental overpay.
-    const quotedFeeSats = satsResponseAmount(quote.requiredFeeSats, {
-        source: 'native fee quote',
-        field: 'requiredFeeSats',
-    });
+    const quotedFeeSats = quotedFeeSatsOf(quote);
     const dustThreshold = resolveDustThreshold(sdk);
     // Refuse to size a positive fee against an unknown floor; guessing Bitcoin's 546 would pad a
     // Dogecoin or Litecoin fee to an output the node rejects. A zero quote builds no output.
@@ -400,6 +407,7 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
             quotedFeeSats,
             quotedFeeNative: quote.requiredFeeNative,
             requiredFeeSats: feeSats,
+            ...(quote.requiredFeeSatsExact != null ? { requiredFeeSatsExact: String(feeSats) } : {}),
             requiredFeeNative: nativeDecimalFromSats(feeSats),
             dustThresholdSats: dustThreshold,
         }
@@ -424,6 +432,57 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Strip our own flag so it isn't forwarded to the encoder as an unknown param.
     const { payFeeInNativeCoin, ...rest } = encoderOpts;
     return { encoderOpts: { ...rest, customOutputs: outs }, quote: payableQuote };
+}
+
+/**
+ * The refusal detail for a base-only EXECUTE quote. nativeFeeErrorMessage matches it by
+ * this exact text, so the user is told about gas rather than about the price feed.
+ */
+export const BASE_ONLY_EXECUTE_ERROR =
+    'the indexer could not estimate the gas this contract call needs and quoted only the base fee';
+
+/**
+ * True for the indexer's base-only EXECUTE answer, which the wallet must never pay.
+ *
+ * Once EXECUTE_NATIVE_METERED_GAS is armed, a native-paid EXECUTE runs only the gas its fee
+ * output buys, and the quote dry-runs the call and adds a safety margin (`validated: true`).
+ * When that dry run cannot finish, the indexer still answers with the base fee alone
+ * (`valid: null`, `validated: false`, no `staticQuote`). Paying it runs the call on base gas,
+ * and a call that needs more fails out of resource with the fee kept. The pre-gate schedule
+ * quote carries `staticQuote: true` on every indexer since v0.23.4 and stays payable, because
+ * before the gate the base fee buys the protocol gas ceiling.
+ *
+ * @param {object | null | undefined} quote
+ * @param {string} [action]   the action being quoted; falls back to the quote's own echo
+ * @returns {boolean}
+ */
+export function isBaseOnlyExecuteQuote(quote, action) {
+    if (!quote || typeof quote !== 'object') return false;
+    const named = action || quote.action || String(quote.actionString || '').split('|')[0];
+    if (String(named || '').trim().toUpperCase() !== 'EXECUTE') return false;
+    return quote.valid === null && quote.staticQuote !== true;
+}
+
+// The quoted amount in satoshis. Read from requiredFeeSatsExact, the decimal string the
+// indexer derives the number from, whenever the reply carries it (v0.24.0 and later), and
+// refused when the two disagree. A reply without it (older indexers) keeps the number.
+function quotedFeeSatsOf(quote) {
+    const sats = satsResponseAmount(quote.requiredFeeSats, {
+        source: 'native fee quote',
+        field: 'requiredFeeSats',
+    });
+    if (quote.requiredFeeSatsExact === undefined || quote.requiredFeeSatsExact === null) return sats;
+    const exact = satsResponseAmount(String(quote.requiredFeeSatsExact), {
+        source: 'native fee quote',
+        field: 'requiredFeeSatsExact',
+    });
+    if (exact !== sats) {
+        throw new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { ...quote, error: 'the fee quote amounts disagree (requiredFeeSats vs requiredFeeSatsExact)' },
+        });
+    }
+    return exact;
 }
 
 function resolvePinnedFeeDestination(sdk) {
