@@ -3,6 +3,16 @@
     "type": "object",
     "required": ["id", "kind", "iconHash", "sentence", "amountText"],
     "additionalProperties": false,
+    "oneOf": [
+        {
+            "properties": { "kind": { "const": "request" } },
+            "not": { "required": ["expiresAt"] }
+        },
+        {
+            "properties": { "kind": { "const": "paydue" } },
+            "required": ["expiresAt"]
+        }
+    ],
     "properties": {
         "id": {
             "type": "string",

@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
+import Ajv2020 from 'ajv/dist/2020.js';
 import schema from '../../../packages/core/src/watch/contract/request.schema.json';
 import validate from '../../../packages/core/src/watch/contract/validate.js';
+
+const validatesRequest = new Ajv2020().compile(schema);
 
 const request = {
     id: '0123456789abcdef0123456789abcdef',
@@ -18,11 +21,19 @@ const request = {
 describe('watch request schema', () => {
     it('accepts request and payment-due display payloads', () => {
         expect(validate(schema, request)).toEqual([]);
-        expect(validate(schema, {
+        const paydue = {
             ...request,
             kind: 'paydue',
             expiresAt: 1_700_000_000_000,
-        })).toEqual([]);
+        };
+        expect(validate(schema, paydue)).toEqual([]);
+        expect(validatesRequest(request)).toBe(true);
+        expect(validatesRequest(paydue)).toBe(true);
+    });
+
+    it('requires expiry only for payment-due payloads', () => {
+        expect(validatesRequest({ ...request, kind: 'paydue' })).toBe(false);
+        expect(validatesRequest({ ...request, expiresAt: 1_700_000_000_000 })).toBe(false);
     });
 
     it('requires every shared display field and rejects watch actions', () => {
