@@ -42,7 +42,10 @@ function fakeModule() {
         autoInstallOnAppQuit: true,     // upstream defaults
         isUpdaterActive: () => true,
         on: () => {},
-        checkForUpdates: async () => { calls.push('checkForUpdates'); },
+        checkForUpdates: async () => {
+            calls.push('checkForUpdates');
+            return { isUpdateAvailable: true };
+        },
         downloadUpdate: async () => { calls.push('downloadUpdate'); return ['/tmp/update.deb']; },
         quitAndInstall: () => { calls.push('quitAndInstall'); },
     };
@@ -202,6 +205,64 @@ describe('the install gate', () => {
         expect(flagsWhenDownloadRan).toEqual({
             autoDownload: false, autoInstallOnAppQuit: false,
         });
+    });
+
+    it('checks before a direct download can reach electron-updater', async () => {
+        const { mod, autoUpdater, calls } = fakeModule();
+        let checked = false;
+        autoUpdater.checkForUpdates = async () => {
+            calls.push('checkForUpdates');
+            checked = true;
+            return { isUpdateAvailable: true };
+        };
+        autoUpdater.downloadUpdate = async () => {
+            if (!checked) throw new Error('Please check update first');
+            calls.push('downloadUpdate');
+            return ['/tmp/update.deb'];
+        };
+
+        await (await attach(mod)).downloadUpdate();
+
+        expect(calls.indexOf('checkForUpdates')).toBeLessThan(calls.indexOf('downloadUpdate'));
+    });
+
+    it('refuses a download when this install has no newer update', async () => {
+        const { mod, autoUpdater, calls } = fakeModule();
+        autoUpdater.checkForUpdates = async () => ({ isUpdateAvailable: false });
+        const events = [];
+        const updater = await attachUpdater({
+            loader: async () => mod,
+            onEvent: (event) => events.push(event),
+        });
+
+        const result = await updater.downloadUpdate();
+
+        expect(result).toEqual({
+            ok: false,
+            reason: 'no update available for this install',
+            cause: 'no-update',
+        });
+        expect(calls).not.toContain('downloadUpdate');
+        expect(events).toContainEqual(expect.objectContaining({
+            type: 'rejected',
+            info: expect.objectContaining({ cause: 'no-update' }),
+        }));
+    });
+
+    it('reports a failed pre-download check without attempting the download', async () => {
+        const { mod, autoUpdater, calls } = fakeModule();
+        autoUpdater.checkForUpdates = async () => { throw new Error('offline'); };
+        const events = [];
+        const updater = await attachUpdater({
+            loader: async () => mod,
+            onEvent: (event) => events.push(event),
+        });
+
+        const result = await updater.downloadUpdate();
+
+        expect(result).toEqual({ ok: false, reason: 'offline' });
+        expect(calls).not.toContain('downloadUpdate');
+        expect(events.some((event) => event.type === 'rejected')).toBe(true);
     });
 
     it('never installs when verification could not run', async () => {

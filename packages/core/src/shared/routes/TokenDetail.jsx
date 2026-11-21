@@ -3191,7 +3191,7 @@ function GatedGroupCard({
                         return (
                             <li key={f.actionIndex}>
                                 <UnlockedFileLink
-                                    name={f.name || `Action #${f.actionIndex}`}
+                                    fileLabel={f.name || `Action #${f.actionIndex}`}
                                     type={f.type}
                                     onOpen={() => openFile(plain, f)}
                                 />
@@ -3291,7 +3291,7 @@ function GatedGroupCard({
 // as a blob href or new-tab document from here - the viewer sniffs the
 // bytes and renders through script-inert surfaces only, with download
 // as the fallback. The declared `type` is cosmetic (icon + chip).
-function UnlockedFileLink({ name, type, onOpen }) {
+function UnlockedFileLink({ fileLabel, type, onOpen }) {
     return (
         <Button
             onClick={onOpen}
@@ -3302,7 +3302,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
                 width: '100%',
                 textAlign: 'left',
             }}
-            aria-label={`Open unlocked file ${name}`}
+            aria-label={`Open unlocked file ${fileLabel}`}
             icon={null}
         >
             <span className={styles.gatedTileContent}>
@@ -3310,7 +3310,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
                     <Icon.FileTypeIcon type={type} />
                     <span className={styles.gatedTileOpen}><Icon.UnlockIcon /> Open</span>
                 </span>
-                <span className={styles.gatedTileBody}><strong>{name}</strong><small>{type || 'File'}</small></span>
+                <span className={styles.gatedTileBody}><strong>{fileLabel}</strong><small>{type || 'File'}</small></span>
             </span>
         </Button>
     );

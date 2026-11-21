@@ -9,7 +9,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isSpentCoinsRefusal } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    isSpentCoinsRefusal,
+    submitFailureMessage,
+} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 import { BROADCAST_FAILED_PERMANENT_NAME } from '../../../packages/core/src/flows/broadcastPermanence.js';
 
 function permanentRefusal(phase, reason = 'bad-txns-inputs-missingorspent') {
@@ -28,5 +31,15 @@ describe('isSpentCoinsRefusal on a post-commit refusal', () => {
     it('does not read a refused envelope reveal as taken coins', () => {
         expect(isSpentCoinsRefusal(permanentRefusal('envelope_reveal'))).toBe(false);
         expect(isSpentCoinsRefusal(permanentRefusal('envelope_reveal', 'txn-mempool-conflict'))).toBe(false);
+    });
+});
+
+describe('multipart signer capability copy', () => {
+    it('preserves the software-wallet remedy ahead of a form fallback', () => {
+        const message = 'This signer cannot sign the file-upload reveal transactions. Use a software wallet key.';
+        expect(submitFailureMessage(
+            { name: 'MultipartSignerCapabilityError', message },
+            { fallback: 'File upload failed.' },
+        )).toBe(message);
     });
 });

@@ -136,8 +136,8 @@ export class RemoteSigner extends Signer {
         // (flows/signerCapability.js) should keep hardware off this path entirely;
         // this is the backstop for when it does not. See
         // assertCannotSignEnvelopeReveal for why the guard covers envelopeReveal
-        // and not the P2SH/P2WSH `reveal` flag, whose lane the capability gate
-        // keeps off this transport.
+        // and not the P2SH/P2WSH `reveal` flag. submitWithSigner and
+        // publishMultipartFile gate both reveal lanes before funding.
         assertCannotSignEnvelopeReveal(this._id, params);
         const res = await this._callOrThrow('signPsbt', params);
         if (!res || typeof res.txHex !== 'string' || typeof res.txid !== 'string') {

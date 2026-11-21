@@ -388,6 +388,57 @@ describe('the read methods stay BARE ARRAYS', () => {
                 unconfirmed: '0',
             },
         ]);
+        expect(flowMocks.addressBalances).toHaveBeenCalledWith(expect.objectContaining({ netPending: false }));
+    });
+
+    it('publishes the native signed pending figure and keeps token pending at zero', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: {
+                tick: 'BTC', quantity: '150000000', divisibility: 8,
+                pendingOutgoingQuantity: '10000000',
+            },
+            tokens: [{ tick: 'PEPECREATURE', quantity: '99', divisibility: 0 }],
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const { result } = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(result[0]).toMatchObject({
+            confirmedRaw: '150000000', unconfirmedRaw: '-10000000', unconfirmed: '-0.1',
+        });
+        expect(result[1]).toMatchObject({ unconfirmedRaw: '0', unconfirmed: '0' });
+    });
+
+    it('publishes an incoming native pending figure', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: { tick: 'BTC', quantity: '150000000', divisibility: 8, pendingQuantity: '25000000' },
+            tokens: [],
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const { result } = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(result[0]).toMatchObject({ unconfirmedRaw: '25000000', unconfirmed: '0.25' });
+    });
+
+    it('refuses a partial balance shape instead of making an unreadable half look empty', async () => {
+        flowMocks.addressBalances.mockResolvedValue({
+            native: null,
+            tokens: [{ tick: 'PEPECREATURE', quantity: '99', divisibility: 0 }],
+            unavailable: ['native'],
+            unavailableReason: 'balance service unavailable',
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const response = await host.handle({
+            type: 'bridge.getBalances',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM },
+        });
+        expect(response).toMatchObject({
+            ok: false, error: { code: 'BALANCES_UNAVAILABLE' },
+        });
+        expect(response.error.message).toMatch(/balance service unavailable/);
     });
 
     it('omits a native row the explorer could not report rather than inventing a zero', async () => {

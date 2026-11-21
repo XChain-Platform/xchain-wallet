@@ -17,7 +17,7 @@
 import { pendingMigrationSweeps } from '../flows/migrationSweeps.js';
 import { defaultRegistry } from '../registry/index.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { airdropCopy, paymentDueCopy } from './alertCopy.js';
+import { airdropCopy, fitAlertCopy, paymentDueCopy } from './alertCopy.js';
 
 /** The coin ticker for a chain id, or '' when the chain is unknown. */
 function tickerForChainId(chainId) {
@@ -35,13 +35,29 @@ function tickerForChainId(chainId) {
  * same wording and the same destination as the Home notice. Pure: the caller
  * passes the rows Home reads and the handlers that open each destination.
  *
- * @param {{ pendingCoinpays?: any[], pendingAirdrops?: any[], isWatcherMode?: boolean, at?: number }} state
+ * `coinpaysIncomplete` marks a payments-due scan that was capped: the rows
+ * passed may omit the oldest pending payment, so one extra item says the list
+ * is partial and opens the pay form with no payment named, which runs its own
+ * scan and says when that scan is partial too, even when no row was returned.
+ *
+ * @param {{ pendingCoinpays?: any[], coinpaysIncomplete?: boolean, pendingAirdrops?: any[], isWatcherMode?: boolean, at?: number }} state
  * @param {{ onResumeCoinpay?: (ref: object) => void, onResumeAirdrop?: (id: string) => void }} [handlers]
  * @returns {WalletAlert[]}
  */
-export function buildPendingNoticeAlerts({ pendingCoinpays = [], pendingAirdrops = [], isWatcherMode = false, at = Date.now() } = {}, handlers = {}) {
+export function buildPendingNoticeAlerts({ pendingCoinpays = [], coinpaysIncomplete = false, pendingAirdrops = [], isWatcherMode = false, at = Date.now() } = {}, handlers = {}) {
     const { onResumeCoinpay, onResumeAirdrop } = handlers || {};
     const alerts = [];
+    if (typeof onResumeCoinpay === 'function' && coinpaysIncomplete === true) {
+        alerts.push({
+            id: 'payment-due:incomplete',
+            type: 'payments',
+            severity: 'info',
+            ...fitAlertCopy({ label: 'Payment due', title: 'Some payments did not load', message: 'Older payments may be missing' }),
+            at,
+            read: false,
+            action: { label: 'Review payments', onSelect: () => onResumeCoinpay({}) },
+        });
+    }
     if (typeof onResumeCoinpay === 'function') {
         for (const rec of Array.isArray(pendingCoinpays) ? pendingCoinpays : []) {
             if (!rec) continue;

@@ -100,11 +100,11 @@ function makeVault({ consents = [consentRow()], lease = null, pendingTxs = [], a
     };
 }
 
-function makeSdkRegistry({ obligations = [obligationRow()], matches = [matchRow()], tip = 101 } = {}) {
+function makeSdkRegistry({ obligations = [obligationRow()], matches = [matchRow()], tip = 101, truncated = false } = {}) {
     const sdk = {
         getStatus: vi.fn(async () => ({ last_block: { RBTC: tip } })),
         explorer: { coin: 'RBTC' },
-        getCoinpayObligations: vi.fn(async () => ({ data: obligations })),
+        getCoinpayObligations: vi.fn(async () => ({ data: obligations, truncated })),
         getOrderMatches: vi.fn(async () => ({ data: matches })),
         getTransaction: vi.fn(async () => null),
         onCoinpayRequired: vi.fn(() => () => {}),
@@ -143,6 +143,7 @@ function makeWatcher(over = {}) {
         instanceId: over.instanceId,
         loadNotified: over.loadNotified,
         saveNotified: over.saveNotified,
+        logger: over.logger,
     });
     return { watcher, vault, ledger, notify, coinpayAction, settings };
 }
@@ -207,6 +208,19 @@ describe('happy path', () => {
         expect(lease.shellKind).toBe('web');
         await watcher.pollOnce();
         expect(vault.leaseStore.get(PAYER_LEASE_ID).holderId).toBe(lease.holderId);
+    });
+
+    it('warns once for a capped obligation read and still handles its rows', async () => {
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const { registry } = makeSdkRegistry({ truncated: true });
+        const { watcher, coinpayAction } = makeWatcher({ sdkRegistry: registry, logger });
+
+        await watcher.pollOnce();
+        await watcher.pollOnce();
+
+        expect(coinpayAction).toHaveBeenCalledTimes(1);
+        expect(logger.warn.mock.calls.filter(([message]) => /obligation read.*was capped/.test(message)))
+            .toHaveLength(1);
     });
 });
 

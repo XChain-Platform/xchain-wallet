@@ -236,7 +236,7 @@ describe('artifact names', () => {
 });
 
 describe('generated build files', () => {
-    it('emits the two keys Gradle reads, and nothing needing escaping', () => {
+    it('emits the three keys Gradle reads, and nothing needing escaping', () => {
         const props = versionPropertiesFor('v0.333.1');
         expect(props).toContain('versionCode=3330150');
         expect(props).toContain('versionName=0.333.1');

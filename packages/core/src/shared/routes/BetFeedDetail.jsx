@@ -166,9 +166,24 @@ export function poolRowsForOutcomes(rows, outcomeCount) {
     return valid;
 }
 
-// The compatibility reconstruction is bounded, and the screen says so out
-// loud when an empty terminal aggregate requires more rows than this read.
-const SETTLED_BET_LIMIT = 500;
+// Explorer bet lists serve at most this many rows per page. The detail read
+// walks the keyset pages and reports when the paging cap still leaves rows out.
+const BET_PAGE_ROWS = 100;
+
+function betReadStatus(resp, rows) {
+    const hasTotal = !Array.isArray(resp) && resp && typeof resp === 'object'
+        && resp.total !== null && resp.total !== undefined && resp.total !== '';
+    const rawTotal = hasTotal
+        ? Number(resp.total)
+        : NaN;
+    const total = Number.isFinite(rawTotal) && rawTotal >= 0 ? rawTotal : null;
+    return {
+        total,
+        partial: resp?.truncated === true || (total !== null
+            ? total > rows.length
+            : rows.length >= BET_PAGE_ROWS),
+    };
+}
 
 function statusLabel(status) {
     if (status === 'open') return 'Positions available';
@@ -315,6 +330,8 @@ export function BetFeedDetail({
     // tab, this wallet's own lines and a terminal split rebuild.
     const [feedBets, setFeedBets] = useState(/** @type {any[] | null} */ (null));
     const [feedBetsFailed, setFeedBetsFailed] = useState(false);
+    const [feedBetsPartial, setFeedBetsPartial] = useState(false);
+    const [feedBetsTotal, setFeedBetsTotal] = useState(/** @type {number | null} */ (null));
     // The tab strip under the hero. Null until the user picks a tab, so the
     // first tab opens: Actions for the market's own oracle (G102), else Bet,
     // or Result once the market stops taking bets. Ownership arrives with the
@@ -367,22 +384,30 @@ export function BetFeedDetail({
         setSettledPartial(false);
         setFeedBets(null);
         setFeedBetsFailed(false);
+        setFeedBetsPartial(false);
+        setFeedBetsTotal(null);
         if (!feed) return undefined;
         const explorerPools = Array.isArray(feed.pools) ? feed.pools : [];
         const terminal = !isLiveFeedStatus(feed.feed_status);
         if (terminal && explorerPools.length > 0) setSettledSplit(explorerPools);
         const rebuildSplit = terminal && explorerPools.length === 0;
         if (typeof messaging.bets !== 'function') { setFeedBets([]); return undefined; }
-        messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: SETTLED_BET_LIMIT } })
+        messaging.bets({
+            chainId,
+            query: String(feedIndex),
+            type: 'feed',
+            opts: { limit: BET_PAGE_ROWS },
+            allPages: true,
+        })
             .then((resp) => {
                 if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp : (resp?.data || []);
+                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
+                const read = betReadStatus(resp, rows);
                 setFeedBets(rows);
+                setFeedBetsPartial(read.partial);
+                setFeedBetsTotal(read.total);
                 if (!rebuildSplit) return;
-                // A page-sized answer means there may be more, and a total that
-                // silently omits bets is worse than one that admits its bound:
-                // this screen is where someone checks what a market did.
-                setSettledPartial(rows.length >= SETTLED_BET_LIMIT);
+                setSettledPartial(read.partial);
                 setSettledSplit(splitFromBets(rows, outcomeLabelsOf(feed).length));
             })
             // Falling back to the explorer rows keeps the screen readable; an
@@ -1036,9 +1061,11 @@ export function BetFeedDetail({
     const recentBets = (Array.isArray(feedBets) ? feedBets : [])
         .slice()
         .sort((a, b) => Number(b?.action_index || 0) - Number(a?.action_index || 0));
-    const betsPartialNote = Array.isArray(feedBets) && feedBets.length >= SETTLED_BET_LIMIT ? (
+    const betsPartialNote = feedBetsPartial ? (
         <p className={styles.hint}>
-            This market has more than {SETTLED_BET_LIMIT} positions; only {SETTLED_BET_LIMIT} were read.
+            {feedBetsTotal === null
+                ? 'Not every position in this market could be read.'
+                : `Only the most recent ${feedBets.length} of ${feedBetsTotal} positions could be read.`}
         </p>
     ) : null;
     // What this wallet currently holds on each outcome.
@@ -1098,6 +1125,9 @@ export function BetFeedDetail({
                     ) : null}
                 </div>
             )}
+            {feedBetsPartial ? (
+                <p className={local.positionQuiet}>Your position may be incomplete because not every market position could be read.</p>
+            ) : null}
         </section>
     );
 
@@ -1260,8 +1290,9 @@ export function BetFeedDetail({
                     {youBet}
                     {!live && settledPartial ? (
                         <p className={styles.hint}>
-                            This market has more than {SETTLED_BET_LIMIT} positions, so the split above covers the
-                            most recent {SETTLED_BET_LIMIT} rather than all of them.
+                            {feedBetsTotal === null
+                                ? 'The split above is incomplete because not every position could be read.'
+                                : `The split above covers the most recent ${feedBets.length} of ${feedBetsTotal} positions rather than all of them.`}
                         </p>
                     ) : null}
                     {!live ? (

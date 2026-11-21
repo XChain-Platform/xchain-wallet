@@ -65,9 +65,9 @@ import {
  * @typedef {Object} BuildSendPsbtResult
  * @property {string} psbtHex            unsigned PSBT, hex-encoded
  * @property {string} encoding           encoding chosen by the encoder (OP_RETURN / P2SH / etc.)
- * @property {string} actionString       full action string (DESTINATION + TICK + AMOUNT + MEMO)
- * @property {string} action             'SEND'
- * @property {number | string} [version]
+ * @property {string | null} actionString full action string, or null for a plain native payment
+ * @property {string | null} action       'SEND', or null for a plain native payment
+ * @property {number | string | null} version action version, or null for a plain native payment
  * @property {string} chainId            mirrored from input for downstream routing
  * @property {string} fromAddress        mirrored from input for downstream routing
  */
@@ -177,8 +177,8 @@ export async function buildSendPsbt(opts) {
         psbtHex: encoded.psbt,
         encoding: encoded.encoding,
         actionString: bareNativePayment ? null : createResult.actionString,
-        action: createResult.action,
-        version: createResult.version,
+        action: bareNativePayment ? null : createResult.action,
+        version: bareNativePayment ? null : createResult.version,
         chainId: opts.chainId,
         fromAddress: source.address,
     };

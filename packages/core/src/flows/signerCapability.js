@@ -111,7 +111,8 @@ export const CHUNK_REVEAL_CAPABLE_SIGNER_KINDS = Object.freeze(['software']);
  * record and reads `source` (the question is asked before an encoding is
  * chosen); this one takes the Signer that will be dispatched to and reads
  * `kind`, because the chunk lane's hazard is the dispatch itself. Called by
- * `submitWithSigner` BEFORE the phase-1 commit is signed or broadcast, so a
+ * `submitWithSigner` and `publishMultipartFile` BEFORE the phase-1 commit or
+ * upload funding is signed or broadcast, so a
  * refusal costs an error dialog; the reveal is then signed before anything is
  * broadcast too, and a signer that could not sign it would otherwise fail deep
  * inside its vendor converter instead of with the capability message.
@@ -130,4 +131,60 @@ export function signerSupportsChunkReveal(signer) {
     }
     if (typeof kind !== 'string') return false;
     return CHUNK_REVEAL_CAPABLE_SIGNER_KINDS.includes(kind);
+}
+
+/** Signer kinds that can sign a BIP341 script-path envelope reveal. */
+export const ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS = Object.freeze(['software']);
+
+/**
+ * Whether an injected Signer can sign an envelope reveal.
+ *
+ * Device kinds stay absent until a shipping integration can produce the
+ * script-path signature. Unknown and malformed signers fail closed.
+ *
+ * @param {{ kind?: string } | null | undefined} signer
+ * @returns {boolean}
+ */
+export function signerSupportsEnvelopeReveal(signer) {
+    if (!signer || typeof signer !== 'object') return false;
+    let kind;
+    try {
+        kind = signer.kind;
+    } catch {
+        return false;
+    }
+    return typeof kind === 'string' && ENVELOPE_REVEAL_CAPABLE_SIGNER_KINDS.includes(kind);
+}
+
+class MultipartSignerCapabilityError extends Error {
+    constructor({ lane, signerKind }) {
+        super('This signer cannot sign the file-upload reveal transactions. Use a software wallet key.');
+        this.name = 'MultipartSignerCapabilityError';
+        this.code = 'FILE_MULTIPART_SIGNER_UNSUPPORTED';
+        this.userFacing = true;
+        this.lane = lane;
+        this.signerKind = signerKind;
+    }
+}
+
+/**
+ * Refuses a multipart upload whose signer cannot sign its lane's reveal.
+ * publishMultipartFile calls it once the lane is known (from the saved record
+ * on resume), before any record is written or funding is signed, because a
+ * refusal after funding leaves a paid upload that fails on every resume.
+ *
+ * @param {{ kind?: string } | null | undefined} signer
+ * @param {'standard' | 'envelope'} lane
+ */
+export function assertSignerCanRevealLane(signer, lane) {
+    const supported = lane === 'envelope'
+        ? signerSupportsEnvelopeReveal(signer)
+        : signerSupportsChunkReveal(signer);
+    if (supported) return;
+    let signerKind;
+    try { signerKind = signer?.kind; } catch { signerKind = undefined; }
+    throw new MultipartSignerCapabilityError({
+        lane,
+        signerKind: typeof signerKind === 'string' ? signerKind : undefined,
+    });
 }

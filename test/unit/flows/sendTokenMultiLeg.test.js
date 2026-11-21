@@ -202,6 +202,26 @@ describe('buildSendPsbt with legs (watcher parity)', () => {
         });
     });
 
+    it('builds an exportable PSBT for a plain native-coin send', async () => {
+        const { encoder, sdk, opts: o } = watcherOpts({ to: A, tick: 'BTC', amount: '1' });
+        const res = await buildSendPsbt(o);
+        expect(res).toMatchObject({
+            psbtHex: '70736274ff', actionString: null, action: null, version: null,
+        });
+        expect(sdk.actions.createAction).not.toHaveBeenCalled();
+        expect(encoder.createTx).toHaveBeenCalledWith(expect.objectContaining({
+            customOutputs: [{ address: A, value: '100000000' }],
+        }));
+        expect(encoder.createTx.mock.calls[0][0]).not.toHaveProperty('data');
+    });
+
+    it('composes the SEND action for a native send with a memo', async () => {
+        const { sdk, opts: o } = watcherOpts({ to: A, tick: 'BTC', amount: '1', memo: 'hi' });
+        const res = await buildSendPsbt(o);
+        expect(sdk.actions.createAction).toHaveBeenCalledTimes(1);
+        expect(res).toMatchObject({ actionString: 'SEND|1|…', action: 'SEND', version: 1 });
+    });
+
     it('makes the same native refusal as sendToken, so the two paths cannot disagree', async () => {
         const { encoder, opts: o } = watcherOpts({
             tick: 'BTC',

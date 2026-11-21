@@ -102,7 +102,7 @@ function harness() {
             total_bytes: 4, status: 'complete',
         } }] })),
     };
-    const signer = { signPsbt: vi.fn(async () => {
+    const signer = { kind: 'software', signPsbt: vi.fn(async () => {
         signedNumber += 1;
         return { txid: txid(signedNumber), txHex: `${signedNumber}abc` };
     }) };

@@ -91,6 +91,12 @@ export function initialNotificationPermission() {
     return typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
 }
 
+export function nativeNotificationPermission(state) {
+    if (state === 'granted' || state === 'denied') return state;
+    if (state === 'default' || state === 'prompt' || state === 'prompt-with-rationale') return 'default';
+    return 'unsupported';
+}
+
 /**
  * Browser/OS notification permission: refreshes the live state without
  * prompting (on mount, focus and visibility), and requests or, in the

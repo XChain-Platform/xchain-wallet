@@ -700,7 +700,7 @@ export function BackupSection({ activeWallet, onExportInTab, only = null, direct
                 <RevealedMnemonic
                     mnemonic={mnemonic}
                     hidden={mnemonicHidden}
-                    walletName={activeWallet?.name || activeWallet?.id || 'Wallet'}
+                    walletName={activeWallet?.name || activeWallet?.id || t('settings.backup.walletFallback')}
                     passphraseEnabled={revealPassphraseEnabled}
                     passphrase={revealPassphrase}
                     onToggle={() => setMnemonicHidden((h) => !h)}

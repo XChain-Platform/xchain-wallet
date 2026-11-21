@@ -124,13 +124,10 @@ export class NotImplementedError extends Error {
  * "p2tr"` or `input has only a witnessUtxo` instead of the capability message.
  *
  * Guards `envelopeReveal` ONLY, deliberately, and `reveal` is NOT added here.
- * Both reveals are signed while nothing is on chain (submitWithSigner steps 3b
- * and 3c), so a refusal of either costs an error. `reveal` is the P2SH/P2WSH
- * phase-2 spend: its lane is gated before anything is signed by the
- * pre-dispatch capability check in submitWithSigner
- * (`flows/signerCapability.js#signerSupportsChunkReveal`), which admits only the
- * software signer. No signer-level guard exists for `reveal`; a request that
- * got past that check would fail inside the vendor format converter.
+ * The pre-dispatch checks in submitWithSigner and publishMultipartFile refuse
+ * unsupported reveal lanes before a commit or multipart funding transaction is
+ * signed. No signer-level guard exists for `reveal`; a request that got past
+ * those checks would fail inside the vendor format converter.
  *
  * @param {string} signerId
  * @param {{ envelopeReveal?: boolean } | null | undefined} params

@@ -329,3 +329,31 @@ describe('ListTransferForm', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
+
+describe('ListTransferForm publishes the destination it validated', () => {
+    const UPPER_BECH32 = 'BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4';
+    it.each([
+        ['wrapped in quotes', `"${DESTINATION}"`, DESTINATION],
+        ['with a trailing comma', `${DESTINATION},`, DESTINATION],
+        ['as upper-case bech32', UPPER_BECH32, UPPER_BECH32.toLowerCase()],
+    ])('publishes and shows the parsed address for a destination %s', async (_case, typed, published) => {
+        const messaging = mount();
+        await fillTransfer({ destination: typed });
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params.DESTINATION).toBe(published);
+        const address = await screen.findByTestId('confirm-address');
+        expect(address.querySelector(`[title="${published}"]`) || address.textContent.includes(published)).toBeTruthy();
+        expect(address.textContent).not.toContain(typed);
+    });
+
+    it('refuses the current owner typed in quotes', async () => {
+        const messaging = mount();
+        await fillTransfer({ destination: `"${OWNER}"` });
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer list$/i }));
+
+        expect((await screen.findAllByText('Destination must be different from the current owner.')).length).toBeGreaterThan(0);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+});

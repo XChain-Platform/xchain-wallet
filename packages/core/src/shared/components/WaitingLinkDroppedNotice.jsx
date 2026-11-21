@@ -42,7 +42,7 @@ export function useWaitingLinkDropped(view, carries = {}) {
         <StatusMessage
             variant="status"
             testId="waiting-link-dropped"
-            recovery={{ label: t('shell.dismiss'), onAction: dismiss }}
+            onDismiss={dismiss}
         >
             {t('shell.waitingLinkDropped')}
         </StatusMessage>

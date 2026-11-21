@@ -60,7 +60,7 @@ function multipartSdk() {
         getUTXOs: vi.fn(async () => ({ utxos: [] })),
     };
     return {
-        signer: { signPsbt: async () => {
+        signer: { kind: 'software', signPsbt: async () => {
             signed += 1;
             return { txid: txid(signed), txHex: `${signed}00` };
         } },

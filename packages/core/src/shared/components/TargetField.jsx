@@ -32,7 +32,7 @@ import '../../i18n/locales/en/ui.js';
  * @param {object} props
  * @param {string} props.label                      field label ("Contract", "Stake On")
  * @param {import('react').ReactNode} [props.help]  help shown from the label-row InfoTip
- * @param {string} props.name                       the target's name ("Yield Vault", "Unnamed contract")
+ * @param {string} props.targetName                 the target's name ("Yield Vault", "Unnamed contract")
  * @param {import('react').ReactNode} [props.detail] its identity, shown muted after the name ("#12", or the network's ChainBadge)
  * @param {import('react').ReactNode} [props.icon]  leading icon; the contract icon by default
  * @param {string | null} [props.hint]              the line under the field, with a clock icon
@@ -43,7 +43,7 @@ import '../../i18n/locales/en/ui.js';
 export function TargetField({
     label,
     help,
-    name,
+    targetName,
     detail,
     icon,
     hint,
@@ -54,7 +54,7 @@ export function TargetField({
     const id = useId();
     const labelId = `${id}-label`;
     const hintId = hint ? `${id}-hint` : undefined;
-    const valueText = typeof detail === 'string' && detail ? `${name} ${detail}` : name;
+    const valueText = typeof detail === 'string' && detail ? `${targetName} ${detail}` : targetName;
     return (
         <div className={styles.field} data-target-field="">
             <div className={inputStyles.labelRow}>
@@ -75,7 +75,7 @@ export function TargetField({
             >
                 <span className={styles.icon} aria-hidden="true">{icon || <ContractIcon />}</span>
                 <span className={styles.value} title={valueText}>
-                    <span className={styles.name}>{name}</span>
+                    <span className={styles.name}>{targetName}</span>
                     {detail ? <span className={styles.detail}>{detail}</span> : null}
                 </span>
                 <FieldIconButton

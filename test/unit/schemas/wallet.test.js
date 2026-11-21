@@ -19,6 +19,7 @@ import {
     WALLET_MODES,
     CURRENT_VERSION,
     walletModeOf,
+    usesBip39Passphrase,
 } from '../../../packages/core/src/schemas/wallet.js';
 
 const BASE_KDF = {
@@ -122,6 +123,16 @@ describe('walletMode (§20, per wallet)', () => {
         expect(walletModeOf({ walletMode: 'signer' })).toBe('signer');
         expect(walletModeOf({ walletMode: 'nope' })).toBe('full');
         expect(walletModeOf(null)).toBe('full');
+    });
+});
+
+describe('usesBip39Passphrase', () => {
+    it('treats the flag as meaningful only for BIP39 seeds', () => {
+        expect(usesBip39Passphrase({ format: 'bip39', passphraseEnabled: true })).toBe(true);
+        expect(usesBip39Passphrase({ format: 'bip39', passphraseEnabled: false })).toBe(false);
+        expect(usesBip39Passphrase({ format: 'counterwallet-legacy', passphraseEnabled: true })).toBe(false);
+        expect(usesBip39Passphrase({ format: 'wif-only', passphraseEnabled: true })).toBe(false);
+        expect(usesBip39Passphrase({ passphraseEnabled: true })).toBe(true);
     });
 });
 

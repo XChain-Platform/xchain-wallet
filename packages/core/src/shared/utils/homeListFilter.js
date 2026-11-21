@@ -89,8 +89,9 @@ export function sortDefiPositions(positions, sortBy) {
 /** The action label an Activity row shows for its entry. */
 export function activityEntryLabel(entry, walletAddresses) {
     const kind = classifyEntryAction(entry, walletAddresses);
-    // 'other' is a filter bucket, not a name: a row in it reads its own action.
-    return actionDisplayLabel(kind === 'other' ? entry.action : kind)
+    // Lifecycle buckets group related rows, but each row keeps its exact verb.
+    const exactAction = kind === 'other' || kind === 'order' || kind === 'swap';
+    return actionDisplayLabel(exactAction ? entry.action : kind)
         || actionDisplayLabel(entry.action)
         || 'Event';
 }

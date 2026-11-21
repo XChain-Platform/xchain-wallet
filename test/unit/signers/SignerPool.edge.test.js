@@ -139,7 +139,12 @@ describe('SignerPool edge branches', () => {
         const pool = new SignerPool();
         const pending = pool.captureOne({
             vault,
-            wallet: { id: 'wallet-1', name: 'Cold' },
+            wallet: {
+                id: 'wallet-1',
+                name: 'Cold',
+                format: 'bip39',
+                passphraseEnabled: true,
+            },
             password: 'pw',
             bip39Passphrase: 'typed',
             ...REGISTRIES,
