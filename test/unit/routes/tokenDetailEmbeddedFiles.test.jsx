@@ -3,9 +3,9 @@
 
 // A token file can carry its whole body inline as a data: URL. The Files tab
 // card must never print that payload (heading, URL line, alt or aria text);
-// it shows a short label instead, draws the picture as a thumbnail only when
-// the wallet's image rule (safeImageSrc) already admits it, and leaves an
-// ordinary https file exactly as before.
+// it shows a short label instead, draws the picture as a thumbnail (from the
+// address or, failing that, the source) only when the wallet's image rule
+// (safeImageSrc) admits it, and leaves an ordinary https file as before.
 
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -74,14 +74,28 @@ describe('PublicFileTile with an inline data: URL', () => {
         expectNoPayload(container, SVG_B64);
     });
 
-    it('shows the label in place of the URL line when only the source is a data: URL', () => {
+    it('draws a picture data: URL held only in the source as a thumbnail, with the label and no link', () => {
         const [file] = tokenFileEntries({ images: [entry({ source: SVG_DATA_URL, type: 'large', name: 'Pepe Cash (large)' })] });
+        expect(file.url).toBeNull();
         const { container } = render(<PublicFileTile file={file} onOpenExternal={() => {}} />);
+        expect(container.querySelector('img').getAttribute('src')).toBe(SVG_DATA_URL);
         expect(screen.getByText('Embedded image (SVG, 1.2 KB)')).toBeTruthy();
         expect(container.textContent).not.toContain('URL:');
-        // normalizeMediaUrl does not take a data: URL, so no thumbnail or link.
-        expect(container.querySelector('img, a')).toBeNull();
+        expect(container.querySelector('a')).toBeNull();
         expectNoPayload(container, SVG_B64);
+    });
+
+    it('draws no source thumbnail for a locked entry or a data: URL safeImageSrc refuses', () => {
+        for (const extra of [
+            { source: SVG_DATA_URL, locked: true },
+            { source: UTF8_DATA_URL },
+            { source: 'data:text/html;base64,PHNjcmlwdD4=' },
+        ]) {
+            const [file] = tokenFileEntries({ images: [entry({ type: 'large', name: 'Pepe Cash (large)', ...extra })] });
+            const { container, unmount } = render(<PublicFileTile file={file} onOpenExternal={() => {}} />);
+            expect(container.querySelector('img, a')).toBeNull();
+            unmount();
+        }
     });
 
     it('never prints a percent-encoded data: URL either', () => {

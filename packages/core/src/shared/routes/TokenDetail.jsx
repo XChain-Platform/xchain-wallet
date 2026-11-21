@@ -2358,7 +2358,11 @@ export function PublicFileTile({ file, onOpenExternal }) {
     // Only an http(s) address opens; a picture data: URL is a thumbnail source
     // and never a link (safeImageSrc's contract).
     const canOpen = Boolean(safeHttpUrl(file.url)) && !file.locked;
-    const previewSrc = file.kind === 'image' && !file.locked ? safeImageSrc(file.url) : null;
+    // A picture embedded only in the source (normalizeMediaUrl takes no data:
+    // URL as an address) still draws when safeImageSrc admits it.
+    const previewSrc = file.kind === 'image' && !file.locked
+        ? safeImageSrc(file.url) || (isDataUrl(file.source) ? safeImageSrc(file.source) : null)
+        : null;
     const body = (
         <>
             <span className={styles.fileTilePreview}>
