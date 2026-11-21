@@ -30,6 +30,7 @@ import { installShellErrorCapture } from './errorCapture.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.jsx';
 import { installNativeFontScale } from './platform/nativeFontScale.js';
+import { installNativeFold } from './platform/nativeFold.js';
 import { CHUNK_RETRY_DELAYS_MS } from './retryablePromise.js';
 
 logConsole.attach();
@@ -37,6 +38,7 @@ logConsole.attach();
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
 installNativeFontScale();
+installNativeFold();
 
 // The web app fetches its locale chunks over the network, so a chunk that
 // failed offline is retried under a fresh URL. Core hands this importer only
