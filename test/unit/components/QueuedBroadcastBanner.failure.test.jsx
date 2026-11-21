@@ -324,6 +324,10 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
         const actionsRule = css.match(/\.actions\s*\{([^}]*)\}/)?.[1] ?? '';
         expect(actionsRule).toMatch(/flex-direction:\s*column/);
         expect(actionsRule).toMatch(/flex-shrink:\s*0/);
+
+        // Retry on an interrupted entry carries the circular refresh icon; a plain Send Now keeps the send icon.
+        const jsx = readFileSync('packages/core/src/shared/components/QueuedBroadcastBanner.jsx', 'utf8');
+        expect(jsx).toMatch(/icon=\{entry\.resumedClaim \? <Icon\.RefreshIcon \/> : <Icon\.SendIcon \/>\}/);
     });
 });
 
