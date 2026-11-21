@@ -35,7 +35,7 @@ if [ "$#" -gt 0 ]; then
     devices=("$@")
     capture_watches=0
 else
-    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)")
+    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)" "XC iPhone Duo")
     capture_watches=1
 fi
 

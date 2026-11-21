@@ -28,15 +28,65 @@ writeFileSync(output, versionXcconfigFor(`v${pkg.version}`));
 NODE
 }
 
+resolve_xcode_destination() {
+    local scheme="$1" device="$2" selection
+    xcrun simctl list pairs -j > "$logs/pairs.json" || die "could not list simulator pairs"
+    xcrun simctl list devices -j > "$logs/devices.json" || die "could not list simulators"
+    if ! selection="$(node --input-type=module - "$logs/pairs.json" "$logs/devices.json" "$scheme" "$device" <<'NODE'
+import { readFileSync } from 'node:fs';
+
+const [pairsFile, devicesFile, scheme, wanted] = process.argv.slice(2);
+const pairData = JSON.parse(readFileSync(pairsFile, 'utf8'));
+const deviceData = JSON.parse(readFileSync(devicesFile, 'utf8'));
+const pairs = Object.values(pairData.pairs || {});
+const matches = pairs.filter((pair) => pair.phone?.name === 'XC iPhone 17'
+    && (scheme === 'App' || pair.watch?.name === wanted));
+const active = matches.filter((pair) => String(pair.state).toLowerCase() === 'active');
+const choices = active.length === 1 ? active : matches;
+const runtimeByUdid = new Map(Object.entries(deviceData.devices || {}).flatMap(([runtime, devices]) =>
+    devices.map((device) => [device.udid, runtime])));
+
+function runtimeParts(pair) {
+    const device = scheme === 'App' ? pair.phone : pair.watch;
+    const runtime = runtimeByUdid.get(device?.udid) || device?.runtime || device?.runtimeIdentifier
+        || pair.runtime || pair.runtimeIdentifier || '';
+    return [...String(runtime).matchAll(/\d+/g)].map((match) => Number(match[0]));
+}
+
+function compareRuntime(left, right) {
+    const a = runtimeParts(left);
+    const b = runtimeParts(right);
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+        const difference = (b[index] || 0) - (a[index] || 0);
+        if (difference) return difference;
+    }
+    const leftDevice = scheme === 'App' ? left.phone : left.watch;
+    const rightDevice = scheme === 'App' ? right.phone : right.watch;
+    return leftDevice.udid.localeCompare(rightDevice.udid);
+}
+
+const pair = choices.sort(compareRuntime)[0];
+const selected = pair && (scheme === 'App' ? pair.phone : pair.watch);
+if (!selected?.udid) process.exit(1);
+process.stdout.write(`${selected.name}\t${selected.udid}`);
+NODE
+)"; then
+        die "no paired simulator for '$device' with XC iPhone 17"
+    fi
+    local chosen_name destination
+    IFS=$'\t' read -r chosen_name destination <<< "$selection"
+    echo "watch-test: selected $chosen_name ($destination)" >&2
+    printf '%s' "$destination"
+}
+
 run_xcode() {
-    local scheme="$1" suite="$2" device="$3" test_case="$4"
+    local scheme="$1" suite="$2" device="$3" test_case="$4" destination
     local result="$logs/${scheme}-${device// /_}.xcresult" summary="$logs/${scheme}-summary.json"
-    xcrun simctl list devices available > "$logs/simulators.log"
-    grep -Fq "$device (" "$logs/simulators.log" || die "no available simulator named '$device'"
+    destination="$(resolve_xcode_destination "$scheme" "$device")"
     write_xcconfig
     rm -rf "$result"
     xcodebuild test -project packages/mobile/ios/App/App.xcodeproj -scheme "$scheme" \
-        -destination "platform=$( [ "$scheme" = App ] && echo 'iOS Simulator' || echo 'watchOS Simulator' ),name=$device" \
+        -destination "id=$destination" \
         -only-testing:"$suite/$test_case" -resultBundlePath "$result" 2>&1 | tee "$logs/${scheme}.log"
     xcrun xcresulttool get test-results summary --path "$result" > "$summary"
     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1])); process.exit(Number(r.passedTests||0)+Number(r.failedTests||0)>0?0:1)' "$summary" \

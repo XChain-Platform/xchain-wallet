@@ -8,7 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { getDefaultAlertInbox } from '../shared/alertInbox.js';
 import { isValidAddressAnyNetwork } from '../shared/utils/addressValidation.js';
+import kinds from './contract/kinds.json' with { type: 'json' };
+
+const ADDRESS_REPLACEMENT = 'an address';
+
+function watchText(text, maxLength) {
+    const codePoints = [...redactAddresses(text, ADDRESS_REPLACEMENT).trim()];
+    if (codePoints.length <= maxLength) return codePoints.join('');
+
+    const prefix = codePoints.slice(0, maxLength - 1);
+    let whitespaceIndex = -1;
+    for (let i = prefix.length - 1; i >= 0; i -= 1) {
+        if (/\s/u.test(prefix[i])) {
+            whitespaceIndex = i;
+            break;
+        }
+    }
+    const cut = whitespaceIndex === -1 ? prefix : prefix.slice(0, whitespaceIndex);
+    return `${cut.join('').trimEnd()}…`;
+}
 
 export function watchInboxKind(alertId, kinds) {
     if (typeof alertId !== 'string') return null;
@@ -33,4 +53,26 @@ export function redactAddresses(text, replacement) {
     });
 
     return redacted.replace(/[A-Za-z0-9]{26,}/g, () => replacement);
+}
+
+export async function buildWatchInbox() {
+    const alerts = await getDefaultAlertInbox().list();
+    const rows = [];
+
+    for (const alert of alerts) {
+        const classified = watchInboxKind(alert.id, kinds);
+        if (!classified) continue;
+        rows.push({
+            id: alert.id,
+            family: classified.family,
+            kind: classified.kind,
+            title: watchText(alert.title, 60),
+            body: watchText(alert.message, 160),
+            at: alert.at,
+            read: alert.read,
+        });
+        if (rows.length === 20) break;
+    }
+
+    return rows;
 }
