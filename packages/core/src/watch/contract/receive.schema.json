@@ -1,0 +1,29 @@
+{
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": ["chainId", "label", "address", "qr"],
+        "additionalProperties": false,
+        "properties": {
+            "chainId": { "type": "string", "minLength": 1 },
+            "label": { "type": "string", "minLength": 1 },
+            "address": { "type": "string", "minLength": 1 },
+            "qr": {
+                "type": "object",
+                "required": ["size", "bits"],
+                "additionalProperties": false,
+                "properties": {
+                    "size": {
+                        "type": "integer",
+                        "enum": [21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177]
+                    },
+                    "bits": {
+                        "type": "string",
+                        "description": "Base64 of the module matrix packed row-major, most-significant bit first, with zero padding in the final byte.",
+                        "pattern": "^(?:(?=.{76}$|.{184}$|.{340}$|.{544}$|.{796}$|.{1096}$|.{1444}$|.{1840}$|.{2284}$|.{2776}$|.{3316}$|.{3904}$|.{4540}$|.{5224}$)(?:[A-Za-z0-9+/]{4})*[A-Za-z0-9+/][AIQYgo4w]A=|(?=.{108}$|.{144}$|.{232}$|.{284}$|.{404}$|.{472}$|.{624}$|.{708}$|.{892}$|.{992}$|.{1208}$|.{1324}$|.{1572}$|.{1704}$|.{1984}$|.{2132}$|.{2444}$|.{2608}$|.{2952}$|.{3132}$|.{3508}$|.{3704}$|.{4112}$|.{4324}$|.{4764}$|.{4992}$)(?:[A-Za-z0-9+/]{4})*[Ag]A==)$"
+                    }
+                }
+            }
+        }
+    }
+}
