@@ -364,6 +364,7 @@ describe('migrateSettings', () => {
         };
         const migrated = migrateSettings(v1);
         expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
+        expect(migrated.watch).toBeUndefined();
         const r = validateSettings(migrated);
         expect(r.ok).toBe(true);
     });
