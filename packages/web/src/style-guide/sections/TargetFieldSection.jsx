@@ -33,7 +33,7 @@ export function TargetFieldSection() {
                 when={<>The first field of a form's main section whenever the page that opened the form fixed the target: a contract, or the network a stake is locked on.</>}
                 whenNot={<>A value the user types or picks from their own balances (use <code>Input</code> or <code>TokenField</code>). Never put the target's name or number in the page title instead.</>}
                 sizing={<>The md control height of every Input and IconSelect, so it lines up with the fields under it.</>}
-                variants={<><code>label</code>, <code>help</code>, <code>name</code>, <code>detail</code> (text or a ChainBadge), <code>icon</code>, <code>hint</code>, <code>onPick</code>, <code>pickLabel</code>. Without <code>onPick</code> the icon stays, locked.</>}
+                variants={<><code>label</code>, <code>help</code>, <code>targetName</code>, <code>detail</code> (text or a ChainBadge), <code>icon</code>, <code>hint</code>, <code>onPick</code>, <code>pickLabel</code>. Without <code>onPick</code> the icon stays, locked.</>}
                 doRule={<>✓ Lead the main section with it · say the cooldown as the hint ("Unstaking takes about 2 days (288 blocks)") · open the host's picker page from the list icon</>}
                 dontRule={<>✗ Name the target in the title · make the field editable · hide the list icon</>}
                 supersedes={<>Contract numbers in form titles ("Stake on Contract #12") and the Target / Cooldown details list. Component at <code>packages/core/src/shared/components/TargetField.jsx</code>.</>}
