@@ -358,27 +358,40 @@ export function ListDetailSplit({
         layoutRef.current = el;
         measureRef?.(el);
     }, [layoutRef, measureRef]);
+    const collapsed = split.layoutWidth > 0 && split.layoutWidth < LIST_DETAIL_MIN_WIDTH;
     return (
         <div ref={setBox} className={styles.twoPanel} data-list-detail={layoutName}>
-            <div
-                className={styles.listPanel}
-                style={{ flexBasis: `${split.width}px` }}
-            >
-                {listHeader ? <div className={styles.listHeader}>{listHeader}</div> : null}
-                {/* Only the rows scroll. The header slot above stays in place,
-                    and the named list scroller remains keyboard reachable. */}
+            {collapsed ? null : (
                 <div
-                    id={listId}
-                    className={styles.listBody}
-                    role="region"
-                    aria-label={listLabel}
-                    tabIndex={0}
+                    key="list"
+                    className={styles.listPanel}
+                    style={{ flexBasis: `${split.width}px` }}
                 >
-                    {list}
+                    {listHeader ? <div className={styles.listHeader}>{listHeader}</div> : null}
+                    {/* Only the rows scroll. The header slot above stays in place,
+                        and the named list scroller remains keyboard reachable. */}
+                    <div
+                        id={listId}
+                        className={styles.listBody}
+                        role="region"
+                        aria-label={listLabel}
+                        tabIndex={0}
+                    >
+                        {list}
+                    </div>
                 </div>
-            </div>
-            <PanelSplitDivider split={split} label={resizeLabel} hint={resizeHint} controls={listId} />
+            )}
+            {collapsed ? null : (
+                <PanelSplitDivider
+                    key="divider"
+                    split={split}
+                    label={resizeLabel}
+                    hint={resizeHint}
+                    controls={listId}
+                />
+            )}
             <div
+                key="detail"
                 className={styles.detailPanel}
                 role="region"
                 aria-label={detailLabel}

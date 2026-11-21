@@ -4,17 +4,13 @@
 import React from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-    ListDetailSplit,
-    useWideContent,
-} from '../../../packages/core/src/shared/components/PanelSplit.jsx';
+import { ListDetailSplit } from '../../../packages/core/src/shared/components/PanelSplit.jsx';
 
 let boxWidth = 900;
 let originalResizeObserver;
 
 function rectFor(element) {
-    const measured = element.hasAttribute('data-list-detail')
-        || element.hasAttribute('data-fold-box');
+    const measured = element.hasAttribute('data-list-detail');
     const width = measured ? boxWidth : 0;
     const left = measured ? 40 : 0;
     return {
@@ -48,19 +44,6 @@ function Split({ measureRef }) {
             detailLabel="Chosen item"
         />
     );
-}
-
-function ResponsiveSplit() {
-    const [measureRef, wide, measured] = useWideContent(720, true);
-    if (!measured) return <div ref={measureRef} data-fold-box="" />;
-    if (!wide) {
-        return (
-            <div ref={measureRef} data-fold-box="">
-                <p>Selected detail</p>
-            </div>
-        );
-    }
-    return <Split measureRef={measureRef} />;
 }
 
 beforeEach(() => {
@@ -100,18 +83,21 @@ describe('PanelSplit fold transitions', () => {
     });
 
     it('keeps the selected detail visible when narrow and returns the list on unfold', () => {
-        render(<ResponsiveSplit />);
+        render(<Split />);
         expect(screen.getByText('List rows')).toBeInTheDocument();
-        expect(screen.getByText('Selected detail')).toBeInTheDocument();
+        const detail = screen.getByRole('region', { name: 'Chosen item' });
+        expect(detail).toHaveTextContent('Selected detail');
 
         boxWidth = 500;
         act(() => globalThis.dispatchEvent(new Event('resize')));
         expect(screen.queryByText('List rows')).not.toBeInTheDocument();
-        expect(screen.getByText('Selected detail')).toBeInTheDocument();
+        expect(screen.queryByRole('separator', { name: 'Resize folded list' })).not.toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Chosen item' })).toBe(detail);
 
         boxWidth = 900;
         act(() => globalThis.dispatchEvent(new Event('resize')));
         expect(screen.getByText('List rows')).toBeInTheDocument();
-        expect(screen.getByText('Selected detail')).toBeInTheDocument();
+        expect(screen.getByRole('separator', { name: 'Resize folded list' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Chosen item' })).toBe(detail);
     });
 });
