@@ -381,10 +381,13 @@ describe('AddressPreferencesForm network reads', () => {
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent("Couldn't load the current preferences. Try again in a moment.");
         expect(alert).toHaveTextContent('Review needs a live read');
-        expect(alert).not.toHaveTextContent('timeout');
         const detail = screen.getByText('timeout').closest('details');
         expect(detail).not.toBeNull();
         expect(detail.open).toBe(false);
+        expect(alert.contains(detail)).toBe(true);
+        const shown = alert.cloneNode(true);
+        shown.querySelectorAll('details').forEach((node) => node.remove());
+        expect(shown).not.toHaveTextContent('timeout');
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         clickReview();
         await screen.findByTestId('confirm-modal');
@@ -410,7 +413,10 @@ describe('AddressPreferencesForm network reads', () => {
         clickReview();
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent("Couldn't load the current preferences. Try again in a moment.");
-        expect(alert).not.toHaveTextContent('Cannot read properties');
+        // The raw TypeError stays in the collapsed Technical details only.
+        const shown = alert.cloneNode(true);
+        shown.querySelectorAll('details').forEach((node) => node.remove());
+        expect(shown).not.toHaveTextContent('Cannot read properties');
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
 

@@ -27,7 +27,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 // FormSection is the collapsible standard one, not ui/FormSection.jsx.
 import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, useFormSections } from '../components/formStandard/index.js';
 import { SummaryAddress } from '../components/formStandard/SummaryAddress.jsx';
-import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
+import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -285,8 +285,10 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             const lead = explorerReadFailure(err, 'load the current preferences')?.message
                 || "Couldn't load the current preferences. Try again in a moment.";
             setFormError(lead + ' Review needs a live read, because every write resets all three preferences.');
+            // The raw failure goes in the notice's collapsed Technical details,
+            // redacted as every diagnostic text is before it reaches the DOM.
             setFormErrorDetail(typeof err?.message === 'string' && err.message.trim()
-                ? err.message.trim() : null);
+                ? redactDiagnosticText(err.message.trim()) : null);
         } finally {
             reviewPending.current = false;
         }
@@ -489,12 +491,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             label="Address preferences"
             onSubmit={handleReview}
             status={formError ? (
-                <>
-                    <StatusMessage variant="error">{formError}</StatusMessage>
-                    {formErrorDetail ? (
-                        <DiagnosticDetails summary="Technical details" items={[formErrorDetail]} />
-                    ) : null}
-                </>
+                <StatusMessage variant="error" details={formErrorDetail || undefined}>{formError}</StatusMessage>
             ) : null}
             action={(
                 <FormAction icon={<Icon.PencilIcon />}>Update Preferences</FormAction>

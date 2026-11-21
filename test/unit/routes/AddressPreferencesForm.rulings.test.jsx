@@ -128,7 +128,7 @@ describe('AddressPreferencesForm rulings', () => {
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
     });
 
-    it('keeps raw explorer failures in a closed technical disclosure', async () => {
+    it('keeps raw explorer failures in a closed technical disclosure inside the error notice', async () => {
         let reads = 0;
         mount(() => {
             reads += 1;
@@ -147,10 +147,18 @@ describe('AddressPreferencesForm rulings', () => {
         expect(alert).toHaveTextContent('temporarily unavailable (error 502)');
         expect(alert).toHaveTextContent('Try again in a moment');
         expect(alert).toHaveTextContent('Review needs a live read');
-        expect(alert).not.toHaveTextContent(/Explorer returned HTTP|\/api\//);
-        const raw = screen.getByText(/Explorer returned HTTP 502/);
-        expect(raw.closest('details')).not.toBeNull();
-        expect(raw.closest('details').open).toBe(false);
+        // The raw text sits only in the notice's own collapsed disclosure, at
+        // the bottom of the box (the StatusMessage details pattern), never
+        // loose beside it or in the shown sentence.
+        const details = alert.querySelectorAll('details');
+        expect(details).toHaveLength(1);
+        expect(details[0].open).toBe(false);
+        expect(details[0].querySelector('summary')).toHaveTextContent(/^Technical details$/);
+        expect(details[0]).toHaveTextContent('Explorer returned HTTP 502');
+        const shown = alert.cloneNode(true);
+        shown.querySelectorAll('details').forEach((node) => node.remove());
+        expect(shown).not.toHaveTextContent(/Explorer returned HTTP|\/api\//);
+        expect(document.querySelectorAll('[data-form-status] details')).toHaveLength(1);
     });
 
     it('picking another own address edits that address and reloads its values', async () => {

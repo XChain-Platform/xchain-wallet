@@ -1055,6 +1055,9 @@ function TokenDetailContent({
             noBalanceReason: atomicQuantity != null && atomicQuantity <= 0n
                 ? capitalize(t('tokenDetail.actions.needsBalance', { tick }))
                 : null,
+            // The Supply group's Destroy follows the same refusal rule as the
+            // registry tile; the Destroy form keeps its own refusal as the backstop.
+            destroyRefusalReason: destroyRefusalFor({ tick, sourceCoin: coinFromChainId(chainId) })?.reason || null,
             extraActions: actionGrid.ownerExtra.map((tile) => ({
                 id: tile.id,
                 label: tile.label,

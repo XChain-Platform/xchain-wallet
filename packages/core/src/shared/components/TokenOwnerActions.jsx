@@ -129,9 +129,12 @@ export function useTokenOwnerState({ messaging, chainId, tick, enabled }) {
  * @param {string | null} [args.noBalanceReason]  given when the wallet holds none of the token:
  *   the actions that spend it (Destroy, Dispenser, Airdrop) are locked with this reason, after
  *   any watch-only or network reason
+ * @param {string | null} [args.destroyRefusalReason]  given when the indexer refuses every DESTROY of
+ *   this token on this chain (destroyPolicy: XCHAIN off Bitcoin, a bridged copy): Destroy is locked
+ *   with this reason, after any watch-only, network or balance reason, as the registry tile does
  * @param {any[]} [args.extraActions]       more issuer actions (the registry's) to group
  */
-export function buildTokenOwnerGroups({ assetInfo, sleepState, handlers, owner, blockedReason = null, noBalanceReason = null, extraActions = [] }) {
+export function buildTokenOwnerGroups({ assetInfo, sleepState, handlers, owner, blockedReason = null, noBalanceReason = null, destroyRefusalReason = null, extraActions = [] }) {
     const tokenLocks = assetInfo?.locks || {};
     const allLocksSet = LOCK_FLAG_KEYS.every((key) => !!tokenLocks[key]);
     const bridgeFrozen = assetInfo?.lockBridge === true;
@@ -173,7 +176,10 @@ export function buildTokenOwnerGroups({ assetInfo, sleepState, handlers, owner, 
     const withBalance = (action) => (noBalanceReason && !action.disabled && NEEDS_BALANCE_OWNER_IDS.has(action.id)
         ? { ...action, disabled: true, disabledReason: noBalanceReason, onSelect: undefined }
         : action);
-    return groupManageActions(actions.map(withState).map(withBalance)).map((group) => ({
+    const withDestroyPolicy = (action) => (destroyRefusalReason && !action.disabled && action.id === 'destroy'
+        ? { ...action, disabled: true, disabledReason: destroyRefusalReason, onSelect: undefined }
+        : action);
+    return groupManageActions(actions.map(withState).map(withBalance).map(withDestroyPolicy)).map((group) => ({
         ...group,
         actions: group.actions.map((action) => ({ ...action, reason: rowReason(action) })),
     }));

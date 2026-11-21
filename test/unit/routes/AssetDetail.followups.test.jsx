@@ -292,6 +292,19 @@ describe('the issuer\'s actions that spend the token', () => {
         expect(actions.destroy.reason).toBe('Needs a signing wallet.');
     });
 
+    it('lock only Destroy with the destroy-policy reason, after the watch-only and balance reasons', () => {
+        const policy = 'XCHAIN cannot be destroyed on this network. Use Move to send it back to Bitcoin instead.';
+        const actions = byId(buildTokenOwnerGroups({ ...base, destroyRefusalReason: policy }));
+        expect(actions.destroy.disabled).toBe(true);
+        expect(actions.destroy.reason).toBe(policy);
+        expect(actions.destroy.onSelect).toBeUndefined();
+        for (const id of ['dispenser', 'airdrop', 'mint']) expect(actions[id].disabled, id).toBe(false);
+        expect(byId(buildTokenOwnerGroups({ ...base, blockedReason: 'Needs a signing wallet.', destroyRefusalReason: policy })).destroy.reason)
+            .toBe('Needs a signing wallet.');
+        expect(byId(buildTokenOwnerGroups({ ...base, noBalanceReason: 'Needs a balance of MYTOKEN.', destroyRefusalReason: policy })).destroy.reason)
+            .toBe('Needs a balance of MYTOKEN.');
+    });
+
     it('show the reason on the page opened from My Tokens with none held', async () => {
         render(
             <MessagingProvider shell="web" messaging={tokenMessaging({ balance: '0' })}>
