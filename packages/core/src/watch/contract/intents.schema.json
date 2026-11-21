@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "refresh": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "detailRequest": {
+      "type": "object",
+      "required": ["tokenId"],
+      "additionalProperties": false,
+      "properties": { "tokenId": { "type": "string", "minLength": 1 } }
+    },
+    "openOnPhone": {
+      "type": "object",
+      "required": ["route"],
+      "additionalProperties": false,
+      "properties": { "route": { "type": "string", "minLength": 1 } }
+    },
+    "markRead": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": { "id": { "type": "string", "minLength": 1 } }
+    },
+    "watchState": {
+      "type": "object",
+      "required": ["appVersion"],
+      "additionalProperties": false,
+      "properties": { "appVersion": { "type": "string", "minLength": 1 } }
+    }
+  }
+}
