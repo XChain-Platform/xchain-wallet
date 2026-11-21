@@ -115,7 +115,27 @@ function makeFixture() {
     mkdirSync(join(root, 'scripts'), { recursive: true });
     cpSync(SOURCE_SCRIPT, script);
     cpSync(SOURCE_PROJECT, project, { recursive: true });
+    stripWatchTargets(project);
     return { root, script, project };
+}
+
+function stripWatchTargets(project) {
+    const ruby = `
+project = Xcodeproj::Project.open(ARGV.fetch(0))
+%w[WatchAppTests WatchApp].each do |name|
+  project.targets.find { |target| target.name == name }&.remove_from_project
+end
+group_class = Xcodeproj::Project::Object::PBXFileSystemSynchronizedRootGroup
+project.objects.select do |object|
+  object.is_a?(group_class) && %w[WatchApp WatchAppTests].include?(object.path)
+end.each(&:remove_from_project)
+project.save
+`;
+    const result = spawnSync('/usr/bin/ruby', ['-rxcodeproj', '-e', ruby, project], {
+        encoding: 'utf8',
+    });
+    expect(result.status, result.stderr).toBe(0);
+    rmSync(join(project, 'xcshareddata/xcschemes/WatchApp.xcscheme'), { force: true });
 }
 
 function runScript(fixture) {
