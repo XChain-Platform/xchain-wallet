@@ -52,6 +52,7 @@ const expectedStrings = {
     'state.locked': 'Wallet locked on phone',
     'state.unreachable': 'Phone not in range',
     'state.hidden': '••••',
+    'state.amountHidden': 'Amount hidden',
     'state.noPriceYet': 'No price yet',
     'state.moreOnPhone': 'More on phone',
     'state.balanceUnavailable': 'Balance unavailable',
