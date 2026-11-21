@@ -14,6 +14,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 
 let queue = [];
 let broadcastImpl = async () => {};
@@ -306,6 +307,23 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
 
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send now: Send 1 XCP' }));
         expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
+    });
+
+    // Short labels in one narrow column leave the entry's text most of the
+    // row; a side-by-side pair leaves it a word or two wide at phone width.
+    it('stacks short Retry and Remove labels in one column beside an interrupted entry', async () => {
+        await renderWith([{ ...entry('a', 'Speed up Send 25 XCHAIN'), resumedClaim: true }]);
+        const retry = screen.getByRole('button', { name: 'Send now: Speed up Send 25 XCHAIN' });
+        const remove = screen.getByRole('button', { name: 'Remove from queue: Speed up Send 25 XCHAIN' });
+        expect(retry).toHaveTextContent(/^Retry$/);
+        expect(remove).toHaveTextContent(/^Remove$/);
+        expect(retry.parentElement).toBe(remove.parentElement);
+        expect(retry.parentElement.className).toMatch(/actions/);
+
+        const css = readFileSync('packages/core/src/shared/components/QueuedBroadcastBanner.module.css', 'utf8');
+        const actionsRule = css.match(/\.actions\s*\{([^}]*)\}/)?.[1] ?? '';
+        expect(actionsRule).toMatch(/flex-direction:\s*column/);
+        expect(actionsRule).toMatch(/flex-shrink:\s*0/);
     });
 });
 
