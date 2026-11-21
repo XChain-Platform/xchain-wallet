@@ -204,6 +204,9 @@ const USER_FACING_ATTRS = new Set([
     'ariaLabel',
     'iconLabel',
     'aria',
+    // Notice (StatusMessage) renders `dismissLabel` as the aria-label of
+    // its corner close X.
+    'dismissLabel',
     // ConfirmActionModal renders `headline` verbatim as the header line
     // and inside its aria-label; HistoryRow renders `statusLabel` into
     // the status bubble; CheckboxPicker renders `allLabel` as its
