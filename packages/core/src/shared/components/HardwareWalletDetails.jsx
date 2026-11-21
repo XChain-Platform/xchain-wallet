@@ -55,7 +55,7 @@ export function cardStatus(signerStatus) {
  * @param {string | null} [props.activeWalletId]
  * @param {(wallet: any) => void} [props.onMakeActive]
  * @param {(walletId: string) => void} [props.onUnlinked]
- * @param {(wallet: any, signer: any) => void} [props.onReconnect]
+ * @param {(wallet: any, signer: any) => (void | boolean | Promise<boolean | void>)} [props.onReconnect]  resolves true when the device opened, false when it did not
  * @param {(wallet: any) => void} [props.onOpenAccounts]  the Accounts row: open the shared My Accounts page for this wallet
  */
 export function HardwareWalletDetails({
@@ -109,6 +109,17 @@ export function HardwareWalletDetails({
         return () => { cancelled = true; };
     }, [wallet.id, messaging]);
 
+    // The status read above answers 'available' for a device the bridge has
+    // registered but not opened, so after a Reconnect the badge follows how
+    // the open ended: true opened it, false failed. A host that reports
+    // nothing leaves the badge as it was.
+    const reconnect = () => {
+        Promise.resolve(onReconnect(wallet, signer)).then((opened) => {
+            if (opened === true) setSignerStatus('available');
+            else if (opened === false) setSignerStatus('disconnected');
+        }, () => setSignerStatus('disconnected'));
+    };
+
     const count = accountCount ?? accountRecords?.length ?? 0;
     const status = cardStatus(signerStatus);
     const vendorName = hardwareVendorName(signer?.vendor);
@@ -149,7 +160,7 @@ export function HardwareWalletDetails({
                     icon={<Icon.RefreshIcon />}
                     title={t('hardwareManage.reconnect')}
                     description={t('hardwareManage.reconnectLine')}
-                    onClick={() => onReconnect(wallet, signer)}
+                    onClick={() => reconnect()}
                 />
             ) : null}
             {typeof onRename === 'function' ? (

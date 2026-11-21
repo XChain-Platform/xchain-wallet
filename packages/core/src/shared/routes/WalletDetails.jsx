@@ -63,7 +63,7 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * A hardware wallet gets its own page instead (hw-4 layout 1): no phrase,
  * backup, export or address check, and Unlink in place of Remove.
  * @param {(walletId: string) => void} [props.onUnlinked]  a hardware wallet that was not active was unlinked; the host leaves the page
- * @param {(wallet: any, signer: any) => void} [props.onReconnect]  a hardware wallet's Reconnect row
+ * @param {(wallet: any, signer: any) => (void | boolean | Promise<boolean | void>)} [props.onReconnect]  a hardware wallet's Reconnect row; resolves true when the device opened
  * @param {(wallet: any) => void} [props.onOpenAccounts]  a hardware wallet's Accounts row: the shared My Accounts page for that wallet (G131)
  */
 export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited, activeWalletId, onMakeActive, onOpenSettings, onShowRecoveryPhrase, onExportBackup, onRemoveWallet, onUnlinked, onReconnect, onOpenAccounts }) {
