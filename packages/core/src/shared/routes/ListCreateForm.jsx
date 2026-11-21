@@ -2173,7 +2173,8 @@ function ownerText(value) {
 // name and description.
 // ---------------------------------------------------------------------------
 
-const POLL_INTERVAL_MS = 10_000;
+// 30 s: BTC blocks are 10 min apart, so an index check changes at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 
 // PC-10 fork-repoint rail (spec §3): the three consumer classes with an
 // edit screen that can point them at a different list index. AIRDROP isn't

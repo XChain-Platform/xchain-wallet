@@ -82,6 +82,7 @@ import detailStyles from './PollDetail.module.css';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatDecimalAmount, formatWithThousands } from '../utils/amountFormat.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
@@ -99,6 +100,8 @@ import {
 
 const chainRegistry = registryLib.defaultRegistry();
 const NO_ACKNOWLEDGMENTS = new Set();
+// 2 min: BTC blocks are 10 min apart, so poll data changes at most once per block.
+const POLL_REFRESH_MS = 120_000;
 const POLL_RANGES = CHART_RANGES.filter((range) => range.id !== 'ytd');
 
 /** The poll's ballot read for Activity is one bounded page. */
@@ -295,8 +298,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
             }
         }
         refreshPoll();
-        const refreshTimer = setInterval(refreshPoll, 30_000);
-        return () => { cancelled = true; clearInterval(refreshTimer); };
+        // Paused while hidden.
+        const stopRefresh = startVisibleInterval(refreshPoll, POLL_REFRESH_MS);
+        return () => { cancelled = true; stopRefresh(); };
     }, [chainId, pollIndex, messaging, validPollIndex]);
 
     useEffect(() => {

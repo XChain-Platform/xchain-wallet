@@ -82,7 +82,8 @@ import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/publishFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-const POLL_INTERVAL_MS = 10_000;
+// 30 s: BTC blocks are 10 min apart, so an index check changes at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 
 const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
 const MAX_TITLE_LENGTH = 100;

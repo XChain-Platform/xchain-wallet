@@ -22,7 +22,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 
-export const ESCROW_REFRESH_MS = 60000;
+// 5 min: BTC blocks are 10 min apart, so escrow data changes at most once per block.
+export const ESCROW_REFRESH_MS = 5 * 60_000;
 export const ESCROW_READ_CACHE_MAX = 32;
 // Upper bound on addresses read per chain when Home shows the whole account
 // rather than one active address per chain.

@@ -146,7 +146,7 @@ assert.ok(
     /setInterval\([^,]+,\s*POLL_INTERVAL_MS\)/.test(src),
     'AirdropForm uses a named POLL_INTERVAL_MS constant',
 );
-assert.ok(/POLL_INTERVAL_MS\s*=\s*10_?000/.test(src), 'poll interval is 10 seconds');
+assert.ok(/POLL_INTERVAL_MS\s*=\s*30_?000/.test(src), 'poll interval is 30 seconds');
 
 // --- 6. Parser module -------------------------------------------------
 

@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 // The standard title-line filter, the gauge card and the wallet's bets loader.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
@@ -85,7 +86,8 @@ export function useBetChainIds() {
 // How often the market list re-reads the chain while it is on screen. Matches
 // the OracleConsole tick, which is the same problem on the other side of the
 // role boundary (its gating is re-derived every 30s for the same reason).
-const REFRESH_MS = 30_000;
+// 2 min: BTC blocks are 10 min apart, so the list changes at most once per block.
+const REFRESH_MS = 120_000;
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -297,13 +299,10 @@ export function BetFeedsList({
         // already mounted, so nothing re-runs. Measured in a live run: six list
         // requests, all in the first thirty seconds, and none after the market
         // closed several minutes later.
-        // No visibility gate on purpose. The wallet's background-poll routes
-        // gate on `document.visibilityState`, which is right for a poll that
-        // drives a submit; this one only replaces a read-only list, and a gate
-        // would leave a returning user looking at whatever was true when they
-        // last had the tab in front of them.
-        const timer = setInterval(() => load(false), REFRESH_MS);
-        return () => { cancelled = true; clearInterval(timer); };
+        // Paused while hidden; startVisibleInterval re-reads once on return, so a
+        // returning user does not look at stale data.
+        const stopTimer = startVisibleInterval(() => load(false), REFRESH_MS);
+        return () => { cancelled = true; stopTimer(); };
     }, [chainId, openOnly, messaging, feedsReload, readMode, ownAddresses]);
 
     const betsByMarket = useMemo(() => {

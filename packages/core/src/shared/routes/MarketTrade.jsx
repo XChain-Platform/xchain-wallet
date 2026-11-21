@@ -32,7 +32,8 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrade.module.css';
 
-const QUOTE_POLL_MS = 5000;
+// 30 s: BTC blocks are 10 min apart, so the quote changes at most once per block.
+const QUOTE_POLL_MS = 30_000;
 
 /**
  * @param {object} props

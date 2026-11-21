@@ -75,7 +75,8 @@ import rosterStyles from './ProjectRosterForm.module.css';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-const POLL_INTERVAL_MS = 10_000;
+// 30 s: BTC blocks are 10 min apart, so an index check changes at most once per block.
+const POLL_INTERVAL_MS = 30_000;
 
 // listMetaInputError codes to their copy, spelled out so every key is static.
 const META_ERROR_KEYS = {

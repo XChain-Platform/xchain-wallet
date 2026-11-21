@@ -73,12 +73,15 @@ import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
 
-const DEFAULT_INTERVAL_MS = 60 * 1000;
+// Two polls per 10-minute BTC block. The WS trigger below still runs a
+// cycle as soon as a match is announced, and the 2-block depth gate means
+// a faster poll would not pay any sooner (operator ruling 2026-11-20).
+const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const NOTIFIED_CAP = 500;
 
 // Lease TTL: 3 unrenewed cycles (spec: a shut-down payer must never
-// block payment for long; with the 60s default this is a 3-minute
-// takeover window, inside the spec's 15-minute bound for 5-min cycles).
+// block payment for long; with the 5-min default this is the spec's
+// 15-minute takeover window, well before the 45-minute arming cutoff).
 const LEASE_CYCLES = 3;
 
 export { pendingTxReferencesMatch };

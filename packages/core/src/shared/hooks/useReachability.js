@@ -60,7 +60,8 @@ import { useOnlineStatus } from './useOnlineStatus.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { filterChainIdsByActiveNetwork } from '../../flows/effectiveNetwork.js';
 
-const DEFAULT_INTERVAL_MS = 30_000;
+// 5 min: BTC blocks are 10 min apart, so reachability need not be probed faster (failure retry and confirm probe stay fast).
+const DEFAULT_INTERVAL_MS = 5 * 60_000;
 // How long to wait before re-probing after a single failed round-trip,
 // before declaring the wallet offline.
 const DEFAULT_FAILURE_RETRY_MS = 2000;
