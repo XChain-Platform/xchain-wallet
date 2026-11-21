@@ -90,7 +90,9 @@ export function HardwareWalletDetails({
         return () => { cancelled = true; };
     }, [wallet.id, messaging, accountCount]);
 
-    // The wallet's SignerRecord, then whether its device answers right now.
+    // The wallet's SignerRecord, then whether its device is open this session
+    // and answers right now (requireOpen: a registered device that was never
+    // opened reads Not connected).
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listSigners !== 'function') return undefined;
@@ -102,17 +104,16 @@ export function HardwareWalletDetails({
                 if (cancelled) return;
                 setSigner(record);
                 if (!record || typeof messaging.getSignerStatus !== 'function') return;
-                const status = await messaging.getSignerStatus({ signerId: record.id }).catch(() => null);
+                const status = await messaging.getSignerStatus({ signerId: record.id, requireOpen: true }).catch(() => null);
                 if (!cancelled) setSignerStatus(status);
             })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [wallet.id, messaging]);
 
-    // The status read above answers 'available' for a device the bridge has
-    // registered but not opened, so after a Reconnect the badge follows how
-    // the open ended: true opened it, false failed. A host that reports
-    // nothing leaves the badge as it was.
+    // After a Reconnect the badge follows how the open ended: true opened
+    // it, false failed. A host that reports nothing leaves the badge as it
+    // was. The next visit reads the status again.
     const reconnect = () => {
         Promise.resolve(onReconnect(wallet, signer)).then((opened) => {
             if (opened === true) setSignerStatus('available');

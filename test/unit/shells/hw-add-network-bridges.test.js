@@ -265,6 +265,33 @@ describe.each(SHELLS)('%s bridge: Add network on a Ledger account', (_name, conn
     });
 });
 
+// The device card's badge reads signer.status with requireOpen. The flag
+// crosses the host route and each shell's bridge to the session signer, so a
+// registered Ledger that was never opened reads disconnected, while a sign
+// page's read without it still gets 'available'.
+describe.each(SHELLS)('%s bridge: the device card status read', (_name, connect) => {
+    it('reads disconnected until the device is open, then asks the device', async () => {
+        const { vault, record } = await bitcoinOnlyLedgerWallet();
+        current = record;
+        useLedger('Bitcoin');
+        connect(record);
+        const host = makeHost(vault);
+        const status = async (request) => (await host.handle({ type: 'signer.status', request: { signerId: record.id, ...request } })).result;
+
+        await expect(status({ requireOpen: true })).resolves.toBe('disconnected');
+        await expect(status({})).resolves.toBe('available');
+
+        await bgSignerBridge.getTransport(record.id)({
+            op: 'getAddresses',
+            payload: { signerId: record.id, chainId: BTC, addressType: 'p2wpkh', accountIndex: 0, change: 0, startIndex: 0, count: 1 },
+        });
+        await expect(status({ requireOpen: true })).resolves.toBe('available');
+
+        invalidateLiveSigners();
+        await expect(status({ requireOpen: true })).resolves.toBe('disconnected');
+    });
+});
+
 describe('a sign on a network the bridge copy of the record predates', () => {
     it('useHardwareReconnect gives the session the shell\'s signer list to read the record again, so the sign goes through', async () => {
         const { vault, hw, record, walletAccounts } = await bitcoinOnlyLedgerWallet();

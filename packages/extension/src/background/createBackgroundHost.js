@@ -5730,7 +5730,8 @@ export function createBackgroundHost(deps) {
     // without touching vault/SDK. Returns `'idle'` when the bridge
     // isn't connected yet (renderer hasn't registered), giving the
     // UI a distinct state vs. the signer actively reporting
-    // 'disconnected'.
+    // 'disconnected'. requireOpen rides through to the renderer's signer,
+    // which then answers 'disconnected' for a device it has not opened.
     host.register('signer.status', async (req) => {
         const signerId = req?.signerId;
         if (typeof signerId !== 'string' || signerId.length === 0) {
@@ -5741,7 +5742,7 @@ export function createBackgroundHost(deps) {
         try {
             const res = await transport({
                 op: 'status',
-                payload: { signerId, chainId: req?.chainId },
+                payload: { signerId, chainId: req?.chainId, ...(req?.requireOpen === true ? { requireOpen: true } : {}) },
             });
             return res;
         } catch (err) {
