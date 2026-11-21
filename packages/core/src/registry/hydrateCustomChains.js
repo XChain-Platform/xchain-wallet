@@ -122,6 +122,18 @@ export function reconcileCustomChainsFromSettings(registry, settings) {
 }
 
 /**
+ * Remove every user-added chain while preserving bundled descriptors.
+ * Never throws, including for an incomplete registry.
+ *
+ * @param {Parameters<typeof reconcileCustomChainsFromSettings>[0]} registry
+ * @returns {{ removed: string[] }}
+ */
+export function clearUserAddedChains(registry) {
+    const { removed } = reconcileCustomChainsFromSettings(registry, { customChains: [] });
+    return { removed };
+}
+
+/**
  * A UI realm's answer to a custom-chain change made elsewhere: re-read the
  * saved settings, reconcile this realm's registry, and hand the record on.
  * The latest call wins, so a slow read started before a newer one never

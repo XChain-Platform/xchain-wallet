@@ -11,6 +11,10 @@
   is the invariant; allowBackup is just the current switch position.
 -->
 <full-backup-content>
+    <!-- The activity-check config holds public addresses outside the vault.
+         Keep both files off every backup even if android:allowBackup or wholesale excludes change. -->
+    <exclude domain="file" path="activity-check.json" />
+    <exclude domain="file" path="activity-check-runs.txt" />
     <exclude domain="root" path="." />
     <exclude domain="file" path="." />
     <exclude domain="database" path="." />

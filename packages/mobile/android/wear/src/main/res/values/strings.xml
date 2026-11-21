@@ -26,6 +26,7 @@
     <string name="n2_open_on_phone">Open on phone</string>
     <string name="state_age">Updated 12 min ago</string>
     <string name="state_age_amber">Updated 12 min ago</string>
+    <string name="state_amount_hidden">Amount hidden</string>
     <string name="state_balance_unavailable">Balance unavailable</string>
     <string name="state_hidden">••••</string>
     <string name="state_hide_amounts">Hide amounts</string>

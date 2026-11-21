@@ -34,7 +34,7 @@ bundle_id="io.xchain.wallet.ios"
 if [ "$#" -gt 0 ]; then
     devices=("$@")
 else
-    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)")
+    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)" "XC iPhone Duo")
 fi
 
 if [ ! -d "$project" ]; then

@@ -17,7 +17,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
-import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { ADS_DONATION_STALE, submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { prebuiltPsbtFromComposed } from '../../../packages/core/src/flows/prebuiltPsbtFromComposed.js';
 import {
     ADS_RESERVATION_REVIEW_GRACE_MS,
@@ -279,6 +279,36 @@ describe('Approve takes the review claim over and settles it once', () => {
         await expect(w.approve('bitcoin-mainnet', composed, goodSigner())).rejects.toThrow();
         expect(w.ads().reserved).toBeUndefined();
         expect(w.ads()).toMatchObject({ queued: '30', donated: '0', donationCount: 0 });
+    });
+
+    it('refuses lapsed donation bytes after another review pays the queue', async () => {
+        const w = makeWallet();
+        const first = await w.compose('bitcoin-mainnet');
+        await reconcileAdsReservation({
+            vault: w.vault,
+            now: w.ads().reserved.at + ADS_RESERVATION_REVIEW_GRACE_MS + 1,
+        });
+        const second = await w.compose('litecoin-mainnet');
+        await w.approve('litecoin-mainnet', second, goodSigner());
+
+        const staleSigner = goodSigner();
+        await expect(w.approve('bitcoin-mainnet', first, staleSigner)).rejects.toMatchObject({
+            code: ADS_DONATION_STALE,
+            refusedBeforeSigning: true,
+        });
+        expect(staleSigner.signPsbt).not.toHaveBeenCalled();
+        expect(w.sdkFor('bitcoin-mainnet').encoder.broadcastTx).not.toHaveBeenCalled();
+        expect(w.ads()).toMatchObject({ queued: '0.05', donated: '30', donationCount: 1 });
+    });
+
+    it('keeps best-effort send-through when the claim store throws', async () => {
+        const w = makeWallet();
+        const composed = await w.compose('bitcoin-mainnet');
+        w.vault.settings.put.mockRejectedValueOnce(new Error('storage unavailable'));
+        const signer = goodSigner();
+        await w.approve('bitcoin-mainnet', composed, signer);
+        expect(signer.signPsbt).toHaveBeenCalledTimes(1);
+        expect(w.sdkFor('bitcoin-mainnet').encoder.broadcastTx).toHaveBeenCalledTimes(1);
     });
 });
 

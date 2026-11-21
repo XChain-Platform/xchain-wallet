@@ -23,6 +23,10 @@ const recvSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Receive.jsx'),
     'utf8',
 );
+const receiveQrUriSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'utils', 'receiveQrUri.js'),
+    'utf8',
+);
 const recvCss = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Receive.module.css'),
     'utf8',
@@ -52,13 +56,13 @@ for (const s of ['reqAmount', 'reqTick', 'amountInputMode', 'fiatAmount']) {
 
 assert.match(recvSrc, /qrUri = useMemo/, 'qrUri memo');
 assert.match(
-    recvSrc,
-    /uriLib\.encodeBip21Uri\(/,
+    receiveQrUriSrc,
+    /encodeBip21Uri\(/,
     'encodes a BIP21-style URI carrying the requested amount',
 );
-assert.match(recvSrc, /amount,/, 'request URI uses the entered amount');
-assert.match(recvSrc, /chain: activeChainId/, 'request URI preserves the selected network');
-assert.match(recvSrc, /\.\.\.\(tick \? \{ tick \} : \{\}\)/, 'request URI carries the token tick');
+assert.match(receiveQrUriSrc, /amount: requestAmount,/, 'request URI uses the entered amount');
+assert.match(receiveQrUriSrc, /chain: chainId/, 'request URI preserves the selected network');
+assert.match(receiveQrUriSrc, /\.\.\.\(requestTick \? \{ tick: requestTick \} : \{\}\)/, 'request URI carries the token tick');
 
 // --- QR generation ---------------------------------------------------
 

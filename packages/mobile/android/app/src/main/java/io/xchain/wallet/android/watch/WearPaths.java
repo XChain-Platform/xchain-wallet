@@ -1,0 +1,37 @@
+package io.xchain.wallet.android.watch;
+
+public final class WearPaths {
+
+    public static final String PREFIX = "/xc/";
+    public static final String SNAPSHOT = "/xc/snapshot";
+    public static final String STATE = "/xc/state";
+    public static final int CHANNEL_THRESHOLD_BYTES = 100000;
+
+    private WearPaths() {}
+
+    public static String detailPath(String id) {
+        if (id == null || id.isEmpty()) {
+            throw new IllegalArgumentException("id must not be null or empty");
+        }
+        return PREFIX + "detail/" + id;
+    }
+
+    public static String imagePath(String hash) {
+        if (hash == null || !hash.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("hash must be 64 lowercase hexadecimal characters");
+        }
+        return PREFIX + "image/" + hash;
+    }
+
+    public static boolean useChannel(int byteLength) {
+        return byteLength > CHANNEL_THRESHOLD_BYTES;
+    }
+
+    public static boolean isDataItemPathAllowed(String path) {
+        return STATE.equals(path);
+    }
+
+    public static boolean isWatchPath(String path) {
+        return path != null && path.startsWith(PREFIX);
+    }
+}

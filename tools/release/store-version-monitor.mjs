@@ -771,6 +771,9 @@ const USAGE = `usage: store-version-monitor.mjs [--main-id <id>] [--beta-id <id>
                                   [--no-play] [--no-chrome] [--no-direct]
                                   [--help]
 
+--timeout <ms> is the per-request timeout (default 15000). In the
+DIRECT lane it covers each full APK download as well as its response.
+
 CHROME lane: compares the live Chrome Web Store version of each
 configured item against packages/extension/docs/publish-log.md
 (§2). A live version with no matching log row is the
@@ -865,6 +868,15 @@ function parseArgs(argv) {
 export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, now = () => new Date() } = {}) {
     const flags = parseArgs(argv);
     if (flags.help) return { exitCode: 0, stdout: USAGE, stderr: '' };
+    const effectiveTimeout = timeoutMs ?? flags.timeoutMs;
+    if (effectiveTimeout !== undefined
+        && (!Number.isInteger(effectiveTimeout) || effectiveTimeout <= 0 || effectiveTimeout > 2_147_483_647)) {
+        return {
+            exitCode: 2,
+            stdout: '',
+            stderr: `store-version-monitor: --timeout must be a finite integer from 1 to 2147483647; got ${String(effectiveTimeout)}. The monitor did not run any check.`,
+        };
+    }
 
     const stamp = now().toISOString();
     const out = [];
@@ -934,14 +946,14 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
     // need to pay for concurrency here.
     const results = [];
     for (const item of items) {
-        results.push(await checkItem({ ...item, entries, fetchImpl, timeoutMs }));
+        results.push(await checkItem({ ...item, entries, fetchImpl, timeoutMs: effectiveTimeout }));
     }
 
     if (playEnabled) {
         const packageName = flags.playPackage || env.PLAY_PACKAGE_NAME || PLAY_PACKAGE_NAME;
         const statePath = flags.statePath || env.PLAY_STATE_PATH || DEFAULT_STATE_PATH;
         try {
-            results.push(await checkPlay({ packageName, statePath, fetchImpl, timeoutMs, now }));
+            results.push(await checkPlay({ packageName, statePath, fetchImpl, timeoutMs: effectiveTimeout, now }));
         } catch (e) {
             // An unreadable or corrupt latch cannot be guessed past: without it
             // "never published" and "was published and is now gone" are the same
@@ -957,7 +969,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
 
     if (directEnabled) {
         const directBase = flags.directBase || env.DIRECT_FEED_BASE || DEFAULT_DIRECT_BASE;
-        results.push(...await checkDirect({ base: directBase, fetchImpl, timeoutMs }));
+        results.push(...await checkDirect({ base: directBase, fetchImpl, timeoutMs: effectiveTimeout }));
     }
 
     const alerts = results.filter((r) => r.state === 'alert');

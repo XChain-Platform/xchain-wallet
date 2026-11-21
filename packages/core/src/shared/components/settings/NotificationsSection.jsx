@@ -38,6 +38,7 @@ import { ChoiceList, RowIcon } from './AppearancePages.jsx';
 import styles from './NotificationsSection.module.css';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
+import { getNativePlugin } from '../../nativeShell.js';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
 import {
     MINUTES_PER_DAY,
@@ -83,6 +84,8 @@ const DEFAULT_CUSTOM_SOUND_ICON = 'lucide:alarm-clock';
 
 /** The permission state before the first live read. */
 export function initialNotificationPermission() {
+    const nativeNotify = getNativePlugin('XChainNotify', { method: 'permissionState' });
+    if (nativeNotify) return 'checking';
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
@@ -107,6 +110,8 @@ export function nativeNotificationPermission(state) {
  * @param {(next: string) => void} setPermission
  */
 export function useNotificationPermissionAccess(permission, setPermission) {
+    const nativeNotify = getNativePlugin('XChainNotify', { method: 'permissionState' });
+    const nativeSupported = Boolean(nativeNotify);
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
@@ -119,7 +124,18 @@ export function useNotificationPermissionAccess(permission, setPermission) {
     useEffect(() => {
         let active = true;
         const refresh = () => {
-            if (extensionSupported) {
+            if (nativeSupported) {
+                nativeNotify.permissionState()
+                    .then(({ state } = {}) => {
+                        if (active) {
+                            setPermission(nativeNotificationPermission(state));
+                            setRequestError(null);
+                        }
+                    })
+                    .catch(() => {
+                        if (active) setRequestError('Could not check notification permission. Try again.');
+                    });
+            } else if (extensionSupported) {
                 chromePermissions.contains({ permissions: ['notifications'] })
                     .then((granted) => {
                         if (active) {
@@ -148,7 +164,7 @@ export function useNotificationPermissionAccess(permission, setPermission) {
             chromePermissions?.onAdded?.removeListener?.(refresh);
             chromePermissions?.onRemoved?.removeListener?.(refresh);
         };
-    }, [chromePermissions, extensionSupported, setPermission, webSupported]);
+    }, [chromePermissions, extensionSupported, nativeNotify, nativeSupported, setPermission, webSupported]);
 
     const request = async () => {
         if (requestInFlight.current) return null;
@@ -156,6 +172,12 @@ export function useNotificationPermissionAccess(permission, setPermission) {
         setRequesting(true);
         setRequestError(null);
         try {
+            if (nativeSupported && typeof nativeNotify.requestPermission === 'function') {
+                const result = await nativeNotify.requestPermission();
+                const next = nativeNotificationPermission(result?.state);
+                setPermission(next);
+                return next;
+            }
             if (extensionSupported) {
                 const granted = await chromePermissions.request({ permissions: ['notifications'] });
                 const next = granted ? 'granted' : 'default';
@@ -194,7 +216,7 @@ export function useNotificationPermissionAccess(permission, setPermission) {
     };
 
     return {
-        supported: extensionSupported || webSupported,
+        supported: nativeSupported || extensionSupported || webSupported,
         extensionSupported,
         permission,
         requestError,

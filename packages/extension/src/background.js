@@ -930,6 +930,25 @@ attachPanicStateListener({ flows: flowsLib, isTrustedSender: isTrustedExtensionS
 // every request it held, is gone.
 attachApprovalWatchListener();
 
+function clearErasedWalletRuntimeState() {
+    let removed = [];
+    try {
+        ({ removed } = registryLib.clearUserAddedChains(chainRegistry));
+    } catch (err) {
+        console.error('[xchain] custom-chain reset failed:', err);
+    }
+    try {
+        if (typeof sdkRegistry?.applyEndpointOverridesFromSettings === 'function') {
+            sdkRegistry.applyEndpointOverridesFromSettings({});
+        }
+    } catch (err) {
+        console.error('[xchain] endpoint reset failed:', err);
+    }
+    for (const id of removed) {
+        try { sdkRegistry?.invalidate?.(id); } catch (_err) { /* wipe continues */ }
+    }
+}
+
 // "Wipe wallet data": always on, and pre-host on purpose. The escapes that
 // reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)
 // all run with the vault CLOSED, so it cannot live behind ensureHost. The
@@ -940,6 +959,7 @@ attachWipeStorageListener({
     beforeWipe: () => sealBroadcastQueues(),
     onWiped: async () => {
         await tearDownHost();
+        clearErasedWalletRuntimeState();
         renewBroadcastQueueStore();
         void surfaceStateEvents.publish('session', { state: 'no-wallet' });
     },

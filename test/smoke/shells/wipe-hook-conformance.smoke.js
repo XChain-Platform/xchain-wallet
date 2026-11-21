@@ -155,8 +155,13 @@ assert.ok(
 
 const background = readFileSync(join(extension, 'src', 'background.js'), 'utf8');
 assert.ok(
-    /attachWipeStorageListener\(\{\s*beforeWipe:\s*\(\)\s*=>\s*sealBroadcastQueues\(\),\s*onWiped:\s*(?:async\s*)?\(\)\s*=>\s*\{\s*(?:await\s+)?tearDownHost\(\);\s*renewBroadcastQueueStore\(\);(?:\s*void surfaceStateEvents\.publish\('session', \{ state: 'no-wallet' \}\);)?\s*\},?\s*\}\)/.test(background),
+    /attachWipeStorageListener\(\{\s*beforeWipe:\s*\(\)\s*=>\s*sealBroadcastQueues\(\),\s*onWiped:\s*(?:async\s*)?\(\)\s*=>\s*\{\s*(?:await\s+)?tearDownHost\(\);\s*clearErasedWalletRuntimeState\(\);\s*renewBroadcastQueueStore\(\);(?:\s*void surfaceStateEvents\.publish\('session', \{ state: 'no-wallet' \}\);)?\s*\},?\s*\}\)/.test(background),
     'background.js seals the broadcast queue before the wipe, then tears the host down and starts a fresh queue store',
+);
+assert.ok(
+    /clearUserAddedChains\(chainRegistry\)/.test(background)
+        && /applyEndpointOverridesFromSettings\(\{\}\)/.test(background),
+    'background.js clears erased-wallet chain and endpoint state after the wipe',
 );
 // The live host and every host a lock tore down share one store, so sealing
 // it reaches them all; a per-host seal would miss a torn-down host's late write.

@@ -50,8 +50,9 @@ describe('hooks/scanCoinpayObligations', () => {
             obligations: { [`btc-regtest:${A1}`]: [row()] },
         });
         const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
-        expect(out).toHaveLength(1);
-        expect(out[0]).toMatchObject({
+        expect(out.incomplete).toBe(false);
+        expect(out.obligations).toHaveLength(1);
+        expect(out.obligations[0]).toMatchObject({
             chainId: 'btc-regtest',
             address: A1,
             orderMatchActionIndex: '900001',
@@ -73,7 +74,7 @@ describe('hooks/scanCoinpayObligations', () => {
             },
         });
         const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
-        expect(out).toHaveLength(0);
+        expect(out.obligations).toHaveLength(0);
     });
 
     it('tolerates enveloped responses and isolates per-address failures', async () => {
@@ -91,8 +92,8 @@ describe('hooks/scanCoinpayObligations', () => {
             },
         });
         const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
-        expect(out).toHaveLength(1);
-        expect(out[0].chainId).toBe('ltc-regtest');
+        expect(out.obligations).toHaveLength(1);
+        expect(out.obligations[0].chainId).toBe('ltc-regtest');
     });
 
     it('rejects when every address lookup fails instead of reporting an empty queue', async () => {
@@ -123,7 +124,7 @@ describe('hooks/scanCoinpayObligations', () => {
             },
         });
         const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
-        expect(out.map((o) => o.orderMatchActionIndex)).toEqual(['3', '1', '2']);
+        expect(out.obligations.map((o) => o.orderMatchActionIndex)).toEqual(['3', '1', '2']);
     });
 
     it('lists a match once when the explorer returns it twice', async () => {
@@ -138,11 +139,28 @@ describe('hooks/scanCoinpayObligations', () => {
             },
         });
         const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
-        expect(out.map((o) => o.orderMatchActionIndex)).toEqual(['7', '8']);
+        expect(out.obligations.map((o) => o.orderMatchActionIndex)).toEqual(['7', '8']);
     });
 
     it('returns [] when the messaging layer lacks the obligation methods', async () => {
         const out = await scanCoinpayObligations({ messaging: {}, walletId: 'w1' });
-        expect(out).toEqual([]);
+        expect(out).toEqual({ obligations: [], incomplete: false });
+    });
+
+    it('keeps rows from a capped read and marks the result incomplete', async () => {
+        const messaging = messagingWith({
+            byChain: {
+                'btc-regtest': [{ address: A1 }],
+                'ltc-regtest': [{ address: A2 }],
+            },
+            obligations: {
+                [`btc-regtest:${A1}`]: { data: [row()], total: 500, truncated: true },
+                [`ltc-regtest:${A2}`]: { data: [row({ action_index: '2', payer_address: A2 })], total: 1 },
+            },
+        });
+
+        const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
+        expect(out.incomplete).toBe(true);
+        expect(out.obligations.map((o) => o.orderMatchActionIndex)).toEqual(['900001', '2']);
     });
 });

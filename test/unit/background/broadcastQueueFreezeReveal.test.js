@@ -272,7 +272,12 @@ describe('host queue route under a freeze armed during the two-phase claim', () 
 
         expect(res.ok).toBe(false);
         expect(h.sent()).toEqual([COMMIT.txHex]);
-        expect(base._map.get('p1')).toMatchObject({ commitLanded: true, txHex: REVEAL.txHex, commitTxid: 'txid-PHASE1' });
+        expect(base._map.get('p1')).toMatchObject({
+            status: 'queued',
+            commitLanded: true,
+            txHex: REVEAL.txHex,
+            commitTxid: 'txid-PHASE1',
+        });
 
         await expect(deactivatePanicMode()).resolves.toBe(true);
         await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });

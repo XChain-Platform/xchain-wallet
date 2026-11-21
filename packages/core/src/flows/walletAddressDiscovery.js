@@ -74,6 +74,11 @@ function isAmount(value) {
     return typeof value === 'string' && /^\+?\d+(?:\.\d+)?$/.test(value.trim());
 }
 
+function isSignedAmount(value) {
+    if (typeof value === 'number') return Number.isFinite(value);
+    return typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(value.trim());
+}
+
 function isPositiveAmount(value) {
     if (value === null || value === undefined) return false;
     return Number(value) > 0;
@@ -101,10 +106,11 @@ export function addressUsedFromReads(address, { balResp, addrResp }) {
     if (!balances || typeof balances !== 'object' || !isAmount(balances.confirmed)) {
         throw new UnrecognizedExplorerReplyError(address, 'no coin balance');
     }
-    for (const field of ['pending', 'received']) {
-        if (balances[field] != null && !isAmount(balances[field])) {
-            throw new UnrecognizedExplorerReplyError(address, `unreadable ${field} figure`);
-        }
+    if (balances.pending != null && !isSignedAmount(balances.pending)) {
+        throw new UnrecognizedExplorerReplyError(address, 'unreadable pending figure');
+    }
+    if (balances.received != null && !isAmount(balances.received)) {
+        throw new UnrecognizedExplorerReplyError(address, 'unreadable received figure');
     }
     if (!balResp || typeof balResp !== 'object' || !Array.isArray(balResp.data)) {
         throw new UnrecognizedExplorerReplyError(address, 'no token ledger');
@@ -112,7 +118,7 @@ export function addressUsedFromReads(address, { balResp, addrResp }) {
     const utxos = addrResp.utxos && typeof addrResp.utxos === 'object' ? addrResp.utxos : {};
     return isPositiveAmount(balances.received)
         || isPositiveAmount(balances.confirmed)
-        || isPositiveAmount(balances.pending)
+        || (balances.pending != null && Number(balances.pending) !== 0)
         || isPositiveAmount(utxos.confirmed)
         || isPositiveAmount(utxos.pending)
         || balResp.data.length > 0;

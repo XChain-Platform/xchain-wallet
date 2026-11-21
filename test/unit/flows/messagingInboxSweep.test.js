@@ -13,16 +13,24 @@
 import { describe, it, expect } from 'vitest';
 import { getMessagingInboxSweep } from '../../../packages/core/src/flows/messagingInbox.js';
 
-// Address records keyed by id. All HD on one chain for simplicity.
+// Address records keyed by id. All HD on one chain for simplicity, in an
+// account of wallet w1, the wallet every sweep below runs for.
 const ADDRS = {
-    a1: { address: 'ADDR_ONE', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
-    a2: { address: 'ADDR_TWO', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/2/0", source: 'hd' },
+    a1: { address: 'ADDR_ONE', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', accountId: 'acct-1' },
+    a2: { address: 'ADDR_TWO', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/2/0", source: 'hd', accountId: 'acct-1' },
 };
 
-function makeDeps(messagesByAddress, { throwFor } = {}) {
-    const vault = {
-        addresses: { get: async (id) => ADDRS[id] || null },
+// The session signer may only export keys for wallet w1's own addresses.
+function walletVault(records) {
+    return {
+        addresses: { get: async (id) => records[id] || null },
+        accounts: { get: async (id) => (id === 'acct-1' ? { id, walletId: 'w1' } : null) },
+        wallets: { get: async (id) => (id === 'w1' ? { id, importedKeys: [] } : null) },
     };
+}
+
+function makeDeps(messagesByAddress, { throwFor } = {}) {
+    const vault = walletVault(ADDRS);
     const chainRegistry = { chainIdFor: () => 'bitcoin' };
     const sdkRegistry = {
         get: () => ({
@@ -33,6 +41,7 @@ function makeDeps(messagesByAddress, { throwFor } = {}) {
         }),
     };
     const signer = {
+        id: 'w1',
         exportWifForPath: () => 'WIF',
         exportWifForAddressId: () => 'WIF',
     };
@@ -92,10 +101,10 @@ describe('getMessagingInboxSweep', () => {
         // bitcoin row win for the bitcoin-homed address despite dogecoin
         // appearing earlier in the scan list.
         const addrs = {
-            d1: { address: 'ADDR_DOGE', chain: 'dogecoin', network: 'regtest', derivationPath: "m/84'/3'/0'/0/0", source: 'hd' },
-            b1: { address: 'ADDR_BTC', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
+            d1: { address: 'ADDR_DOGE', chain: 'dogecoin', network: 'regtest', derivationPath: "m/84'/3'/0'/0/0", source: 'hd', accountId: 'acct-1' },
+            b1: { address: 'ADDR_BTC', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', accountId: 'acct-1' },
         };
-        const vault = { addresses: { get: async (id) => addrs[id] || null } };
+        const vault = walletVault(addrs);
         const chainRegistry = { chainIdFor: (chain) => chain };
         const sdkRegistry = {
             get: (chainId) => ({
@@ -111,6 +120,7 @@ describe('getMessagingInboxSweep', () => {
             }),
         };
         const signer = {
+            id: 'w1',
             exportWifForPath: () => 'WIF',
             exportWifForAddressId: () => 'WIF',
         };

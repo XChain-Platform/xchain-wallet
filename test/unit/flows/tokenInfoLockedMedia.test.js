@@ -65,4 +65,30 @@ describe('locked TIS media', () => {
         const withoutHero = normalizeTokenInfo('bitcoin-mainnet', 'MEDIA', { info: {} }, lockedOnly);
         expect(withoutHero.imageUrl).toBeNull();
     });
+
+    it.each(['images', 'files'])('keeps %s data when data_ref is not an action reference', (key) => {
+        const data = 'https://192.0.2.1/public.png';
+        const bundle = tisToMediaBundle({ [key]: [{ data, data_ref: 'not-a-ref' }] });
+        expect(bundle[key]).toHaveLength(1);
+        expect(bundle[key][0]).toMatchObject({ url: data, dataRef: null });
+    });
+
+    it.each(['images', 'files'])('normalizes and resolves padded %s action references', (key) => {
+        const bundle = tisToMediaBundle({ [key]: [{ data_ref: ' action:DOGE:55 ' }] });
+        expect(bundle[key][0]).toMatchObject({ url: null, dataRef: 'action:DOGE:55' });
+        resolveMediaDataRefs(bundle, { fileRawUrl: (index, coin) => `raw:${coin}:${index}` });
+        expect(bundle[key][0].url).toBe('raw:DOGE:55');
+    });
+
+    it('uses a valid action reference over data and drops an unusable reference-only entry', () => {
+        const data = 'https://192.0.2.1/public.png';
+        const bundle = tisToMediaBundle({
+            images: [
+                { data, data_ref: 'action:12' },
+                { data_ref: 'https://192.0.2.2/not-an-action' },
+            ],
+        });
+        expect(bundle.images).toHaveLength(1);
+        expect(bundle.images[0]).toMatchObject({ url: null, dataRef: 'action:12', source: data });
+    });
 });

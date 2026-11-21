@@ -4368,6 +4368,23 @@ function ListShareBody({ cfg, walletId, listRef, actionField = null, shared, onS
 // ---------------------------------------------------------------------------
 
 /**
+ * The single address a transfer's New owner field holds, as the recipient
+ * parser reads it: wrapping quotes and stray commas dropped, a single-case
+ * bech32 address in lowercase. The network checks the published string as
+ * is, so this value, not the typed text, is what gets checked, signed and
+ * shown.
+ *
+ * @param {string} text
+ * @param {any} descriptor
+ * @returns {string | null} null unless the text is exactly one valid address
+ */
+function transferDestinationFrom(text, descriptor) {
+    const candidates = airdropLib.parsePaste(text);
+    const classified = airdropLib.classifyRecipients(candidates, descriptor);
+    return candidates.length === 1 && classified.valid.length === 1 ? classified.valid[0] : null;
+}
+
+/**
  * Transfer ownership of an existing list with LIST format 3.
  *
  * @param {object} props
@@ -4501,6 +4518,7 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
         hardware: 'createListHw',
     });
     const trimmedDestination = destination.trim();
+    const newOwner = transferDestinationFrom(trimmedDestination, descriptor);
     const trimmedMemo = memo.trim();
     const transferListName = typeof listDetail?.name === 'string' && listDetail.name
         ? neutralizeControlText(listDetail.name, { maxLength: 64 })
@@ -4508,11 +4526,9 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
     const transferMemberCount = listDetail ? currentListMemberCount(listDetail) : null;
 
     function validate() {
-        const candidates = airdropLib.parsePaste(trimmedDestination);
-        const classified = airdropLib.classifyRecipients(candidates, descriptor);
-        const destinationError = candidates.length !== 1 || classified.valid.length !== 1
+        const destinationError = newOwner === null
             ? 'Destination must be one valid address for the selected network.'
-            : owner && trimmedDestination.toLowerCase() === owner.toLowerCase()
+            : owner && newOwner.toLowerCase() === owner.toLowerCase()
                 ? 'Destination must be different from the current owner.' : null;
         const memoTooLong = memoLengthError(trimmedMemo);
         const problems = {
@@ -4541,7 +4557,7 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
         const params = {
             VERSION: '3',
             LIST_ACTION_INDEX: listActionIndex,
-            DESTINATION: trimmedDestination,
+            DESTINATION: newOwner,
             MEMO: trimmedMemo,
         };
         try {
@@ -4611,7 +4627,7 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
                     direction: 'none',
                     chainId: listRef.chainId,
                     address: fromRecord?.address,
-                    ...(trimmedDestination ? { recipient: trimmedDestination } : {}),
+                    ...(newOwner ? { recipient: newOwner } : {}),
                     // Only sharing or editing a shared list pays a protocol
                     // fee (listFeeSchedule.js), so a transfer's is known: none.
                     protocolFee: { amount: '0', ticker: 'XCHAIN' },

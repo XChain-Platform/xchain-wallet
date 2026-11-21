@@ -65,6 +65,13 @@ const infoPlist = readFileSync(join(appDir, 'Info.plist'), 'utf8');
 const entitlements = readFileSync(join(appDir, 'App.entitlements'), 'utf8');
 const packageSwift = readFileSync(join(ios, 'App', 'CapApp-SPM', 'Package.swift'), 'utf8');
 const capConfig = JSON.parse(readFileSync(join(mobile, 'capacitor.config.json'), 'utf8'));
+const watchScheme = readFileSync(
+    join(ios, 'App', 'App.xcodeproj', 'xcshareddata', 'xcschemes', 'WatchApp.xcscheme'),
+    'utf8',
+);
+const watchAppSource = readFileSync(join(ios, 'App', 'WatchApp', 'XChainWatchApp.swift'), 'utf8');
+const watchTestsSource = readFileSync(join(ios, 'App', 'WatchAppTests', 'SmokeTests.swift'), 'utf8');
+const watchTestScript = readFileSync(join(mobile, 'scripts', 'watch-test.sh'), 'utf8');
 
 /* A deliberately small plist reader. Hand-rolled rather than pulled from npm
  * for the same reason the release-config guards are: a file that checks the
@@ -84,6 +91,25 @@ function plistValue(text, key) {
     if (arr) return [...arr[1].matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) => m[1]);
     return null; // present, but a shape this reader does not model (e.g. a dict)
 }
+
+// --- 1a. watchOS shell -----------------------------------------------
+
+assert.match(pbxproj, /objectVersion = 77;/, 'synchronized groups require object version 77');
+assert.match(pbxproj, /preferredProjectObjectVersion = 77;/);
+assert.match(pbxproj, /path = WatchApp;/, 'missing synchronized WatchApp source group');
+assert.match(pbxproj, /path = WatchAppTests;/, 'missing synchronized WatchAppTests source group');
+assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch;/);
+assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.tests;/);
+assert.match(pbxproj, /INFOPLIST_KEY_WKCompanionAppBundleIdentifier = io\.xchain\.wallet\.ios;/);
+assert.match(pbxproj, /INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;/);
+assert.match(watchScheme, /BlueprintName = "WatchApp"/);
+assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
+assert.match(watchAppSource, /@main[\s\S]*Open XChain Wallet on your phone/);
+assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
+assert.match(watchTestScript, /simctl list pairs -j/);
+assert.match(watchTestScript, /simctl list devices -j/);
+assert.match(watchTestScript, /-destination "id=\$destination"/);
+assert.doesNotMatch(watchTestScript, /-destination [^\n]*name=/);
 
 // --- 2. Bundle id, and the seam it can slip through -------------------
 

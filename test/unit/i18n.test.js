@@ -592,8 +592,8 @@ describe('translations', () => {
             ['components.leftNav.governance', 'walletMenu.group.governance'],
             // The side menu, command palette and menu model share the Trade group label.
             ['components.leftNav.groupTrade', 'palette.category.trade', 'walletMenu.group.trade'],
-            // The side menu, Settings and menu model share the Wallet group label.
-            ['components.leftNav.groupWallet', 'settings.thisWallet.wallet', 'walletMenu.group.wallet'],
+            // The side menu, backup fallback, Settings and menu model share the Wallet group label.
+            ['components.leftNav.groupWallet', 'settings.backup.walletFallback', 'settings.thisWallet.wallet', 'walletMenu.group.wallet'],
             // The order book's size column and its size field label, and the Publish File review's size row.
             ['components.orderbookPanel.size', 'components.orderbookPanel.sizeLabel', 'publishFile.details.size'],
             // The order panel's Market label and the token page's Market section.

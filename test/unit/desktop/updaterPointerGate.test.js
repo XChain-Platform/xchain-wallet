@@ -120,7 +120,10 @@ function fakeModule({ name = ARTIFACT, bytes = ARTIFACT_BYTES, version = VERSION
         autoInstallOnAppQuit: true,
         isUpdaterActive: () => true,
         on(event, fn) { handlers.set(event, fn); },
-        checkForUpdates: async () => { calls.push('checkForUpdates'); },
+        checkForUpdates: async () => {
+            calls.push('checkForUpdates');
+            return { isUpdateAvailable: true };
+        },
         async downloadUpdate() {
             calls.push('downloadUpdate');
             writeFileSync(path, bytes);

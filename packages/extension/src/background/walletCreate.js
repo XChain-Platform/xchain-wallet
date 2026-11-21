@@ -26,7 +26,7 @@ import {
     readsFromBatchEntry,
     shapeFromReads,
 } from '@xchain-wallet/core/flows/balances.js';
-import { saveSigningSecret } from './signingSecretSession.js';
+import { clearSigningSecret, saveSigningSecret } from './signingSecretSession.js';
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 /**
@@ -789,12 +789,23 @@ function isVaultConflict(err) {
  * discards a wallet that was already there or that another writer stored. A clear that fails too is
  * left for the original error to report.
  *
- * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> } }} deps
+ * The session key and the cached signing secret go first, as the unlock
+ * rollback drops them: a failed lane opens no session, and a key left in the
+ * session slot would let the next host open over the empty install with no
+ * kdfParams on record.
+ *
+ * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> }, sessionBackend?: { clear?: () => Promise<void> }, signingSecretBackend?: { clear: () => Promise<void> } | null }} deps
  */
 async function discardPartialWallet(deps) {
-    for (const backend of [deps.storageBackend, deps.metaBackend]) {
+    const clears = [
+        () => (typeof deps.sessionBackend?.clear === 'function' ? deps.sessionBackend.clear() : undefined),
+        () => clearSigningSecret(deps.signingSecretBackend),
+        ...[deps.storageBackend, deps.metaBackend].map((backend) => () => (
+            typeof backend?.clear === 'function' ? backend.clear() : undefined)),
+    ];
+    for (const clear of clears) {
         try {
-            if (typeof backend?.clear === 'function') await backend.clear();
+            await clear();
         } catch {
             // The failure being reported is the first one.
         }

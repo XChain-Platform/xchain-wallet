@@ -102,7 +102,9 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     const { offline, recheck } = useNetworkOffline({ walletId });
     // The hook scans on mount, on every poll and when the window becomes
     // visible again, so the page has no manual refresh control.
-    const { obligations, scanning, error: scanError } = useCoinpayObligations(
+    const {
+        obligations, incomplete, scanning, error: scanError,
+    } = useCoinpayObligations(
         walletId,
         activeAccountId,
         { pollMs: 30_000, offline },
@@ -177,6 +179,11 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                         {scanError && !offline ? (
                             <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
                         ) : null}
+                        {incomplete && !offline ? (
+                            <StatusMessage variant="error" className={styles.hint}>
+                                Couldn't load every payment due. Older payments may be missing from this list.
+                            </StatusMessage>
+                        ) : null}
                     </>
                 )}
             >
@@ -188,7 +195,7 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!showOffline && !scanError && due.length === 0 && !(scanning && obligations.length === 0) ? (
+                {!showOffline && !scanError && !incomplete && due.length === 0 && !(scanning && obligations.length === 0) ? (
                     <EmptyState title="No payments due" body="Matched orders that need a coin payment appear here." />
                 ) : null}
 

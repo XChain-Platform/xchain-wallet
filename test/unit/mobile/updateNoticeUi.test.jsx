@@ -23,7 +23,6 @@ import { UpdateNoticeBanner } from '../../../packages/core/src/shared/components
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { setDirectUpdateProvider } from '../../../packages/core/src/flows/directUpdate.js';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { checkForDirectUpdate } from '../../../packages/web/src/update/directUpdateCheck.js';
 import {
     __setNativeShellForTests,
@@ -80,28 +79,22 @@ describe('UpdateNoticeBanner', () => {
         // An anchor here would be a remote-controlled destination inside a
         // wallet, which is the phishing surface the whole design refuses.
         expect(container.querySelectorAll('a').length).toBe(0);
-        const buttons = [...container.querySelectorAll('button')].map((b) => b.textContent);
-        expect(buttons).toEqual(['Dismiss']);
+        // The one control is the Notice's corner X, with no visible text (U100).
+        const buttons = [...container.querySelectorAll('button')];
+        expect(buttons).toHaveLength(1);
+        expect(buttons[0].hasAttribute('data-notice-dismiss')).toBe(true);
+        expect(buttons[0].textContent.trim()).toBe('');
     });
 
-    it('uses the shared notice tokens and small kit dismiss control', async () => {
+    it('is the standard info Notice closed by its corner X', async () => {
         lane({ notice: 'XChain Wallet 9.9.9 is available.' });
         render(<UpdateNoticeBanner />);
 
         const notice = await screen.findByRole('status');
-        expect(notice).toHaveStyle({
-            padding: 'var(--xc-card-pad)',
-            borderRadius: 'var(--xc-card-radius)',
-            fontSize: 'var(--xc-text-sm)',
-            lineHeight: '1.4',
-        });
-        expect(notice.querySelector('[aria-hidden="true"]')).toHaveStyle({
-            width: 'var(--xc-icon-md)',
-            height: 'var(--xc-icon-md)',
-            fontSize: 'var(--xc-icon-md)',
-        });
-        expect(screen.getByRole('button', { name: 'Dismiss update notice' }))
-            .toHaveClass(buttonStyles.btn, buttonStyles.sm);
+        expect(notice.getAttribute('data-tone')).toBe('info');
+        const close = screen.getByRole('button', { name: 'Dismiss update notice' });
+        expect(close.hasAttribute('data-notice-dismiss')).toBe(true);
+        expect(notice.lastElementChild).toBe(close);
     });
 
     it('stays dismissed across remounts for the same session and version', async () => {

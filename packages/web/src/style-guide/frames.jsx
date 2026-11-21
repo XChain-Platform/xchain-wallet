@@ -74,13 +74,13 @@ function containFrameFocus(win) {
 }
 
 // The shared compact-landscape rules (orientation: landscape, max-height: 480px,
-// min-aspect-ratio: 3/2) strip padding from headers and screens. A narrow frame
+// min-aspect-ratio: 7/5) strip padding from headers and screens. A narrow frame
 // whose content is short enough to cross that aspect ratio shrinks, which keeps
 // the rules on, or grows, which turns them off, and so flips between the two
 // forever. A phone-width frame is a portrait preview, so it never gets a
-// viewport shorter than the height where the aspect ratio drops below 3/2.
+// viewport shorter than the height where the aspect ratio drops below 7/5.
 function portraitFloor(width) {
-    return width <= 480 ? Math.floor(width / 1.5) + 1 : 0;
+    return width <= 480 ? Math.floor(width / 1.4) + 1 : 0;
 }
 
 /**

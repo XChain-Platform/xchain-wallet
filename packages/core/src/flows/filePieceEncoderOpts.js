@@ -68,6 +68,7 @@ function validateArgs(args) {
 }
 
 function envelopeOptions(buildMode, phase, signedCommitHex) {
+    // publishMultipartFile refuses non-software signers before a piece is built.
     if (buildMode === 'two_step' && phase === 'reveal') {
         return { envelopeCommitHex: signedCommitHex, signerSupportsTapscript: true };
     }

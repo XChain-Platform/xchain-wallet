@@ -24,8 +24,12 @@ import { unlockWallet } from './unlockWallet.js';
 import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertNoDeceptiveCharacters, assertNoHiddenControls } from './signRiskClassifier.js';
+import {
+    parseSignInChallenge,
+    SIGN_IN_CHALLENGE_PREFIX,
+} from '@xchain-wallet/bridge-spec';
 
-export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
+export { SIGN_IN_CHALLENGE_PREFIX };
 
 /**
  * @typedef {Object} SignMessageFlowOpts
@@ -47,7 +51,34 @@ export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
  * @param {SignMessageFlowOpts} opts
  * @returns {Promise<{ signature: string }>}
  */
-export async function signMessageFlow({
+export async function signMessageFlow(opts) {
+    if (typeof opts?.message === 'string' && opts.message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
+        throw new Error('signMessageFlow: sign-in challenges cannot be signed as arbitrary messages');
+    }
+    return signMessageInternal(opts, 'signMessageFlow');
+}
+
+/**
+ * Sign a v2 challenge assembled by the trusted sign-in bridge handler.
+ * This separate entry point cannot weaken arbitrary message signing: it accepts
+ * only bytes the shared bridge-spec parser recognizes as a v2 challenge.
+ *
+ * @param {SignMessageFlowOpts} opts
+ * @returns {Promise<{ signature: string }>}
+ */
+export async function signSignInChallengeFlow(opts) {
+    if (typeof opts?.message !== 'string' || parseSignInChallenge(opts.message) === null) {
+        throw new Error('signSignInChallengeFlow: message must be a valid v2 sign-in challenge');
+    }
+    return signMessageInternal(opts, 'signSignInChallengeFlow');
+}
+
+/**
+ * @param {SignMessageFlowOpts} opts
+ * @param {string} flowName
+ * @returns {Promise<{ signature: string }>}
+ */
+async function signMessageInternal({
     vault,
     walletId,
     password,
@@ -60,31 +91,28 @@ export async function signMessageFlow({
     addressType,
     message,
     signer: injectedSigner,
-}) {
-    if (!vault) throw new Error('signMessageFlow: vault is required');
+}, flowName) {
+    if (!vault) throw new Error(`${flowName}: vault is required`);
     if (typeof chainId !== 'string' || chainId.length === 0) {
-        throw new Error('signMessageFlow: chainId is required');
+        throw new Error(`${flowName}: chainId is required`);
     }
     const hasPath = typeof path === 'string' && path.startsWith('m/');
     const hasAddressId = typeof addressId === 'string' && addressId.length > 0;
     if (hasPath === hasAddressId) {
         throw new Error(
-            'signMessageFlow: supply exactly one of `path` (BIP32) or `addressId` (imported-WIF)',
+            `${flowName}: supply exactly one of \`path\` (BIP32) or \`addressId\` (imported-WIF)`,
         );
     }
     if (typeof message !== 'string') {
-        throw new Error('signMessageFlow: message must be a string');
-    }
-    if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
-        throw new Error('signMessageFlow: sign-in challenges cannot be signed as arbitrary messages');
+        throw new Error(`${flowName}: message must be a string`);
     }
     // Refuse text whose visual form can conceal the bytes the signer receives.
-    assertNoDeceptiveCharacters({ chainId, path, addressId, message }, 'signMessageFlow');
-    assertNoHiddenControls(message, 'signMessageFlow');
+    assertNoDeceptiveCharacters({ chainId, path, addressId, message }, flowName);
+    assertNoHiddenControls(message, flowName);
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         // A hardware wallet signs only on its device; no password helps.
         refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
-        throw new Error('signMessageFlow: either `password` or `signer` is required');
+        throw new Error(`${flowName}: either \`password\` or \`signer\` is required`);
     }
     // §26.5 panic-mode freeze.
     assertSigningAllowed();

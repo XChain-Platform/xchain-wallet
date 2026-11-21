@@ -28,8 +28,17 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { directFeedRejection, FINDINGS, PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep,
-    verifyManifestSignature } from '../../../tools/release/feed-sweep.mjs';
+import {
+    directFeedRejection,
+    FINDINGS,
+    PAYLOAD_DIRS,
+    parseManifest,
+    parseUpdateInfo,
+    RELEASE_FEED_BASE_URL,
+    releaseFeedRejection,
+    sweep,
+    verifyManifestSignature,
+} from '../../../tools/release/feed-sweep.mjs';
 // The two CONSUMERS this producer has to agree with, imported so the
 // parity assertions below read the shipped rule rather than a restatement
 // of it. Neither is what feed-sweep.mjs itself imports at runtime: the
@@ -37,6 +46,14 @@ import { directFeedRejection, FINDINGS, PAYLOAD_DIRS, parseManifest, parseUpdate
 import { parseUpdateFeed, UPDATE_FEED_MAX_BYTES }
     from '../../../packages/web/src/update/directUpdateCheck.js';
 import { parseChannelPointer, verifyChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
+import {
+    parseReleaseFeed as parseAboutReleaseFeed,
+    UPDATE_CHANNELS as ABOUT_CHANNELS,
+    UPDATE_FEED_MAX_BYTES as ABOUT_FEED_MAX_BYTES,
+    UPDATE_HOSTS as ABOUT_HOSTS,
+} from '../../../packages/core/src/shared/releaseFeed.js';
+import { UPDATE_FEED_BASE_URL as DESKTOP_FEED_BASE_URL }
+    from '../../../packages/desktop/main/updater.js';
 
 const root = mkdtempSync(join(tmpdir(), 'xchain-feed-sweep-'));
 // Every code a scenario below provokes must carry a reading in FINDINGS.
@@ -81,14 +98,23 @@ function sha512b64(text) { return createHash('sha512').update(text).digest('base
  * the artifact names that release covered; `pointers` is filename -> the
  * update-info body.
  */
-function buildFeed(dir, { artifacts = {}, manifests = {}, pointers = {}, signed = true }) {
+function buildFeed(dir, {
+    artifacts = {}, androidArtifacts = {}, rootFiles = {}, manifests = {}, pointers = {}, signed = true,
+}) {
     rmSync(dir, { recursive: true, force: true });
-    for (const sub of ['desktop', 'extension', 'web', 'RELEASE_HASHES']) {
+    for (const sub of ['desktop', 'extension', 'web', 'android', 'RELEASE_HASHES']) {
         mkdirSync(join(dir, sub), { recursive: true });
     }
     for (const [name, body] of Object.entries(artifacts)) {
         writeFileSync(join(dir, 'desktop', name), body);
     }
+    for (const [name, body] of Object.entries(androidArtifacts)) {
+        writeFileSync(join(dir, 'android', name), body);
+    }
+    for (const [name, body] of Object.entries(rootFiles)) {
+        writeFileSync(join(dir, name), body);
+    }
+    const manifestBodies = { ...artifacts, ...androidArtifacts, ...rootFiles };
     for (const [tag, names] of Object.entries(manifests)) {
         const lines = [
             '# XChain Wallet release manifest',
@@ -98,7 +124,7 @@ function buildFeed(dir, { artifacts = {}, manifests = {}, pointers = {}, signed 
             '# built: 2026-07-31T00:00:00Z',
             '# dev-mock-gate: enforced',
             `# artifacts: ${names.length}`,
-            ...names.map((n) => `${sha256(artifacts[n])}  ./${n}`),
+            ...names.map((n) => `${sha256(manifestBodies[n])}  ./${n}`),
         ];
         writeFileSync(join(dir, 'RELEASE_HASHES', `${tag}.txt`), `${lines.join('\n')}\n`);
         if (signed) {
@@ -775,6 +801,148 @@ function clientVerdict(pointerText, manifests, artifacts) {
             `the sweep and the shipped client disagree about ${body.slice(0, 48)}: a feed one `
             + 'accepts and the other refuses means the sweep is not auditing what ships');
     }
+}
+
+// ---------------- the About release feed: producer and consumer agree
+
+{
+    assert.equal(RELEASE_FEED_BASE_URL, DESKTOP_FEED_BASE_URL,
+        'the standalone sweep maps the same public feed root as the desktop updater');
+
+    const base = {
+        latest: '1.2.3',
+        channels: {
+            'android-direct': {
+                version: '1.2.3',
+                url: `${DESKTOP_FEED_BASE_URL}android/wallet.apk`,
+            },
+        },
+    };
+    const body = (change = {}) => JSON.stringify({ ...base, ...change });
+    const sized = (length, character = 'x') => {
+        const seed = JSON.stringify({ ...base, pad: '' });
+        return JSON.stringify({ ...base, pad: character.repeat(length - seed.length) });
+    };
+    const wrongHost = ['https://invalid', 'example/wallet.apk'].join('.');
+    const newerChannel = {
+        ...base.channels,
+        'android-direct': { ...base.channels['android-direct'], version: '2.0.0' },
+    };
+    const table = [
+        body(),
+        body({ latest: 'v1.2.3' }),
+        body({ latest: ' 1.2.3 ' }),
+        body({ latest: '01.2.3' }),
+        body({ channels: newerChannel }),
+        body({ channels: { ...base.channels, unknown: { version: '9.9.9', url: 'bad' } } }),
+        body({ channels: { 'android-direct': { version: '1.2.3', url: 'http://invalid' } } }),
+        body({ channels: { 'android-direct': { version: '1.2.3', url: wrongHost } } }),
+        body({ channels: [] }),
+        JSON.stringify({ channels: base.channels }),
+        'not json',
+        sized(ABOUT_FEED_MAX_BYTES),
+        sized(ABOUT_FEED_MAX_BYTES + 1),
+        sized(ABOUT_FEED_MAX_BYTES, '\u00e9'),
+    ];
+    assert.equal(sized(ABOUT_FEED_MAX_BYTES).length, ABOUT_FEED_MAX_BYTES);
+    assert.ok(Buffer.byteLength(sized(ABOUT_FEED_MAX_BYTES, '\u00e9'), 'utf8') > ABOUT_FEED_MAX_BYTES);
+
+    const aboutAccepts = (text) => {
+        if (text.length > ABOUT_FEED_MAX_BYTES) return false;
+        try { parseAboutReleaseFeed(JSON.parse(text)); return true; } catch { return false; }
+    };
+    // Every channel and host the client knows, one accepted URL per host and
+    // one URL on a host the client allows only for some other channel, so a
+    // drift in either copied table shows up as a disagreement here.
+    const allHosts = [...new Set(Object.values(ABOUT_HOSTS).flat())];
+    for (const channel of ABOUT_CHANNELS) {
+        const entry = (host) => body({ channels: { [channel]: { version: '1.2.3', url: `https://${host}/x` } } });
+        for (const host of ABOUT_HOSTS[channel] || []) table.push(entry(host));
+        const foreign = allHosts.find((host) => !(ABOUT_HOSTS[channel] || []).includes(host));
+        if (foreign) table.push(entry(foreign));
+    }
+    assert.ok(table.length > 14 + ABOUT_CHANNELS.length, 'the per-channel rows were added');
+    for (const text of table) {
+        assert.equal(releaseFeedRejection(text) === '', aboutAccepts(text),
+            `the sweep and About disagree about ${text.slice(0, 96)}`);
+    }
+}
+
+{
+    const apk = 'wallet-0.333.1.apk';
+    const releaseBody = (url = `${DESKTOP_FEED_BASE_URL}android/${apk}`, version = '0.333.1') => JSON.stringify({
+        latest: '0.333.1',
+        channels: { 'android-direct': { version, url } },
+    });
+
+    buildFeed(root, {
+        androidArtifacts: { [apk]: 'apk' },
+        rootFiles: { 'releases.json': releaseBody() },
+        manifests: { 'v0.333.1': [apk] },
+    });
+    const clean = sweep(root);
+    assert.deepEqual(codes(clean), [], 'a covered root release feed is clean');
+    assert.equal(clean.pointers, 1, 'the root release feed is counted as a pointer');
+
+    buildFeed(root, {
+        androidArtifacts: { 'covered.apk': 'covered', [apk]: 'apk' },
+        rootFiles: { 'releases.json': releaseBody() },
+        manifests: { 'v0.333.1': ['covered.apk'] },
+    });
+    assert.deepEqual(codes(sweep(root)), ['POINTER-UNCOVERED', 'UNCOVERED'],
+        'an existing target outside its own manifest is visible both as payload and pointer drift');
+
+    buildFeed(root, {
+        androidArtifacts: { 'covered.apk': 'covered' },
+        rootFiles: { 'releases.json': releaseBody() },
+        manifests: { 'v0.333.1': ['covered.apk'] },
+    });
+    assert.deepEqual(codes(sweep(root)), ['POINTER-DANGLING'],
+        'an absent release-feed target is reported');
+
+    buildFeed(root, { rootFiles: { 'releases.json': releaseBody() } });
+    assert.deepEqual(codes(sweep(root)), ['POINTER-DANGLING', 'POINTER-NO-MANIFEST'],
+        'a live release feed without a signed version cannot pass on an empty baseline');
+
+    buildFeed(root, {
+        rootFiles: { 'releases.json': releaseBody(undefined, '0.334.0') },
+    });
+    assert.deepEqual(codes(sweep(root)), ['POINTER-UNREADABLE'],
+        'a channel newer than latest is rejected exactly as About rejects it');
+}
+
+{
+    const apk = 'wallet-0.333.1.apk';
+    const feedAt = (path) => JSON.stringify({
+        latest: '0.333.1',
+        channels: { 'android-direct': { version: '0.333.1', url: `${DESKTOP_FEED_BASE_URL}${path}` } },
+    });
+    const shadowFeed = (shadowBytes) => {
+        buildFeed(root, {
+            androidArtifacts: { [apk]: 'signed-apk' },
+            rootFiles: { 'releases.json': feedAt(`shadow/${apk}`) },
+            manifests: { 'v0.333.1': [apk] },
+        });
+        mkdirSync(join(root, 'shadow'), { recursive: true });
+        writeFileSync(join(root, 'shadow', apk), shadowBytes);
+        return sweep(root);
+    };
+
+    const altered = shadowFeed('altered-apk');
+    assert.deepEqual(codes(altered), ['POINTER-HASH'],
+        'a release-feed target in an unswept directory under a signed name is hashed, not trusted by name');
+    assert.match(altered.findings[0].detail, /v0\.333\.1 manifest does not record/);
+    assert.deepEqual(codes(shadowFeed('signed-apk')), [],
+        'the same path holding the signed bytes is clean');
+
+    buildFeed(root, {
+        androidArtifacts: { [apk]: 'signed-apk' },
+        rootFiles: { 'releases.json': feedAt(`android/${apk}`) },
+        manifests: { 'v0.333.1': [apk] },
+    });
+    writeFileSync(join(root, 'android', apk), 'altered-apk');
+    assert.deepEqual(codes(sweep(root)), ['MISMATCH', 'POINTER-HASH'],
+        'altered bytes in a payload directory are reported as payload and as the feed target');
 }
 
 // ------------------------------- CRLF: producer and consumer must agree

@@ -13,7 +13,12 @@
 // with the air-gapped/hardware callers.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { signMessageFlow, signPsbtFlow } from '../../../packages/core/src/flows/signFlows.js';
+import {
+    signMessageFlow,
+    signSignInChallengeFlow,
+    signPsbtFlow,
+} from '../../../packages/core/src/flows/signFlows.js';
+import { formatSignInChallenge } from '../../../packages/bridge-spec/src/runtime.js';
 import {
     activatePanicMode,
     clearPanicModeState,
@@ -24,6 +29,15 @@ const vault = {};
 const registries = { chainRegistry: {}, sdkRegistry: {} };
 const chainId = 'bitcoin-regtest';
 const signingPaths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }];
+const signInChallenge = formatSignInChallenge({
+    version: 2,
+    appId: 'example-app',
+    origin: 'https://example.test',
+    address: 'bcrt1qexample',
+    nonce: 'nonce-1',
+    timestamp: 1_700_000_000_000,
+    expiresAt: 1_700_000_060_000,
+});
 
 function mockSigner() {
     return {
@@ -119,6 +133,16 @@ describe('signMessageFlow', () => {
         }));
     });
 
+    it('still refuses a valid v2 sign-in challenge before the signer is called', async () => {
+        const signer = mockSigner();
+
+        await expect(signMessageFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0",
+            message: signInChallenge, signer, ...registries,
+        })).rejects.toThrow(/cannot be signed as arbitrary messages/);
+        expect(signer.signMessage).not.toHaveBeenCalled();
+    });
+
     it('refuses to sign in panic mode without calling the signer', async () => {
         const signer = mockSigner();
         activatePanicMode();
@@ -132,6 +156,21 @@ describe('signMessageFlow', () => {
             signer,
             ...registries,
         })).rejects.toBeInstanceOf(PanicModeActiveError);
+        expect(signer.signMessage).not.toHaveBeenCalled();
+    });
+});
+
+describe('signSignInChallengeFlow', () => {
+    it.each([
+        ['an arbitrary message', 'hello'],
+        ['a v1-shaped challenge', 'XChain Sign-In | app | bcrt1qexample | nonce | 1700000000000 | 1700000060000'],
+    ])('refuses %s before the signer is called', async (_label, message) => {
+        const signer = mockSigner();
+
+        await expect(signSignInChallengeFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0",
+            message, signer, ...registries,
+        })).rejects.toThrow(/valid v2 sign-in challenge/);
         expect(signer.signMessage).not.toHaveBeenCalled();
     });
 });

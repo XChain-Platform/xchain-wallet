@@ -8,6 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
+
+const USAGE = `Usage: node tools/release/gradle-pins.mjs --help
+
+Reads Gradle ext assignments supplied by an importing release check.
+Reports version pins that are not exact numeric releases without changing files.
+`;
+
 const IDENTIFIER_START = /[A-Za-z_$]/;
 const IDENTIFIER_PART = /[\w$]/;
 const ASSIGNMENT = /(?:^|[;\r\n])\s*([A-Za-z_$][\w$]*)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^;\r\n}]*?))\s*(?=;|[\r\n}]|$)/g;
@@ -106,4 +114,10 @@ export function badVersionPins(vars, { prefix = '' } = {}) {
     return Object.keys(vars)
         .filter((key) => key.startsWith(prefix) && key.endsWith('Version') && !RELEASE.test(vars[key]))
         .map((key) => ({ key, value: vars[key] }));
+}
+
+if (isInvokedDirectly(import.meta.url)
+    && process.argv.length === 3
+    && (process.argv[2] === '--help' || process.argv[2] === '-h')) {
+    process.stdout.write(USAGE);
 }

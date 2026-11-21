@@ -99,6 +99,7 @@ function harness({
         } }] })),
     };
     const signer = {
+        kind: 'software',
         signPsbt: vi.fn(async ({ psbtHex }) => {
             signedNumber += 1;
             return { psbtHex, txid: txid(signedNumber), txHex: `${signedNumber.toString(16).padStart(2, '0')}aa` };
@@ -155,6 +156,25 @@ function resumedRecord() {
 }
 
 describe('multipart publish funding and envelope delivery', () => {
+    it('refuses unsupported reveal signers before planning, recording or funding', async () => {
+        for (const lane of ['standard', 'envelope']) {
+            for (const kind of ['ledger', 'trezor', undefined]) {
+                const h = harness({ lane });
+                h.signer.kind = kind;
+                const opts = options(h);
+                await expect(publishMultipartFile(opts)).rejects.toMatchObject({
+                    name: 'MultipartSignerCapabilityError',
+                    code: 'FILE_MULTIPART_SIGNER_UNSUPPORTED',
+                    lane,
+                });
+                expect(opts.planMultipartFile).not.toHaveBeenCalled();
+                expect(h.signer.signPsbt).not.toHaveBeenCalled();
+                expect(h.vault.pendingFileUploads.put).not.toHaveBeenCalled();
+                expect(h.encoder.broadcastTx).not.toHaveBeenCalled();
+            }
+        }
+    });
+
     it('checkpoints the record and signed recovery pairs before broadcast', async () => {
         const h = harness();
         const result = await publishMultipartFile(options(h));

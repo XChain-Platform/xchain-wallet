@@ -86,7 +86,7 @@ function harness(seed = null) {
         })),
         getAction: vi.fn(async () => ({ data: [{ multipart: { status: 'complete' } }] })),
     };
-    const signer = { signPsbt: vi.fn(async ({ psbtHex }) => {
+    const signer = { kind: 'software', signPsbt: vi.fn(async ({ psbtHex }) => {
         signed += 1;
         return { psbtHex, txid: txid(signed), txHex: `${String(signed).padStart(2, '0')}aa` };
     }) };
@@ -184,6 +184,21 @@ describe('saved multipart run configuration', () => {
             .find((data) => typeof data === 'string' && data.startsWith('FILE|1|'));
         expect(manifestData).toContain('|saved.bin|application/saved|Saved|Keep me');
         expect(result.record).toMatchObject({ stage: 'complete', lane: 'standard' });
+    });
+
+    it('refuses a device signer on resume by the saved lane, before any write or signature', async () => {
+        const record = savedStandardRecord();
+        const h = harness(record);
+        h.signer.kind = 'ledger';
+        const planner = vi.fn(async (_bytes, meta) => fakePlan(meta));
+        await expect(publishMultipartFile(options(h, {
+            resumeId: record.id, lane: 'envelope', planMultipartFile: planner,
+        }))).rejects.toMatchObject({ code: 'FILE_MULTIPART_SIGNER_UNSUPPORTED', lane: 'standard' });
+        expect(planner).not.toHaveBeenCalled();
+        expect(h.signer.signPsbt).not.toHaveBeenCalled();
+        expect(h.vault.pendingFileUploads.put).not.toHaveBeenCalled();
+        expect(h.encoder.broadcastTx).not.toHaveBeenCalled();
+        expect(h.vault.rows.get(record.id)).toMatchObject({ stage: 'sending', lane: 'standard' });
     });
 });
 

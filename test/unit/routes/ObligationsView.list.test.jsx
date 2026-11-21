@@ -14,12 +14,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 
-const hookState = vi.hoisted(() => ({ obligations: [] }));
+const hookState = vi.hoisted(() => ({ obligations: [], incomplete: false }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useCoinpayObligations.js', async (importOriginal) => ({
     scanCoinpayObligations: (await importOriginal()).scanCoinpayObligations,
     useCoinpayObligations: () => ({
         obligations: hookState.obligations,
+        incomplete: hookState.incomplete,
         scanning: false,
         error: null,
         refresh: vi.fn(),
@@ -76,6 +77,7 @@ function renderView({ onPay = vi.fn(), getCoinpayMatchSides } = {}) {
 afterEach(() => {
     cleanup();
     hookState.obligations = [];
+    hookState.incomplete = false;
     vi.useRealTimers();
 });
 
@@ -84,6 +86,13 @@ describe('ObligationsView list', () => {
         renderView();
         expect(screen.getByText('No payments due')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /Refresh Payments|Pay Now/ })).toBeNull();
+    });
+
+    it('shows an incomplete-read notice instead of claiming no payments are due', () => {
+        hookState.incomplete = true;
+        renderView();
+        expect(screen.getByText(/Couldn't load every payment due/)).toBeTruthy();
+        expect(screen.queryByText('No payments due')).toBeNull();
     });
 
     it('draws each row as ring, title, pay line and chevron, and nothing else', async () => {
@@ -125,13 +134,13 @@ describe('ObligationsView list', () => {
             { action_index: '700210', coinpay_status: 'pending_coinpay', payer_address: PAYER, payee_address: PAYEE, coin_amount: '0.0015', expiration: now() + 3600 },
             { action_index: '700211', coinpay_status: 'fulfilled', payer_address: PAYER, payee_address: PAYEE, coin_amount: '0.0016', expiration: now() + 3600 },
         ];
-        hookState.obligations = await scanCoinpayObligations({
+        hookState.obligations = (await scanCoinpayObligations({
             messaging: {
                 getAddressesByChain: async () => ({ 'bitcoin-mainnet': [{ address: PAYER }] }),
                 getCoinpayObligationsForAddress: async () => ({ data: rows }),
             },
             walletId: 'w1',
-        });
+        })).obligations;
         renderView();
         await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
         expect(screen.getByRole('button', { name: /Pay 0\.0015 BTC/ })).toBeTruthy();

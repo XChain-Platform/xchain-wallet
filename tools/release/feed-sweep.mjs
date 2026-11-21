@@ -42,7 +42,7 @@
 
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -68,6 +68,29 @@ export const PAYLOAD_DIRS = ['desktop', 'extension', 'web', 'android'];
 /** Where signed manifests live, one per release, append-only (§7.3). */
 export const MANIFEST_DIR = 'RELEASE_HASHES';
 
+export const RELEASE_FEED_BASE_URL = ['https://downloads', 'xchain', 'io/wallet/'].join('.');
+
+const RELEASE_CHANNELS = Object.freeze([
+    'web', 'chrome', 'firefox', 'edge', 'ios', 'macos-appstore',
+    'android-play', 'android-direct', 'windows-store', 'desktop-direct', 'snap',
+]);
+const releaseHost = (...parts) => parts.join('.');
+const RELEASE_HOSTS = Object.freeze({
+    web: [releaseHost('wallet', 'xchain', 'io')],
+    chrome: [releaseHost('chromewebstore', 'google', 'com')],
+    firefox: [releaseHost('addons', 'mozilla', 'org')],
+    edge: [releaseHost('microsoftedge', 'microsoft', 'com')],
+    ios: [releaseHost('apps', 'apple', 'com')],
+    'macos-appstore': [releaseHost('apps', 'apple', 'com')],
+    'android-play': [releaseHost('play', 'google', 'com')],
+    'android-direct': [new URL(RELEASE_FEED_BASE_URL).hostname],
+    'windows-store': [releaseHost('apps', 'microsoft', 'com'), releaseHost('www', 'microsoft', 'com')],
+    'desktop-direct': [new URL(RELEASE_FEED_BASE_URL).hostname],
+    snap: [releaseHost('snapcraft', 'io')],
+});
+const RELEASE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const RELEASE_FEED_MAX_CHARS = 4096;
+
 /**
  * Every finding this sweep can report, with the reading each one wants.
  * Kept as data so the log, the summary and the tests cannot drift on what
@@ -77,9 +100,9 @@ export const FINDINGS = {
     UNCOVERED: 'a published file no manifest covers by name',
     MISMATCH: 'a published file whose bytes match no manifest hash for its name',
     'POINTER-UNPARSEABLE': 'an update-info yml that does not parse',
-    'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards (oversized, or a version it will not parse)',
+    'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards',
     'POINTER-DANGLING': 'a pointer naming a file that is not on the feed',
-    'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
+    'POINTER-HASH': "a pointer's sha512, or its version's signed manifest hash, does not match the bytes it names",
     'POINTER-NO-HASH': "a yml pointer names a file with no sha512 the desktop client can read, which every desktop client refuses",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
@@ -230,6 +253,66 @@ export function directFeedRejection(text) {
         return `"${version.slice(0, 32)}" is not a plain MAJOR.MINOR.PATCH`;
     }
     return '';
+}
+
+function cleanReleaseVersion(version) {
+    return String(version ?? '').replace(/^v/, '');
+}
+
+function isNewerReleaseVersion(candidate, current) {
+    const next = RELEASE_SEMVER.exec(cleanReleaseVersion(candidate));
+    const installed = RELEASE_SEMVER.exec(cleanReleaseVersion(current));
+    if (!next || !installed) return false;
+    for (let index = 1; index <= 3; index += 1) {
+        const difference = Number(next[index]) - Number(installed[index]);
+        if (difference !== 0) return difference > 0;
+    }
+    return false;
+}
+
+/** Standalone copy of the About parser, held to it by the smoke equivalence table. */
+function parseReleaseFeedText(text) {
+    if (typeof text !== 'string' || text.length > RELEASE_FEED_MAX_CHARS) {
+        throw new Error('body exceeds the client cap');
+    }
+    let body;
+    try { body = JSON.parse(text); } catch { throw new Error('body is not parseable JSON'); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('body is not an object');
+    const latest = cleanReleaseVersion(body.latest);
+    if (!RELEASE_SEMVER.test(latest)
+        || !body.channels || typeof body.channels !== 'object' || Array.isArray(body.channels)) {
+        throw new Error('invalid latest version or channels');
+    }
+    const channels = {};
+    for (const channel of RELEASE_CHANNELS) {
+        if (!Object.hasOwn(body.channels, channel)) continue;
+        const entry = body.channels[channel];
+        const version = cleanReleaseVersion(entry?.version);
+        if (!RELEASE_SEMVER.test(version) || isNewerReleaseVersion(version, latest)) {
+            throw new Error('invalid channel version');
+        }
+        let url;
+        try { url = new URL(entry?.url); } catch { throw new Error('invalid channel target'); }
+        if (url.protocol !== 'https:' || !RELEASE_HOSTS[channel]?.includes(url.hostname)) {
+            throw new Error('invalid channel target');
+        }
+        channels[channel] = { version, url: url.href };
+    }
+    return { latest, channels };
+}
+
+export function releaseFeedRejection(text) {
+    try { parseReleaseFeedText(text); return ''; } catch (err) { return String(err?.message || err); }
+}
+
+function isReleaseFeedContent(text) {
+    try {
+        const body = JSON.parse(text);
+        return Boolean(body && typeof body === 'object' && !Array.isArray(body)
+            && Object.hasOwn(body, 'latest') && Object.hasOwn(body, 'channels'));
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -406,6 +489,89 @@ export function verifyManifestSignature(manifestBytes, signaturePath, keyFingerp
     return classifyPinnedSignature(result.stdout, keyFingerprint) === 'ok' ? 'ok' : 'bad';
 }
 
+function auditReleaseFeedVersions(rel, feed, byManifestFile, gateByFile, add) {
+    const versions = new Set([feed.latest]);
+    for (const channel of ['android-direct', 'desktop-direct']) {
+        if (feed.channels[channel]) versions.add(feed.channels[channel].version);
+    }
+    for (const version of versions) {
+        const manifestName = `v${version}.txt`;
+        if (!byManifestFile.has(manifestName)) {
+            add('POINTER-NO-MANIFEST', rel,
+                `names version ${version}, no RELEASE_HASHES/${manifestName}`);
+        }
+        const gate = gateByFile.get(manifestName);
+        if (gate !== undefined && gate !== 'enforced') {
+            add('POINTER-UNGATED', rel,
+                `the v${version} manifest records the dev-mock gate as '${gate || 'unrecorded'}', not 'enforced'`);
+        }
+    }
+}
+
+function releaseUrlTarget(root, url) {
+    if (url.search || url.hash) return null;
+    let pathname;
+    try { pathname = decodeURIComponent(url.pathname); } catch { return null; }
+    const basePath = new URL(RELEASE_FEED_BASE_URL).pathname;
+    if (!pathname.startsWith(basePath)) return null;
+    const rootPath = resolve(root);
+    const target = resolve(rootPath, pathname.slice(basePath.length));
+    if (target !== rootPath && !target.startsWith(`${rootPath}/`)) return null;
+    return { target, pathname };
+}
+
+// A covered NAME is not covered BYTES: a feed URL may name a file outside
+// the payload directories, which nothing else hashes, under a basename a
+// signed manifest lists. So the target itself is hashed here, against the
+// hash its own version's manifest records for that name, or the union of
+// every manifest when that version has none.
+function auditReleaseFeedTarget(rel, channel, entry, target, baseline, add) {
+    const { byManifestFile, hashesByManifestFile, union } = baseline;
+    const name = basename(target);
+    const manifestName = `v${entry.version}.txt`;
+    const own = byManifestFile.get(manifestName);
+    if (own && !own.has(name)) {
+        add('POINTER-UNCOVERED', rel,
+            `${channel} names ${name}, which the v${entry.version} manifest does not cover`
+            + (union.has(name) ? ' (another release\'s manifest does)' : ''));
+        return;
+    }
+    if (!own && !union.has(name)) {
+        add('POINTER-UNCOVERED', rel, `${channel} names ${name}, which no signed manifest covers`);
+        return;
+    }
+    const expected = own ? new Set([hashesByManifestFile.get(manifestName).get(name)]) : union.get(name);
+    const actual = sha256File(target);
+    if (!expected.has(actual)) {
+        const source = own ? `the v${entry.version} manifest does not record` : 'no signed manifest records';
+        add('POINTER-HASH', rel, `${channel} names ${name} with sha256 ${actual}, which ${source} for it`);
+    }
+}
+
+function auditReleaseFeedUrls(rel, root, feed, baseline, add) {
+    const localHost = new URL(RELEASE_FEED_BASE_URL).hostname;
+    for (const [channel, entry] of Object.entries(feed.channels)) {
+        const url = new URL(entry.url);
+        if (url.hostname !== localHost) continue;
+        const mapped = releaseUrlTarget(root, url);
+        if (!mapped) {
+            add('POINTER-UNCOVERED', rel, `${channel} names a target outside this feed`);
+            continue;
+        }
+        if (mapped.pathname.endsWith('/')) {
+            if (channel !== 'desktop-direct') {
+                add('POINTER-DANGLING', rel, `${channel} names no file`);
+            }
+            continue;
+        }
+        if (!existsSync(mapped.target) || !statSync(mapped.target).isFile()) {
+            add('POINTER-DANGLING', rel, `${channel} names an absent file`);
+            continue;
+        }
+        auditReleaseFeedTarget(rel, channel, entry, mapped.target, baseline, add);
+    }
+}
+
 /**
  * Sweep a feed root and return every finding.
  *
@@ -423,6 +589,7 @@ export function sweep(root, options = {}) {
     const manifestDir = join(root, MANIFEST_DIR);
     const union = new Map();        // basename -> Set<sha256>
     const byManifestFile = new Map(); // manifest file name -> Set<basename>
+    const hashesByManifestFile = new Map(); // manifest file name -> Map<basename, sha256>
     const gateByFile = new Map();   // manifest file name -> its dev-mock-gate value
     let manifestCount = 0;
     let signaturesChecked = 0;
@@ -468,11 +635,14 @@ export function sweep(root, options = {}) {
                     `file names ${fileTag}, but signed header ${tag} resolves to ${releaseTagOf(tag)}`);
             }
             const covered = new Set();
+            const ownHashes = new Map();
             byManifestFile.set(name, covered);
+            hashesByManifestFile.set(name, ownHashes);
             for (const [file, hash] of entries) {
                 if (!union.has(file)) union.set(file, new Set());
                 union.get(file).add(hash);
                 covered.add(file);
+                ownHashes.set(file, hash);
             }
         }
     }
@@ -480,6 +650,19 @@ export function sweep(root, options = {}) {
     // ---- every published file, against that baseline -------------------
     const pointers = [];
     let checked = 0;
+
+    const auditPayload = (file, rel, name) => {
+        checked += 1;
+        const known = union.get(name);
+        if (!known) {
+            add('UNCOVERED', rel, 'no signed manifest names this file');
+            return;
+        }
+        const actual = sha256File(file);
+        if (!known.has(actual)) {
+            add('MISMATCH', rel, `sha256 ${actual} is in no manifest for this name`);
+        }
+    };
 
     for (const dir of PAYLOAD_DIRS) {
         const full = join(root, dir);
@@ -515,17 +698,21 @@ export function sweep(root, options = {}) {
                 }
             }
 
-            checked += 1;
-            const known = union.get(name);
-            if (!known) {
-                add('UNCOVERED', rel, 'no signed manifest names this file');
+            auditPayload(file, rel, name);
+        }
+    }
+
+    for (const name of readdirSync(root).sort()) {
+        const file = join(root, name);
+        if (!statSync(file).isFile()) continue;
+        if (name.endsWith('.json')) {
+            const text = readFileSync(file, 'utf8');
+            if (isReleaseFeedContent(text)) {
+                pointers.push({ rel: name, file, kind: 'release-feed', text });
                 continue;
             }
-            const actual = sha256File(file);
-            if (!known.has(actual)) {
-                add('MISMATCH', rel, `sha256 ${actual} is in no manifest for this name`);
-            }
         }
+        auditPayload(file, name, name);
     }
 
     // ---- the pointers, which no manifest covers by design --------------
@@ -550,6 +737,18 @@ export function sweep(root, options = {}) {
     // baseline, which is the attacker-plants-a-manifest case the anchor
     // exists to catch.
     for (const { rel, dir, kind, text } of pointers) {
+        if (kind === 'release-feed') {
+            const rejection = releaseFeedRejection(text);
+            if (rejection) {
+                add('POINTER-UNREADABLE', rel,
+                    `the shipped client discards this feed: ${rejection}`);
+                continue;
+            }
+            const feed = parseReleaseFeedText(text);
+            auditReleaseFeedVersions(rel, feed, byManifestFile, gateByFile, add);
+            auditReleaseFeedUrls(rel, root, feed, { byManifestFile, hashesByManifestFile, union }, add);
+            continue;
+        }
         // A JSON pointer carries a version and nothing else - no file list,
         // no hashes - so only the version check applies to it. Stated rather
         // than silently skipped: this lane's pointer names no bytes, so
@@ -665,9 +864,9 @@ export function sweep(root, options = {}) {
 
 const USAGE = `usage: feed-sweep.mjs --root <feed root> [--gpg-key <40-hex fingerprint>] [--json]
 
-Validates every object under a release feed against the UNION of the
-signed manifests published beside them (§7.2). Runs on the feed
-host, over the local tree, by cron:
+Validates signed manifests, files in the published payload directories,
+and root-level files including the release feed. Other subdirectories are
+outside this sweep. Runs on the feed host, over the local tree, by cron:
 
   30 * * * * /usr/bin/node /opt/xchain/feed-sweep.mjs \\
     --root /srv/downloads/wallet --gpg-key <K1 full 40-hex fingerprint> \\

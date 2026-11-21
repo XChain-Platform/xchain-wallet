@@ -218,6 +218,7 @@ export function versionPropertiesFor(tag) {
         `# Derived from release tag ${canonicalTag(tag)} (rails §2).`,
         `versionCode=${storeVersionFromTag(tag)}`,
         `versionName=${versionNameFromTag(tag)}`,
+        `wearVersionCode=${wearVersionCodeFromTag(tag)}`,
         '',
     ].join('\n');
 }

@@ -139,6 +139,45 @@ function parsePbxproj(text) {
     return result;
 }
 
+export function pbxprojTargetLinks(text) {
+    const project = parsePbxproj(text);
+    const objects = project.objects ?? {};
+
+    return Object.values(objects)
+        .filter((object) => object.isa === 'PBXNativeTarget')
+        .map((target) => ({
+            name: target.name,
+            synchronizedGroups: (target.fileSystemSynchronizedGroups ?? [])
+                .map((reference) => objects[reference])
+                .filter((group) => group?.isa === 'PBXFileSystemSynchronizedRootGroup')
+                .map((group) => group.path)
+                .sort(),
+            dependencies: (target.dependencies ?? [])
+                .map((reference) => objects[reference])
+                .filter((dependency) => dependency?.isa === 'PBXTargetDependency')
+                .map((dependency) => dependency.target === undefined
+                    ? dependency.name
+                    : objects[dependency.target]?.name ?? dependency.name)
+                .filter((name) => name !== undefined)
+                .sort(),
+            copyPhases: (target.buildPhases ?? [])
+                .map((reference) => objects[reference])
+                .filter((phase) => phase?.isa === 'PBXCopyFilesBuildPhase')
+                .map((phase) => ({
+                    name: phase.name,
+                    dstSubfolderSpec: phase.dstSubfolderSpec === undefined
+                        ? undefined
+                        : Number(phase.dstSubfolderSpec),
+                    dstPath: phase.dstPath,
+                    files: (phase.files ?? []).map((reference) => {
+                        const buildFile = objects[reference];
+                        return objects[buildFile?.fileRef]?.path;
+                    }),
+                })),
+        }))
+        .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+}
+
 export function pbxprojFacts(text) {
     const project = parsePbxproj(text);
     const objects = project.objects ?? {};
