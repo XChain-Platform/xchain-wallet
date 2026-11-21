@@ -40,7 +40,7 @@ struct SnapshotFileCheck {
             fail("after two saves the directory holds only snapshot.json")
         }
         require(
-            contents.map(\.lastPathComponent) == [SnapshotFile.fileName],
+            contents.map(\.lastPathComponent) == ["snapshot.json"],
             "after two saves the directory holds only snapshot.json"
         )
 
