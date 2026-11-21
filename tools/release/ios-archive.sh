@@ -124,20 +124,21 @@ rm -rf "$archive"
 
 if [ -n "$unsigned" ]; then
     echo "ios-archive: UNSIGNED archive - proves the lane, not the app. Not exportable." >&2
-    # DEVELOPMENT_TEAM and CODE_SIGN_ENTITLEMENTS are cleared as well as the
-    # identity: the project sets both, and leaving either in place makes
-    # xcodebuild look for a provisioning profile it cannot have and fail on
-    # exactly the credential this mode exists to do without.
+    # DEVELOPMENT_TEAM and the App target's entitlements are cleared as well as
+    # the identity. The watchOS targets keep their own entitlement settings.
+    unsigned_config="$(mktemp)"
+    trap 'rm -f "$unsigned_config"' EXIT
+    printf '%s\n' 'CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*] =' > "$unsigned_config"
     xcodebuild archive \
         -project "$project" \
         -scheme App \
         -configuration Release \
         -destination 'generic/platform=iOS' \
         -archivePath "$archive" \
+        -xcconfig "$unsigned_config" \
         CODE_SIGNING_ALLOWED=NO \
         CODE_SIGNING_REQUIRED=NO \
         CODE_SIGN_IDENTITY="" \
-        CODE_SIGN_ENTITLEMENTS="" \
         DEVELOPMENT_TEAM=""
 else
     # xcodebuild wants the key as a FILE. Written with a restrictive umask and
@@ -170,6 +171,11 @@ fi
 app="$archive/Products/Applications/App.app"
 if [ ! -d "$app" ]; then
     echo "ios-archive: xcodebuild succeeded but $app is not there" >&2
+    exit 1
+fi
+
+if ! node "$here/tools/release/watch-embed.mjs" "$archive"; then
+    echo "ios-archive: the archive is missing its watch app or widget extension" >&2
     exit 1
 fi
 
