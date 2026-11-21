@@ -86,6 +86,27 @@ export function resolveSmallBalanceFiat(settings) {
 export const NUMBER_FORMATS = /** @type {const} */ (['full', 'trim', 'plain']);
 export const NUMBER_FORMAT_DEFAULT = 'full';
 
+export const WATCH_TOKEN_MODES = /** @type {const} */ (['home', 'pinned']);
+export const WATCH_START_MODES = /** @type {const} */ (['fiat', 'units']);
+export const WATCH_DEFAULTS = Object.freeze({
+    enabled: true,
+    tokenMode: 'home',
+    startIn: 'fiat',
+    showTotal: false,
+    backgroundActivityCheck: true,
+});
+
+export function resolveWatchSettings(settings) {
+    const stored = isPlainObject(settings?.watch) ? settings.watch : {};
+    return {
+        ...WATCH_DEFAULTS,
+        ...stored,
+        backgroundActivityCheck: settings?.privacy?.torRouting === true
+            ? false
+            : stored.backgroundActivityCheck ?? WATCH_DEFAULTS.backgroundActivityCheck,
+    };
+}
+
 // §20: wallet mode lives on each wallet record (schemas/wallet.js). Re-exported
 // for the validator below, which accepts the legacy app-wide key that only the
 // wallet v3 -> v4 migration reads.
@@ -367,6 +388,7 @@ export function lookalikeWarningsEnabled(settings) {
  * @property {boolean} [showFiatInHistory] v2-tolerant. When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
  * @property {{ enabled: boolean, start: string, end: string }} [quietHours] v2-tolerant. Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
  * @property {{ enabled: boolean, perKind: Record<string, string> }} [sounds] v2-tolerant. Event sounds (spec §6 M4.2). TOP-LEVEL, never nested under the notification flags: the sparse merge is one level deep, so nesting would freeze the whole flag block on the first picker change. `enabled` is the master switch and defaults FALSE (ruling I-35a: audio is opt-in, no surprise noise on upgrade). `perKind` maps a notification family key (the `SOUND_FAMILIES` keys, which are the notification flag names) to a palette sound id or the sentinel 'none' (that family muted while the master stays on); a family absent from the map plays its palette default, and an id the palette no longer knows resolves to that default at read time (`pickedSoundForFamily`) rather than failing validation, so a palette rename can never make a stored record unreadable.
+ * @property {{ enabled: boolean, tokenMode: 'home' | 'pinned', startIn: 'fiat' | 'units', showTotal: boolean, backgroundActivityCheck: boolean }} [watch] watch display and background activity preferences; absent legacy records resolve through WATCH_DEFAULTS
  */
 
 // Form-draft retention (surfaced in Settings > Privacy, Cluster P FU 6).
@@ -506,6 +528,7 @@ export function createDefaultSettings() {
         partnerPairing: null,
         activeNetwork: NETWORK_DEFAULT,
         lastUsedChain: {},
+        watch: { ...WATCH_DEFAULTS },
         // Event sounds (§6 M4.2). Silent out of the box; every family's
         // sound comes from the palette default until the user picks one,
         // so an empty `perKind` is the fully-configured state, not a gap.
@@ -918,6 +941,19 @@ export function validateSettings(record) {
             'showFiatInHistory',
             isBoolean(r.showFiatInHistory),
             'must be a boolean when present',
+        );
+    }
+    if (r.watch !== undefined) {
+        check(
+            errors,
+            'watch',
+            isPlainObject(r.watch)
+                && isBoolean(r.watch.enabled)
+                && isOneOf(r.watch.tokenMode, WATCH_TOKEN_MODES)
+                && isOneOf(r.watch.startIn, WATCH_START_MODES)
+                && isBoolean(r.watch.showTotal)
+                && isBoolean(r.watch.backgroundActivityCheck),
+            'malformed',
         );
     }
     if (r.quietHours !== undefined) {
