@@ -122,5 +122,6 @@ export async function advancedAction(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
+        verifyBuiltTx: true,
     });
 }
