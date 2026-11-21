@@ -154,6 +154,13 @@ describe('wire audit: the mobile egress set is pinned', () => {
         expect(egressHostsFor('mobile')).toEqual(EXPECTED_MOBILE);
     });
 
+    it('discloses the explorer background check and both of its controls', () => {
+        const row = WIRE_AUDIT.find((e) => e.host === 'explorer.xchain.io');
+        expect(row.why).toMatch(/background activity check/);
+        expect(row.control).toMatch(/Settings › Networks/);
+        expect(row.control).toMatch(/Settings › Watch › Background activity check/);
+    });
+
     it('does not contact the block-explorer icon hosts, which the extension does', () => {
         const mobile = egressHostsFor('mobile');
         for (const host of ['mempool.space', 'blockstream.info', 'litecoinspace.org', 'blockchair.com', 'www.blockcypher.com']) {
