@@ -7,6 +7,12 @@ import { describe, expect, it } from 'vitest';
 import schema from '../../../packages/core/src/watch/contract/inbox.schema.json';
 import validate from '../../../packages/core/src/watch/contract/validate.js';
 
+const families = [
+    'txConfirmations', 'incomingReceipts', 'incomingPending', 'messages',
+    'governancePolls', 'deadlines', 'dispenserEscrow', 'dispenserFills',
+    'orderFills', 'priceAlerts', 'request', 'paydue',
+];
+
 const item = (overrides = {}) => ({
     id: 'alert-1',
     family: 'incomingReceipts',
@@ -27,6 +33,12 @@ describe('watch inbox schema', () => {
     it('caps the inbox at 20 items', () => {
         expect(validate(schema, Array.from({ length: 20 }, (_, id) => item({ id: String(id) })))).toEqual([]);
         expect(validate(schema, Array.from({ length: 21 }, (_, id) => item({ id: String(id) })))).toEqual(['$']);
+    });
+
+    it('accepts only families from the alert kinds contract', () => {
+        expect(schema.items.properties.family.enum).toEqual(families);
+        for (const family of families) expect(validate(schema, [item({ family })])).toEqual([]);
+        expect(validate(schema, [item({ family: 'unknownFamily' })])).toEqual(['$[0].family']);
     });
 
     it('enforces title and body character limits', () => {

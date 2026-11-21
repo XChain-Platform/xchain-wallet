@@ -8,7 +8,14 @@
         "additionalProperties": false,
         "properties": {
             "id": { "type": "string" },
-            "family": { "type": "string" },
+            "family": {
+                "type": "string",
+                "enum": [
+                    "txConfirmations", "incomingReceipts", "incomingPending", "messages",
+                    "governancePolls", "deadlines", "dispenserEscrow", "dispenserFills",
+                    "orderFills", "priceAlerts", "request", "paydue"
+                ]
+            },
             "kind": { "type": "string" },
             "title": { "type": "string", "maxLength": 60 },
             "body": { "type": "string", "maxLength": 160 },
