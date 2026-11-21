@@ -680,6 +680,29 @@ final class ScreenshotTests: XCTestCase {
         }
     }
 
+    private func captureDuoLead(_ name: String) {
+        app.launch()
+        acceptTerms()
+        advanceIntroCarousel()
+        enterDemoMode()
+        switchToMainnet()
+        if let home = button(anyOf: ["Home", "Balances"]) { _ = tap(home, "Duo home") }
+        _ = reach(app.staticTexts.firstMatch, "Duo home content", timeout: 20)
+        capture(name)
+        assertListingSafe(scene: name)
+        if !missed.isEmpty {
+            XCTFail("Duo screenshot harness could not reach: \(missed.joined(separator: "; "))")
+        }
+    }
+
+    func testCaptureDuoOuterScreenshots() throws {
+        captureDuoLead("duo-outer-1398x2034")
+    }
+
+    func testCaptureDuoInnerScreenshots() throws {
+        captureDuoLead("duo-inner-2007x2853")
+    }
+
     /// Diagnostic, not a screenshot. Dumps what the WebView exposes so
     /// selectors can be written against reality rather than a guess about how
     /// React rendered. Kept permanently: when the harness breaks, the first
