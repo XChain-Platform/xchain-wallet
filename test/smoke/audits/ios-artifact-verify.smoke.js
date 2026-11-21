@@ -34,7 +34,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -45,6 +45,29 @@ const {
 } = await import(VERIFIER);
 
 const repoExpectations = readExpectations(root);
+
+{
+    const dir = mkdtempSync(join(tmpdir(), 'xchain-watch-bundle-'));
+    const files = [
+        'packages/mobile/ios/App/App.xcodeproj/project.pbxproj',
+        'packages/core/src/uri/xchainUri.js',
+        'packages/mobile/ios/App/App/Info.plist',
+        'packages/mobile/ios/App/App/App.entitlements',
+    ];
+    try {
+        for (const file of files) {
+            mkdirSync(dirname(join(dir, file)), { recursive: true });
+            writeFileSync(join(dir, file), readFileSync(join(root, file)));
+        }
+        const project = join(dir, files[0]);
+        writeFileSync(project, `${readFileSync(project)}\nPRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.watch;\nPRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.watch.widgets;`);
+        assert.equal(readExpectations(dir).bundleId, 'io.xchain.wallet.ios');
+        writeFileSync(project, `${readFileSync(project)}\nPRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.watch.other;`);
+        assert.throws(() => readExpectations(dir), /there is no single id/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
 
 // The one fact readExpectations cannot supply on a checkout where sync:ios has
 // not run: Version.xcconfig is generated and git-ignored. Pinned here so the

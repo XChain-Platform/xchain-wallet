@@ -215,7 +215,9 @@ export function bundleIdFromProject(wsRoot = WS_ROOT) {
     const text = readFileSync(pbx, 'utf8');
     const ids = [...text.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
         .map((m) => m[1].trim().replace(/^"|"$/g, ''))
-        .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests'));
+        .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests')
+            && id !== 'io.xchain.wallet.ios.watch'
+            && id !== 'io.xchain.wallet.ios.watch.widgets');
     const unique = [...new Set(ids)];
     if (unique.length !== 1) {
         throw new Error(
