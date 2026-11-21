@@ -22,6 +22,7 @@ import {
     readPanelSplitPreference,
     writePanelSplitPreference,
 } from '../hooks/useSettingsRootAttributes.js';
+import { useFoldDivision } from '../hooks/useFoldDivision.js';
 import styles from './PanelSplit.module.css';
 
 /** The line and the 8px on each side of it, between the two panels. */
@@ -143,6 +144,17 @@ function inlineSign(el) {
     }
 }
 
+function foldPanelWidth(fold, box, el) {
+    if (!fold.vertical || !Number.isFinite(fold.dividerX) || box.width <= 0) return null;
+    const start = inlineSign(el) < 0
+        ? box.right - fold.dividerX
+        : fold.dividerX - box.left;
+    if (start <= 0 || start >= box.width) return null;
+    const halfGutter = (PANEL_SPLIT_GUTTER_PX - 1) / 2;
+    const available = Math.max(0, box.width - PANEL_SPLIT_GUTTER_PX);
+    return Math.round(Math.min(available, Math.max(0, start - halfGutter)));
+}
+
 /**
  * The split's state: the start panel's width (dragged and saved, or the
  * default share of the measured split), the measured split itself, and the
@@ -159,9 +171,10 @@ function inlineSign(el) {
 export function usePanelSplit({ storageKey, min, max, minOther = 0, defaultShare = 0.4, step = 8 }) {
     const limits = { min, max, minOther };
     const layoutRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const [layoutWidth, setLayoutWidth] = useState(0);
+    const [layoutBox, setLayoutBox] = useState({ width: 0, left: 0, right: 0 });
     const [saved, setSaved] = useState(() => readStoredWidth(storageKey, limits));
     const [dragging, setDragging] = useState(false);
+    const fold = useFoldDivision();
 
     useLayoutEffect(() => {
         setSaved(readStoredWidth(storageKey, { min, max, minOther }));
@@ -171,8 +184,15 @@ export function usePanelSplit({ storageKey, min, max, minOther = 0, defaultShare
         const el = layoutRef.current;
         if (!el) return undefined;
         const measure = () => {
-            const next = Math.round(el.getBoundingClientRect?.().width || 0);
-            setLayoutWidth((prev) => (prev === next ? prev : next));
+            const rect = el.getBoundingClientRect?.();
+            const width = Math.round(rect?.width || 0);
+            const left = Number.isFinite(rect?.left) ? rect.left : 0;
+            const right = Number.isFinite(rect?.right) ? rect.right : left + width;
+            setLayoutBox((prev) => (
+                prev.width === width && prev.left === left && prev.right === right
+                    ? prev
+                    : { width, left, right }
+            ));
         };
         measure();
         if (typeof ResizeObserver !== 'undefined') {
@@ -183,14 +203,19 @@ export function usePanelSplit({ storageKey, min, max, minOther = 0, defaultShare
         if (typeof window === 'undefined') return undefined;
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, []);
+    }, [fold.dividerX, fold.vertical]);
 
+    const layoutWidth = layoutBox.width;
     const defaultWidth = clampPanelSplit(
         layoutWidth > 0 ? layoutWidth * defaultShare : min,
         limits,
         layoutWidth,
     );
-    const width = saved === null ? defaultWidth : clampPanelSplit(saved, limits, layoutWidth);
+    const preferredWidth = saved === null
+        ? defaultWidth
+        : clampPanelSplit(saved, limits, layoutWidth);
+    const snappedWidth = foldPanelWidth(fold, layoutBox, layoutRef.current);
+    const width = snappedWidth ?? preferredWidth;
     const widest = panelSplitMax(limits, layoutWidth);
 
     const save = useCallback((px) => {
@@ -241,8 +266,8 @@ export function usePanelSplit({ storageKey, min, max, minOther = 0, defaultShare
         layoutRef,
         layoutWidth,
         width,
-        min,
-        max: widest,
+        min: Math.min(min, width),
+        max: Math.max(widest, width),
         dragging,
         onPointerDown,
         onKeyDown,
@@ -333,27 +358,40 @@ export function ListDetailSplit({
         layoutRef.current = el;
         measureRef?.(el);
     }, [layoutRef, measureRef]);
+    const collapsed = split.layoutWidth > 0 && split.layoutWidth < LIST_DETAIL_MIN_WIDTH;
     return (
         <div ref={setBox} className={styles.twoPanel} data-list-detail={layoutName}>
-            <div
-                className={styles.listPanel}
-                style={{ flexBasis: `${split.width}px` }}
-            >
-                {listHeader ? <div className={styles.listHeader}>{listHeader}</div> : null}
-                {/* Only the rows scroll. The header slot above stays in place,
-                    and the named list scroller remains keyboard reachable. */}
+            {collapsed ? null : (
                 <div
-                    id={listId}
-                    className={styles.listBody}
-                    role="region"
-                    aria-label={listLabel}
-                    tabIndex={0}
+                    key="list"
+                    className={styles.listPanel}
+                    style={{ flexBasis: `${split.width}px` }}
                 >
-                    {list}
+                    {listHeader ? <div className={styles.listHeader}>{listHeader}</div> : null}
+                    {/* Only the rows scroll. The header slot above stays in place,
+                        and the named list scroller remains keyboard reachable. */}
+                    <div
+                        id={listId}
+                        className={styles.listBody}
+                        role="region"
+                        aria-label={listLabel}
+                        tabIndex={0}
+                    >
+                        {list}
+                    </div>
                 </div>
-            </div>
-            <PanelSplitDivider split={split} label={resizeLabel} hint={resizeHint} controls={listId} />
+            )}
+            {collapsed ? null : (
+                <PanelSplitDivider
+                    key="divider"
+                    split={split}
+                    label={resizeLabel}
+                    hint={resizeHint}
+                    controls={listId}
+                />
+            )}
             <div
+                key="detail"
                 className={styles.detailPanel}
                 role="region"
                 aria-label={detailLabel}

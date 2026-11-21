@@ -36,6 +36,12 @@
         "distUrl": "https://nodejs.org/dist"
     },
 
+    "xcode": {
+        "version": "27.2",
+        "build": "27B52",
+        "_versionNote": "Exact version and build keep the macOS release toolchain reproducible."
+    },
+
     "baseImage": {
         "ref": "debian:bookworm-slim",
         "digest": "sha256:40b107342c492725bc7aacbe93a49945445191ae364184a6d24fedb28172f6f7",
