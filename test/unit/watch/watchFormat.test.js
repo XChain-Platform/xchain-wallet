@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
-import { ageText, amountText, fiatText } from '../../../packages/core/src/watch/watchFormat.js';
+import {
+    ageText,
+    amountText,
+    balanceText,
+    fiatText,
+} from '../../../packages/core/src/watch/watchFormat.js';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -29,11 +34,27 @@ describe('watch formatting', () => {
         expect(fiatText(row, { fiatCurrency: 'not-supported' })).toBe('$2,469.00');
     });
 
-    it('keeps units beneath the no-price copy for fiat mode', () => {
+    it('uses the two-line no-price form only in fiat mode', () => {
         const unpriced = { ...row, fiatRate: null };
-        expect({ primary: fiatText(unpriced), secondary: amountText(unpriced) }).toEqual({
+        expect(balanceText(unpriced, 'fiat')).toEqual({
             primary: 'No price yet',
             secondary: '1,234.50000000 TICK',
+        });
+        expect(balanceText(unpriced, 'units')).toEqual({
+            primary: '1,234.50000000 TICK',
+            secondary: '',
+        });
+    });
+
+    it('uses a single primary line when the selected mode has a value', () => {
+        const settings = { fiatCurrency: 'EUR', numberFormat: 'trim' };
+        expect(balanceText(row, 'fiat', settings)).toEqual({
+            primary: '€2,469.00',
+            secondary: '',
+        });
+        expect(balanceText(row, 'units', settings)).toEqual({
+            primary: '1,234.5 TICK',
+            secondary: '',
         });
     });
 

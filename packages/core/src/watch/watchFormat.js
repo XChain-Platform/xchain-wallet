@@ -30,6 +30,16 @@ export function fiatText(row, settings = {}) {
     return formatFiat(value, effective?.fiatCurrency);
 }
 
+export function balanceText(row, mode, settings = {}) {
+    const units = amountText(row, settings);
+    if (mode !== 'fiat') return { primary: units, secondary: '' };
+
+    const fiat = fiatText(row, settings);
+    return fiat === balanceStrings['state.noPriceYet']
+        ? { primary: fiat, secondary: units }
+        : { primary: fiat, secondary: '' };
+}
+
 export function ageText(balancesAt, now) {
     const age = ageBucket(balancesAt, now);
     if (age.bucket === 'justNow') return 'Updated just now';
