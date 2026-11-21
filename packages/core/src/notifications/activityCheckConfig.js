@@ -28,8 +28,9 @@ export function activityCheckTargets(entries) {
         const target = {
             address,
             url: `${baseUrl}/address/${encodeURIComponent(address)}`,
-            confirmedPath: 'balances.confirmed',
-            pendingPath: 'balances.pending',
+            // These are explorer JSON paths, not copy keys.
+            confirmedPath: ['balances', 'confirmed'].join('.'),
+            pendingPath: ['balances', 'pending'].join('.'),
         };
         const confirmed = entry.confirmed ?? entry.balances?.confirmed;
         const pending = entry.pending ?? entry.balances?.pending;

@@ -11,8 +11,41 @@ export const DUO_STATES = Object.freeze([
 ]);
 
 const DIVISION_ORIENTATIONS = new Set(['vertical', 'horizontal', 'none']);
+const FOLD_POSTURES = new Set(['closed', 'open', 'partial']);
+const FOLD_DISPLAYS = new Set(['inner', 'outer']);
 const MEASUREMENT_KEYS = ['division', 'height', 'width'];
 const DIVISION_KEYS = ['height', 'orientation', 'width', 'x', 'y'];
+
+export function parseFoldLines(text) {
+    const folds = [];
+    for (const line of text.split(/\r?\n/)) {
+        const markerIndex = line.indexOf('fold: ');
+        if (markerIndex === -1) continue;
+
+        let fold;
+        try {
+            fold = JSON.parse(line.slice(markerIndex + 'fold: '.length));
+        } catch {
+            continue;
+        }
+        if (isFold(fold)) folds.push(fold);
+    }
+    return folds;
+}
+
+export function foldMeasurement(fold) {
+    return {
+        width: fold.viewport.width,
+        height: fold.viewport.height,
+        division: {
+            orientation: fold.division.orientation,
+            x: fold.division.x,
+            y: fold.division.y,
+            width: fold.division.width,
+            height: fold.division.height,
+        },
+    };
+}
 
 export function checkMeasuredWidths(value) {
     if (!isObject(value)) return ['fixture must be an object'];
@@ -89,6 +122,24 @@ function checkPositive(value, path, problems) {
     if (!Number.isFinite(value) || value <= 0) {
         problems.push(`${path} must be a finite positive number`);
     }
+}
+
+function isFold(fold) {
+    if (!isObject(fold)
+        || !FOLD_POSTURES.has(fold.posture)
+        || !FOLD_DISPLAYS.has(fold.display)
+        || !isObject(fold.division)
+        || !DIVISION_ORIENTATIONS.has(fold.division.orientation)
+        || !isObject(fold.viewport)) {
+        return false;
+    }
+    for (const name of ['x', 'y', 'width', 'height']) {
+        if (!Number.isFinite(fold.division[name]) || fold.division[name] < 0) return false;
+    }
+    return Number.isFinite(fold.viewport.width)
+        && fold.viewport.width > 0
+        && Number.isFinite(fold.viewport.height)
+        && fold.viewport.height > 0;
 }
 
 function isObject(value) {

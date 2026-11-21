@@ -93,6 +93,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@xchain-wallet/bridge-spec':
+        specifier: workspace:*
+        version: link:../bridge-spec
       '@noble/ciphers':
         specifier: ^1.0.0
         version: 1.3.0

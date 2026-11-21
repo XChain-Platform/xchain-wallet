@@ -37,6 +37,7 @@ import providerSource from '../../../packages/extension/src/inject/xchainProvide
 const flowMocks = vi.hoisted(() => ({
     sendToken: vi.fn(),
     signMessageFlow: vi.fn(),
+    signSignInChallengeFlow: vi.fn(),
     signPsbtFlow: vi.fn(),
     addressBalances: vi.fn(),
     passiveCoSignForAccount: vi.fn(),
@@ -166,6 +167,7 @@ beforeEach(() => {
     for (const mock of Object.values(flowMocks)) mock.mockReset();
     flowMocks.sendToken.mockResolvedValue({ txid: 'tx-1', actionString: 'SEND|…', encoding: 'opreturn' });
     flowMocks.signMessageFlow.mockResolvedValue({ signature: 'sig-1' });
+    flowMocks.signSignInChallengeFlow.mockResolvedValue({ signature: 'sig-1' });
     flowMocks.signPsbtFlow.mockResolvedValue({ signedPsbtHex: 'ab', txHex: 'cd', txid: 'tx-2' });
 });
 
@@ -942,7 +944,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         const resp = await call(host, {});
         expect(resp.ok).toBe(false);
         expect(resp.error.message).toMatch(/NO_CREDENTIALS/);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('an address outside the account grant is refused even when the window returns it', async () => {
@@ -952,7 +954,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
         expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.address)).not.toContain(OUTSIDE);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('a chain the site was not granted is never offered, and is refused if returned', async () => {
@@ -962,7 +964,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         expect(resp.ok).toBe(false);
         expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
         expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.chainId)).toEqual([CHAIN, CHAIN, CHAIN]);
-        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+        expect(flowMocks.signSignInChallengeFlow).not.toHaveBeenCalled();
     });
 
     it('an address from a second wallet signs with that wallet, not the window default', async () => {
@@ -970,7 +972,7 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
         const { result } = await call(host, {});
         expect(result.ok).toBe(true);
-        expect(flowMocks.signMessageFlow.mock.calls[0][0]).toMatchObject({
+        expect(flowMocks.signSignInChallengeFlow.mock.calls[0][0]).toMatchObject({
             walletId: 'wallet-2', addressType: 'p2wpkh',
         });
     });

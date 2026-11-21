@@ -317,11 +317,15 @@ export function makeHardwareSessionSigner(record, opts = {}) {
         isLive() {
             return Boolean(peek());
         },
-        // A status poll never opens the device (that could prompt); until the
-        // first sign opens it, the sign page owns the connection state.
+        // A status poll never opens the device (that could prompt). A sign
+        // page's poll gets 'available' for an unopened device, since the sign
+        // opens it and the sign page owns the connection state. requireOpen
+        // asks whether the device is currently open (the device card's
+        // badge): an unopened device is 'disconnected', and an open one is
+        // asked through its own transport.
         async getStatus(params) {
             const signer = peek();
-            if (!signer) return 'available';
+            if (!signer) return params?.requireOpen === true ? 'disconnected' : 'available';
             return signer.getStatus(params);
         },
         // Reads may take a network the record has no identity for yet (the

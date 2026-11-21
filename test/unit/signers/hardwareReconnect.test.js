@@ -16,6 +16,7 @@ import { MockHardwareSigner } from './MockHardwareSigner.js';
 import * as hardwareSession from '../../../packages/core/src/signers/hardwareSession.js';
 import {
     _resetHardwareReconnectForTests,
+    invalidateLiveSigners,
     makeHardwareSessionSigner,
     setHardwareFactories,
     workingHardwareVendors,
@@ -326,5 +327,34 @@ describe('makeHardwareSessionSigner', () => {
         expect(events).toEqual([]);
         expect(signer.isLive()).toBe(true);
         off();
+    });
+
+    // The device card asks with requireOpen; every sign page asks without it
+    // and keeps 'available', since its sign opens the device.
+    it('answers requireOpen with disconnected until the device is open this session', async () => {
+        const live = new MockHardwareSigner({ vendor: 'ledger', status: 'available' });
+        const open = vi.fn(async () => live);
+        const signer = makeHardwareSessionSigner({ id: 's', vendor: 'ledger' }, { open });
+        await expect(signer.getStatus({ requireOpen: true })).resolves.toBe('disconnected');
+        await expect(signer.getStatus({})).resolves.toBe('available');
+        await expect(signer.getStatus()).resolves.toBe('available');
+        expect(open).not.toHaveBeenCalled();
+
+        await signer.getAddresses({ count: 1 });
+        await expect(signer.getStatus({ requireOpen: true })).resolves.toBe('available');
+        expect(live.calls.getStatus).toBe(1);
+
+        // A lock or wallet switch resets the transports: the device is closed again.
+        invalidateLiveSigners();
+        await expect(signer.getStatus({ requireOpen: true })).resolves.toBe('disconnected');
+        await expect(signer.getStatus({})).resolves.toBe('available');
+    });
+
+    it('asks a device the pairing handed over through its own transport', async () => {
+        const live = new MockHardwareSigner({ vendor: 'ledger', status: 'disconnected' });
+        const signer = makeHardwareSessionSigner({ id: 's', vendor: 'ledger' }, { open: vi.fn() });
+        signer.adopt({ live });
+        await expect(signer.getStatus({ requireOpen: true })).resolves.toBe('disconnected');
+        expect(live.calls.getStatus).toBe(1);
     });
 });
