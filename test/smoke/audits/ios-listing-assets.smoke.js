@@ -94,6 +94,26 @@ const requiredWatchScenes = ['01-balances.png', '02-receive.png', '03-send.png',
 assert.deepEqual(WATCH_LISTING, {
     type: 'APP_WATCH_ULTRA', dir: 'xc-watch-49mm', width: 422, height: 514, scenes: requiredWatchScenes,
 });
+const expectedWatchAssets = ['xc-watch-49mm', 'xc-watch-41mm']
+    .flatMap((dir) => requiredWatchScenes.map((name) => `${dir}/${name}`));
+const assertExactWatchExtras = (result) => {
+    const pinnedWatchAssets = expectedWatchAssets.filter((name) => result.pin.assets[name]);
+    assert.ok(
+        pinnedWatchAssets.length === 0 || pinnedWatchAssets.length === expectedWatchAssets.length,
+        `the App Store pin contains a partial watch capture: ${pinnedWatchAssets.join(', ')}`,
+    );
+    assert.deepEqual(
+        [...result.extra].sort(),
+        [...pinnedWatchAssets].sort(),
+        `the App Store pin covers unexpected files: ${result.extra.join(', ')}`,
+    );
+};
+assertExactWatchExtras(pin);
+assert.throws(
+    () => assertExactWatchExtras({ ...pin, extra: [...pin.extra, 'unrelated/extra.png'] }),
+    /unexpected files/,
+    'an unrelated extra asset must fail the listing audit',
+);
 const captureSource = readFileSync(join(repoRoot, iosSet.capture), 'utf8');
 assert.match(captureSource, /XC Watch 49mm:422:514/);
 assert.match(captureSource, /XC Watch 41mm:352:430/);
