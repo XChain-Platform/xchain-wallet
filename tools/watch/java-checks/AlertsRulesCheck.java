@@ -117,13 +117,50 @@ public final class AlertsRulesCheck {
     }
 
     private static void checkStringKeys() throws Exception {
+        require(!containsJsonKey("{\"other\":\"w3.empty\"}", "w3.empty"),
+                "JSON key check rejects w3.empty when it is only a value");
+        require(!containsJsonKey("{\"other\":\"w4.requestExpired\"}", "w4.requestExpired"),
+                "JSON key check rejects w4.requestExpired when it is only a value");
+
         String strings = Files.readString(
                 Path.of("packages/core/src/watch/contract/strings-alerts.json"),
                 StandardCharsets.UTF_8);
-        require(strings.contains("\"w3.empty\""),
+        require(containsJsonKey(strings, "w3.empty"),
                 "strings-alerts.json contains the quoted w3.empty key");
-        require(strings.contains("\"w4.requestExpired\""),
+        require(containsJsonKey(strings, "w4.requestExpired"),
                 "strings-alerts.json contains the quoted w4.requestExpired key");
+    }
+
+    private static boolean containsJsonKey(String json, String key) {
+        for (int start = 0; start < json.length(); start++) {
+            if (json.charAt(start) != '"') {
+                continue;
+            }
+
+            boolean escaped = false;
+            int end = start + 1;
+            for (; end < json.length() && json.charAt(end) != '"'; end++) {
+                if (json.charAt(end) == '\\') {
+                    escaped = true;
+                    end++;
+                }
+            }
+            if (end >= json.length()) {
+                return false;
+            }
+
+            if (!escaped && key.equals(json.substring(start + 1, end))) {
+                int next = end + 1;
+                while (next < json.length() && Character.isWhitespace(json.charAt(next))) {
+                    next++;
+                }
+                if (next < json.length() && json.charAt(next) == ':') {
+                    return true;
+                }
+            }
+            start = end;
+        }
+        return false;
     }
 
     private static void require(boolean condition, String caseName) {
