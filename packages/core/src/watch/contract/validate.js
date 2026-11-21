@@ -31,6 +31,7 @@ function rejectNulls(value, path, errors) {
 
 function visit(schema, value, path, root, errors) {
     if (value === null) return;
+    const errorsBefore = errors.size;
     if (schema.$ref) {
         const target = resolveRef(root, schema.$ref);
         if (!target) errors.add(path);
@@ -66,6 +67,19 @@ function visit(schema, value, path, root, errors) {
                 if (!Object.hasOwn(properties, key)) errors.add(childPath(path, key));
             }
         }
+    }
+    if (errors.size === errorsBefore && Array.isArray(schema.oneOf)) {
+        const matches = schema.oneOf.filter((branch) => {
+            const branchErrors = new Set();
+            visit(branch, value, path, root, branchErrors);
+            return branchErrors.size === 0;
+        });
+        if (matches.length !== 1) errors.add(path);
+    }
+    if (errors.size === errorsBefore && schema.not) {
+        const branchErrors = new Set();
+        visit(schema.not, value, path, root, branchErrors);
+        if (branchErrors.size === 0) errors.add(path);
     }
 }
 
