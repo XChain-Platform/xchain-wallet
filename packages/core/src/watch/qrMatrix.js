@@ -1,6 +1,10 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import QRCode from 'qrcode';
+
+const RECEIVE_ERROR_CORRECTION = 'M';
+
 export function packModules({ size, data }) {
     const moduleCount = size * size;
     const packed = new Uint8Array(Math.ceil(moduleCount / 8));
@@ -25,4 +29,10 @@ export function unpackModules({ size, bits }) {
         data[index] = (binary.charCodeAt(index >> 3) >> (7 - (index & 7))) & 1;
     }
     return data;
+}
+
+export function qrMatrix(uri) {
+    return packModules(QRCode.create(uri, {
+        errorCorrectionLevel: RECEIVE_ERROR_CORRECTION,
+    }).modules);
 }
