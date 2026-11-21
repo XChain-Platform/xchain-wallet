@@ -28,6 +28,7 @@ import {
     retireBiometricAfterPasswordChange,
 } from '../../flows/biometricUnlock.js';
 import { tripDuressIfMatch } from '../../flows/duressPassphrase.js';
+import { vaultErrorKind } from '../../storage/backend.js';
 import {
     cancelEraseSchedule,
     eraseRemainingMs,
@@ -87,8 +88,11 @@ const ForgotPassword = onDemandComponent(
  * @param {() => void} [props.onUnlocked]
  * @param {'auto-lock-unsaved' | null} [props.lockReason] why the shell locked
  *   the wallet, when the reason is one the user should be told
+ * @param {(status: { error: string, errorKind: 'evicted' | 'incomplete' }) => void} [props.onVaultUnavailable]
+ *   called when the unlock finds the encrypted vault gone, so the shell shows
+ *   the screen its own start-up read shows for the same state
  */
-export function Locked({ onUnlocked, lockReason = null }) {
+export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
     // S4: The unlock screen: a recording of it is a recording of the password
     // being typed.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -564,6 +568,19 @@ export function Locked({ onUnlocked, lockReason = null }) {
                 // the freeze, which every open context's signer reads, and the
                 // message below is the one any password gets here.
                 tripDuressIfMatch(password);
+                // The vault meta is here and the encrypted vault is not, so no
+                // password can open it and closing the app will not bring it
+                // back. Hand the shell the screen its start-up read shows for
+                // this state; only the two missing-vault kinds route, so a
+                // password attempt never reaches the corrupt or keystore screens.
+                const vaultKind = vaultErrorKind(err);
+                if ((vaultKind === 'evicted' || vaultKind === 'incomplete')
+                    && typeof onVaultUnavailable === 'function') {
+                    haptic.error();
+                    finishFailedUnlock({ clearPassword: true });
+                    onVaultUnavailable({ error: String(err?.message || err), errorKind: vaultKind });
+                    return;
+                }
                 // Two failures carry a sentence that says what to do: another
                 // tab holding the vault, and a browser that cannot coordinate
                 // tabs. "Close and reopen the app" would send the user the wrong way.
