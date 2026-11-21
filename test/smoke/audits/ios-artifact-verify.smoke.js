@@ -631,6 +631,31 @@ if (process.platform === 'darwin') {
             '</dict></plist>',
         ].join('\n'));
 
+        const watchApp = join(app, 'Watch', 'WatchApp.app');
+        const widget = join(watchApp, 'PlugIns', 'WatchWidgets.appex');
+        const writeBundleInfo = (bundle, values) => {
+            mkdirSync(bundle, { recursive: true });
+            writeFileSync(join(bundle, 'Info.plist'), [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<plist version="1.0"><dict>',
+                ...Object.entries(values).map(plistEntry),
+                '</dict></plist>',
+            ].join('\n'));
+        };
+        const watchInfo = {
+            CFBundleIdentifier: `${expected.bundleId}.watch`,
+            CFBundleShortVersionString: cliMarketing,
+            CFBundleVersion: cliBuild,
+            WKCompanionAppBundleIdentifier: expected.bundleId,
+        };
+        const widgetInfo = {
+            CFBundleIdentifier: `${expected.bundleId}.watch.widgets`,
+            CFBundleShortVersionString: cliMarketing,
+            CFBundleVersion: cliBuild,
+        };
+        writeBundleInfo(watchApp, watchInfo);
+        writeBundleInfo(widget, widgetInfo);
+
         const cli = (args) => {
             try {
                 execFileSync('node', [VERIFIER, ...args], { encoding: 'utf8', stdio: 'pipe', cwd: root });
@@ -644,6 +669,22 @@ if (process.platform === 'darwin') {
             '--marketing-version', cliMarketing, '--build-number', cliBuild]);
         if (unsignedRun.code === 0) console.log('  ok   the CLI reads an XML Info.plist out of a .app');
         else { failures += 1; console.error(`  FAIL the CLI could not read a synthesised .app:\n${unsignedRun.out}`); }
+
+        writeBundleInfo(watchApp, { ...watchInfo, CFBundleVersion: '1' });
+        const badWatch = cli([app, '--stage', 'archive', '--unsigned',
+            '--marketing-version', cliMarketing, '--build-number', cliBuild]);
+        if (badWatch.code === 1 && /watch app CFBundleVersion is "1"/.test(badWatch.out)) {
+            console.log('  ok   the CLI rejects a watch app version that differs from the phone');
+        } else { failures += 1; console.error(`  FAIL the CLI did not inspect the watch app:\n${badWatch.out}`); }
+        writeBundleInfo(watchApp, watchInfo);
+
+        writeBundleInfo(widget, { ...widgetInfo, CFBundleVersion: '1' });
+        const badWidget = cli([app, '--stage', 'archive', '--unsigned',
+            '--marketing-version', cliMarketing, '--build-number', cliBuild]);
+        if (badWidget.code === 1 && /watch widgets CFBundleVersion is "1"/.test(badWidget.out)) {
+            console.log('  ok   the CLI rejects a widget version that differs from the phone');
+        } else { failures += 1; console.error(`  FAIL the CLI did not inspect the widget:\n${badWidget.out}`); }
+        writeBundleInfo(widget, widgetInfo);
 
         const signedRun = cli([app, '--stage', 'archive']);
         if (signedRun.code === 1 && /carries no entitlements at all/.test(signedRun.out)) {
