@@ -38,11 +38,13 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { SETS, verifyPin, APP_STORE_SIZES } from '../../../tools/release/verify-listing-assets.mjs';
+import { SETS, verifyPin, APP_STORE_SIZES, pngHeader } from '../../../tools/release/verify-listing-assets.mjs';
+import { WATCH_LISTING } from '../../../tools/release/upload-listing-assets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -89,11 +91,35 @@ assert.deepEqual(
     + `refuses (accepted: ${APP_STORE_SIZES.map((c) => `${c.width}x${c.height}`).join(', ')}): `
     + `${pin.hashProblems.join(' | ')}`,
 );
+const watchCases = [
+    { dir: WATCH_LISTING.dir, width: 422, height: 514, uploads: true },
+    { dir: 'xc-watch-41mm', width: 352, height: 430, uploads: false },
+];
+const expectedWatchAssets = watchCases.flatMap(({ dir }) => WATCH_LISTING.scenes.map((name) => `${dir}/${name}`));
 assert.deepEqual(
-    pin.extra,
-    [],
-    `the App Store pin covers files that are not listing assets: ${pin.extra.join(', ')}`,
+    pin.extra.length ? [...pin.extra].sort() : [],
+    pin.extra.length ? [...expectedWatchAssets].sort() : [],
+    `the App Store pin covers unexpected files: ${pin.extra.join(', ')}`,
 );
+for (const spec of watchCases) {
+    for (const name of WATCH_LISTING.scenes) {
+        const rel = `${spec.dir}/${name}`;
+        if (!pin.pin.assets[rel]) continue;
+        const bytes = readFileSync(join(repoRoot, 'packages/mobile/screenshots', rel));
+        assert.equal(createHash('sha256').update(bytes).digest('hex'), pin.pin.assets[rel].sha256, `${rel} changed after capture`);
+        const header = pngHeader(bytes);
+        assert.equal(header?.width, spec.width, `${rel} must be ${spec.width}px wide`);
+        assert.equal(header?.height, spec.height, `${rel} must be ${spec.height}px high`);
+        assert.equal(header?.hasAlpha, false, `${rel} must have no alpha channel`);
+    }
+}
+const captureSource = readFileSync(join(repoRoot, iosSet.capture), 'utf8');
+assert.match(captureSource, /XC Watch 49mm:422:514/);
+assert.match(captureSource, /XC Watch 41mm:352:430/);
+assert.match(captureSource, /simctl pair_activate/);
+assert.match(captureSource, /simctl io .* screenshot/);
+assert.equal(WATCH_LISTING.type, 'APP_WATCH_ULTRA');
+assert.equal(watchCases.filter((item) => item.uploads).map((item) => item.dir).join(','), WATCH_LISTING.dir);
 
 // 3. TRACKED. This is the row-63 half, and it is asserted against git rather
 // than against the filesystem on purpose: the images were present on disk the

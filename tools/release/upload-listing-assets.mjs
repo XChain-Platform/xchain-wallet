@@ -69,6 +69,11 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WS_ROOT = join(HERE, '..', '..');
 const API = 'https://api.appstoreconnect.apple.com';
+export const WATCH_LISTING = Object.freeze({
+    type: 'APP_WATCH_ULTRA',
+    dir: 'xc-watch-49mm',
+    scenes: Object.freeze(['01-balances.png', '02-receive.png', '03-send.png', '04-settings.png']),
+});
 
 export const USAGE = `upload-listing-assets.mjs - upload the pinned iOS listing
 screenshots to App Store Connect (row 63).
@@ -243,6 +248,28 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
         log('which writes the pin as part of a successful run.');
         return EXIT.CONFIG;
     }
+    const screenshotTypes = [...REQUIRED_SCREENSHOT_TYPES];
+    const watchEntries = [];
+    const watchDir = join(wsRoot, 'packages', 'mobile', 'screenshots', WATCH_LISTING.dir);
+    const watchPin = JSON.parse(readFileSync(join(wsRoot, 'packages', 'mobile', 'screenshots', 'capture-pin.json'), 'utf8'));
+    const hasWatchPin = WATCH_LISTING.scenes.some((name) => watchPin.assets?.[`${WATCH_LISTING.dir}/${name}`]);
+    for (const name of WATCH_LISTING.scenes) {
+        const rel = `${WATCH_LISTING.dir}/${name}`;
+        const recorded = watchPin.assets?.[rel];
+        const file = join(watchDir, name);
+        if (!recorded || !existsSync(file)) { watchEntries.length = 0; break; }
+        const bytes = readFileSync(file);
+        if (createHash('sha256').update(bytes).digest('hex') !== recorded.sha256) { watchEntries.length = 0; break; }
+        watchEntries.push({ name, md5: createHash('md5').update(bytes).digest('hex') });
+    }
+    if (hasWatchPin && watchEntries.length !== WATCH_LISTING.scenes.length) {
+        log('The pinned 49mm watch set is incomplete, missing, or changed after capture.');
+        return EXIT.CONFIG;
+    }
+    if (watchEntries.length === WATCH_LISTING.scenes.length) {
+        pin.byType[WATCH_LISTING.type] = watchEntries;
+        screenshotTypes.push(WATCH_LISTING.type);
+    }
 
     const creds = credentialsFromEnv(env);
     if (creds.error) { log(creds.error); return EXIT.CONFIG; }
@@ -296,10 +323,11 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
     const setByType = new Map((sets.body.data ?? []).map((s) => [s.attributes.screenshotDisplayType, s]));
 
     let failed = false;
-    for (const type of REQUIRED_SCREENSHOT_TYPES) {
+    for (const type of screenshotTypes) {
         const wanted = pin.byType[type] ?? [];
         if (!wanted.length) { log(`\n${type}: the pin names no images; skipping`); continue; }
-        const dir = join(wsRoot, 'packages', 'mobile', 'screenshots', SCREENSHOT_DIR_BY_TYPE[type]);
+        const dir = join(wsRoot, 'packages', 'mobile', 'screenshots',
+            type === WATCH_LISTING.type ? WATCH_LISTING.dir : SCREENSHOT_DIR_BY_TYPE[type]);
         const ordered = [...wanted].sort((a, b) => a.name.localeCompare(b.name));
 
         log(`\n${type}: ${ordered.length} pinned image(s) -> ${args.locale}`);
