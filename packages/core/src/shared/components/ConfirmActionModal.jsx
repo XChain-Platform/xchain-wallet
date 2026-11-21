@@ -424,11 +424,25 @@ export function ConfirmActionModal({
     useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });
     const previewReady = phase === 'ready' && !reportLoading;
     const [settledRequest, setSettledRequest] = useState(null);
+    const [settleEpoch, setSettleEpoch] = useState(0);
+    useEffect(() => {
+        if (!open) return undefined;
+        const restartSettle = () => {
+            setSettledRequest(null);
+            setSettleEpoch((epoch) => epoch + 1);
+        };
+        window.addEventListener('resize', restartSettle);
+        window.addEventListener('xchain:native-fold', restartSettle);
+        return () => {
+            window.removeEventListener('resize', restartSettle);
+            window.removeEventListener('xchain:native-fold', restartSettle);
+        };
+    }, [open]);
     useEffect(() => {
         if (!previewReady || approveSettle.ms <= 0) return undefined;
         const timer = setTimeout(() => setSettledRequest(composed ?? true), approveSettle.ms);
         return () => clearTimeout(timer);
-    }, [previewReady, composed]);
+    }, [previewReady, composed, settleEpoch]);
     const approveSettled = previewReady && (approveSettle.ms <= 0 || settledRequest === (composed ?? true));
     const approveInFlight = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
