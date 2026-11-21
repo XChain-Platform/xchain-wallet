@@ -10,6 +10,7 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import {
     createBridgeEventBroadcaster,
+    emitPermissionDiff,
     notifyAccountsChanged,
     notifyDisconnectedSites,
     notifyNetworkChanged,
@@ -125,6 +126,38 @@ describe('dApp event fanout audit', () => {
 
         expect(events.chainChanged).toHaveBeenCalledTimes(1);
         expect(events.chainChanged).toHaveBeenCalledWith(ORIGIN, 'litecoin-testnet');
+    });
+
+    it('uses one representative active chain for concrete and wildcard grants', async () => {
+        const events = eventStub();
+        await notifyNetworkChanged({
+            events,
+            activeChainIds: ['bitcoin-testnet', 'litecoin-testnet'],
+            sites: [
+                site('concrete', ORIGIN, ['bitcoin-testnet', 'litecoin-testnet']),
+                site('wildcard', OTHER),
+            ],
+        });
+
+        expect(events.chainChanged).toHaveBeenCalledTimes(2);
+        expect(events.chainChanged).toHaveBeenCalledWith(ORIGIN, 'bitcoin-testnet');
+        expect(events.chainChanged).toHaveBeenCalledWith(OTHER, 'bitcoin-testnet');
+    });
+
+    it('does not report permission edits as active network changes', async () => {
+        const events = eventStub();
+        await emitPermissionDiff({
+            events,
+            origin: ORIGIN,
+            prevPermissions: { accounts: ['account-1'], chains: ['bitcoin-mainnet'] },
+            nextPermissions: {
+                accounts: ['account-1'],
+                chains: ['bitcoin-mainnet', 'litecoin-mainnet'],
+            },
+            accountsChangedPayload: [{ id: 'account-1', name: 'Primary' }],
+        });
+
+        expect(events.chainChanged).not.toHaveBeenCalled();
     });
 
     it('sends only public records to origins whose account grant changed', async () => {

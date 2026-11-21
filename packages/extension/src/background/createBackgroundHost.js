@@ -4637,21 +4637,8 @@ export function createBackgroundHost(deps) {
                     throw err;
                 }
                 // A transient failure may still have reached a node, so keep the record live and queue
-                // the same signed bytes for a re-send; the entry names the original so a later
-                // delivery retires it. The original stays 'broadcast' until then.
-                const queuedPatch = { status: 'queued', error: failure };
-                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
-                    recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
-                }
-                await enqueueSignedBroadcast(walletId, {
-                    chainId,
-                    signedTxHex: signed.txHex,
-                    summary: pending.actionSummary,
-                    txid: signed.txid,
-                    pendingTxId: pending.id,
-                    rbfReplacesPendingTxId: conflictRecord.id,
-                });
-                await flushOwedSettlements(vault);
+                // the same signed bytes for a re-send.
+                await queueReplacementBytes(vault, walletId, { chainId, signed, pending, conflictRecord, error: failure });
                 if (err && typeof err === 'object') {
                     try { err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME; } catch { /* keep immutable error */ }
                 }
@@ -4662,21 +4649,19 @@ export function createBackgroundHost(deps) {
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
             : (broadcast?.txid ?? broadcast?.tx_hash ?? null);
-        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
-            await settleOrJournalPatch(vault, walletId, pending.id, {
-                status: 'failed',
-                error: 'SDK did not return a txid',
+        // A resolved broadcast with no txid, or another one, most likely still put these bytes on a
+        // node, so the replacement is never retired as 'failed': it waits in the queue under the
+        // txid of the bytes signed here, and a re-send's answer settles it and the original.
+        const unconfirmedReason = typeof replacementTxHash !== 'string' || !replacementTxHash
+            ? 'SDK did not return a txid'
+            : (lowerHash(replacementTxHash) !== lowerHash(signed.txid) ? 'broadcast txid did not match signed transaction' : null);
+        if (unconfirmedReason) {
+            await queueReplacementBytes(vault, walletId, {
+                chainId, signed, pending, conflictRecord, error: unconfirmedReason, resumedClaim: true,
             });
-            await flushOwedSettlements(vault);
-            throw new Error('tx.replace: SDK did not return a txid');
-        }
-        if (lowerHash(replacementTxHash) !== lowerHash(signed.txid)) {
-            await settleOrJournalPatch(vault, walletId, pending.id, {
-                status: 'failed',
-                error: 'broadcast txid did not match signed transaction',
-            });
-            await flushOwedSettlements(vault);
-            throw new Error('tx.replace: broadcast txid did not match signed transaction');
+            const uncertain = new Error(`tx.replace: ${unconfirmedReason}`);
+            uncertain.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+            throw uncertain;
         }
 
         const broadcastedAt = new Date().toISOString();
@@ -4730,6 +4715,22 @@ export function createBackgroundHost(deps) {
             recordOwedSettlement(walletId, pendingTxId, 'patch', patch);
         }
     }
+    // Keep a fee-bump replacement whose broadcast ended uncertain live as 'queued' and queue its
+    // signed bytes. The entry names the original, which stays 'broadcast' until a later delivery
+    // retires it; `resumedClaim` marks bytes a node may already hold.
+    async function queueReplacementBytes(vault, walletId, { chainId, signed, pending, conflictRecord, error, resumedClaim = false }) {
+        await settleOrJournalPatch(vault, walletId, pending.id, { status: 'queued', error });
+        await enqueueSignedBroadcast(walletId, {
+            chainId,
+            signedTxHex: signed.txHex,
+            summary: pending.actionSummary,
+            txid: signed.txid,
+            pendingTxId: pending.id,
+            rbfReplacesPendingTxId: conflictRecord.id,
+            ...(resumedClaim ? { resumedClaim: true } : {}),
+        });
+        await flushOwedSettlements(vault);
+    }
     // §36: the claim on the donation queue a queued entry's bytes hold. The
     // verdict names it; an entry rebuilt from its PendingTx alone carries no
     // verdict, and its claim (if any) is the record's id.
@@ -4769,18 +4770,27 @@ export function createBackgroundHost(deps) {
             console.warn('broadcast.queue: ADS release failed', e && e.message ? String(e.message) : String(e));
         }
     }
+    async function replacedOriginalPendingTxId(vault, entry) {
+        let originalId = entry?.rbfReplacesPendingTxId;
+        if ((typeof originalId !== 'string' || !originalId)
+            && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+            try {
+                originalId = (await vault?.pendingTxs?.get(entry.pendingTxId))?.rbfReplacesPendingTxId;
+            } catch (_e) {
+                return null;
+            }
+        }
+        return typeof originalId === 'string' && originalId ? originalId : null;
+    }
     // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
     // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
-    async function settleReplacedOriginal(vault, entry, replacementTxHash) {
+    async function settleReplacedOriginal(vault, entry, replacementTxHash, knownOriginalId = undefined) {
         if (typeof replacementTxHash !== 'string' || !replacementTxHash) return;
         try {
             // Fall back to the replacement's own record when the entry lost the link.
-            let originalId = entry?.rbfReplacesPendingTxId;
-            if ((typeof originalId !== 'string' || !originalId)
-                && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-                originalId = (await vault?.pendingTxs?.get(entry.pendingTxId))?.rbfReplacesPendingTxId;
-            }
-            if (typeof originalId !== 'string' || !originalId) return;
+            const originalId = knownOriginalId === undefined
+                ? await replacedOriginalPendingTxId(vault, entry) : knownOriginalId;
+            if (!originalId) return;
             const original = await vault?.pendingTxs?.get(originalId);
             if (!original || original.chainConfirmed === true) return;
             if (original.status !== 'broadcast' && original.status !== 'broadcasting') return;
@@ -4860,6 +4870,15 @@ export function createBackgroundHost(deps) {
             // The coins this entry spends, held once it goes out (see ownSpends.js).
             const queuedSpend = rawTxOutpoints(entry.signedTxHex);
             const queuedSpendTxid = txidOfRaw(entry.signedTxHex);
+            const replacementOriginalId = await replacedOriginalPendingTxId(vault, entry);
+            const replacementTxid = replacementOriginalId ? queuedSpendTxid : null;
+            // Fee-bump queue metadata may name the original, but it cannot name
+            // the replacement: that identity comes from the signed bytes. Refuse
+            // divergent persisted metadata before a claim or network call.
+            if (replacementTxid && entry.txid != null
+                && String(entry.txid).toLowerCase() !== replacementTxid) {
+                throw new Error('broadcast.queue: replacement entry txid does not match its signed transaction bytes');
+            }
             const retryAfterMs = Number.isFinite(entry.nextRetryAt)
                 ? Math.ceil(entry.nextRetryAt - Date.now())
                 : 0;
@@ -5023,16 +5042,17 @@ export function createBackgroundHost(deps) {
                 // because an earlier attempt ended ambiguously, and retiring it as
                 // 'failed' invites a re-compose, the one action here that can double spend.
                 if (saysAlreadyOnNetwork(err)) {
+                    const deliveredTxid = replacementTxid ?? entry.txid ?? null;
                     const deliveredPatch = {
                         status: 'broadcast',
                         broadcastAt: new Date().toISOString(),
-                        txid: entry.txid ?? null,
+                        txid: deliveredTxid,
                         error: null,
                     };
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
                         recordOwedSettlement(walletId, entry, 'patch', deliveredPatch);
                     }
-                    await settleReplacedOriginal(vault, entry, entry.txid);
+                    await settleReplacedOriginal(vault, entry, deliveredTxid, replacementOriginalId);
                     await ownSpends.hold(entry.chainId, queuedSpend, queuedSpendTxid, {
                         names: entry.soldNames,
                     });
@@ -5045,7 +5065,7 @@ export function createBackgroundHost(deps) {
                     // that is still queued, an interrupted claim included, never booked.
                     // A claim still held is settled with it: it names one payout, once.
                     await bookLandedAds(vault, chainRegistry, entry, { accrue: true });
-                    return { txid: entry.txid ?? null, alreadyOnNetwork: true };
+                    return { txid: deliveredTxid, alreadyOnNetwork: true };
                 }
                 // Release the claim either way, the two transitions core's drain
                 // records: a permanent rejection retires the record so it stops
@@ -5105,8 +5125,13 @@ export function createBackgroundHost(deps) {
                 throw err;
             }
             // Encoder result shape varies by chain, same as `broadcast.signedTx`
-            // below: normalize so the caller always sees { txid }.
-            const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
+            // below: normalize so the caller always sees { txid }. A fee-bump
+            // replacement is single-phase, so its byte-derived txid outranks an
+            // echo a malformed reply can get wrong;
+            // every other entry keeps the encoder's answer, since a two-phase entry
+            // can still carry its commit's txid while its reveal goes out.
+            const reportedTxid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
+            const txid = replacementTxid ?? reportedTxid;
             const landedPatch = {
                 status: 'broadcast',
                 broadcastAt: new Date().toISOString(),
@@ -5119,7 +5144,7 @@ export function createBackgroundHost(deps) {
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
                 recordOwedSettlement(walletId, entry, 'patch', landedPatch);
             }
-            await settleReplacedOriginal(vault, entry, landedPatch.txid);
+            await settleReplacedOriginal(vault, entry, landedPatch.txid, replacementOriginalId);
             await ownSpends.hold(entry.chainId, queuedSpend, queuedSpendTxid, {
                 names: entry.soldNames,
             });

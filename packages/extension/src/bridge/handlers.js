@@ -1663,9 +1663,8 @@ function balanceRecordsFrom(shape) {
         if (!row || typeof row !== 'object') return;
         const asset = typeof row.tick === 'string' ? row.tick : '';
         if (!asset) return;
-        const divisibility = Number.isFinite(Number(row.divisibility))
-            ? Number(row.divisibility)
-            : 0;
+        const divisibility = Number(row.divisibility);
+        if (!Number.isInteger(divisibility) || divisibility < 0 || divisibility > 30) return;
         const confirmedRaw = String(row.quantity ?? '0');
         let unconfirmedRaw = '0';
         if (assetType === 'native' && /^\d+$/.test(String(row.pendingQuantity ?? ''))) {

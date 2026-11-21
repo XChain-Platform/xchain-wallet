@@ -143,6 +143,15 @@ const UNVERIFIED_KEYS = {
     DISPENSE_SETTLEMENT_MATCH: 'preflightCopy.unverified.dispenseSettlementMatch',
     GATED_HANDOFF_REF: 'preflightCopy.unverified.gatedHandoffRef',
     DISPENSER_RESTRICTIONS: 'preflightCopy.unverified.dispenserRestrictions',
+    LIST_LOOKUP: 'preflightCopy.unverified.listLookup',
+    DISPENSER_LOOKUP: 'preflightCopy.unverified.dispenserLookup',
+    DURATION_FEE: 'preflightCopy.unverified.durationFee',
+    DISPENSER_ORIGIN_STANDING: 'preflightCopy.unverified.dispenserOriginStanding',
+    ISSUE_CARET_TICK_NO_CREATE: 'preflightCopy.unverified.issueCaretTickNoCreate',
+    VALIDATOR_SEMANTICS: 'preflightCopy.unverified.validatorSemantics',
+    // Declared for a VOTE format the SDK does not recognise, so nothing more
+    // specific than the generic line is true of it.
+    VOTE_UNKNOWN_STATE: UNVERIFIED_FALLBACK,
 };
 
 export const UNVERIFIED_COPY = Object.freeze(UNVERIFIED_KEYS);

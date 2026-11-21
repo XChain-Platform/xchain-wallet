@@ -204,6 +204,11 @@ assert.ok(/POLL_INTERVAL_MS\s*=\s*30_?000/.test(src), 'poll interval is 30 secon
     assert.equal(rec.storedCount, 2, 'reconcile reads the stored count off the chain');
     assert.deepEqual(rec.missing, ['bc1qmainnet'], 'reconcile names what the chain dropped');
     assert.equal(rec.ok, false);
+
+    // A swapped member keeps the counts equal; the read-back still names it.
+    const swap = airdropLib.reconcileStoredList(['bcrt1qa', 'bcrt1qb'], ['bcrt1qa', 'bcrt1qx']);
+    assert.deepEqual(swap.unexpected, ['bcrt1qx'], 'reconcile names a stored member nobody submitted');
+    assert.equal(swap.ok, false);
 }
 
 // --- 6b. Network-aware wiring at the call sites ---------------
@@ -219,6 +224,9 @@ assert.ok(/messaging\.getListByActionIndex\(\{ chainId, actionIndex: listActionI
     'AirdropForm reads the published list back once it is indexed');
 assert.ok(/listReconcile \? listReconcile\.storedCount : recipients\.valid\.length/.test(src),
     'the recipient count that prices step 2 prefers the chain-stored count');
+assert.ok(/canApprove=\{[^}]*!reconcileBlocked/.test(src)
+    && /if \(reconcileBlocked\) \{ setSubmitError\(reconcileBlockedMessage\); return; \}/.test(src),
+    'a stored member nobody submitted keeps step 2 unsignable');
 assert.ok(/airdropLib\.applyTokenAccessLists\(listed, accessLists\)/.test(src)
     && /addressPreview\(listReconcile \? listReconcile\.stored : recipients\.valid, count\)/.test(src),
     'the recipient count drops the addresses the token\'s allow and block lists exclude');

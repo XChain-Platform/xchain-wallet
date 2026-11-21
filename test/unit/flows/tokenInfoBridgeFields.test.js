@@ -22,6 +22,7 @@
 //
 //   absent  -> null -> unknown -> the wallet makes no claim either way
 //   '-'     -> []   -> the issuer opted OUT -> the move is refused
+//   null    -> '-'  -> [] -> refused: the indexer's "no destinations" column
 //   'DOGE'  -> ['DOGE'] -> only that destination is offered
 //
 // Collapsing any two of those is how a wallet either blocks a legal move or
@@ -121,6 +122,24 @@ describe('P10: bridge fields survive the token-info projection', () => {
         const info = norm(explorerRow({ info: { bridge_chains: '' } }));
         expect(info.bridgeChains).toBeNull();
         expect(bridgeChainsList(info.bridgeChains)).toBeNull();
+    });
+
+    it('a reported null BRIDGE_CHAINS is "no destinations", so the v3 lock is refused', () => {
+        // The explorer copies the tokens column into info even when it is NULL,
+        // and the indexer writes NULL for a token that never opted in.
+        for (const row of [explorerRow({ info: { bridge_chains: null } }), { bridge_chains: null }]) {
+            const info = norm(row);
+            expect(info.bridgeChains).toBe('-');
+            expect(bridgeChainsList(info.bridgeChains)).toEqual([]);
+            expect(bridgeDestinationError({
+                tick: 'FUFU', sourceCoin: 'BTC', destCoin: 'DOGE', bridgeChains: bridgeChainsList(info.bridgeChains),
+            })).toContain('has not opened it to the bridge');
+        }
+    });
+
+    it('a reported null does not override a list carried at the row root', () => {
+        const info = norm({ ...explorerRow({ info: { bridge_chains: null } }), bridge_chains: 'LTC' });
+        expect(info.bridgeChains).toBe('LTC');
     });
 
     it('leaves the fields the projection already carried alone', () => {

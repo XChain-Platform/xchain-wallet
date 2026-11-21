@@ -545,7 +545,6 @@ function SiteDetail({ site, blocklistWired, pendingAction, onDisconnect, onBlock
     const chains = permissions?.chains || [];
     const accounts = permissions?.accounts || [];
     const actions = permissions?.canSignAction || {};
-    const none = t('send.advanced.none');
     return (
         <ListPage>
             <section className={local.identityCard} aria-label={t('settings.connectedSites.siteIdentity')}>
@@ -558,8 +557,12 @@ function SiteDetail({ site, blocklistWired, pendingAction, onDisconnect, onBlock
             <SectionHeader as="h3" title={t('settings.connectedSites.permissions')} />
             {permissions ? (
                 <ul className={local.list} aria-label={t('settings.connectedSites.permissions')}>
-                    <FactRow label={t('extension.connect.chains')}>{chains.length ? chains.join(', ') : none}</FactRow>
-                    <FactRow label={t('accountPicker.title')}>{accounts.length ? accounts.join(', ') : none}</FactRow>
+                    <FactRow label={t('extension.connect.chains')}>
+                        {chains.length ? chains.join(', ') : t('common.allNetworks')}
+                    </FactRow>
+                    <FactRow label={t('accountPicker.title')}>
+                        {accounts.length ? accounts.join(', ') : t('settings.connectedSites.allAccounts')}
+                    </FactRow>
                     <FactRow label={t('settings.connectedSites.signMessages')}>
                         {permissions.canSignMessage ? t('settings.connectedSites.alwaysAllow') : t('settings.connectedSites.askEveryTime')}
                     </FactRow>

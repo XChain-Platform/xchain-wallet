@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 // English headlines for the pre-flight checks the wallet could not confirm,
-// one per SDK check code (shared/utils/preflightFindingCopy.js maps the codes).
+// one per SDK check code (shared/utils/preflightFindingCopy.js maps the codes,
+// and a parity test fails on any code the installed SDK emits without one).
 
 import { addEnglish } from '../../store.js';
 
@@ -74,6 +75,12 @@ const messages = {
     'preflightCopy.unverified.dispenseSettlementMatch': "Whether your payment exactly matches what the dispenser expects",
     'preflightCopy.unverified.gatedHandoffRef': "How the key to locked content reaches the recipient, when this token unlocks any",
     'preflightCopy.unverified.dispenserRestrictions': "Pause, allow and block rules on the dispenser's token and addresses",
+    'preflightCopy.unverified.listLookup': "The list this action names, which couldn't be read",
+    'preflightCopy.unverified.dispenserLookup': "The dispenser's details, which couldn't be read",
+    'preflightCopy.unverified.durationFee': "The fee for how long this stays open. Extending how long it stays open is charged for the added days.",
+    'preflightCopy.unverified.dispenserOriginStanding': "Whether the network accepts the address and coins funding this new dispenser",
+    'preflightCopy.unverified.issueCaretTickNoCreate': "Whether the token this numbered name points to already exists, which couldn't be read",
+    'preflightCopy.unverified.validatorSemantics': "Whether the tokens this action names meet the network's rules for it",
     'preflightCopy.nativeFee.oraclePriceInactive': 'This oracle has no price in effect right now. A published price starts pricing 24 hours after its block and stops 24 hours after it took effect, so wait for a pending price or publish a new one. Nothing was signed or sent.',
     'preflightCopy.nativeFee.oraclePricePairMissing': "This dispenser oracle price can't be paired with a current network price for {coin}. Nothing was signed or sent; try again when both prices are current.",
     'preflightCopy.nativeFee.validatorPriceMissing': "The oracle usage fee can't be priced right now because the network has no current {coin} rate to value it against. Nothing was signed or sent; try again in a moment.",

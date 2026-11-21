@@ -68,6 +68,9 @@
 //     for those same attribute names, written directly or as a ternary /
 //     `||` branch, when a property whose KEY is in the set holds copy.
 //     style={{ color: 'red' }} stays silent because `style` is not in it.
+//   - Object-only copy attributes  action={{ label: 'Try again' }}  → flagged
+//     for the OBJECT_COPY_ATTRS names (action, extra) through that same
+//     inline-object judge and nothing else, so action="stake" stays silent.
 //   - JSXExpressionContainer in JSX content, holding a Literal, a
 //     template or a ternary / `||` fallback:
 //                              <span>{'literal'}</span>          → flagged
@@ -438,10 +441,22 @@ const USER_FACING_ATTRS = new Set([
     'badgeTitle',
 ]);
 
+// Props whose copy only ever arrives inside an inline object, and whose name
+// also carries technical values, so they cannot join USER_FACING_ATTRS.
+// Notice (StatusMessage) prefers `action` over `recovery` and renders
+// `action.label` as its button text and accessible name, but the three App.jsx
+// shells pass `action="stake"`-style mode strings and the protocol builders use
+// `action` as an object key. ActionsDetailsToggle renders `extra.label` as a
+// tab label, while LeftNav takes a numeric width under `extra`. These names
+// are judged only through inlineObjectCopy: never as a bare string, template,
+// ternary of strings, constant table, object key or prop default.
+const OBJECT_COPY_ATTRS = new Set(['action', 'extra']);
+
 // There is deliberately no technical-attribute deny-list here. Both
 // `create()` and `findViolations` decide by USER_FACING_ATTRS membership,
-// so a second list of names to exclude was unreachable code that could
-// only drift out of step with the set that actually decides.
+// plus the narrower OBJECT_COPY_ATTRS allow-list above, so a second list of
+// names to exclude was unreachable code that could only drift out of step
+// with the sets that actually decide.
 
 const DEFAULT_IGNORE_FILES = [
     /\.smoke\.js$/,
@@ -664,6 +679,23 @@ function inlineObjectCopy(node, allow = [], minLength = 2) {
         if (nested !== null) return nested;
     }
     return null;
+}
+
+/**
+ * Return the copy an OBJECT_COPY_ATTRS attribute carries in an inline
+ * object, as `{ node, copy }`, or null for any other attribute or shape.
+ * Shared by findViolations and create() so the two paths cannot drift.
+ *
+ * @param {string} attrName
+ * @param {object} value      the JSXAttribute's value
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {{ node: object, copy: string } | null}
+ */
+function objectOnlyCopy(attrName, value, allow = [], minLength = 2) {
+    if (!OBJECT_COPY_ATTRS.has(attrName) || value?.type !== 'JSXExpressionContainer') return null;
+    const copy = inlineObjectCopy(value.expression, allow, minLength);
+    return copy === null ? null : { node: value.expression, copy };
 }
 
 /**
@@ -913,6 +945,10 @@ export function findViolations(node, options = {}) {
                     out.push(...tableViolations(v.expression, attrName, tables, judged, allow, minLength));
                 }
             }
+            const objectOnly = objectOnlyCopy(attrName, n.value, allow, minLength);
+            if (objectOnly) {
+                out.push({ node: objectOnly.node, message: `Inline ${attrName} object copy "${truncate(objectOnly.copy)}" should use t('key').` });
+            }
             // Descend once, and enter an expression container at its
             // *expression* rather than at the container itself. The
             // container belongs to this attribute and the branch above
@@ -1033,6 +1069,9 @@ function create(context) {
         },
         JSXAttribute(node) {
             const attrName = node.name?.name;
+            // Mirrors the findViolations object-only branch.
+            const objectOnly = objectOnlyCopy(attrName, node.value, allow, minLength);
+            if (objectOnly) context.report({ node: objectOnly.node, message: `Inline ${attrName} object copy should use t('key')` });
             if (!USER_FACING_ATTRS.has(attrName)) return;
             const v = node.value;
             if (v?.type === 'Literal' && typeof v.value === 'string'
@@ -1109,4 +1148,4 @@ function create(context) {
 }
 
 export default { meta, create };
-export { meta, create, USER_FACING_ATTRS };
+export { meta, create, USER_FACING_ATTRS, OBJECT_COPY_ATTRS };

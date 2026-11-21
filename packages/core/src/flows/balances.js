@@ -196,7 +196,9 @@ function pendingOutgoingAtomic(pending) {
 // exactly as nativeFromAddress does for the coin balance; passing it through
 // unscaled made every decimals>0 token read 10^decimals too small (3000
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
-// fixtures, dev mocks) are atomic already and pass through untouched.
+// fixtures, dev mocks) are atomic already and pass through untouched. Every
+// token row must carry an explicit scale, including indivisible tokens whose
+// scale is zero; otherwise an atomic quantity cannot be interpreted safely.
 export function tokensFromBalances(balResp, scope) {
     return tokenRowsFromBalances(balResp, scope).rows;
 }
@@ -227,7 +229,9 @@ function normalizeTokenBalanceRow(row, scope) {
     if (!row || typeof row !== 'object') return null;
     if (!balanceScopeMatches(row, scope)) return null;
     const tick = typeof row.tick === 'string' ? row.tick.trim() : '';
-    const divisibility = Number(row.divisibility ?? row.decimals ?? 0);
+    const rawDivisibility = row.divisibility ?? row.decimals;
+    if (rawDivisibility === undefined || rawDivisibility === null) return null;
+    const divisibility = Number(rawDivisibility);
     if (!tick || !Number.isInteger(divisibility) || divisibility < 0 || divisibility > 18) return null;
 
     let quantity;
