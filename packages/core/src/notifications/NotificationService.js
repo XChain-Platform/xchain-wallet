@@ -145,6 +145,12 @@ function addressLabel(addr) {
     return walletName ? `${walletName} wallet's ${addr.label}` : addr.label;
 }
 
+export function coinpayRole(data, address) {
+    if (data?.payer_address === address) return 'payer';
+    if (data?.payee_address === address) return 'payee';
+    return 'neutral';
+}
+
 export class NotificationService {
     /**
      * @param {Object} deps
@@ -555,12 +561,16 @@ export class NotificationService {
                 // event reaches both the payer and the payee address, so each
                 // side is told its own part; an event naming neither stays neutral.
                 if (flags.incomingReceipts) {
-                    if (data.payer_address === addr.address) {
-                        plan = { kind: 'coinpay-required', title: 'Payment due for a matched order', body: `One of your orders on ${addr.label} was matched. Send the coin payment before the payment window closes, or the match expires.` };
-                    } else if (data.payee_address === addr.address) {
-                        plan = { kind: 'coinpay-required', title: 'Order matched, awaiting payment', body: `One of your orders on ${addr.label} was matched. The buyer has until the payment window closes to send the coin payment.` };
-                    } else {
-                        plan = { kind: 'coinpay-required', title: 'Coin payment due', body: `An order on ${addr.label} was matched and needs a coin payment before the payment window closes.` };
+                    switch (coinpayRole(data, addr.address)) {
+                        case 'payer':
+                            plan = { kind: 'coinpay-required', title: 'Payment due for a matched order', body: `One of your orders on ${addr.label} was matched. Send the coin payment before the payment window closes, or the match expires.` };
+                            break;
+                        case 'payee':
+                            plan = { kind: 'coinpay-required', title: 'Order matched, awaiting payment', body: `One of your orders on ${addr.label} was matched. The buyer has until the payment window closes to send the coin payment.` };
+                            break;
+                        default:
+                            plan = { kind: 'coinpay-required', title: 'Coin payment due', body: `An order on ${addr.label} was matched and needs a coin payment before the payment window closes.` };
+                            break;
                     }
                 }
                 break;
