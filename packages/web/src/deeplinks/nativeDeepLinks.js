@@ -41,7 +41,8 @@
 /** Plugin name registered by XChainLinksPlugin.java. */
 export const LINKS_PLUGIN = 'XChainLinks';
 
-// The link shapes this app claims in its manifest, and nothing else.
+// The link shapes this app claims in its manifest, and nothing else. The iOS
+// and Android plugins also claim the wallet.xchain.io host natively.
 //
 // The prefix is `/wallet/link/`, NOT `/wallet`. The wider form claimed every
 // page under /wallet, including the `/wallet/privacy/` and `/wallet/support/`
@@ -52,6 +53,8 @@ export const LINKS_PLUGIN = 'XChainLinks';
 // constant EQUALS the parser's WEB_LINK_PREFIX.
 const ALLOWED_HTTPS_ORIGIN = 'https://xchain.io';
 const ALLOWED_HTTPS_PREFIX = '/wallet/link/';
+const WALLET_HTTPS_ORIGIN = 'https://wallet.xchain.io';
+const WALLET_HTTPS_PREFIX = '/link/';
 const APP_SCHEMES = ['xchain:', 'bitcoin:', 'litecoin:', 'dogecoin:'];
 
 /**
@@ -66,13 +69,14 @@ export function isAcceptableDeepLink(url) {
     if (typeof url !== 'string' || url.length === 0 || url.length > 4096) return false;
     const lower = url.toLowerCase();
     if (APP_SCHEMES.some((scheme) => lower.startsWith(scheme))) return true;
-    if (!lower.startsWith(`${ALLOWED_HTTPS_ORIGIN}/`)) return false;
     // Parse rather than prefix-match the path: `https://xchain.io.evil.com/`
     // and `https://xchain.io@evil.com/` both pass a naive startsWith.
     try {
         const parsed = new URL(url);
-        return parsed.origin === ALLOWED_HTTPS_ORIGIN
-            && parsed.pathname.startsWith(ALLOWED_HTTPS_PREFIX);
+        return (parsed.origin === ALLOWED_HTTPS_ORIGIN
+                && parsed.pathname.startsWith(ALLOWED_HTTPS_PREFIX))
+            || (parsed.origin === WALLET_HTTPS_ORIGIN
+                && parsed.pathname.startsWith(WALLET_HTTPS_PREFIX));
     } catch (_err) {
         return false;
     }
