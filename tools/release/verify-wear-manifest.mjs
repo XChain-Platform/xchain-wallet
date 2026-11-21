@@ -8,6 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
+
+const USAGE = `Usage: node tools/release/verify-wear-manifest.mjs --help
+
+Reads Android manifest XML and the expected component and permission policy.
+Reports the manifest checks that pass and fail without changing the manifest.
+`;
+
 function attribute(tag, name) {
     return new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, 's').exec(tag)?.[2];
 }
@@ -123,4 +131,10 @@ export function checkWearManifest(xml, { components, permissions }) {
     }
 
     return { failures, passes };
+}
+
+if (isInvokedDirectly(import.meta.url)
+    && process.argv.length === 3
+    && (process.argv[2] === '--help' || process.argv[2] === '-h')) {
+    process.stdout.write(USAGE);
 }
