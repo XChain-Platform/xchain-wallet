@@ -606,7 +606,7 @@ export {
     LABEL_SYNC_AUTO_DEBOUNCE_MS,
     LABEL_SYNC_AUTO_MAX_WAIT_MS,
 } from './labelSync.js';
-export { signMessageFlow, signPsbtFlow } from './signFlows.js';
+export { signMessageFlow, signSignInChallengeFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
     adsSettingsOf,

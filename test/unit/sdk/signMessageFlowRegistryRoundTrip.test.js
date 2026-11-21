@@ -10,7 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { importMnemonic } from '../../../packages/core/src/flows/importMnemonic.js';
-import { signMessageFlow } from '../../../packages/core/src/flows/signFlows.js';
+import {
+    signMessageFlow,
+    signSignInChallengeFlow,
+} from '../../../packages/core/src/flows/signFlows.js';
+import { formatSignInChallenge } from '../../../packages/bridge-spec/src/runtime.js';
 import { unlockWallet } from '../../../packages/core/src/flows/unlockWallet.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { adaptXChainSDK } from '../../../packages/core/src/sdk/defaultFactory.js';
@@ -56,6 +60,9 @@ const unsupportedTaprootCases = messageSigningChains.flatMap((descriptor) => (
     descriptor.addressTypes.includes('p2tr')
         ? [{ chainId: descriptor.id, addressType: 'p2tr' }]
         : []
+));
+const signInCase = verifiableCases.find(({ chainId, addressType }) => (
+    chainId === 'bitcoin-regtest' && addressType === 'p2wpkh'
 ));
 
 let vault;
@@ -136,6 +143,53 @@ describe.each(verifiableCases)('$chainId $addressType message signing', ({
             },
         });
 
+        expect(verified).toMatchObject({ ok: true, result: { valid: true } });
+    });
+});
+
+describe('v2 sign-in challenge signing', () => {
+    it('signs and verifies a formatted challenge for a regtest segwit address', async () => {
+        expect(signInCase).toBeDefined();
+        const { chainId, addressType } = signInCase;
+        const [derived] = await signer.getAddresses({
+            chainId,
+            accountIndex: 0,
+            change: 0,
+            startIndex: 0,
+            count: 1,
+            addressType,
+        });
+        const challenge = formatSignInChallenge({
+            version: 2,
+            appId: 'registry-round-trip',
+            origin: 'https://sign-in.example',
+            address: derived.address,
+            nonce: 'real-signing-path',
+            timestamp: 1_700_000_000_000,
+            expiresAt: 1_700_000_300_000,
+        });
+        const signed = await signSignInChallengeFlow({
+            vault,
+            walletId,
+            signer,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            path: derived.path,
+            addressType,
+            message: challenge,
+        });
+        const verified = await verifyHost.handle({
+            type: 'auth.verifyMessage',
+            request: {
+                chainId,
+                address: derived.address,
+                message: challenge,
+                signature: signed.signature,
+            },
+        });
+
+        expect(signed.signature).toEqual(expect.any(String));
         expect(verified).toMatchObject({ ok: true, result: { valid: true } });
     });
 });

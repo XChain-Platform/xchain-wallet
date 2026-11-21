@@ -65,6 +65,7 @@ const {
     sendToken,
     sweepToken,
     signMessageFlow,
+    signSignInChallengeFlow,
     signPsbtFlow,
     submitAction,
     createSignThrottle,
@@ -969,7 +970,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
         // Sign with the chosen address's own wallet; the window defaults walletId to the first one.
         const walletId = await walletIdForAddress(deps.vault, decision.address);
-        const { signature } = await signMessageFlow({
+        const { signature } = await signSignInChallengeFlow({
             vault: deps.vault,
             walletId,
             password: decision.password,
