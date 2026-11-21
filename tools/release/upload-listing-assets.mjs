@@ -65,6 +65,7 @@ import {
     selectVersionRecord,
     tagDerivations,
 } from './verify-appstore-version.mjs';
+import { pngHeader } from './verify-listing-assets.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WS_ROOT = join(HERE, '..', '..');
@@ -72,8 +73,38 @@ const API = 'https://api.appstoreconnect.apple.com';
 export const WATCH_LISTING = Object.freeze({
     type: 'APP_WATCH_ULTRA',
     dir: 'xc-watch-49mm',
+    width: 422,
+    height: 514,
     scenes: Object.freeze(['01-balances.png', '02-receive.png', '03-send.png', '04-settings.png']),
 });
+
+export function watchListingEntries(wsRoot = WS_ROOT) {
+    const root = join(wsRoot, 'packages', 'mobile', 'screenshots');
+    let watchPin;
+    try {
+        watchPin = JSON.parse(readFileSync(join(root, 'capture-pin.json'), 'utf8'));
+    } catch (err) {
+        return { error: `The watch listing capture pin cannot be read: ${err.message}` };
+    }
+    const entries = [];
+    for (const name of WATCH_LISTING.scenes) {
+        const rel = `${WATCH_LISTING.dir}/${name}`;
+        const recorded = watchPin.assets?.[rel];
+        const file = join(root, rel);
+        if (!recorded) return { error: `The watch listing capture pin is missing ${rel}.` };
+        if (!existsSync(file)) return { error: `The pinned watch listing asset is missing ${rel}.` };
+        const bytes = readFileSync(file);
+        if (createHash('sha256').update(bytes).digest('hex') !== recorded.sha256) {
+            return { error: `The pinned watch listing asset changed after capture: ${rel}.` };
+        }
+        const header = pngHeader(bytes);
+        if (header?.width !== WATCH_LISTING.width || header?.height !== WATCH_LISTING.height || header.hasAlpha) {
+            return { error: `${rel} must be an opaque ${WATCH_LISTING.width}x${WATCH_LISTING.height} PNG.` };
+        }
+        entries.push({ name, md5: createHash('md5').update(bytes).digest('hex') });
+    }
+    return { entries };
+}
 
 export const USAGE = `upload-listing-assets.mjs - upload the pinned iOS listing
 screenshots to App Store Connect (row 63).
@@ -248,29 +279,6 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
         log('which writes the pin as part of a successful run.');
         return EXIT.CONFIG;
     }
-    const screenshotTypes = [...REQUIRED_SCREENSHOT_TYPES];
-    const watchEntries = [];
-    const watchDir = join(wsRoot, 'packages', 'mobile', 'screenshots', WATCH_LISTING.dir);
-    const watchPin = JSON.parse(readFileSync(join(wsRoot, 'packages', 'mobile', 'screenshots', 'capture-pin.json'), 'utf8'));
-    const hasWatchPin = WATCH_LISTING.scenes.some((name) => watchPin.assets?.[`${WATCH_LISTING.dir}/${name}`]);
-    for (const name of WATCH_LISTING.scenes) {
-        const rel = `${WATCH_LISTING.dir}/${name}`;
-        const recorded = watchPin.assets?.[rel];
-        const file = join(watchDir, name);
-        if (!recorded || !existsSync(file)) { watchEntries.length = 0; break; }
-        const bytes = readFileSync(file);
-        if (createHash('sha256').update(bytes).digest('hex') !== recorded.sha256) { watchEntries.length = 0; break; }
-        watchEntries.push({ name, md5: createHash('md5').update(bytes).digest('hex') });
-    }
-    if (hasWatchPin && watchEntries.length !== WATCH_LISTING.scenes.length) {
-        log('The pinned 49mm watch set is incomplete, missing, or changed after capture.');
-        return EXIT.CONFIG;
-    }
-    if (watchEntries.length === WATCH_LISTING.scenes.length) {
-        pin.byType[WATCH_LISTING.type] = watchEntries;
-        screenshotTypes.push(WATCH_LISTING.type);
-    }
-
     const creds = credentialsFromEnv(env);
     if (creds.error) { log(creds.error); return EXIT.CONFIG; }
     const token = ascToken({ keyPem: creds.keyPem, keyId: creds.keyId, issuer: creds.issuer });
@@ -304,6 +312,14 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
 
     log(`${app.attributes.name} (${bundleId})  version ${version.attributes.versionString}  ${state}`);
     log(`Pin: ${pin.version} @ ${(pin.commit ?? '').slice(0, 8)}`);
+
+    const watch = watchListingEntries(wsRoot);
+    if (watch.error) {
+        log(watch.error);
+        return EXIT.CONFIG;
+    }
+    pin.byType[WATCH_LISTING.type] = watch.entries;
+    const screenshotTypes = [...REQUIRED_SCREENSHOT_TYPES, WATCH_LISTING.type];
 
     const buildRel = await api.get(`/v1/appStoreVersions/${version.id}/build`);
     if (buildRel.body.data) {
