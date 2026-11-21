@@ -214,7 +214,15 @@ function tokenRowsFromBalances(balResp, scope) {
     const truncated = Number.isSafeInteger(total) && total > balResp.data.length;
     const rows = [];
     let invalid = false;
+    let unscaled = 0;
     for (const row of balResp.data) {
+        // A row that names no scale cannot be read safely, so it alone is left
+        // out. It says nothing about the other rows, so it does not mark the
+        // read invalid; `unscaled` counts them for a caller that wants a note.
+        if (rowNamesNoScale(row, scope)) {
+            unscaled += 1;
+            continue;
+        }
         const normalized = normalizeTokenBalanceRow(row, scope);
         if (!normalized) {
             invalid = true;
@@ -222,7 +230,12 @@ function tokenRowsFromBalances(balResp, scope) {
         }
         rows.push(normalized);
     }
-    return { rows, invalid, truncated };
+    return { rows, invalid, truncated, unscaled };
+}
+
+function rowNamesNoScale(row, scope) {
+    if (!row || typeof row !== 'object' || !balanceScopeMatches(row, scope)) return false;
+    return (row.divisibility ?? row.decimals) == null;
 }
 
 function normalizeTokenBalanceRow(row, scope) {
