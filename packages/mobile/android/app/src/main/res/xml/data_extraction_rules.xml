@@ -26,6 +26,10 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <!-- The activity-check config holds public addresses outside the vault.
+             Keep both files off every backup even if android:allowBackup or wholesale excludes change. -->
+        <exclude domain="file" path="activity-check.json" />
+        <exclude domain="file" path="activity-check-runs.txt" />
         <exclude domain="root" />
         <exclude domain="file" />
         <exclude domain="database" />
@@ -37,6 +41,10 @@
         <exclude domain="device_sharedpref" />
     </cloud-backup>
     <device-transfer>
+        <!-- The activity-check config holds public addresses outside the vault.
+             Keep both files off every backup even if android:allowBackup or wholesale excludes change. -->
+        <exclude domain="file" path="activity-check.json" />
+        <exclude domain="file" path="activity-check-runs.txt" />
         <exclude domain="root" />
         <exclude domain="file" />
         <exclude domain="database" />
