@@ -297,6 +297,33 @@ for (const [name, text] of [['app/build.gradle', appGradle], ['build.gradle', ro
     );
 }
 
+const wearGradle = readFileSync(join(android, 'wear', 'build.gradle'), 'utf8');
+assert.match(
+    readFileSync(join(android, 'settings.gradle'), 'utf8'),
+    /include ':wear'/,
+    'the Android project includes the Wear application module',
+);
+assert.match(wearGradle, /applicationId 'io\.xchain\.wallet\.android'/);
+assert.match(wearGradle, /applicationIdSuffix '\.debug'/);
+assert.match(wearGradle, /minSdk = 30\b/);
+assert.match(wearGradle, /compileSdk = rootProject\.ext\.compileSdkVersion/);
+assert.match(wearGradle, /targetSdk = rootProject\.ext\.targetSdkVersion/);
+assert.match(
+    wearGradle,
+    /test\/fixtures\/watch/,
+    'Wear unit tests read the shared cross-platform watch fixtures',
+);
+assert.match(
+    wearGradle,
+    /com\.google\.android\.gms:play-services-wearable:\$wearPlayServicesVersion/,
+    'Wear uses the one allowed Play Services dependency at its central pin',
+);
+assert.doesNotMatch(
+    wearGradle,
+    /^\s*(classpath|apply plugin:).*google-services/m,
+    'wear/build.gradle does not wire google-services',
+);
+
 // --- 7. Ignore rules for key material and generated files -------------
 
 const androidIgnore = readFileSync(join(android, '.gitignore'), 'utf8');
