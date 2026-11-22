@@ -1188,6 +1188,19 @@ if (composeIsRemote) {
     );
 }
 
+// --- 19. Handoff activity type and single-scene vault session ----------
+
+assert.deepEqual(
+    plistValue(infoPlist, 'NSUserActivityTypes'),
+    ['io.xchain.wallet.view'],
+    'the app must declare exactly the Handoff type advertised by the watch',
+);
+assert.equal(
+    plistValue(infoPlist, 'UIApplicationSupportsMultipleScenes'),
+    false,
+    'the app must keep one WebView and one vault session',
+);
+
 console.log(
     'OK: iOS shell smoke (S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -1206,5 +1219,6 @@ console.log(
     + " 2026-08-06. §17: while a new wallet opens on the main networks, the reviewer's scripted walkthrough"
     + ' switches the network before it claims a test-network balance, so the airplane-mode signing demo has'
     + ' something to spend. §18: while composing routes through the remote encoder, that same demo reaches the'
-    + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction)',
+    + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction.'
+    + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled)',
 );
