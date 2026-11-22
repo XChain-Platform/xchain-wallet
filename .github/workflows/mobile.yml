@@ -132,11 +132,15 @@ jobs:
       - name: Sync the native project
         run: pnpm --filter @xchain-wallet/mobile exec cap sync android
 
-      # Unsigned on purpose: no signingConfig exists in this project, so Gradle
-      # emits an unsigned bundle and that is the whole intent.
-      - name: Build the unsigned AAB
+      # Unsigned on purpose: no signingConfig exists in either project, so
+      # Gradle emits unsigned bundles and that is the whole intent.
+      - name: Build the unsigned phone and Wear AABs
         working-directory: packages/mobile/android
-        run: ./gradlew --no-daemon bundleRelease
+        run: ./gradlew --no-daemon :app:bundleRelease :wear:bundleRelease
+
+      - name: Run the phone and Wear unit tests
+        working-directory: packages/mobile/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :wear:testDebugUnitTest
 
       - name: Fetch bundletool (pinned + hash-checked)
         run: |

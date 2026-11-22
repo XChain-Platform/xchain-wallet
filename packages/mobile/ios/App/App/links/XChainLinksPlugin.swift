@@ -73,6 +73,8 @@ final class XChainLinkInbox {
     private static let schemeWeb = "https"
     private static let hostWeb = "xchain.io"
     private static let pathPrefixWeb = "/wallet/link/"
+    private static let hostWallet = "wallet.xchain.io"
+    private static let pathPrefixWallet = "/link/"
 
     /// Delivery can arrive on the main thread (the scene callbacks) while the
     /// plugin drains on the bridge's queue, so the one field they share is
@@ -136,7 +138,8 @@ final class XChainLinkInbox {
         return url
     }
 
-    /// The URL, if it is one of ours. Nil for everything else.
+    /// The URL, if it uses xchain.io/wallet/link/ or wallet.xchain.io/link/.
+    /// Nil for everything else.
     ///
     /// Mirrors `isAcceptableDeepLink` in nativeDeepLinks.js, including the
     /// 4096-character bound and the reason it parses instead of prefix-matching:
@@ -154,6 +157,9 @@ final class XChainLinkInbox {
         if scheme == Self.schemeWeb,
            parsed.host?.lowercased() == Self.hostWeb,
            parsed.percentEncodedPath.hasPrefix(Self.pathPrefixWeb) { return raw }
+        if scheme == Self.schemeWeb,
+           parsed.host?.lowercased() == Self.hostWallet,
+           parsed.percentEncodedPath.hasPrefix(Self.pathPrefixWallet) { return raw }
 
         // An http:// link, another host, or a scheme some other app aimed at us.
         // The association file and the URL types should not have routed it here

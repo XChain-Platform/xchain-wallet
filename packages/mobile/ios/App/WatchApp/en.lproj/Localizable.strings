@@ -24,6 +24,9 @@
 "n2.openOnPhone" = "Open on phone";
 "state.age" = "Updated 12 min ago";
 "state.ageAmber" = "Updated 12 min ago";
+"state.ageHours" = "Updated {n} h ago";
+"state.ageJustNow" = "Updated just now";
+"state.ageMinutes" = "Updated {n} min ago";
 "state.amountHidden" = "Amount hidden";
 "state.balanceUnavailable" = "Balance unavailable";
 "state.hidden" = "••••";
@@ -61,6 +64,10 @@
 "w2.title" = "Token detail";
 "w2.type" = "Type";
 "w3.empty" = "No alerts";
+"w3.timeDays" = "{n} d ago";
+"w3.timeHours" = "{n} h ago";
+"w3.timeJustNow" = "Just now";
+"w3.timeMinutes" = "{n} min ago";
 "w3.title" = "Alerts";
 "w4.openOnPhone" = "Open on phone";
 "w4.requestAmount" = "Amount";
