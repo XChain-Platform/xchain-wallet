@@ -50,6 +50,7 @@ import {
 import { chainIdForCoinCode, coinCodeForChainId, coinNetworkForCoinCode, isKnownCoinCode } from './coinCodes.js';
 import { isValidAddressAnyNetwork, isValidAddressForChain } from '../shared/utils/addressValidation.js';
 import { neutralizeControlText } from '../shared/utils/textHardening.js';
+import { inspectRequestLink } from './requestLink.js';
 
 const PATH_PREFIX = 'xchain://';
 const BIP21_PREFIX = 'xchain:';
@@ -150,7 +151,7 @@ function normalizeFeePriority(raw) {
 
 /**
  * @typedef {Object} XchainUriIntent
- * @property {'send' | 'receive' | 'execute' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
+ * @property {'send' | 'receive' | 'execute' | 'request' | 'request-unsupported' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
  * @property {string} [action]                      literal action segment from a coin-code URI ('send' / 'receive' / 'execute' / etc.) when present
  * @property {string} [contractActionIndex]         execute: the deployed contract's action_index
  * @property {string} [method]                      execute: contract method name to invoke
@@ -165,11 +166,12 @@ function normalizeFeePriority(raw) {
  * @property {string} [message]
  * @property {Record<string, string>} [params]      recognized query params (includes the named ones for caller convenience)
  * @property {string[]} [required]                  names of `req-*` params; if non-empty the caller MUST decide whether to honor each or reject the URI per BIP21
+ * @property {Record<string, unknown>} [request]    validated request-link envelope
  */
 
 /**
  * @param {string} uri
- * @param {{ chainRegistry?: { chainIdFor: (coin: string, networkKind: string) => string | null } }} [deps]
+ * @param {{ chainRegistry?: { chainIdFor: (coin: string, networkKind: string) => string | null }, now?: number, developerMode?: boolean }} [deps]
  *        Registry is only needed to resolve coin codes (`xchain:TBTC/...`)
  *        back to chainIds. Without it, coin-code URIs still parse but
  *        intent.chainId will be undefined; the caller can resolve later.
@@ -181,6 +183,16 @@ export function parseXchainUri(uri, deps) {
     if (raw.length === 0) return { kind: 'unknown' };
     if (raw.length > URI_MAX_LENGTH) return { kind: 'unknown' };
     const lower = raw.toLowerCase();
+
+    if (lower.startsWith('xchain:request?')) {
+        const parsed = inspectRequestLink(raw, {
+            now: deps?.now,
+            developerMode: deps?.developerMode,
+        });
+        if (parsed.status === 'valid') return { kind: 'request', request: parsed.request };
+        if (parsed.status === 'unsupported') return { kind: 'request-unsupported' };
+        return { kind: 'unknown' };
+    }
 
     // Checked before the scheme branches because a web link IS an https URL and
     // matches none of them. One level deep by construction: `unwrapWebLink`
