@@ -23,21 +23,24 @@ import io.xchain.wallet.android.wear.R
 fun NotSetUpScreen(enabled: Boolean = true) {
     val context = LocalContext.current
     val helper = remember(context) { RemoteActivityHelper(context, context.mainExecutor) }
-    NotSetUpScreen(enabled) { helper.startRemoteActivity(openPhoneIntent(), null) }
+    NotSetUpScreen(
+        message = stringResource(if (enabled) R.string.state_open_wallet_on_phone else R.string.state_watch_disabled),
+        action = stringResource(R.string.state_open_on_phone),
+    ) { helper.startRemoteActivity(openPhoneIntent(), null) }
 }
 
 @Composable
-internal fun NotSetUpScreen(enabled: Boolean, onOpenOnPhone: () -> Unit) {
+internal fun NotSetUpScreen(message: String, action: String, onOpenOnPhone: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(if (enabled) R.string.state_open_wallet_on_phone else R.string.state_watch_disabled),
+            text = message,
             textAlign = TextAlign.Center,
         )
-        Button(onClick = onOpenOnPhone) { Text(stringResource(R.string.state_open_on_phone)) }
+        Button(onClick = onOpenOnPhone) { Text(action) }
     }
 }
 
