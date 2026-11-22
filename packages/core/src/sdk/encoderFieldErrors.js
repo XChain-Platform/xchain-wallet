@@ -21,10 +21,8 @@
 
 import { decimalFromBaseUnits } from '../shared/utils/amountFormat.js';
 import { perByteRateToDisplay } from '../flows/feeEstimate.js';
+import { FEE_BELOW_RELAY_RE, INSUFFICIENT_RE, RATE_BELOW_RELAY_RE } from './encoderFieldMatch.js';
 
-const RATE_BELOW_RELAY_RE = /feePerKb (\d+) base units\/kB produces fee (\d+), below the node relay minimum (\d+) base units for a ~(\d+)-byte transaction/;
-const FEE_BELOW_RELAY_RE = /(?:^|[\s:])fee (\d+) is below the node relay minimum (\d+) base units for a ~(\d+)-byte transaction/;
-const INSUFFICIENT_RE = /insufficient funds: selected inputs total (\d+) but (\d+) is required \(outputs (\d+) \+ fee (\d+)(?:, raised from the requested fee \d+)?\)(.*)$/s;
 
 /** Base units as a coin-scale decimal with the ticker, trailing zeros dropped. */
 function coinText(baseUnits, ticker, divisibility) {
