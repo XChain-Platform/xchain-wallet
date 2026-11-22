@@ -32,7 +32,7 @@ describe('short-landscape media queries', () => {
             const css = readFileSync(join(root, file), 'utf8');
             for (const line of css.split('\n')) {
                 if (line.includes('orientation: landscape') && line.includes('max-height: 480px')) {
-                    expect(line, file).toContain('min-aspect-ratio: 3/2');
+                    expect(line, file).toContain('min-aspect-ratio: 7/5');
                 }
             }
         }

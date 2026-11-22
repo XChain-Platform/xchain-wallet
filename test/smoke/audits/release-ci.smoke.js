@@ -25,6 +25,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const WORKFLOW = '.github/workflows/release.yml';
 assert.ok(existsSync(join(root, WORKFLOW)), `${WORKFLOW} exists`);
 const wf = read(WORKFLOW);
+const toolchain = JSON.parse(read('tools/release/toolchain.json'));
 
 // A boundary-aware "does the file reference this exact URL" check: a plain
 // substring search would also match the URL appearing as a piece of some
@@ -401,6 +402,18 @@ if (docsAvailable()) {
 assert.ok(jobs.has('mobile-ios'), 'workflow has an iOS lane');
 const ios = jobs.get('mobile-ios');
 
+assert.deepEqual(toolchain.xcode, {
+    version: '27.2',
+    build: '27B52',
+    developerDir: '/Applications/Xcode_27.2.app/Contents/Developer',
+    _versionNote: 'Exact version and build keep the macOS release toolchain reproducible.',
+}, 'the release toolchain pins the installed Xcode version, build and developer directory');
+assert.match(ios,
+    /xcode-select --switch \/Applications\/Xcode_27\.2\.app\/Contents\/Developer/,
+    'the iOS lane selects the Xcode installation pinned by toolchain.json');
+assert.ok(ios.includes("test \"$(xcodebuild -version)\" = $'Xcode 27.2\\nBuild version 27B52'"),
+    'the iOS lane refuses an Xcode installation whose version or build drifts');
+
 assert.ok(/XCHAIN_BUILD_PROFILE:\s*store/.test(ios),
     'the iOS lane must build the web shell at the `store` profile, or the ipa '
     + 'has the wrong CSP, sourcemap setting and profile stamp');
@@ -417,6 +430,24 @@ assert.ok(/ASC_KEY_ID:\s*\$\{\{\s*secrets\.APPLE_API_KEY_ID/.test(ios),
 // first and reported on the wrong one. Split into step blocks instead, and gate
 // on what the step actually asks for.
 const iosSteps = ios.split(/^ {6}- (?=name:|uses:|run:)/m);
+const watchBuild = iosSteps.find((step) => step.includes('name: Build WatchApp for the simulator'));
+assert.ok(watchBuild, 'the iOS lane builds WatchApp for the watchOS simulator');
+assert.match(watchBuild, /xcodebuild build\s+-scheme WatchApp/,
+    'the watch simulator build uses the WatchApp scheme');
+assert.match(watchBuild, /-destination 'generic\/platform=watchOS Simulator'/,
+    'the WatchApp build targets the generic watchOS simulator');
+
+const watchTest = iosSteps.find((step) => step.includes('name: Test WatchApp on both watch sizes'));
+assert.ok(watchTest, 'the iOS lane tests WatchApp on both watch sizes');
+assert.match(watchTest, /xcodebuild test -scheme WatchApp/,
+    'the watch test step runs the WatchApp scheme');
+for (const watchSpec of [
+    '41mm:Apple-Watch-Series-9-41mm',
+    '49mm:Apple-Watch-Ultra-4-49mm',
+]) {
+    assert.match(watchTest, new RegExp(`['"]${watchSpec}['"]`),
+        `the watch test step covers ${watchSpec}`);
+}
 for (const step of ['ios-archive.sh', 'ios-export.sh']) {
     const callers = iosSteps.filter((b) => new RegExp(`run: bash tools/release/${step}`).test(b));
     assert.ok(callers.length > 0, `the iOS lane runs ${step}`);

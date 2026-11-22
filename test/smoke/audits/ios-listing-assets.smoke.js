@@ -38,11 +38,12 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SETS, verifyPin, APP_STORE_SIZES } from '../../../tools/release/verify-listing-assets.mjs';
+import { WATCH_LISTING, watchListingEntries } from '../../../tools/release/upload-listing-assets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -89,11 +90,54 @@ assert.deepEqual(
     + `refuses (accepted: ${APP_STORE_SIZES.map((c) => `${c.width}x${c.height}`).join(', ')}): `
     + `${pin.hashProblems.join(' | ')}`,
 );
-assert.deepEqual(
-    pin.extra,
-    [],
-    `the App Store pin covers files that are not listing assets: ${pin.extra.join(', ')}`,
+const requiredWatchScenes = ['01-balances.png', '02-receive.png', '03-send.png', '04-settings.png'];
+assert.deepEqual(WATCH_LISTING, {
+    type: 'APP_WATCH_ULTRA', dir: 'xc-watch-49mm', width: 422, height: 514, scenes: requiredWatchScenes,
+});
+const expectedWatchAssets = ['xc-watch-49mm', 'xc-watch-41mm']
+    .flatMap((dir) => requiredWatchScenes.map((name) => `${dir}/${name}`));
+const assertExactWatchExtras = (result) => {
+    const pinnedWatchAssets = expectedWatchAssets.filter((name) => result.pin.assets[name]);
+    assert.ok(
+        pinnedWatchAssets.length === 0 || pinnedWatchAssets.length === expectedWatchAssets.length,
+        `the App Store pin contains a partial watch capture: ${pinnedWatchAssets.join(', ')}`,
+    );
+    assert.deepEqual(
+        [...result.extra].sort(),
+        [...pinnedWatchAssets].sort(),
+        `the App Store pin covers unexpected files: ${result.extra.join(', ')}`,
+    );
+};
+assertExactWatchExtras(pin);
+assert.throws(
+    () => assertExactWatchExtras({ ...pin, extra: [...pin.extra, 'unrelated/extra.png'] }),
+    /unexpected files/,
+    'an unrelated extra asset must fail the listing audit',
 );
+const captureSource = readFileSync(join(repoRoot, iosSet.capture), 'utf8');
+assert.match(captureSource, /XC Watch 49mm:422:514/);
+assert.match(captureSource, /XC Watch 41mm:352:430/);
+assert.match(captureSource, /for scene in 01-balances 02-receive 03-send 04-settings/);
+assert.match(captureSource, /simctl pair_activate/);
+assert.match(captureSource, /simctl io .* screenshot/);
+assert.match(captureSource, /pin\.assets\[name\] =/);
+assert.match(captureSource, /header\.hasAlpha/);
+
+const scratchParent = join(repoRoot, 'tmp');
+mkdirSync(scratchParent, { recursive: true });
+const scratchRoot = mkdtempSync(join(scratchParent, 'ios-watch-listing-'));
+try {
+    const screenshotRoot = join(scratchRoot, 'packages', 'mobile', 'screenshots');
+    mkdirSync(screenshotRoot, { recursive: true });
+    writeFileSync(join(screenshotRoot, 'capture-pin.json'), '{"assets":{}}\n');
+    assert.match(
+        watchListingEntries(scratchRoot).error,
+        /capture pin is missing xc-watch-49mm\/01-balances\.png/,
+        'an entirely absent watch set must be refused rather than skipped',
+    );
+} finally {
+    rmSync(scratchRoot, { recursive: true });
+}
 
 // 3. TRACKED. This is the row-63 half, and it is asserted against git rather
 // than against the filesystem on purpose: the images were present on disk the

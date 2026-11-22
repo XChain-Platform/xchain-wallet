@@ -197,6 +197,7 @@ export function installNativeWipeHook({ afterWipe } = {}) {
                 // the biometric wrap: a guard slot that would not clear must
                 // not leave a wrap holding the old password behind it.
                 await callNativeVault('clearGuards');
+                await clearWatchNativeStores();
                 if (typeof afterWipe === 'function') await afterWipe();
                 return { ok: true };
             } catch (err) {

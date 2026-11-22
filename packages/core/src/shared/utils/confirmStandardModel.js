@@ -679,7 +679,10 @@ export function feeFacts(fees) {
  * @typedef {object} ConfirmStatus
  * @property {'success'|'danger'|'info'} tone
  * @property {string} title
- * @property {Array<{ key: string, text: string, detail?: string|null }>} points
+ * @property {Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>} points
+ *   each point is one issue, and several issues are a bulleted list (U101); a
+ *   `lead` point is the plain sentence above the list and an `after` point the
+ *   plain line under it
  * @property {Array<any>} overrides     error findings the user may sign anyway, each with its own box
  * @property {'alert'|'status'|null} role
  * @property {string} state             'checking', 'oracleFees' or a pre-flight state (pass, notChecked, partial, settleChecks, warn, fail)
@@ -725,7 +728,7 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
     if (state === S.SETTLE_CHECKS) {
         // The wallet's headline names which limits wait; the SDK's reason text
         // is report-reader wording, so it stays out of this note.
-        const settlePoints = [{ key: 'settle-checks', text: t('confirmStandard.settleChecks.body') }];
+        const settlePoints = [{ key: 'settle-checks', text: t('confirmStandard.settleChecks.body'), place: 'lead' }];
         uniqueHeadlines(report.unverified).forEach((text, i) => {
             settlePoints.push({ key: `settle-${i}`, text });
         });
@@ -769,6 +772,8 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
             points.push({
                 key: 'fail-approve',
                 text: hard ? t('confirmStandard.warning.approveOff') : t('confirmStandard.warning.signAnyway'),
+                // What Approve does about the failure, not one more reason.
+                place: 'after',
             });
         }
     } else if (state === S.WARN) {
@@ -782,9 +787,12 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
             points.push({
                 key: 'partial-batch',
                 text: t('confirmStandard.warning.partialBatch', { accepted: partial.data.accepted, total: partial.data.subCommandCount }),
+                place: 'lead',
             });
         } else {
-            points.push({ key: 'partial', text: t('confirmStandard.warning.partialBody') });
+            // The summary sentence leads; the checks the network could not
+            // verify follow it as the list.
+            points.push({ key: 'partial', text: t('confirmStandard.warning.partialBody'), place: 'lead' });
         }
         if (report?.restricted) points.push({ key: 'restricted', text: t('confirmStandard.warning.restricted') });
         uniqueHeadlines(Array.isArray(report?.unverified) ? report.unverified : []).forEach((text, i) => {

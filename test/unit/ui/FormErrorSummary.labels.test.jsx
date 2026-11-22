@@ -18,10 +18,11 @@ import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary
 
 afterEach(cleanup);
 
-// The line is plain text since the Notice Standard (2026-11-15), no link.
+// The line is plain text since the Notice Standard (2026-11-15), no link;
+// a single problem is a plain line, not a list item (U101).
 function link(error) {
     render(<FormErrorSummary errors={[{ id: 'f', ...error }]} focusKey={1} />);
-    return screen.getByRole('listitem').textContent;
+    return screen.getByRole('alert').querySelector('[data-error-for="f"]').textContent;
 }
 
 describe('FormErrorSummary label repetition', () => {

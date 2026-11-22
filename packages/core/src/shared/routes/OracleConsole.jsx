@@ -157,8 +157,9 @@ export function useOracleMarkets({ walletId, accountId, messaging }) {
                 for (const a of addrs || []) pairs.push({ chainId, address: a.address, addr: a });
             }
             const results = await Promise.all(pairs.map((p) => messaging
-                .betFeeds({ chainId: p.chainId, query: p.address, type: 'source', opts: { limit: 100 } })
-                .then((r) => ({ p, feeds: extractRows(r) }))
+                // Every page: the closed market still waiting on a result is often the oldest.
+                .betFeeds({ chainId: p.chainId, query: p.address, type: 'source', opts: { limit: 100 }, allPages: true })
+                .then((r) => ({ p, feeds: extractRows(r), truncated: r?.truncated === true }))
                 .catch((requestError) => ({ p, feeds: [], requestError }))));
             if (sequence !== loadSequence.current) return;
             const failures = results.filter((entry) => entry.requestError);
@@ -184,6 +185,8 @@ export function useOracleMarkets({ walletId, accountId, messaging }) {
                 setError(background
                     ? 'Some markets could not be refreshed. The available markets are shown below.'
                     : 'Some markets could not be loaded. The available markets are shown below.');
+            } else if (results.some((entry) => entry.truncated)) {
+                setError('Some older markets could not be loaded. The available markets are shown below.');
             }
         } catch {
             if (sequence !== loadSequence.current) return;

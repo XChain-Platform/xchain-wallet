@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import styles from './TotalBalanceHero.module.css';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
@@ -53,6 +54,14 @@ export function BalanceHeroMenu({ items, extraItems = [], className }) {
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
     const menuRef = useRef(null);
+    // The menu is placed in viewport coordinates under its trigger, so the
+    // hero card's clipping (it rounds the chart drawn behind the balance)
+    // never cuts off the rows below the card's foot.
+    const placement = useAnchoredPopover(open, triggerRef);
+    const setMenuNode = useCallback((node) => {
+        menuRef.current = node;
+        placement.ref.current = node;
+    }, [placement.ref]);
     const rows = [...(items || []), ...(extraItems || [])].filter(Boolean);
     const label = t('components.totalBalanceHero.balanceActions');
 
@@ -72,13 +81,20 @@ export function BalanceHeroMenu({ items, extraItems = [], className }) {
         const onFocusIn = (event) => {
             if (!wrapRef.current?.contains(event.target)) setOpen(false);
         };
+        // A fixed menu would stay put while the page scrolls under it, so a
+        // scroll anywhere but inside the menu closes it.
+        const onScroll = (event) => {
+            if (!menuRef.current?.contains(event.target)) setOpen(false);
+        };
         window.addEventListener('mousedown', onPointerDown);
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('focusin', onFocusIn);
+        window.addEventListener('scroll', onScroll, true);
         return () => {
             window.removeEventListener('mousedown', onPointerDown);
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('focusin', onFocusIn);
+            window.removeEventListener('scroll', onScroll, true);
         };
     }, [open]);
 
@@ -117,8 +133,9 @@ export function BalanceHeroMenu({ items, extraItems = [], className }) {
             </Button>
             {open ? (
                 <div
-                    ref={menuRef}
+                    ref={setMenuNode}
                     className={styles.actionMenu}
+                    style={placement.style}
                     role="menu"
                     aria-label={label}
                     onKeyDown={onMenuKeyDown}

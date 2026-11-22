@@ -8,22 +8,47 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve('packages/mobile/scripts/watch-test.sh'), 'utf8');
+const simulatorPairs = JSON.stringify({
+    pairs: {
+        'PAIR-41': {
+            state: 'active',
+            phone: { name: 'XC iPhone 17', udid: 'PHONE-17' },
+            watch: { name: 'XC Watch 41mm', udid: 'WATCH-41' },
+        },
+        'PAIR-49': {
+            state: 'active',
+            phone: { name: 'XC iPhone 17', udid: 'PHONE-17' },
+            watch: { name: 'XC Watch 49mm', udid: 'WATCH-49' },
+        },
+    },
+});
+const simulatorDevices = JSON.stringify({
+    devices: {
+        'com.apple.CoreSimulator.SimRuntime.iOS-26-1': [
+            { name: 'XC iPhone 17', udid: 'PHONE-17' },
+        ],
+        'com.apple.CoreSimulator.SimRuntime.watchOS-26-1': [
+            { name: 'XC Watch 41mm', udid: 'WATCH-41' },
+            { name: 'XC Watch 49mm', udid: 'WATCH-49' },
+        ],
+    },
+});
 const fixtures = [];
 afterEach(() => fixtures.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 describe('watch-test.sh', () => {
     it.each([
-        ['watch41', 'WatchApp', 'WatchAppTests/BalanceTests', 'XC Watch 41mm'],
-        ['watch49', 'WatchApp', 'WatchAppTests/BalanceTests', 'XC Watch 49mm'],
-        ['phone', 'App', 'AppTests/VaultTests', 'XC iPhone 17'],
-    ])('runs %s and proves execution from xcresult data', (target, scheme, only, device) => {
+        ['watch41', 'WatchApp', 'WatchAppTests/BalanceTests', 'WATCH-41'],
+        ['watch49', 'WatchApp', 'WatchAppTests/BalanceTests', 'WATCH-49'],
+        ['phone', 'App', 'AppTests/VaultTests', 'PHONE-17'],
+    ])('runs %s and proves execution from xcresult data', (target, scheme, only, udid) => {
         const fixture = makeFixture();
         const result = run(fixture, [target, target === 'phone' ? 'VaultTests' : 'BalanceTests']);
         const commands = readFileSync(fixture.log, 'utf8');
         expect(result.status).toBe(0);
         expect(commands).toContain(`-scheme ${scheme}`);
         expect(commands).toContain(`-only-testing:${only}`);
-        expect(commands).toContain(`name=${device}`);
+        expect(commands).toContain(`-destination id=${udid}`);
         expect(commands).toContain('xcresulttool get test-results summary');
     });
 
@@ -39,7 +64,7 @@ describe('watch-test.sh', () => {
         const fixture = makeFixture();
         const result = run(fixture, ['phone', 'VaultTests'], { FAKE_NO_SIMS: '1' });
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain("no available simulator named 'XC iPhone 17'");
+        expect(result.stderr).toContain("no paired simulator for 'XC iPhone 17' with XC iPhone 17");
         expect(readFileSync(fixture.log, 'utf8')).not.toContain('xcodebuild');
     });
 
@@ -100,8 +125,10 @@ function makeFixture() {
     put(log, '');
     put(join(bin, 'xcrun'), `#!/usr/bin/env bash
 printf 'xcrun %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-if [ "$1 $2 $3 $4" = 'simctl list devices available' ]; then
-  [ "\${FAKE_NO_SIMS:-}" = 1 ] || printf '%s\\n' 'XC Watch 41mm (AAAA) (Shutdown)' 'XC Watch 49mm (BBBB) (Shutdown)' 'XC iPhone 17 (CCCC) (Shutdown)'
+if [ "$1 $2 $3 $4" = 'simctl list pairs -j' ]; then
+  [ "\${FAKE_NO_SIMS:-}" = 1 ] && printf '%s\\n' '{"pairs":{}}' || printf '%s\\n' '${simulatorPairs}'
+elif [ "$1 $2 $3 $4" = 'simctl list devices -j' ]; then
+  [ "\${FAKE_NO_SIMS:-}" = 1 ] && printf '%s\\n' '{"devices":{}}' || printf '%s\\n' '${simulatorDevices}'
 elif [ "$1 $2 $3 $4" = 'xcresulttool get test-results summary' ]; then
   [ "\${FAKE_XCODE_COUNTS:-}" = zero ] && printf '%s\\n' '{"passedTests":0,"failedTests":0}' || printf '%s\\n' '{"passedTests":1,"failedTests":0}'
 fi

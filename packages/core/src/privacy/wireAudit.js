@@ -58,9 +58,9 @@ export const WIRE_AUDIT = Object.freeze([
     {
         host: 'explorer.xchain.io',
         party: 'first',
-        why: 'balances, transaction history, token rows, fee quotes',
+        why: 'balances, transaction history, token rows, fee quotes, background activity check',
         carries: 'the addresses being queried, and the requesting IP',
-        control: 'Settings › Networks (the endpoint is user-configurable)',
+        control: 'Settings › Networks (the endpoint is user-configurable); Settings › Watch › Background activity check (mobile background reads)',
         shells: ['web', 'desktop', 'extension', 'mobile'],
         source: 'packages/core/src/registry/descriptors/',
     },

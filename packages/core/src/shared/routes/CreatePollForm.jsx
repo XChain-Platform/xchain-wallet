@@ -18,6 +18,7 @@ import {
     Input,
     ListPage,
     Notice,
+    NoticeList,
     PageHeader,
     Screen,
     Select,
@@ -1016,9 +1017,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                         </WarningCard>
                         {bindingErrors.length > 0 ? (
                             <Notice tone="danger" role="note" data-poll-binding-errors="">
-                                {bindingErrors.length === 1
-                                    ? bindingErrors[0]
-                                    : <ul>{bindingErrors.map((e) => <li key={e}>{e}</li>)}</ul>}
+                                <NoticeList items={bindingErrors.map((e) => ({ key: e, content: e }))} />
                             </Notice>
                         ) : null}
                     </>

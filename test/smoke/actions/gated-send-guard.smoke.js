@@ -113,5 +113,7 @@ assert.ok(!/gatedRawNotice\.gated[\s\S]{0,200}disabled/.test(advanced), 'Advance
 const tokenDetail = read('packages', 'core', 'src', 'shared', 'routes', 'TokenDetail.jsx');
 assert.match(tokenDetail, /only to addresses that have made\s*\n?\s*at least one transaction/,
     'TokenDetail states the never-spent-recipient constraint');
+assert.match(tokenDetail, /key=\{`\$\{g\.publisher \|\| ''\}\|\$\{g\.keyHash\}`\}/,
+    'publisher-scoped packs render with distinct React keys');
 
 console.log('gated-send-guard smoke: OK');

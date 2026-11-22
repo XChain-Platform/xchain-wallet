@@ -12,7 +12,7 @@ import { t } from '../../i18n/index.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From, the fee selector and the section frame come from the Form Standard.
-import { AddressField, Button, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, Notice, OptionSwitch, OptionSwitchList, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, Notice, NoticeList, OptionSwitch, OptionSwitchList, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import {
     FeeSection,
     FormAction,
@@ -800,11 +800,7 @@ export function SweepForm({
             ) : null}
             {!migrateLane && gatedTicks.length > 0 ? (
                 <StatusMessage variant="warning" role="alert">
-                    {gatedTicks.map((tick) => (
-                        <p key={tick}>
-                            {gatedTickWarningCopy(tick, 'sweep recipients')}
-                        </p>
-                    ))}
+                    <NoticeList items={gatedTicks.map((tick) => ({ key: tick, content: gatedTickWarningCopy(tick, 'sweep recipients') }))} />
                 </StatusMessage>
             ) : null}
         </>
@@ -1095,6 +1091,7 @@ export function SweepForm({
                     variant="warning"
                     role="alert"
                     lines={gatedTicks.map((tick) => gatedTickWarningCopy(tick, 'sweep recipients'))}
+                    bullets
                 />
             ) : null}
 

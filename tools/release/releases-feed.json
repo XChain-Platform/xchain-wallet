@@ -6,7 +6,7 @@
       "url": "https://wallet.xchain.io/"
     },
     "chrome": {
-      "version": "0.341.2",
+      "version": "0.343.0",
       "url": "https://chromewebstore.google.com/detail/hpgekccmlajjbeckcjbldjinajmhchfp"
     },
     "android-direct": {
@@ -14,7 +14,7 @@
       "url": "https://downloads.xchain.io/wallet/android/xchain-wallet-v0.343.1.apk"
     },
     "android-play": {
-      "version": "0.343.0",
+      "version": "0.343.1",
       "url": "https://play.google.com/store/apps/details?id=io.xchain.wallet.android"
     },
     "desktop-direct": {

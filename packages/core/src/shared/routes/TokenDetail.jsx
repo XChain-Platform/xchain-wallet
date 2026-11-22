@@ -2896,7 +2896,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 const heading = meta?.name || (isPack ? `Pack (${g.files.length} files)` : g.files[0]?.name) || 'Gated file';
                 return (
                     <GatedGroupCard
-                        key={g.keyHash}
+                        key={`${g.publisher || ''}|${g.keyHash}`}
                         group={g}
                         heading={heading}
                         description={meta?.description}

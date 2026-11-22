@@ -1,0 +1,25 @@
+/* The bulleted list of a notice's issues (U101). The selector carries the
+   data attribute so it outranks Notice's own `.body > ul` reset, which strips
+   the markers from a plain list placed in a notice body. The markers hang in
+   the list's start padding, so each bullet sits at the text column's start
+   edge (under the title's first letter) and a wrapped item lines up under
+   its own text. */
+ul.list[data-notice-list] {
+    margin: 0;
+    padding-inline-start: var(--xc-space-4);
+    list-style: disc outside;
+}
+
+ul.list[data-notice-list] > li {
+    margin: 0;
+    padding-inline-start: var(--xc-space-1);
+}
+
+ul.list[data-notice-list] > li + li {
+    margin-top: var(--xc-space-1);
+}
+
+/* The marker keeps the item's own text colour (the notice tone's text). */
+ul.list[data-notice-list] > li::marker {
+    color: currentColor;
+}
