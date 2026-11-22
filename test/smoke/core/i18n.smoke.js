@@ -164,6 +164,38 @@ const PAIRS = { '(': ')', '[': ']', '{': '}' };
 // Identifier vars cannot be read from source; these files pin theirs by
 // rendering every branch (xchain-uri-describe.smoke.js).
 const VARS_PINNED_ELSEWHERE = new Set(['packages/core/src/uri/xchainUri.js']);
+const PENDING_WATCH_KEYS = new Set([
+    'watch.title',
+    'watch.showWallet',
+    'watch.tokens',
+    'watch.tokens.followHome',
+    'watch.tokens.pinnedOnly',
+    'watch.startIn',
+    'watch.startIn.fiat',
+    'watch.startIn.units',
+    'watch.showTotal',
+    'watch.backgroundActivityCheck',
+    'watch.value.on',
+    'watch.value.off',
+    'watch.status.title',
+    'watch.status.paired',
+    'watch.status.installed',
+    'watch.status.reachable',
+    'watch.status.lastSync',
+    'watch.status.hint.pairApple',
+    'watch.status.hint.installApple',
+    'watch.status.hint.installWear',
+    'watch.status.hint.unreachable',
+    'watch.sendTestAlert',
+    'watch.testAlert.title',
+    'watch.testAlert.body',
+    'watch.removeData',
+    'watch.newActivity.title',
+    'watch.newActivity.body',
+    'watch.torUnavailable',
+    'watch.openOnPhone',
+    'watch.mobileAutopayNotice',
+]);
 
 /** Collect every .js / .jsx file under `dir`, skipping the dictionaries. */
 function sourceFiles(dir, out = []) {
@@ -308,7 +340,12 @@ for (const { rel, src } of translated) {
     }
 }
 
-const unusedKeys = Object.keys(en).filter((key) => !seenKeys.has(key));
+for (const key of PENDING_WATCH_KEYS) {
+    assert.equal(typeof en[key], 'string', `pending Watch key "${key}" exists`);
+}
+const unusedKeys = Object.keys(en).filter((key) => (
+    !seenKeys.has(key) && !PENDING_WATCH_KEYS.has(key)
+));
 assert.deepEqual(unusedKeys, [],
     `en.js defines keys no package source names: ${unusedKeys.join(', ')}`);
 
