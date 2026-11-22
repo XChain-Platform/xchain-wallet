@@ -21,6 +21,21 @@
     display: none;
 }
 
+:global(html[data-fold='horizontal']) .bar {
+    inset-block-end: 0;
+    min-block-size: 0;
+    block-size: min(
+        3.5rem,
+        max(0px, calc(
+            var(--xc-viewport-h, 100vh)
+            - var(--xc-fold-y, calc(var(--xc-space-1) - var(--xc-space-1)))
+            - var(--xc-fold-height, calc(var(--xc-space-1) - var(--xc-space-1)))
+            - env(safe-area-inset-bottom, 0px)
+        ))
+    );
+    overflow: hidden;
+}
+
 .bar .tab {
     --xc-button-hover-bg: transparent;
     --xc-button-hover-border: currentColor;
