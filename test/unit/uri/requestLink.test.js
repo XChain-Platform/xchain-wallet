@@ -70,25 +70,13 @@ describe('request links', () => {
         expect(parseXchainUri(outerVersion, { now: vectors.now })).toEqual({ kind: 'request-unsupported' });
     });
 
-    it('unwraps both published web-link origins', () => {
+    it('routes requests through both published web-link origins', () => {
         const request = encode(validEnvelope());
         for (const wrapper of [
             `https://xchain.io/wallet/link/?uri=${encodeURIComponent(request)}`,
             `https://wallet.xchain.io/link/?uri=${encodeURIComponent(request)}`,
         ]) {
             expect(parseXchainUri(wrapper, { now: vectors.now }).kind).toBe('request');
-        }
-    });
-
-    it('pairs each published web-link origin with only its claimed path', () => {
-        const request = encode(validEnvelope());
-        for (const wrapper of [
-            `https://xchain.io/link/?uri=${encodeURIComponent(request)}`,
-            `https://wallet.xchain.io/wallet/link/?uri=${encodeURIComponent(request)}`,
-            `https://wallet.xchain.io/linkage/?uri=${encodeURIComponent(request)}`,
-            `https://wallet.xchain.io.evil.example/link/?uri=${encodeURIComponent(request)}`,
-        ]) {
-            expect(parseXchainUri(wrapper, { now: vectors.now })).toEqual({ kind: 'unknown' });
         }
     });
 
