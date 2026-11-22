@@ -36,9 +36,14 @@ const ext = join(wsRoot, 'packages', 'extension');
 const popupHtml = readFileSync(join(ext, 'popup.html'), 'utf8');
 assert.ok(popupHtml.includes('id="xchain-popup-root"'), 'popup.html has root div');
 assert.ok(
-    /src=".\/src\/popup\/main\.jsx"/.test(popupHtml),
-    'popup.html references src/popup/main.jsx',
+    /src=".\/src\/popup\/boot\.js"/.test(popupHtml),
+    'popup.html references src/popup/boot.js',
 );
+// The boot module loads the app with a dynamic import, so the popup's first
+// load (when Chrome shows it) never waits for the wallet bundle.
+const bootJs = readFileSync(join(ext, 'src', 'popup', 'boot.js'), 'utf8');
+assert.ok(/^import\('\.\/main\.jsx'\);$/m.test(bootJs), 'boot.js dynamically imports main.jsx');
+assert.ok(!/^import\s+[^(]/m.test(bootJs), 'boot.js has no static import');
 
 const mainJsx = readFileSync(join(ext, 'src', 'popup', 'main.jsx'), 'utf8');
 assert.ok(mainJsx.includes('createRoot'), 'main.jsx uses createRoot');

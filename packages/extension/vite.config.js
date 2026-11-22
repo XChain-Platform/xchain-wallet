@@ -64,35 +64,97 @@ const zlibBrowserShim = fileURLToPath(
 );
 const startupThemeUrl = new URL('../web/public/theme-init.js', import.meta.url);
 
+const PRELOAD_HELPER_ID = '\0vite/preload-helper.js';
+const CORE_ENTRY_SUFFIX = '/packages/core/src/index.js';
+
+/**
+ * The chunks the object form `{ core: ['@xchain-wallet/core'] }` made, plus
+ * one: Vite's dynamic-import helper gets a chunk of its own. The object form
+ * pulled the helper into core (core's own dynamic imports use it), so
+ * src/popup/boot.js, which loads the wallet with one dynamic import, made the
+ * popup's first load wait for the whole 2.8 MB core chunk.
+ *
+ * Core keeps exactly the object form's members: the core entry and every
+ * module it reaches by static import, except modules already given a chunk.
+ */
+function coreManualChunks(id, { getModuleIds, getModuleInfo }) {
+    if (id === PRELOAD_HELPER_ID) return 'preload-helper';
+    if (!coreManualChunks.members) {
+        const members = new Set();
+        const entry = [...getModuleIds()].find((moduleId) => moduleId.endsWith(CORE_ENTRY_SUFFIX));
+        const queue = entry ? [entry] : [];
+        while (queue.length) {
+            const next = queue.pop();
+            if (members.has(next) || next === PRELOAD_HELPER_ID) continue;
+            members.add(next);
+            for (const dep of getModuleInfo(next)?.importedIds || []) queue.push(dep);
+        }
+        coreManualChunks.members = members;
+    }
+    return coreManualChunks.members.has(id) ? 'core' : undefined;
+}
+// Toolbar popup only: sizes the popup and shows a load failure before the
+// module bundle runs. See the header of popup-size.js.
+const popupSizeUrl = new URL('./popup-size.js', import.meta.url);
+
+const STARTUP_SCRIPTS = [
+    { fileName: 'theme-init.js', url: startupThemeUrl },
+    { fileName: 'popup-size.js', url: popupSizeUrl },
+];
+
+/**
+ * True when Vite is transforming popup.html (the toolbar popup and its
+ * full-tab view), and false for the side panel and the approval window.
+ *
+ * @param {{ filename?: string, path?: string } | undefined} ctx
+ */
+export function isPopupHtml(ctx) {
+    const name = ctx?.filename || ctx?.path || '';
+    return /(^|[\\/])popup\.html$/.test(name);
+}
+
 /**
  * Install the shared parser-blocking theme bootstrap on every extension page.
  * The inline background rules cover the interval before the module bundle and
  * tokens load, while the external script remains compatible with MV3 CSP.
+ * popup.html also gets popup-size.js right after it; theme-init.js stays the
+ * file the web shell ships, untouched.
  */
 function startupThemePlugin() {
     return {
         name: 'xchain-startup-theme',
         async buildStart() {
-            this.emitFile({
-                type: 'asset',
-                fileName: 'theme-init.js',
-                source: await readFile(startupThemeUrl, 'utf8'),
-            });
+            for (const { fileName, url } of STARTUP_SCRIPTS) {
+                this.emitFile({
+                    type: 'asset',
+                    fileName,
+                    source: await readFile(url, 'utf8'),
+                });
+            }
         },
         configureServer(server) {
-            server.middlewares.use('/theme-init.js', async (_request, response, next) => {
-                try {
-                    response.statusCode = 200;
-                    response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-                    response.end(await readFile(startupThemeUrl, 'utf8'));
-                } catch {
-                    next();
-                }
-            });
+            for (const { fileName, url } of STARTUP_SCRIPTS) {
+                server.middlewares.use(`/${fileName}`, async (_request, response, next) => {
+                    try {
+                        response.statusCode = 200;
+                        response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+                        response.end(await readFile(url, 'utf8'));
+                    } catch {
+                        next();
+                    }
+                });
+            }
         },
         transformIndexHtml: {
             order: 'pre',
-            handler() {
+            handler(_html, ctx) {
+                const popupTags = isPopupHtml(ctx)
+                    ? [{
+                        tag: 'script',
+                        attrs: { src: '/popup-size.js' },
+                        injectTo: 'head-prepend',
+                    }]
+                    : [];
                 return [
                     {
                         tag: 'style',
@@ -110,6 +172,7 @@ html[data-xc-theme="light"], html[data-xc-theme="light"] body { background: #FFF
                         attrs: { src: '/theme-init.js' },
                         injectTo: 'head-prepend',
                     },
+                    ...popupTags,
                 ];
             },
         },
@@ -356,9 +419,7 @@ export default defineConfig({
                 },
                 chunkFileNames: 'chunks/[name]-[hash].js',
                 assetFileNames: 'assets/[name]-[hash][extname]',
-                manualChunks: {
-                    core: ['@xchain-wallet/core'],
-                },
+                manualChunks: coreManualChunks,
             },
         },
     },
