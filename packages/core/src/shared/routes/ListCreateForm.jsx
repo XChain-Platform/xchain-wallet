@@ -1447,8 +1447,8 @@ function StandardListBody({
                 >
                     <Input
                         label="Name"
-                        help={`A public on-chain name for this list, up to ${LIST_META_NAME_MAX_BYTES} UTF-8 bytes.`}
-                        hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
+                        help={`A public on-chain name for this list, up to ${LIST_META_NAME_MAX_BYTES} characters. Accented letters and emoji count as more than one.`}
+                        hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES}`}
                         error={nameError || undefined}
                         value={listName}
                         onChange={(e) => { setListName(e.target.value); setFormError(null); }}
@@ -1456,8 +1456,8 @@ function StandardListBody({
                     />
                     <Input
                         label="Description"
-                        help={`A public on-chain description of this list, up to ${LIST_META_DESCRIPTION_MAX_BYTES} UTF-8 bytes.`}
-                        hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
+                        help={`A public on-chain description of this list, up to ${LIST_META_DESCRIPTION_MAX_BYTES} characters. Accented letters and emoji count as more than one.`}
+                        hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES}`}
                         error={descriptionError || undefined}
                         value={listDescription}
                         onChange={(e) => { setListDescription(e.target.value); setFormError(null); }}
@@ -3795,7 +3795,7 @@ function ListMembersBody({
                     ) : null}
                     <Input
                         label="Name"
-                        help={`Leave this empty to keep the current name. The X sets the name to nothing on the chain. The name is public and can be at most ${LIST_META_NAME_MAX_BYTES} bytes. A new name is its own transaction, published apart from a member change.`}
+                        help={`Leave this empty to keep the current name. The X sets the name to nothing on the chain. The name is public and can be at most ${LIST_META_NAME_MAX_BYTES} characters; accented letters and emoji count as more than one. A new name is its own transaction, published apart from a member change.`}
                         counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedName), max: LIST_META_NAME_MAX_BYTES })}
                         error={nameError || undefined}
                         value={name}
@@ -3807,7 +3807,7 @@ function ListMembersBody({
                     />
                     <Textarea
                         label="Description"
-                        help={`Leave this empty to keep the current description. The X sets the description to nothing on the chain. The description is public and can be at most ${LIST_META_DESCRIPTION_MAX_BYTES} bytes.`}
+                        help={`Leave this empty to keep the current description. The X sets the description to nothing on the chain. The description is public and can be at most ${LIST_META_DESCRIPTION_MAX_BYTES} characters; accented letters and emoji count as more than one.`}
                         counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedDescription), max: LIST_META_DESCRIPTION_MAX_BYTES })}
                         error={descriptionError || undefined}
                         value={description}

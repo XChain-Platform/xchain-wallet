@@ -377,7 +377,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
     });
 
-    it('explains a refused Undo in a toast and keeps the page usable', async () => {
+    it('explains a refused Undo at the top of the page and keeps the page usable', async () => {
         const site = { id: 'site-1', origin: 'https://dapp.example', appName: 'Example dApp', permissions: {} };
         const blockedErr = Object.assign(new Error('sites.restore: origin is blocked'), { code: 'BLOCKED_BY_USER' });
         for (const [refusal, text] of [
@@ -397,8 +397,11 @@ describe('ConnectedSitesSection settings controls', () => {
             await act(async () => { await toast.show.mock.calls[0][0].onAction(); });
 
             expect(messaging.restoreConnectedSite).toHaveBeenCalledWith({ site });
-            expect(toast.show).toHaveBeenLastCalledWith({ message: text, variant: 'error' });
-            expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+            expect(toast.show).toHaveBeenCalledTimes(1);
+            const notice = await screen.findByText(text);
+            const list = await screen.findByText('No sites connected yet');
+            expect(notice.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+                'the refusal notice sits above the page content').toBeTruthy();
             expect(document.body.textContent).not.toMatch(/Connected sites unavailable|sites\.restore/);
             cleanup();
         }

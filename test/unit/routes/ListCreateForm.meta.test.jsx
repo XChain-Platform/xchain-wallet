@@ -155,6 +155,6 @@ describe('ListCreateForm name and description', () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '\u{1F600}' } });
-        expect(await screen.findByText('4 / 64 bytes')).toBeInTheDocument();
+        expect(await screen.findByText('4 / 64')).toBeInTheDocument();
     });
 });

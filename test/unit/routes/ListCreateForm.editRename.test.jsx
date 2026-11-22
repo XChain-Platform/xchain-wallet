@@ -175,7 +175,7 @@ describe('ListRenameForm', () => {
         const name = await screen.findByLabelText('Name');
 
         fireEvent.change(name, { target: { value: '🙂'.repeat(16) } });
-        expect(screen.getByText('64 / 64 bytes')).toBeTruthy();
+        expect(screen.getByText('64 / 64')).toBeTruthy();
 
         fireEvent.change(name, { target: { value: '🙂'.repeat(17) } });
         expect(screen.getByText('Too long.')).toBeTruthy();
