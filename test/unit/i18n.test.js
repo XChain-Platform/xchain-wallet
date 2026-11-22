@@ -29,6 +29,38 @@ const TEST_LOCALE = 'unit-partial';
 const TRANSLATION_KEY = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
 const TRANSLATION_LITERAL = /['"`][a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+['"`]/;
 const URL_HOST = /^(?:[a-z0-9-]+\.)+(?:com|io|org)$/i;
+const pendingWatchKeys = new Map([
+    ['watch.title', 'WD-067'],
+    ['watch.showWallet', 'WD-064'],
+    ['watch.tokens', 'WD-064'],
+    ['watch.tokens.followHome', 'WD-064'],
+    ['watch.tokens.pinnedOnly', 'WD-064'],
+    ['watch.startIn', 'WD-064'],
+    ['watch.startIn.fiat', 'WD-064'],
+    ['watch.startIn.units', 'WD-064'],
+    ['watch.showTotal', 'WD-064'],
+    ['watch.backgroundActivityCheck', 'WD-065'],
+    ['watch.value.on', 'WD-064'],
+    ['watch.value.off', 'WD-064'],
+    ['watch.status.title', 'WD-066'],
+    ['watch.status.paired', 'WD-066'],
+    ['watch.status.installed', 'WD-066'],
+    ['watch.status.reachable', 'WD-066'],
+    ['watch.status.lastSync', 'WD-066'],
+    ['watch.status.hint.pairApple', 'WD-066'],
+    ['watch.status.hint.installApple', 'WD-066'],
+    ['watch.status.hint.installWear', 'WD-066'],
+    ['watch.status.hint.unreachable', 'WD-066'],
+    ['watch.sendTestAlert', 'WD-066'],
+    ['watch.testAlert.title', 'WD-066'],
+    ['watch.testAlert.body', 'WD-066'],
+    ['watch.removeData', 'WD-066'],
+    ['watch.newActivity.title', 'WD-075'],
+    ['watch.newActivity.body', 'WD-075'],
+    ['watch.torUnavailable', 'WD-065'],
+    ['watch.openOnPhone', 'WD-075'],
+    ['watch.mobileAutopayNotice', 'WD-077'],
+]);
 const packageKeySources = import.meta.glob(
     [
         '../../packages/**/*.{js,jsx}',
@@ -98,6 +130,10 @@ function translationUsage(source, acceptsInjectedTranslator = false) {
 
 function missingTranslationKeys(keys, dictionary) {
     return [...keys].filter((key) => typeof dictionary[key] !== 'string').sort();
+}
+
+function unreferencedTranslationKeys(keys, referencedKeys, pendingKeys = new Map()) {
+    return keys.filter((key) => !referencedKeys.has(key) && !pendingKeys.has(key));
 }
 
 function messageVariables(message) {
@@ -635,11 +671,11 @@ describe('translations', () => {
             ['coSigner.detail.turnOn', 'settings.toggle.turnOn'],
             // A token count on an agent account and the Project Tokens section's closed summary.
             ['coSigner.tokenCount', 'projectRoster.tokenCount'],
-            // The Extra Passphrase section's closed summary reads Off or On, as the Settings switch states do;
+            // The Extra Passphrase section's closed summary reads Off or On, as the Watch and Settings switch states do;
             // Off is also the localhost password timeout's off choice (its help says Off asks every time),
             // the form-draft dropdown's off choice and the Settings row status for a feature that is off.
-            ['createWallet.extraPassphraseOff', 'settings.developer.offAlwaysPrompt', 'settings.privacy.off'],
-            ['createWallet.extraPassphraseOn', 'settings.page.on'],
+            ['createWallet.extraPassphraseOff', 'settings.developer.offAlwaysPrompt', 'settings.privacy.off', 'watch.value.off'],
+            ['createWallet.extraPassphraseOn', 'settings.page.on', 'watch.value.on'],
             // Every action form's From field: Execute contract, Send and Unbind controller.
             ['execute.caller', 'send.fields.from', 'unbindForm.from'],
             // Loading addresses on Execute contract and on the unbind form.
@@ -660,8 +696,8 @@ describe('translations', () => {
             ['governance.statusFilter.all', 'history.filters.allStatuses'],
             // Closed is the same status on a poll and a swap.
             ['governance.statusFilter.closed', 'mySwaps.status.closed'],
-            // The filter heading and action-status prefix use the same noun.
-            ['governance.statusFilter.label', 'history.filters.statusHeader', 'parallelComposer.statusPrefix'],
+            // The filter heading, action-status prefix and Watch status section use the same noun.
+            ['governance.statusFilter.label', 'history.filters.statusHeader', 'parallelComposer.statusPrefix', 'watch.status.title'],
             // Open is the status label and the developer folder action.
             ['governance.statusFilter.open', 'settings.developer.open'],
             // A governance proposal that has not opened and a transaction timeline stage not reached yet.
@@ -815,6 +851,14 @@ describe('translations', () => {
             .toEqual(['status.failed']);
     });
 
+    it('limits pending Watch claims to their exact keys', () => {
+        expect(unreferencedTranslationKeys(
+            ['watch.title', 'watch.unclaimed'],
+            new Set(),
+            new Map([['watch.title', 'WD-067']]),
+        )).toEqual(['watch.unclaimed']);
+    });
+
     it('keeps English keys synchronized with package source', () => {
         const translatedFiles = [];
         const usedKeys = new Set();
@@ -839,6 +883,8 @@ describe('translations', () => {
             for (const key of usage.keys) referencedKeys.add(key);
         }
 
-        expect(Object.keys(en).filter((key) => !referencedKeys.has(key))).toEqual([]);
+        expect(unreferencedTranslationKeys(Object.keys(en), referencedKeys, pendingWatchKeys))
+            .toEqual([]);
+        expect([...pendingWatchKeys].filter(([key]) => typeof en[key] !== 'string')).toEqual([]);
     });
 });
