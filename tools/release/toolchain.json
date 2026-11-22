@@ -39,6 +39,7 @@
     "xcode": {
         "version": "27.2",
         "build": "27B52",
+        "developerDir": "/Applications/Xcode_27.2.app/Contents/Developer",
         "_versionNote": "Exact version and build keep the macOS release toolchain reproducible."
     },
 

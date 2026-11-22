@@ -17,7 +17,7 @@ function read(relativePath) {
 
 // A portrait phone with its keyboard open is shorter than it is wide but is
 // not a landscape phone, so the query also requires a landscape aspect ratio.
-const query = '@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2)';
+const query = '@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 7/5)';
 const appHeader = read('packages/core/src/shared/components/AppHeader.module.css');
 const bottomBar = read('packages/core/src/shared/components/BottomTabBar.module.css');
 const leftNav = read('packages/core/src/shared/components/LeftNav.module.css');

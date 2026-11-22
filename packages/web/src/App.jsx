@@ -3712,6 +3712,7 @@ function AppInner() {
                         <Suspense fallback={null}>
                             <CommandPaletteHost
                                 open={palette.open}
+                                focusSearch={palette.focusSearch}
                                 onClose={palette.closePalette}
                                 ctx={paletteCtx}
                                 entityCtx={paletteEntityCtx}

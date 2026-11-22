@@ -102,10 +102,18 @@ function orderMenuSearchResults(results, commands, query = '') {
  *   onSelect: (viewId: string) => void,
  *   onOpenSettings: () => void,
  *   onLock?: () => void,
+ *   onOpenSidebar?: () => void,
+ *   onOpenFullScreen?: () => void,
  * }} [props.menu]
+ *        onOpenSidebar and onOpenFullScreen are the extension's view switches;
+ *        each shows as a header button only when the shell passes it.
+ * @param {boolean} [props.focusSearch=true]  with a menu, false opens with the
+ *        menu's scroll surface focused instead of the search field, so a
+ *        click on the menu button can scroll the menu at once; typing a
+ *        character still goes to search.
  */
 export function CommandPalette({
-    open, onClose, commands, placeholder, parseQuery, menu,
+    open, onClose, commands, placeholder, parseQuery, menu, focusSearch = true,
 }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
@@ -117,7 +125,8 @@ export function CommandPalette({
     const listRef = useRef(/** @type {HTMLElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [wideMenu, setWideMenu] = useState(false);
-    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
+    const surfaceFirst = Boolean(menu) && !focusSearch;
+    useFocusTrap(dialogRef, { active: open, initialFocusRef: surfaceFirst ? listRef : inputRef });
 
     const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
     const walletRows = walletGroups.flatMap((group) => group.rows);
@@ -191,9 +200,9 @@ export function CommandPalette({
     useEffect(() => {
         if (!open) return;
         // Focus after paint so the input exists in the DOM.
-        const id = requestAnimationFrame(() => inputRef.current?.focus());
+        const id = requestAnimationFrame(() => (surfaceFirst ? listRef : inputRef).current?.focus());
         return () => cancelAnimationFrame(id);
-    }, [open]);
+    }, [open, surfaceFirst]);
 
     // Escape closes the palette wherever focus sits, as ShortcutHelp does. It
     // was handled on the search input alone, so a click on the panel's
@@ -276,6 +285,14 @@ export function CommandPalette({
             }
         }
         return best;
+    };
+
+    // A printable key on the focused menu surface starts a search: focus moves
+    // to the field before the key's default action, so the character lands there.
+    const onSurfaceKeyDown = (e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
+        inputRef.current?.focus();
     };
 
     const onKeyDown = (e) => {
@@ -408,6 +425,26 @@ export function CommandPalette({
         </span>
     ) : null;
 
+    // The extension's view switches sit left of Lock: search, Open in
+    // sidebar, Open full screen, Lock, Close (operator 2026-11-21). The opener
+    // runs first, inside the click, since the browser opens a side panel only
+    // during a user gesture.
+    const viewButton = (handler, label, ButtonIcon, attr) => (handler ? (
+        <span className={styles.viewSwitch}>
+            <Button
+                variant="secondary"
+                size="md"
+                icon={<ButtonIcon />}
+                onClick={() => { handler(); onClose(); }}
+                aria-label={label}
+                title={label}
+                {...{ [attr]: '' }}
+            />
+        </span>
+    ) : null);
+    const sidebarButton = viewButton(menu?.onOpenSidebar, t('walletMenu.openSidebar'), Icon.SidebarIcon, 'data-wallet-menu-sidebar');
+    const fullScreenButton = viewButton(menu?.onOpenFullScreen, t('walletMenu.openFullScreen'), Icon.MaximizeIcon, 'data-wallet-menu-full-screen');
+
     const walletButtonClass = `${buttonStyles.btn} ${buttonStyles.rowAction} ${buttonStyles.md}`;
 
     return (
@@ -434,6 +471,8 @@ export function CommandPalette({
                     <header className={styles.menuHeader}>
                         {searchControl}
                         <div className={styles.menuActions}>
+                            {sidebarButton}
+                            {fullScreenButton}
                             {lockButton}
                             {closeButton}
                         </div>
@@ -451,7 +490,12 @@ export function CommandPalette({
                     </>
                 )}
                 {showingWalletMenu ? (
-                    <div ref={listRef} className={styles.walletSurface}>
+                    <div
+                        ref={listRef}
+                        className={styles.walletSurface}
+                        tabIndex={-1}
+                        onKeyDown={onSurfaceKeyDown}
+                    >
                         <div
                             id="xc-cmd-listbox"
                             className={styles.walletGrid}
