@@ -1,0 +1,13 @@
+{
+  "snapshot-empty": { "scenario": "empty", "now": 1700000000000 },
+  "snapshot-testnet": { "scenario": "testnet", "now": 1700000000000 },
+  "snapshot-unpriced": { "scenario": "unpriced", "now": 1700000000000 },
+  "snapshot-hidden": { "scenario": "standard", "now": 1700000000000, "hidden": true },
+  "snapshot-stale": { "scenario": "standard", "now": 1700000000000, "ageMs": 960000 },
+  "snapshot-stale24": { "scenario": "standard", "now": 1700000000000, "ageMs": 86400000 },
+  "snapshot-locked": { "scenario": "standard", "now": 1700000000000, "session": "locked" },
+  "snapshot-rows50": { "scenario": "rows50", "now": 1700000000000 },
+  "snapshot-longnames": { "scenario": "longnames", "now": 1700000000000 },
+  "snapshot-capped": { "scenario": "rows50", "now": 1700000000000, "capped": true },
+  "snapshot-disabled": { "scenario": "empty", "now": 1700000000000, "enabled": false }
+}
