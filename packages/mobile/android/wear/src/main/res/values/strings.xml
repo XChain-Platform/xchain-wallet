@@ -26,6 +26,9 @@
     <string name="n2_open_on_phone">Open on phone</string>
     <string name="state_age">Updated 12 min ago</string>
     <string name="state_age_amber">Updated 12 min ago</string>
+    <string name="state_age_hours">Updated {n} h ago</string>
+    <string name="state_age_just_now">Updated just now</string>
+    <string name="state_age_minutes">Updated {n} min ago</string>
     <string name="state_amount_hidden">Amount hidden</string>
     <string name="state_balance_unavailable">Balance unavailable</string>
     <string name="state_hidden">••••</string>
@@ -63,6 +66,10 @@
     <string name="w2_title">Token detail</string>
     <string name="w2_type">Type</string>
     <string name="w3_empty">No alerts</string>
+    <string name="w3_time_days">{n} d ago</string>
+    <string name="w3_time_hours">{n} h ago</string>
+    <string name="w3_time_just_now">Just now</string>
+    <string name="w3_time_minutes">{n} min ago</string>
     <string name="w3_title">Alerts</string>
     <string name="w4_open_on_phone">Open on phone</string>
     <string name="w4_request_amount">Amount</string>

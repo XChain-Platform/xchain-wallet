@@ -331,7 +331,7 @@ const approvalMainSrc = readFileSync(join(wsRoot, 'packages/extension/src/approv
 assert.match(approvalMainSrc, /hydrateCustomChainsFromSettings\(registry\.defaultRegistry\(\)/,
     'approval entry hydrates its realm registry at boot');
 const signApprovalSrc = readFileSync(
-    join(wsRoot, 'packages/extension/src/approval/kinds/SignApproval.jsx'),
+    join(wsRoot, 'packages/core/src/shared/approval/SignApproval.jsx'),
     'utf8',
 );
 assert.match(signApprovalSrc, /hydrateCustomChainsFromSettings\(chainRegistry, s\)/,
@@ -340,7 +340,7 @@ assert.match(signApprovalSrc, /hydrateCustomChainsFromSettings\(chainRegistry, s
 // the list through the live hook: behaviour lives in
 // test/unit/approval/connectApprovalChains.test.jsx.
 const connectApprovalSrc = readFileSync(
-    join(wsRoot, 'packages/extension/src/approval/kinds/ConnectApproval.jsx'),
+    join(wsRoot, 'packages/core/src/shared/approval/ConnectApproval.jsx'),
     'utf8',
 );
 assert.match(connectApprovalSrc, /hydrateCustomChainsFromSettings\(chainRegistry, s\)/,

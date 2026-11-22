@@ -234,7 +234,7 @@
             "count": 3,
             "reason": "A development-only variant badge that never ships in a release build."
         },
-        "packages/extension/src/approval/kinds/ConnectApproval.module.css": {
+        "packages/core/src/shared/approval/ConnectApproval.module.css": {
             "count": 3,
             "reason": "The field-shaped multi-select picker trigger has field border, invalid and focus states; the shared single-choice dropdown cannot represent its picker-screen interaction."
         }

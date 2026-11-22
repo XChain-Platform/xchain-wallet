@@ -1,0 +1,49 @@
+{
+  "v": 1,
+  "builtAt": 1700000000000,
+  "balancesAt": 1699999040000,
+  "pricesAt": 1699999040000,
+  "session": "unlocked",
+  "network": {
+    "kind": "mainnet",
+    "isTest": false
+  },
+  "fiatCode": "USD",
+  "hidden": false,
+  "unitDefault": "fiat",
+  "walletName": "Daily wallet",
+  "totals": {
+    "fiatText": "$20,000.00",
+    "unitsText": "Balances"
+  },
+  "rows": [
+    {
+      "id": "bitcoin-mainnet:BTC",
+      "chainId": "bitcoin-mainnet",
+      "tick": "BTC",
+      "displayName": "Bitcoin",
+      "amountText": "0.50 BTC",
+      "fiatText": "$20,000.00",
+      "noPrice": false,
+      "pendingText": "",
+      "unavailable": false,
+      "iconHash": "btc-icon-cache",
+      "tickerColor": "#BE185D",
+      "hasDetail": true
+    }
+  ],
+  "capped": false,
+  "receive": [],
+  "inbox": [],
+  "request": {
+    "id": "0123456789abcdef0123456789abcdef",
+    "kind": "request",
+    "iconHash": "",
+    "sentence": "Review this request on your phone",
+    "amountText": "0.50 BTC"
+  },
+  "settings": {
+    "showTotal": true,
+    "enabled": true
+  }
+}

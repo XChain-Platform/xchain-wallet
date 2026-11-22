@@ -36,7 +36,7 @@ const sourceFiles = [
     'packages/core/src/shared/routes/SignMessageForm.jsx',
     'packages/core/src/shared/routes/StakeDetail.jsx',
     'packages/core/src/shared/routes/TokenDetail.jsx',
-    'packages/extension/src/approval/kinds/SignApproval.jsx',
+    'packages/core/src/shared/approval/SignApproval.jsx',
     'packages/extension/src/popup/App.jsx',
 ];
 

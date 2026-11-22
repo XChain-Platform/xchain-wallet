@@ -24,4 +24,9 @@ public final class WatchAvailability {
     public static boolean watchAllowed(String installer, boolean debuggable) {
         return debuggable || isPlayInstaller(installer);
     }
+
+    public static boolean startsMessageRouter(
+            String installer, boolean debuggable, boolean playServicesReady) {
+        return watchAllowed(installer, debuggable) && playServicesReady;
+    }
 }

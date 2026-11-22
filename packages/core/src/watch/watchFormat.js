@@ -42,8 +42,12 @@ export function balanceText(row, mode, settings = {}) {
 
 export function ageText(balancesAt, now) {
     const age = ageBucket(balancesAt, now);
-    if (age.bucket === 'justNow') return 'Updated just now';
-    if (age.bucket === 'minutes') return `Updated ${age.n} min ago`;
-    if (age.bucket === 'hours') return `Updated ${age.n} h ago`;
+    if (age.bucket === 'justNow') return balanceStrings['state.ageJustNow'];
+    if (age.bucket === 'minutes') {
+        return balanceStrings['state.ageMinutes'].replace('{n}', String(age.n));
+    }
+    if (age.bucket === 'hours') {
+        return balanceStrings['state.ageHours'].replace('{n}', String(age.n));
+    }
     return balanceStrings['state.stale24h'];
 }

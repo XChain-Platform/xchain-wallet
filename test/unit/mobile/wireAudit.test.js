@@ -154,6 +154,22 @@ describe('wire audit: the mobile egress set is pinned', () => {
         expect(egressHostsFor('mobile')).toEqual(EXPECTED_MOBILE);
     });
 
+    it('keeps the site callback as its own wildcard disclosure class', () => {
+        const wildcardRows = WIRE_AUDIT.filter((entry) => entry.host === '*');
+        const callback = wildcardRows.find(
+            (entry) => entry.source === 'native site-request callback sender',
+        );
+
+        expect(wildcardRows).toHaveLength(3);
+        expect(callback).toMatchObject({
+            party: 'third',
+            shells: ['desktop', 'mobile'],
+        });
+        expect(callback.carries).toMatch(/requesting IP.*approved or rejected result.*signed payload/i);
+        expect(callback.control).toMatch(/destination shown.*Approve or Reject/i);
+        expect(egressHostsFor('mobile').filter((host) => host === '*')).toEqual(['*']);
+    });
+
     it('discloses the explorer background check and both of its controls', () => {
         const row = WIRE_AUDIT.find((e) => e.host === 'explorer.xchain.io');
         expect(row.why).toMatch(/background activity check/);

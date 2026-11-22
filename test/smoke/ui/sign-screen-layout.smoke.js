@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const signPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx');
+const signPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx');
 const sendPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
 
 const signSrc = readFileSync(signPath, 'utf8');
@@ -261,7 +261,7 @@ assert.doesNotMatch(confirmStandardCss, /\.stack\s*\{[^}]*padding-(?:block-)?top
         }
         assert.doesNotMatch(approveBtn, /variant="danger"/, `${name}: Approve is not danger`);
     };
-    const connectSrc = read('packages', 'extension', 'src', 'approval', 'kinds', 'ConnectApproval.jsx');
+    const connectSrc = read('packages', 'core', 'src', 'shared', 'approval', 'ConnectApproval.jsx');
     assertPair('ConnectApproval', footerOf(connectSrc, 'data-connect-actions'), THUMBS, true);
     assert.match(signSrc, /signingUnavailable \? \([\s\S]{0,500}<Button[\s\S]{0,300}variant="danger"/,
         'SignApproval fail-closed state offers only the red Reject button');

@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { userEvent } from '../../helpers/userEvent.js';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     fetchApproval: vi.fn(async () => null),
     listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1' }]),
     getSettings: vi.fn(async () => ({})),
@@ -56,17 +56,20 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     })),
     parseCoSign: async () => { throw new Error('not used by signPsbt'); },
 }));
+vi.mock('../../../packages/extension/src/approval/messaging.js', async () => (
+    import('../../../packages/core/src/shared/approval/index.js')
+));
 
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
 const { ConnectApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 const { Router } = await import('../../../packages/extension/src/approval/Router.jsx');
-const messaging = await import('../../../packages/extension/src/approval/messaging.js');
+const messaging = await import('../../../packages/core/src/shared/approval/index.js');
 
 const readCss = (relativePath) => readFileSync(join(process.cwd(), relativePath), 'utf8');
 
@@ -473,7 +476,7 @@ describe('SignApproval 360x600 layout', () => {
         expect(screen.getByRole('button', { name: /Approve/i })).toBeVisible();
 
         const screenCss = readCss('packages/core/src/ui/Screen.module.css');
-        const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
+        const signCss = readCss('packages/core/src/shared/approval/SignApproval.module.css');
         expect(screenCss).toMatch(/\.screen\s*\{[^}]*height:[^;}]+;[^}]*overflow:\s*hidden/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden/s);
         expect(screenCss).toMatch(/\.footer\s*\{[^}]*flex:\s*0 0 auto/s);
@@ -520,8 +523,8 @@ describe('SignApproval 360x600 layout', () => {
         expect(detailScrollport.nextElementSibling).toBe(actionFooter);
         expect(screen.getByTestId('confirm-buttons').querySelectorAll('button')).toHaveLength(2);
 
-        const approvalCss = readCss('packages/extension/src/approval/approval.module.css');
-        const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
+        const approvalCss = readCss('packages/core/src/shared/approval/approval.module.css');
+        const signCss = readCss('packages/core/src/shared/approval/SignApproval.module.css');
         expect(approvalCss).toMatch(/\.toggleRow\s*\{[^}]*min-width:\s*0/s);
         expect(approvalCss).toMatch(/\.toggleRow > span:last-child\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/s);
         expect(signCss).not.toMatch(/\.details(?:Row|Value)/);

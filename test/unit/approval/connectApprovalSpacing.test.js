@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 const read = (path) => readFileSync(path, 'utf8');
 
 describe('Connect approval spacing', () => {
-    const connectCss = read('packages/extension/src/approval/kinds/ConnectApproval.module.css');
+    const connectCss = read('packages/core/src/shared/approval/ConnectApproval.module.css');
     const formPageCss = read('packages/core/src/ui/FormPage.module.css');
     const tokens = read('packages/core/src/ui/tokens.css');
 

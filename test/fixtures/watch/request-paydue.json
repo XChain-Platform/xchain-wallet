@@ -1,0 +1,8 @@
+{
+    "id": "2123456789abcdef0123456789abcdef",
+    "kind": "paydue",
+    "iconHash": "1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0a",
+    "sentence": "Payment is due for this request.",
+    "amountText": "125.00 USDC",
+    "expiresAt": 4102444800000
+}

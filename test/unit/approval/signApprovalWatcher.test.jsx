@@ -7,7 +7,7 @@ import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     // §20: the mode is the signing wallet's own.
     listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1', walletMode: 'watcher' }]),
     getSettings: vi.fn(async () => ({})),
@@ -35,9 +35,9 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
-const messaging = await import('../../../packages/extension/src/approval/messaging.js');
+const messaging = await import('../../../packages/core/src/shared/approval/index.js');
 
 afterAll(() => vi.unstubAllGlobals());
 afterEach(() => cleanup());

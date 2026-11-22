@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "tokenId": "bitcoin-mainnet:XC",
+  "changeText": "+4.75% over 24 h",
+  "priceSourceText": "XChain DEX",
+  "facts": [
+    {
+      "label": "Type",
+      "value": "Token"
+    },
+    {
+      "label": "Supply",
+      "value": "1,000,000 XC"
+    },
+    {
+      "label": "Divisibility",
+      "value": "6 decimals"
+    },
+    {
+      "label": "Status",
+      "value": "Mutable"
+    },
+    {
+      "label": "Creator",
+      "value": "xc1qab...7pq999"
+    }
+  ],
+  "description": "A cached token used to verify that watch detail screens render phone-formatted facts and descriptions."
+}

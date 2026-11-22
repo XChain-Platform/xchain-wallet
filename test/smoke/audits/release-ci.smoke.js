@@ -472,6 +472,23 @@ for (const step of ['ios-archive.sh', 'ios-export.sh']) {
 const simBuild = /-destination 'generic\/platform=iOS Simulator'/.test(ios);
 assert.ok(simBuild, 'the iOS lane builds for the simulator with no signing identity');
 
+// --- 8c. The Android lane builds and tests both form factors -----------
+
+const mobileWorkflow = read('.github/workflows/mobile.yml');
+const mobileAndroid = jobBlocks(mobileWorkflow).get('android');
+assert.ok(mobileAndroid, 'mobile.yml must keep an Android job');
+const androidSteps = stepBlocks(mobileAndroid);
+
+const androidBundles = androidSteps.find((step) => step.includes(':app:bundleRelease'));
+assert.ok(androidBundles, 'the Android lane builds the phone release bundle explicitly');
+assert.match(androidBundles, /:app:bundleRelease\s+:wear:bundleRelease/,
+    'the Android lane builds the Wear release bundle beside the phone bundle');
+
+const androidUnitTests = androidSteps.find((step) => step.includes(':app:testDebugUnitTest'));
+assert.ok(androidUnitTests, 'the Android lane runs the phone native unit tests');
+assert.match(androidUnitTests, /:app:testDebugUnitTest\s+:wear:testDebugUnitTest/,
+    'the Android lane runs the Wear native unit tests beside the phone tests');
+
 // --- 9. The PR-triggered workflow holds no signing secrets -------------
 
 // ci.yml runs on pull_request. If a signing secret ever appears there,

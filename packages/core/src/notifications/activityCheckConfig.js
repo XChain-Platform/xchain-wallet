@@ -3,6 +3,7 @@
 
 import { isDemoWallet } from '../flows/demoMode.js';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/watch.js';
 import { resolveWatchSettings } from '../schemas/settings.js';
 import { getNativePlugin } from '../shared/nativeShell.js';
 

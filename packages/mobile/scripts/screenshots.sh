@@ -85,7 +85,9 @@ echo "screenshots: staged bundle profile is '$profile'"
 
 mkdir -p "$outdir"
 
-for device in "${devices[@]}" "${duo_devices[@]}"; do
+for device in \
+    ${devices[@]+"${devices[@]}"} \
+    ${duo_devices[@]+"${duo_devices[@]}"}; do
     echo
     echo "=== $device ==="
     slug="$(echo "$device" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"

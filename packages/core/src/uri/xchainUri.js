@@ -78,6 +78,8 @@ const BIP21_PREFIX = 'xchain:';
 // where `xchain:` shows a camera app nothing at all.
 const WEB_LINK_ORIGIN = 'https://xchain.io';
 const WEB_LINK_PREFIX = '/wallet/link/';
+const WALLET_LINK_ORIGIN = 'https://wallet.xchain.io';
+const WALLET_LINK_PREFIX = '/link/';
 
 /**
  * The canonical URI inside a web link, or undefined.
@@ -101,8 +103,15 @@ function unwrapWebLink(raw) {
     // Compare the parsed ORIGIN, never a prefix of the string: both
     // `https://xchain.io.evil.com/wallet/link/` and `https://xchain.io@evil.com/`
     // pass a naive startsWith and neither is our domain.
-    if (parsed.origin !== WEB_LINK_ORIGIN) return undefined;
-    if (!parsed.pathname.startsWith(WEB_LINK_PREFIX)) return undefined;
+    let linkPrefix;
+    if (parsed.origin === WEB_LINK_ORIGIN) {
+        linkPrefix = WEB_LINK_PREFIX;
+    } else if (parsed.origin === WALLET_LINK_ORIGIN) {
+        linkPrefix = WALLET_LINK_PREFIX;
+    } else {
+        return undefined;
+    }
+    if (!parsed.pathname.startsWith(linkPrefix)) return undefined;
 
     const carried = parsed.searchParams.get('uri');
     if (typeof carried !== 'string') return undefined;

@@ -30,13 +30,13 @@ const shim = vi.hoisted(() => ({
     getSettings: async () => ({}),
     resolveApproval: async () => ({ approved: true }),
 }));
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     getSettings: (...args) => shim.getSettings(...args),
     resolveApproval: (...args) => shim.resolveApproval(...args),
 }));
 
 const { ConnectApproval, connectCoinFamilies } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 const template = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-regtest');

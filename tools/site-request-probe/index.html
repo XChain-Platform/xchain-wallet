@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site request transport probe</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      line-height: 1.5;
+    }
+
+    body {
+      margin: 0 auto;
+      max-width: 72rem;
+      padding: 1.5rem;
+    }
+
+    h1,
+    h2 {
+      line-height: 1.2;
+    }
+
+    section {
+      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius: 0.75rem;
+      margin: 1rem 0;
+      padding: 1rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 650;
+      margin-top: 0.75rem;
+    }
+
+    input {
+      box-sizing: border-box;
+      display: block;
+      font: inherit;
+      margin-top: 0.25rem;
+      padding: 0.5rem;
+      width: 100%;
+    }
+
+    button,
+    .button-link {
+      border: 1px solid currentColor;
+      border-radius: 0.4rem;
+      cursor: pointer;
+      display: inline-block;
+      font: inherit;
+      margin: 0.35rem 0.35rem 0.35rem 0;
+      padding: 0.5rem 0.75rem;
+      text-decoration: none;
+    }
+
+    button {
+      background: Canvas;
+      color: CanvasText;
+    }
+
+    .button-link {
+      color: LinkText;
+    }
+
+    .status-grid {
+      display: grid;
+      gap: 0.4rem 1rem;
+      grid-template-columns: max-content 1fr;
+      margin: 0;
+    }
+
+    .status-grid dt {
+      font-weight: 650;
+    }
+
+    .status-grid dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .controls {
+      margin-top: 0.75rem;
+    }
+
+    .hint {
+      opacity: 0.8;
+    }
+
+    pre {
+      background: color-mix(in srgb, CanvasText 8%, Canvas);
+      border-radius: 0.5rem;
+      max-height: 28rem;
+      overflow: auto;
+      padding: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Site request transport probe</h1>
+    <p>Use synthetic marker data only. Set the same session on pages that should exchange return observations.</p>
+
+    <section aria-labelledby="environment-heading">
+      <h2 id="environment-heading">Environment</h2>
+      <dl class="status-grid">
+        <dt>Page ID</dt>
+        <dd id="page-id"></dd>
+        <dt>URL</dt>
+        <dd id="page-url"></dd>
+        <dt>Referrer</dt>
+        <dd id="referrer"></dd>
+        <dt>Hash</dt>
+        <dd id="hash"></dd>
+        <dt>Opener present</dt>
+        <dd id="opener"></dd>
+        <dt>Navigation type</dt>
+        <dd id="navigation-type"></dd>
+        <dt>Visibility</dt>
+        <dd id="visibility"></dd>
+      </dl>
+
+      <label for="session">Probe session</label>
+      <input id="session" autocomplete="off" spellcheck="false">
+      <div class="controls">
+        <button id="apply-session" type="button">Apply session</button>
+        <button id="broadcast" type="button">Broadcast snapshot</button>
+        <button id="close-window" type="button">Call window.close()</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="launch-heading">
+      <h2 id="launch-heading">HTTPS launch and return</h2>
+      <p class="hint">The default target is this page in landing mode with the current session and a synthetic fragment.</p>
+      <label for="target-url">Target URL</label>
+      <input id="target-url" inputmode="url" spellcheck="false">
+      <div class="controls">
+        <a class="button-link" id="href-same" href="">Anchor, same tab</a>
+        <a class="button-link" id="href-new" href="" target="_blank" rel="opener">Anchor, new tab with opener</a>
+        <a class="button-link" id="href-new-noopener" href="" target="_blank" rel="noopener">Anchor, new tab without opener</a>
+      </div>
+      <div class="controls">
+        <button id="script-assign" type="button">Script location.assign()</button>
+        <button id="script-open" type="button">Script window.open()</button>
+        <button id="script-open-await" type="button">window.open() after await</button>
+        <button id="script-open-timeout" type="button">window.open() after timer</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="scheme-heading">
+      <h2 id="scheme-heading">Custom-scheme launch</h2>
+      <label for="scheme-url">Custom-scheme URL</label>
+      <input id="scheme-url" value="xchain:request?v=1&amp;req=probe" spellcheck="false">
+      <div class="controls">
+        <a class="button-link" id="scheme-anchor" href="">Anchor launch</a>
+        <button id="scheme-script" type="button">Script launch in click tick</button>
+        <button id="scheme-await" type="button">Script launch after await</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="redirect-heading">
+      <h2 id="redirect-heading">Fragment redirect checks</h2>
+      <p class="hint">For the HTTP case, enter an endpoint that responds with a 302 Location header lacking a fragment. For the script case, first open the return source, then use assign or replace from that page.</p>
+      <label for="redirect-url">HTTP 302 entry URL</label>
+      <input id="redirect-url" inputmode="url" spellcheck="false" placeholder="Enter an HTTPS redirect endpoint">
+      <label for="fragment-marker">Synthetic fragment marker</label>
+      <input id="fragment-marker" value="xchain=synthetic-probe-result" spellcheck="false">
+      <div class="controls">
+        <a class="button-link" id="redirect-anchor" href="">Open 302 entry with fragment</a>
+        <button id="redirect-open" type="button">Script-open 302 entry with fragment</button>
+        <a class="button-link" id="script-source" href="" target="_blank" rel="opener">Open script redirect source</a>
+      </div>
+      <label for="redirect-destination">Script redirect destination</label>
+      <input id="redirect-destination" inputmode="url" spellcheck="false">
+      <div class="controls">
+        <button id="redirect-assign" type="button">Redirect with location.assign()</button>
+        <button id="redirect-replace" type="button">Redirect with location.replace()</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="events-heading">
+      <h2 id="events-heading">Event log</h2>
+      <div class="controls">
+        <button id="copy-log" type="button">Copy JSON log</button>
+        <button id="clear-log" type="button">Clear log</button>
+      </div>
+      <pre id="events" aria-live="polite"></pre>
+    </section>
+  </main>
+
+  <script>
+    'use strict';
+
+    const params = new URLSearchParams(location.search);
+    const pageId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const events = [];
+    let channel;
+
+    const elements = Object.fromEntries(
+      Array.from(document.querySelectorAll('[id]'), (element) => [element.id, element]),
+    );
+
+    const navigation = performance.getEntriesByType('navigation')[0];
+
+    function sessionValue() {
+      return elements.session.value.trim() || 'default';
+    }
+
+    function snapshot(extra = {}) {
+      return {
+        pageId,
+        session: sessionValue(),
+        time: new Date().toISOString(),
+        href: location.href,
+        referrer: document.referrer || null,
+        hash: location.hash || null,
+        openerPresent: Boolean(window.opener),
+        visibility: document.visibilityState,
+        navigationType: navigation?.type || null,
+        userActivationActive: navigator.userActivation?.isActive ?? null,
+        userActivationSeen: navigator.userActivation?.hasBeenActive ?? null,
+        userAgent: navigator.userAgent,
+        ...extra,
+      };
+    }
+
+    function renderEvents() {
+      elements.events.textContent = events.map((event) => JSON.stringify(event, null, 2)).join('\n\n');
+    }
+
+    function record(type, details = {}) {
+      events.push(snapshot({ type, ...details }));
+      renderEvents();
+    }
+
+    function broadcast(type) {
+      const message = snapshot({ type });
+      if (!channel) {
+        record('broadcast-unavailable', { requestedType: type });
+        return;
+      }
+      channel.postMessage(message);
+      record('broadcast-sent', { message });
+    }
+
+    function openChannel() {
+      channel?.close();
+      if (!('BroadcastChannel' in window)) {
+        channel = null;
+        record('channel-unsupported');
+        return;
+      }
+      try {
+        channel = new BroadcastChannel(`xchain-site-request-probe:${sessionValue()}`);
+      } catch (error) {
+        channel = null;
+        record('channel-open-failed', { message: error.message });
+        return;
+      }
+      channel.addEventListener('message', (event) => {
+        record('broadcast-received', { message: event.data });
+      });
+      record('channel-opened');
+      broadcast('page-ready');
+    }
+
+    function basePageUrl() {
+      const url = new URL(location.href);
+      url.search = '';
+      url.hash = '';
+      return url;
+    }
+
+    function landingUrl(marker = elements['fragment-marker'].value.trim()) {
+      const url = basePageUrl();
+      url.searchParams.set('landing', '1');
+      url.searchParams.set('session', sessionValue());
+      if (marker) {
+        url.hash = marker;
+      }
+      return url.href;
+    }
+
+    function addFragment(value, marker) {
+      try {
+        const url = new URL(value, location.href);
+        url.hash = marker;
+        return url.href;
+      } catch (error) {
+        record('invalid-url', { value, message: error.message });
+        return '#';
+      }
+    }
+
+    function refreshLinks() {
+      const target = elements['target-url'].value.trim() || landingUrl();
+      elements['href-same'].href = target;
+      elements['href-new'].href = target;
+      elements['href-new-noopener'].href = target;
+
+      const scheme = elements['scheme-url'].value.trim();
+      elements['scheme-anchor'].href = scheme || '#';
+
+      const marker = elements['fragment-marker'].value.trim();
+      const redirectEntry = elements['redirect-url'].value.trim();
+      elements['redirect-anchor'].href = redirectEntry ? addFragment(redirectEntry, marker) : '#';
+      elements['script-source'].href = landingUrl(marker);
+    }
+
+    function launchPopup(value, launchType) {
+      record('launch-attempt', { launchType, target: value });
+      const opened = window.open(value, '_blank');
+      record('launch-result', { launchType, popupReturnedNull: opened === null });
+    }
+
+    elements.session.value = params.get('session') || crypto.randomUUID?.() || String(Date.now());
+    elements['target-url'].value = landingUrl();
+    elements['redirect-destination'].value = landingUrl('');
+
+    elements['page-id'].textContent = pageId;
+    elements['page-url'].textContent = location.href;
+    elements.referrer.textContent = document.referrer || '(empty)';
+    elements.hash.textContent = location.hash || '(empty)';
+    elements.opener.textContent = window.opener ? 'yes' : 'no';
+    elements['navigation-type'].textContent = navigation?.type || '(unavailable)';
+    elements.visibility.textContent = document.visibilityState;
+
+    elements['apply-session'].addEventListener('click', () => {
+      openChannel();
+      elements['target-url'].value = landingUrl();
+      refreshLinks();
+    });
+    elements.broadcast.addEventListener('click', () => broadcast('manual-snapshot'));
+    elements['close-window'].addEventListener('click', () => {
+      broadcast('window-close-requested');
+      record('window-close-requested');
+      window.close();
+      setTimeout(() => record('window-close-did-not-close'), 250);
+    });
+
+    elements['script-assign'].addEventListener('click', () => {
+      const target = elements['target-url'].value.trim();
+      record('launch-attempt', { launchType: 'location.assign', target });
+      location.assign(target);
+    });
+    elements['script-open'].addEventListener('click', () => {
+      launchPopup(elements['target-url'].value.trim(), 'window.open-click-tick');
+    });
+    elements['script-open-await'].addEventListener('click', async () => {
+      await Promise.resolve();
+      launchPopup(elements['target-url'].value.trim(), 'window.open-after-await');
+    });
+    elements['script-open-timeout'].addEventListener('click', () => {
+      setTimeout(() => launchPopup(elements['target-url'].value.trim(), 'window.open-after-timer'), 0);
+    });
+
+    elements['scheme-script'].addEventListener('click', () => {
+      const target = elements['scheme-url'].value.trim();
+      record('launch-attempt', { launchType: 'scheme-location-assign', target });
+      location.assign(target);
+    });
+    elements['scheme-await'].addEventListener('click', async () => {
+      await Promise.resolve();
+      const target = elements['scheme-url'].value.trim();
+      record('launch-attempt', { launchType: 'scheme-after-await', target });
+      location.assign(target);
+    });
+
+    for (const id of [
+      'href-same',
+      'href-new',
+      'href-new-noopener',
+      'scheme-anchor',
+      'redirect-anchor',
+      'script-source',
+    ]) {
+      elements[id].addEventListener('click', () => {
+        record('anchor-launch', { control: id, target: elements[id].href });
+      });
+    }
+
+    elements['redirect-open'].addEventListener('click', () => {
+      const redirectEntry = elements['redirect-url'].value.trim();
+      if (!redirectEntry) {
+        record('redirect-entry-missing');
+        return;
+      }
+      const target = addFragment(
+        redirectEntry,
+        elements['fragment-marker'].value.trim(),
+      );
+      launchPopup(target, 'http-302-entry');
+    });
+    elements['redirect-assign'].addEventListener('click', () => {
+      const target = elements['redirect-destination'].value.trim();
+      record('redirect-attempt', { redirectType: 'location.assign', target });
+      location.assign(target);
+    });
+    elements['redirect-replace'].addEventListener('click', () => {
+      const target = elements['redirect-destination'].value.trim();
+      record('redirect-attempt', { redirectType: 'location.replace', target });
+      location.replace(target);
+    });
+
+    for (const id of ['target-url', 'scheme-url', 'redirect-url', 'fragment-marker']) {
+      elements[id].addEventListener('input', refreshLinks);
+    }
+
+    elements['copy-log'].addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(events, null, 2));
+        record('log-copied');
+      } catch (error) {
+        record('log-copy-failed', { message: error.message });
+      }
+    });
+    elements['clear-log'].addEventListener('click', () => {
+      events.length = 0;
+      record('log-cleared');
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      elements.visibility.textContent = document.visibilityState;
+      record('visibilitychange');
+    });
+    window.addEventListener('focus', () => record('focus'));
+    window.addEventListener('blur', () => record('blur'));
+    window.addEventListener('hashchange', (event) => {
+      elements.hash.textContent = location.hash || '(empty)';
+      record('hashchange', { oldURL: event.oldURL, newURL: event.newURL });
+      broadcast('hashchange');
+    });
+    window.addEventListener('pageshow', (event) => record('pageshow', { persisted: event.persisted }));
+    window.addEventListener('pagehide', (event) => record('pagehide', { persisted: event.persisted }));
+
+    refreshLinks();
+    record('page-loaded', { landingMode: params.get('landing') === '1' });
+    openChannel();
+  </script>
+</body>
+</html>

@@ -21,10 +21,10 @@ const messaging = vi.hoisted(() => ({
     getSettings: vi.fn(async () => ({})),
     resolveApproval: vi.fn(async () => ({ approved: true })),
 }));
-vi.mock('../../../../packages/extension/src/approval/messaging.js', () => messaging);
+vi.mock('../../../../packages/core/src/shared/approval/index.js', () => messaging);
 
 const { ConnectApproval } = await import(
-    '../../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 const bridgeSpecSource = readFileSync(

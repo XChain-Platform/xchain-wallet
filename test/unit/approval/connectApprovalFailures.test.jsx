@@ -13,13 +13,13 @@ const mocks = vi.hoisted(() => ({
     resolveApproval: vi.fn(),
 }));
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     getSettings: mocks.getSettings,
     resolveApproval: mocks.resolveApproval,
 }));
 
 const { ConnectApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 const chain = BUNDLED_DESCRIPTORS[0];

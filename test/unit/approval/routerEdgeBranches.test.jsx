@@ -25,7 +25,7 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     fetchApproval: mocks.fetchApproval,
     resolveApproval: mocks.resolveApproval,
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/ConnectApproval.jsx', () => ({
     ConnectApproval: ({ id, payload, onReject }) => (
         <section>
             <span>{id}:{payload.origin}</span>
@@ -33,7 +33,7 @@ vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', ()
         </section>
     ),
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/SignApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/SignApproval.jsx', () => ({
     SignApproval: ({ id }) => <section>{id}</section>,
 }));
 

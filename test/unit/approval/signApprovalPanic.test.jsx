@@ -20,7 +20,7 @@ import {
     holdPanicModeFreeze,
 } from '../../../packages/core/src/flows/panicMode.js';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1' }]),
     getSettings: vi.fn(async () => ({ walletMode: 'full' })),
     getAddressesByChain: vi.fn(async () => ({ 'bitcoin-regtest': [] })),
@@ -50,9 +50,9 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
-const messaging = await import('../../../packages/extension/src/approval/messaging.js');
+const messaging = await import('../../../packages/core/src/shared/approval/index.js');
 
 afterAll(() => vi.unstubAllGlobals());
 afterEach(() => {

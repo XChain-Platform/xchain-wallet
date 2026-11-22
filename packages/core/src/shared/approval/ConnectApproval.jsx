@@ -33,9 +33,9 @@ import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupporte
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { SiteIcon } from '@xchain-wallet/core/shared/components/SiteIcon.jsx';
 import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
-import { getSettings, resolveApproval } from '../messaging.js';
-import { ApprovalHeader } from '../ApprovalHeader.jsx';
-import shared from '../approval.module.css';
+import { getSettings, resolveApproval } from './index.js';
+import { ApprovalHeader } from './ApprovalHeader.jsx';
+import shared from './approval.module.css';
 import styles from './ConnectApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();

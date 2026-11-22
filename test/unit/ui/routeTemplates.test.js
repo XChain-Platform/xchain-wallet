@@ -66,7 +66,7 @@ function pageFiles() {
     }
     const router = join(repoRoot, APPROVAL_ROUTER);
     for (const spec of importSpecs(readFileSync(router, 'utf8'))) {
-        if (!spec.startsWith('./kinds/')) continue;
+        if (!/\/shared\/approval\/(ConnectApproval|SignApproval)\.jsx$/.test(spec)) continue;
         const path = resolveModule(spec, router);
         if (path) pages.add(rel(path));
     }
@@ -161,7 +161,7 @@ describe('route templates', () => {
         expect(pages).toContain('packages/core/src/shared/routes/Send.jsx');
         expect(pages).toContain('packages/core/src/shared/routes/AddressList.jsx');
         expect(pages).toContain('packages/core/src/shared/routes/ConnectedSites.jsx');
-        expect(pages).toContain('packages/extension/src/approval/kinds/SignApproval.jsx');
+        expect(pages).toContain('packages/core/src/shared/approval/SignApproval.jsx');
         expect(pages).toContain('packages/core/src/shared/components/settings/KeyboardSection.jsx');
         expect(pages.length).toBeGreaterThan(100);
     });

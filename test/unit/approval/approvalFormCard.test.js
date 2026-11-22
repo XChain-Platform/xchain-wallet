@@ -9,9 +9,9 @@ import { describe, expect, it } from 'vitest';
 const read = (path) => readFileSync(path, 'utf8');
 
 describe('extension approval responsive form card', () => {
-    const connect = read('packages/extension/src/approval/kinds/ConnectApproval.jsx');
-    const sign = read('packages/extension/src/approval/kinds/SignApproval.jsx');
-    const approvalCss = read('packages/extension/src/approval/approval.module.css');
+    const connect = read('packages/core/src/shared/approval/ConnectApproval.jsx');
+    const sign = read('packages/core/src/shared/approval/SignApproval.jsx');
+    const approvalCss = read('packages/core/src/shared/approval/approval.module.css');
     const formPageCss = read('packages/core/src/ui/FormPage.module.css');
 
     it('uses FormPage for connect and every shared signing approval body', () => {

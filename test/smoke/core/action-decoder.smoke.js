@@ -590,7 +590,7 @@ assert.ok(
 );
 
 const sign = readFileSync(
-    join(ext, 'src', 'approval', 'kinds', 'SignApproval.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx'),
     'utf8',
 );
 // §3.2/§3.5: the approval window describes through the SDK, on the
