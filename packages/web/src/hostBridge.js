@@ -43,7 +43,6 @@ import { devMockSigningError } from '../../core/src/sdk/devMockErrors.js';
 import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
 import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
-import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { legacySettingsMigrationCtx } from '../../core/src/flows/legacyRates.js';
 import { VAULT_SESSION_LOCK_NAME } from '../../core/src/flows/eraseSchedule.js';
 import { createFileRefResolver } from '../../core/src/flows/fileRefSource.js';
@@ -68,6 +67,7 @@ import {
     markPendingTxMempoolSeen,
 } from '../../core/src/notifications/pendingTxBridge.js';
 import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
+import { installSampleFiatSource } from './devFiatSource.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
 // this module resolves under Node without the pnpm workspace symlink
 // (needed for smoke tests) while still bundling cleanly through Vite
@@ -232,33 +232,9 @@ function buildTokenPriceSource(vault) {
 // was referenced from live code paths and shipped in every build. The
 // `?.` keeps the module importable under raw Node (smoke harness),
 // where import.meta.env is undefined and the mock stays available.
-// Dev-shell fiat rates: the real §45 price sources (mainnet explorer
-// oracle, CoinGecko) aren't reachable from the dev mock environment, so
-// seed priceLookup with a fake fetch that serves the devFakeBalances
-// rates via the CoinGecko response shape (oracle URLs 404 to force the
-// fallback). Same PROD gate as the mock SDK: dead-code-eliminated from
-// production builds.
+// Dev-shell fiat rates use the same isolated source as the style guide.
 if (!import.meta.env?.PROD) {
-    const rates = fakeNativeFiatRates();
-    configureFiatRateSource({
-        fetch: async (url) => {
-            const u = String(url);
-            if (u.includes('simple/price')) {
-                return {
-                    ok: true,
-                    json: async () => ({
-                        bitcoin: { usd: rates.bitcoin },
-                        litecoin: { usd: rates.litecoin },
-                        dogecoin: { usd: rates.dogecoin },
-                    }),
-                };
-            }
-            // Oracle price_snapshots (and anything else): report
-            // unreachable so refreshFiatRates falls back to the fake
-            // CoinGecko branch above.
-            return { ok: false, status: 404, json: async () => ({}) };
-        },
-    });
+    installSampleFiatSource(fakeNativeFiatRates());
 }
 
 // M1.3: one shared event bus across every per-chain mock SDK instance (the

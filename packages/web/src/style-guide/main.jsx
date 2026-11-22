@@ -14,8 +14,12 @@
 // the app uses are installed on :root for every example.
 import { createRoot } from 'react-dom/client';
 import '@xchain-wallet/core/ui/tokens.css';
+import { installSampleFiatSource } from '../devFiatSource.js';
 import { StyleGuidePage } from './StyleGuidePage.jsx';
+import { SAMPLE_RATES } from './sampleRates.js';
 import './style-guide.css';
+
+installSampleFiatSource(SAMPLE_RATES);
 
 const container = document.getElementById('xchain-styleguide-root');
 if (container) {
