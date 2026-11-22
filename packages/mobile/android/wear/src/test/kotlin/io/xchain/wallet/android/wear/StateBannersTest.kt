@@ -34,7 +34,15 @@ class StateBannersTest {
 
     @Test
     fun rendersEveryBannerKind() {
-        activity.setContent { StateBanners(Banner.entries) }
+        val text = mapOf(
+            Banner.LOADING to "Waiting for phone",
+            Banner.LOCKED to "Wallet locked on phone",
+            Banner.UNREACHABLE to "Phone not in range",
+            Banner.STALE_24H to "Open XChain Wallet on your phone to refresh",
+        )
+        activity.setContent {
+            StateBanners(Banner.entries, textFor = { text.getValue(it) })
+        }
 
         listOf(
             "Waiting for phone",
@@ -59,14 +67,14 @@ class StateBannersTest {
 
     @Test
     fun rendersHiddenWhenRequested() {
-        activity.setContent { Hidden(hidden = true) }
+        activity.setContent { Hidden(hidden = true, hiddenText = { "••••" }) }
 
         compose.onNodeWithText("••••").assertIsDisplayed()
     }
 
     @Test
     fun omitsHiddenWhenNotRequested() {
-        activity.setContent { Hidden(hidden = false) }
+        activity.setContent { Hidden(hidden = false, hiddenText = { "••••" }) }
 
         compose.onNodeWithText("••••").assertDoesNotExist()
     }

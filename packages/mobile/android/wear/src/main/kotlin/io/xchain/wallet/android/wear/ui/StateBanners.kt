@@ -15,11 +15,15 @@ import io.xchain.wallet.android.wear.ui.StateBannerRules.Banner
 private val AgeAmber = Color(0xFFFFB300)
 
 @Composable
-fun StateBanners(banners: List<Banner>, modifier: Modifier = Modifier) {
+fun StateBanners(
+    banners: List<Banner>,
+    modifier: Modifier = Modifier,
+    textFor: @Composable (Banner) -> String = { stringResource(it.stringRes()) },
+) {
     Column(modifier = modifier) {
         banners.forEach { banner ->
             Text(
-                text = stringResource(banner.stringRes()),
+                text = textFor(banner),
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -37,9 +41,13 @@ fun Age(line: AgeLine, text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun Hidden(hidden: Boolean, modifier: Modifier = Modifier) {
+fun Hidden(
+    hidden: Boolean,
+    modifier: Modifier = Modifier,
+    hiddenText: @Composable () -> String = { stringResource(R.string.state_hidden) },
+) {
     if (hidden) {
-        Text(text = stringResource(R.string.state_hidden), modifier = modifier)
+        Text(text = hiddenText(), modifier = modifier)
     }
 }
 
