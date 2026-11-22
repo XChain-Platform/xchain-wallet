@@ -65,11 +65,16 @@ function installMockedWalletStorage() {
     localStorage.setItem('unrelated.preference', 'keep');
 }
 
+// A real wallet's vault: the Forgot Password demo check is refused.
+const refuseDemoPassword = vi.fn(async () => {
+    throw Object.assign(new Error('Incorrect password'), { name: 'InvalidPasswordError' });
+});
+
 function ResettableShell() {
     const [hasWallet, setHasWallet] = useState(() => localStorage.getItem(META_KEY) !== null);
     reload.mockImplementation(() => setHasWallet(localStorage.getItem(META_KEY) !== null));
     return (
-        <MessagingProvider shell="web" messaging={{ unlockWallet: vi.fn() }}>
+        <MessagingProvider shell="web" messaging={{ unlockWallet: refuseDemoPassword }}>
             {hasWallet
                 ? <Locked onUnlocked={() => setHasWallet(false)} />
                 : <Onboarding onCreate={() => {}} onImport={() => {}} />}

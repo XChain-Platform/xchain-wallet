@@ -108,7 +108,9 @@ describe('onboarding and Home layout guards', () => {
         expect(licenseScrollBase).toMatch(/flex:\s*1 1 auto/);
         expect(wideLicense).not.toMatch(/flex:\s*1 1 auto/);
         expect(onboardingSource).toContain('label="Wallet Setup"');
-        expect(onboardingSource).toContain('title="License Agreement"');
+        // First run titles the licence once, in the boot page header; only
+        // the Add Wallet path (no page header) titles the card.
+        expect(onboardingSource).toContain("title={onBack ? 'License Agreement' : undefined}");
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
         expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
         const cardBreakpoint = onboardingCss.match(/@media \(min-width: 600px\) \{[\s\S]*?\n\}/)?.[0] ?? '';

@@ -62,11 +62,18 @@ jobs:
           cache: pnpm
 
       # AGP 8.13 / Gradle 8.14 want a modern JDK; 21 is the LTS both support.
+      # The Gradle cache keeps plugin and library downloads between runs; without
+      # it every run fetched every POM from Maven Central, which answers bursts
+      # with 429 Too Many Requests and failed the AAB build twice.
       - name: Use JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            packages/mobile/android/**/*.gradle*
+            packages/mobile/android/**/gradle-wrapper.properties
 
       - name: Set up the Android SDK
         # The action's default package list still names the retired `tools`

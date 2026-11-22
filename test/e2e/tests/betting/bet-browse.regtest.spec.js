@@ -33,7 +33,8 @@
 // closed on chain and the list kept it under "Taking bets" indefinitely, and
 // re-selecting "Betting" from the palette did not help because the route was
 // already mounted. The trace of that run settled it - six list requests, all
-// inside the first thirty seconds. The fix gives BetFeedsList a 30s refresh;
+// inside the first thirty seconds. The fix gives BetFeedsList a timed refresh
+// (30 s then, 120 s since the block-scale poll cadences);
 // the last step asserts it by touching NOTHING and requiring the row to leave
 // the list on its own.
 //
@@ -409,11 +410,14 @@ test.describe('BET browse', () => {
             // on screen, and the list has to notice by itself. Before the fix
             // this never happened at all (a trace of the failing run showed six
             // list requests, all in the first thirty seconds), so the row stayed
-            // under "Taking bets" indefinitely. Two refresh cycles of headroom.
+            // under "Taking bets" indefinitely. Two refresh cycles of headroom:
+            // BetFeedsList refreshes every 120 s (REFRESH_MS) since the polls
+            // moved to block-scale cadences, so 75 s could pass before the
+            // first refresh ever ran.
             await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'the hub never re-read the chain: a market that closed while the list was on '
                 + 'screen is still listed under "Taking bets" (D-117)')
-                .toBeHidden({ timeout: 75_000 });
+                .toBeHidden({ timeout: 255_000 });
 
             await selectListFilterOption(page, 'Filter prediction markets', 'Status', 'All markets');
             const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
