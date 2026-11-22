@@ -81,6 +81,10 @@ const WEB_LINK_ORIGIN = 'https://xchain.io';
 const WEB_LINK_PREFIX = '/wallet/link/';
 const WALLET_LINK_ORIGIN = 'https://wallet.xchain.io';
 const WALLET_LINK_PREFIX = '/link/';
+const WEB_LINK_ROUTES = Object.freeze([
+    Object.freeze({ origin: WEB_LINK_ORIGIN, pathPrefix: WEB_LINK_PREFIX }),
+    Object.freeze({ origin: WALLET_LINK_ORIGIN, pathPrefix: WALLET_LINK_PREFIX }),
+]);
 
 /**
  * The canonical URI inside a web link, or undefined.
@@ -104,15 +108,10 @@ function unwrapWebLink(raw) {
     // Compare the parsed ORIGIN, never a prefix of the string: both
     // `https://xchain.io.evil.com/wallet/link/` and `https://xchain.io@evil.com/`
     // pass a naive startsWith and neither is our domain.
-    let linkPrefix;
-    if (parsed.origin === WEB_LINK_ORIGIN) {
-        linkPrefix = WEB_LINK_PREFIX;
-    } else if (parsed.origin === WALLET_LINK_ORIGIN) {
-        linkPrefix = WALLET_LINK_PREFIX;
-    } else {
-        return undefined;
-    }
-    if (!parsed.pathname.startsWith(linkPrefix)) return undefined;
+    const route = WEB_LINK_ROUTES.find(({ origin, pathPrefix }) => (
+        parsed.origin === origin && parsed.pathname.startsWith(pathPrefix)
+    ));
+    if (!route) return undefined;
 
     const carried = parsed.searchParams.get('uri');
     if (typeof carried !== 'string') return undefined;

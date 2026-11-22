@@ -80,6 +80,18 @@ describe('request links', () => {
         }
     });
 
+    it('pairs each published web-link origin with only its claimed path', () => {
+        const request = encode(validEnvelope());
+        for (const wrapper of [
+            `https://xchain.io/link/?uri=${encodeURIComponent(request)}`,
+            `https://wallet.xchain.io/wallet/link/?uri=${encodeURIComponent(request)}`,
+            `https://wallet.xchain.io/linkage/?uri=${encodeURIComponent(request)}`,
+            `https://wallet.xchain.io.evil.example/link/?uri=${encodeURIComponent(request)}`,
+        ]) {
+            expect(parseXchainUri(wrapper, { now: vectors.now })).toEqual({ kind: 'unknown' });
+        }
+    });
+
     it('hardens display text without restoring object prototypes', () => {
         const envelope = validEnvelope({
             method: 'signMessage',
