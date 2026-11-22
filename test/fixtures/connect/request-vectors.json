@@ -1,0 +1,277 @@
+{
+  "now": 1800000000000,
+  "valid": [
+    {
+      "name": "login with browser return",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "login-fixture-nonce",
+          "chains": [
+            "BTC"
+          ],
+          "maxAddresses": 2
+        },
+        "return": "https://request.example/connect/return",
+        "state": "login-state",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "signMessage with server callback",
+      "envelope": {
+        "v": 1,
+        "id": "BBBBBBBBBBBBBBBBBBBBBA",
+        "method": "signMessage",
+        "params": {
+          "chainId": "BTC",
+          "address": "bc1qrequestvector",
+          "message": "Confirm this request vector"
+        },
+        "callback": "https://request.example/connect/callback",
+        "exp": 1800000420000
+      }
+    },
+    {
+      "name": "signAction with same-origin return and callback",
+      "envelope": {
+        "v": 1,
+        "id": "CCCCCCCCCCCCCCCCCCCCCA",
+        "method": "signAction",
+        "params": {
+          "chainId": "BTC",
+          "from": "bc1qrequestvector",
+          "action": "SEND",
+          "params": {
+            "destination": "bc1qdestinationvector",
+            "quantity": 1250
+          }
+        },
+        "return": "https://request.example/connect/return",
+        "callback": "https://request.example/connect/callback",
+        "state": "action-state",
+        "exp": 1800000540000,
+        "app": {
+          "name": "Request Vector App"
+        },
+        "browser": "chrome"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown envelope key",
+      "rule": "unknown-key",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000,
+        "unexpected": true
+      }
+    },
+    {
+      "name": "missing envelope version",
+      "rule": "missing-v",
+      "envelope": {
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "unsupported envelope version",
+      "rule": "bad-v",
+      "envelope": {
+        "v": 2,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "unknown request method",
+      "rule": "unknown-method",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "send",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "request without a delivery target",
+      "rule": "no-target",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "return and callback use different origins",
+      "rule": "two-origins",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000,
+        "callback": "https://callback.example/connect/result"
+      }
+    },
+    {
+      "name": "insecure HTTP target",
+      "rule": "http-target",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "http://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "target contains credentials",
+      "rule": "target-credentials",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://user:secret@request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "target contains a fragment",
+      "rule": "target-fragment",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return#result",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "target exceeds 2048 characters",
+      "rule": "target-too-long",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "exp": 1800000300000
+      }
+    },
+    {
+      "name": "request is already expired",
+      "rule": "exp-past",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000000000
+      }
+    },
+    {
+      "name": "request expires after ten minutes",
+      "rule": "exp-over-10-min",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000600001
+      }
+    },
+    {
+      "name": "unknown browser hint",
+      "rule": "bad-browser",
+      "envelope": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000,
+        "browser": "opera"
+      }
+    },
+    {
+      "name": "request id is not 22 base64url characters",
+      "rule": "bad-id",
+      "envelope": {
+        "v": 1,
+        "id": "short-id",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "fixture-nonce"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    }
+  ]
+}
