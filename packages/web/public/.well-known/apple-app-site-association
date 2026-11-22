@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "829JG9YLH3.io.xchain.wallet.ios"
+        ],
+        "components": [
+          {
+            "/": "/link/*",
+            "comment": "wallet.xchain.io deep links only; every other wallet.xchain.io path stays in the browser"
+          }
+        ]
+      }
+    ]
+  }
+}

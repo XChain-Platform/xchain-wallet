@@ -1,0 +1,17 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.xchain.wallet.android",
+      "sha256_cert_fingerprints": [
+        "AA:98:35:05:24:F7:AA:5C:8B:A4:F0:33:5B:D8:6B:5E:42:3B:BB:41:DD:4F:48:73:16:ED:25:27:81:7F:58:80",
+        "88:47:31:9C:12:1E:97:10:FB:E3:EB:21:88:55:7F:71:7F:51:02:CF:69:5B:3A:4E:4C:D7:90:1A:F3:62:7A:6B",
+        "0A:BA:BC:CC:B4:CE:08:2D:C6:E2:7E:EE:B0:31:0E:87:B2:35:DA:71:11:58:86:F4:11:A9:30:30:26:A3:F3:D4",
+        "4B:5D:E0:91:CF:39:97:31:06:11:B8:46:8B:67:79:DC:72:F5:8A:2A:94:0E:53:4F:1E:0A:59:AD:D8:25:9E:28"
+      ]
+    }
+  }
+]
