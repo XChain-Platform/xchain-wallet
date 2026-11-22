@@ -49,6 +49,8 @@ import { assertDestroyAllowedOnChain } from '../registry/destroyPolicy.js';
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
+ * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string, finalPsbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {boolean} [adsPayout]                    false when the approving screen cannot name an automatic donation
  * @property {boolean} [trackPendingTx]
  * @property {string} [actionSummary]                    PendingTx label in place of the action's plain-language name (a controller bind is an ADDRESS or ISSUE on the wire)
  */
@@ -122,6 +124,8 @@ export async function advancedAction(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
+        ...(typeof opts.beforeBroadcast === 'function' && { beforeBroadcast: opts.beforeBroadcast }),
+        ...(opts.adsPayout !== undefined && { adsPayout: opts.adsPayout }),
         verifyBuiltTx: true,
     });
 }
