@@ -7,7 +7,10 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { installSampleFiatSource } from '../../../packages/web/src/devFiatSource.js';
-import { SECTIONS } from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
+import {
+    DOCUMENTED_PRIMITIVES,
+    SECTIONS,
+} from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
 import { SAMPLE_RATES } from '../../../packages/web/src/style-guide/sampleRates.js';
 import { ViewContext } from '../../../packages/web/src/style-guide/frames.jsx';
 
@@ -22,10 +25,6 @@ vi.mock('../../../packages/web/src/style-guide/frames.jsx', async (importOrigina
         ),
     };
 });
-
-vi.mock('../../../packages/web/src/style-guide/ComponentStateMatrix.jsx', () => ({
-    ComponentStateMatrix: ({ name }) => <div data-testid={`matrix-${name}`} />,
-}));
 
 afterEach(() => {
     cleanup();
@@ -46,7 +45,7 @@ describe('style guide sample data', () => {
             return { ok: false, status: 404, json: async () => ({}) };
         }));
 
-        render(
+        const { container } = render(
             <ViewContext.Provider value="desktop">
                 {SECTIONS.map(({ id, Component }) => <Component key={id} />)}
             </ViewContext.Provider>,
@@ -55,6 +54,11 @@ describe('style guide sample data', () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
 
+        expect(SECTIONS.map(({ id }) => container.querySelector(`#${id}`)?.id))
+            .toEqual(SECTIONS.map(({ id }) => id));
+        expect([...container.querySelectorAll('.sg-component-matrix')]
+            .map((matrix) => matrix.dataset.component))
+            .toEqual(DOCUMENTED_PRIMITIVES);
         expect(requests.filter((url) => (
             /^(?:[a-z]+:)?\/\//i.test(url)
             || url.includes('/api/price_snapshots')
