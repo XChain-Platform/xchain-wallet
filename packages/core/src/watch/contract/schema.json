@@ -1,0 +1,12 @@
+{
+    "v": 1,
+    "messages": {
+        "snapshot": "snapshot.schema.json",
+        "detail": "detail.schema.json",
+        "refresh": "intents.schema.json#/$defs/refresh",
+        "detailRequest": "intents.schema.json#/$defs/detailRequest",
+        "openOnPhone": "intents.schema.json#/$defs/openOnPhone",
+        "markRead": "intents.schema.json#/$defs/markRead",
+        "watchState": "intents.schema.json#/$defs/watchState"
+    }
+}
