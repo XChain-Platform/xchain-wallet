@@ -124,3 +124,85 @@ export async function openExtensionTab(handoff, options = {}) {
     }
     return true;
 }
+
+/**
+ * Which view switches the wallet menu offers in this extension view: the
+ * toolbar popup offers both, the side panel offers Full screen, and a full
+ * browser tab offers Sidebar. Each is offered only when the browser has the
+ * API it needs.
+ *
+ * @param {Window | undefined} [view]
+ * @param {any} [chromeApi]
+ * @returns {{ sidebar: boolean, fullScreen: boolean }}
+ */
+export function walletViewSwitches(view = globalThis.window, chromeApi = globalThis.chrome) {
+    const pathname = view?.location?.pathname || '';
+    const sidePanel = pathname.endsWith('/sidepanel.html');
+    const canSidebar = typeof chromeApi?.sidePanel?.open === 'function';
+    const canTab = typeof chromeApi?.tabs?.create === 'function'
+        && typeof chromeApi?.runtime?.getURL === 'function';
+    if (sidePanel) return { sidebar: false, fullScreen: canTab };
+    if (!pathname.endsWith('/popup.html')) return { sidebar: false, fullScreen: false };
+    if (isToolbarPopupView(view, chromeApi?.extension)) return { sidebar: canSidebar, fullScreen: canTab };
+    return { sidebar: canSidebar, fullScreen: false };
+}
+
+/**
+ * Opens the wallet in the browser's side panel for `windowId` and closes the
+ * view the user left: the popup closes itself, a full-screen tab removes its
+ * own tab. Must run inside the click: the browser opens a side panel only
+ * during a user gesture, so nothing is awaited before `sidePanel.open`.
+ *
+ * @param {{ windowId?: number | null, chromeApi?: any, view?: Window }} [options]
+ * @returns {Promise<boolean>} true when the side panel opened
+ */
+export async function openWalletSidebar(options = {}) {
+    const chromeApi = options.chromeApi || globalThis.chrome;
+    const view = options.view || globalThis.window;
+    const windowId = Number.isInteger(options.windowId)
+        ? options.windowId
+        : chromeApi?.windows?.WINDOW_ID_CURRENT;
+    if (typeof chromeApi?.sidePanel?.open !== 'function' || !Number.isInteger(windowId)) return false;
+    try {
+        await chromeApi.sidePanel.open({ windowId });
+    } catch {
+        return false;
+    }
+    if (isToolbarPopupView(view, chromeApi.extension)) {
+        try { view.close?.(); } catch { /* The side panel is open either way. */ }
+        return true;
+    }
+    try {
+        const tab = await chromeApi.tabs?.getCurrent?.();
+        if (Number.isInteger(tab?.id)) await chromeApi.tabs.remove(tab.id);
+    } catch {
+        // The full-screen tab stays open beside the side panel.
+    }
+    return true;
+}
+
+/**
+ * Opens the wallet full screen: popup.html in a new browser tab, which lays
+ * the wallet out for the window's size. The popup or side panel the user
+ * left closes itself.
+ *
+ * @param {{ chromeApi?: any, view?: Window }} [options]
+ * @returns {Promise<boolean>} true when the tab opened
+ */
+export async function openWalletFullScreen(options = {}) {
+    const chromeApi = options.chromeApi || globalThis.chrome;
+    const view = options.view || globalThis.window;
+    if (typeof chromeApi?.tabs?.create !== 'function' || typeof chromeApi?.runtime?.getURL !== 'function') {
+        return false;
+    }
+    try {
+        await chromeApi.tabs.create({ url: chromeApi.runtime.getURL('popup.html') });
+    } catch {
+        return false;
+    }
+    const pathname = view?.location?.pathname || '';
+    if (pathname.endsWith('/sidepanel.html') || isToolbarPopupView(view, chromeApi.extension)) {
+        try { view.close?.(); } catch { /* The new tab is open either way. */ }
+    }
+    return true;
+}

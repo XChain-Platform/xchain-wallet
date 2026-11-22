@@ -210,8 +210,11 @@ import {
     createLaunchRouteState,
     isToolbarPopupView,
     openExtensionTab,
+    openWalletFullScreen,
+    openWalletSidebar,
     parseExtensionHandoff,
     shellForExtensionView,
+    walletViewSwitches,
 } from './launchState.js';
 import { shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
@@ -1297,6 +1300,19 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         navigate: openRootView,
         currentView: unlockedView,
     });
+    // The wallet menu's Open in sidebar and Open full screen buttons. The
+    // window id is read ahead, since the side panel opens only inside the
+    // click and an await there would drop the gesture.
+    const viewSwitches = useMemo(() => walletViewSwitches(), []);
+    const windowIdRef = useRef(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (!viewSwitches.sidebar) return;
+        Promise.resolve(globalThis.chrome?.windows?.getCurrent?.())
+            .then((win) => { if (Number.isInteger(win?.id)) windowIdRef.current = win.id; })
+            .catch(() => {});
+    }, [viewSwitches.sidebar]);
+    const openSidebarView = useCallback(() => { openWalletSidebar({ windowId: windowIdRef.current }); }, []);
+    const openFullScreenView = useCallback(() => { openWalletFullScreen(); }, []);
     const heldSwitchNavigated = heldWalletSwitch.navigated;
     useEffect(() => { heldSwitchNavigated(); }, [unlockedView, palette.navigationKey, heldSwitchNavigated]);
     const loadPaletteSites = useCallback(() => messaging.listConnectedSites(), []);
@@ -3805,6 +3821,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     ) : null}
                     <CommandPalette
                         open={palette.open}
+                        focusSearch={palette.focusSearch}
                         onClose={palette.closePalette}
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
@@ -3820,6 +3837,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onSelect: handleWalletMenuSelect,
                             onOpenSettings: () => openSettingsSection(null),
                             onLock: handleLock,
+                            onOpenSidebar: viewSwitches.sidebar ? openSidebarView : undefined,
+                            onOpenFullScreen: viewSwitches.fullScreen ? openFullScreenView : undefined,
                         }}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
