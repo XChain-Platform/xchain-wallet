@@ -26,15 +26,27 @@ class ImageCacheTest {
     }
 
     @Test
-    fun storesAndReadsAHashNamedFile() {
+    fun receivesAnImageChannelIntoAHashNamedFile() {
         val cache = ImageCache(directory)
         val bytes = "image".toByteArray()
         val contentHash = hash(42)
 
-        cache.store(bytes, contentHash)
+        assertTrue(cache.receive(imagePath(contentHash), bytes))
 
         assertArrayEquals(bytes, cache.data(contentHash))
         assertEquals(listOf(contentHash), fileNames())
+    }
+
+    @Test
+    fun rejectsNonImageAndMalformedChannelPaths() {
+        val cache = ImageCache(directory)
+        val bytes = "image".toByteArray()
+
+        assertFalse(cache.receive("/xc/detail/${hash(1)}", bytes))
+        assertFalse(cache.receive("/xc/image/${hash(10).uppercase()}", bytes))
+        assertFalse(cache.receive("/xc/image/${hash(3).dropLast(1)}", bytes))
+
+        assertTrue(fileNames().isEmpty())
     }
 
     @Test
@@ -53,7 +65,7 @@ class ImageCacheTest {
         store(ImageCache.CAPACITY, cache)
         assertTrue(cache.data(hash(0)) != null)
 
-        cache.store(byteArrayOf(255.toByte()), hash(ImageCache.CAPACITY))
+        cache.receive(imagePath(hash(ImageCache.CAPACITY)), byteArrayOf(255.toByte()))
 
         assertTrue(directory.resolve(hash(0)).isFile)
         assertFalse(directory.resolve(hash(1)).exists())
@@ -64,8 +76,8 @@ class ImageCacheTest {
         val cache = ImageCache(directory)
         val snapshotHash = hash(500)
         val detailHash = hash(501)
-        cache.store(byteArrayOf(1), snapshotHash)
-        cache.store(byteArrayOf(2), detailHash)
+        cache.receive(imagePath(snapshotHash), byteArrayOf(1))
+        cache.receive(imagePath(detailHash), byteArrayOf(2))
         cache.setPinned(setOf(snapshotHash), setOf(detailHash))
         store(199, cache)
 
@@ -104,11 +116,13 @@ class ImageCacheTest {
 
     private fun store(count: Int, cache: ImageCache) {
         repeat(count) { index ->
-            cache.store(byteArrayOf((index % 256).toByte()), hash(index))
+            cache.receive(imagePath(hash(index)), byteArrayOf((index % 256).toByte()))
         }
     }
 
     private fun hash(index: Int) = "%064x".format(index)
+
+    private fun imagePath(hash: String) = "/xc/image/$hash"
 
     private fun fileNames() = directory.list()?.sorted().orEmpty()
 }

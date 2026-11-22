@@ -24,11 +24,16 @@ class ImageCache(private val directory: File) {
     }
 
     @Synchronized
-    fun store(data: ByteArray, hash: String) {
+    fun receive(path: String, data: ByteArray): Boolean {
+        val incoming = WatchPaths.classify(path)
+        if (incoming?.kind != WatchPaths.Kind.IMAGE) return false
+
+        val hash = checkNotNull(incoming.key)
         check(directory.exists() || directory.mkdirs()) { "Could not create image cache directory" }
         file(hash).writeBytes(data)
         lru.touch(hash)
         evict()
+        return true
     }
 
     @Synchronized
