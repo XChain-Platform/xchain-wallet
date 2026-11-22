@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { buildWatchDetail } from './buildWatchDetail.js';
-import * as watchContract from './contract/index.js';
+import intentsSchema from './contract/intents.schema.json' with { type: 'json' };
+import validate from './contract/validate.js';
 import { createSingleFlight } from './watchSingleFlight.js';
+
+const validateIntent = (kind, value) => (
+    Object.hasOwn(intentsSchema.$defs, kind) && validate(intentsSchema.$defs[kind], value).length === 0
+);
 
 export async function routeWatchIntent(kind, value, handlers, { validate = () => true } = {}) {
     const allowedKinds = ['refresh', 'detailRequest', 'openOnPhone', 'markRead', 'watchState'];
@@ -62,7 +67,7 @@ export function createWatchIntents({
         },
     };
     const route = (kind, value) => routeWatchIntent(kind, value, handlers, {
-        validate: watchContract.validateMessage,
+        validate: validateIntent,
     });
 
     return {
