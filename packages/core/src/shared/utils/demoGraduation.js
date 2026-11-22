@@ -16,10 +16,10 @@
  * written once, when the vault is created, and the master key that
  * decrypts every wallet record in it is derived from that password
  * alone. In the demo funnel the vault is created by the demo, so the
- * password governing the whole device is the demo's random throwaway
- * one, which the exit (and the 24h auto-wipe) deletes.
+ * password governing the whole device is the demo's throwaway one
+ * (DEMO_WALLET_PASSWORD), which no real wallet may be kept under.
  *
- * Two consequences, and both used to strand the user:
+ * Two consequences, either of which strands the user unless handled:
  *   - Removing the demo wallet without clearing the vault store leaves
  *     a meta the shell reads as "a wallet exists", so the next boot is
  *     an unlock screen for an empty vault whose only password was just
@@ -37,7 +37,12 @@
  * reload that the wipe requires.
  */
 
-import { clearDemoWalletId } from '../../flows/demoMode.js';
+import {
+    DEMO_WALLET_PASSWORD,
+    clearDemoWalletId,
+    getDemoWalletId,
+    markDemoWallet,
+} from '../../flows/demoMode.js';
 import { clearActiveWallet, writeActiveWallet } from './activeWalletMemory.js';
 import { clearLastView } from './lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from './msgReadMemory.js';
@@ -219,4 +224,79 @@ export async function exitDemoWallet({
     clearActiveWallet();
     if (intent) setPostDemoIntent(intent);
     return { wiped: true, reloaded: reload(), remaining };
+}
+
+/**
+ * Forgot Password's check before it schedules the 48-hour erase: a vault
+ * that DEMO_WALLET_PASSWORD opens is a demo vault whose marker was lost, so
+ * it is erased at once, as the demo's own Exit would.
+ *
+ * A real wallet can never have the password "demo": every screen that
+ * chooses a wallet password (create, import, hardware first run, migration,
+ * change password, phrase reset) demands at least 8 characters, and demo
+ * graduation wipes a demo vault before a real wallet is added. So this check
+ * cannot shorten a real wallet's erase. The one other way to a "demo" vault
+ * is a fresh restore of a backup made from a demo wallet, which keeps that
+ * wallet's password; the vault then holds that demo wallet, and its first
+ * unlock with "demo" marks it so Add Wallet graduates out of it too.
+ *
+ * One attempt, never a loop. Any refusal (wrong password, throttle, another
+ * tab holding the vault) reads as "not a demo" and the 48-hour hold applies.
+ * On the extension and desktop a refusal costs the real wallet one of the
+ * host throttle's free attempts.
+ *
+ * @param {object} opts
+ * @param {any} opts.messaging
+ * @param {() => void} [opts.beforeReload]     records where to land after the reload
+ * @param {() => Promise<void>} [opts.wipe]    injected for tests
+ * @param {() => boolean} [opts.reload]        injected for tests
+ * @returns {Promise<boolean>} true when the vault was a demo vault and is now erased
+ */
+export async function eraseIfDemoVault({
+    messaging,
+    beforeReload,
+    wipe = wipeWalletStorage,
+    reload = defaultReload,
+}) {
+    if (typeof messaging?.unlockWallet !== 'function') return false;
+    try {
+        await messaging.unlockWallet(DEMO_WALLET_PASSWORD);
+    } catch {
+        return false;
+    }
+    try {
+        await wipe();
+    } catch (err) {
+        // The probe left the vault open; close it again before the error shows.
+        try { await messaging.lockWallet?.(); } catch { /* best-effort */ }
+        throw err;
+    }
+    clearDemoWalletId();
+    clearActiveWallet();
+    beforeReload?.();
+    reload();
+    return true;
+}
+
+/**
+ * Restores the demo marker after the lock screen opened an unmarked vault
+ * with DEMO_WALLET_PASSWORD. Without it the app would treat the demo as a
+ * real wallet: no banner, no synthetic-data guards, and an Add Wallet that
+ * grows the demo vault instead of graduating out of it. The demo-origin
+ * wallet is preferred; failing that, any wallet in the vault is marked,
+ * since everything a "demo" vault holds is throwaway and the marker is what
+ * makes Add Wallet graduate.
+ *
+ * @param {any} messaging
+ * @param {string} password   the password that just opened the vault
+ * @returns {Promise<boolean>} true when a demo wallet was re-marked
+ */
+export async function restoreLostDemoMarker(messaging, password) {
+    if (password !== DEMO_WALLET_PASSWORD || getDemoWalletId()) return false;
+    const wallets = await readWalletList(messaging);
+    const listed = (wallets || []).filter((wallet) => typeof wallet?.id === 'string' && wallet.id.length > 0);
+    const demo = listed.find((wallet) => wallet.origin === 'demo') || listed[0];
+    if (!demo) return false;
+    markDemoWallet(demo.id, { password });
+    return true;
 }

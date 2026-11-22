@@ -25,6 +25,9 @@
 //   3. Erase Everything             schedules an erase 48 hours out. The lock
 //                                   screen shows it, any unlock cancels it.
 //
+// Both erase paths first try the demo password once (eraseIfDemoVault): a
+// demo vault whose marker was lost is erased at once instead of waiting.
+//
 // Rendered by Locked.jsx, which keeps the screen guard (useProtectedScreen)
 // on for every page here; the phrase page also holds it itself.
 
@@ -41,6 +44,7 @@ import {
 } from '../../flows/biometricUnlock.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { setForgotPasswordRestoreIntent } from '../utils/forgotPasswordRecovery.js';
+import { eraseIfDemoVault } from '../utils/demoGraduation.js';
 import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -159,7 +163,9 @@ export function ForgotPassword({ variant, messaging, onClose, onPasswordReset, o
             {page === 'backup' ? (
                 <BackupRestorePage messaging={messaging} onBusy={setBusy} onEraseScheduled={onEraseScheduled} />
             ) : null}
-            {page === 'erase' ? <EraseSchedulePage onBusy={setBusy} onEraseScheduled={onEraseScheduled} /> : null}
+            {page === 'erase' ? (
+                <EraseSchedulePage messaging={messaging} onBusy={setBusy} onEraseScheduled={onEraseScheduled} />
+            ) : null}
         </Screen>
     );
 }
@@ -384,6 +390,18 @@ function BackupRestorePage({ messaging, onBusy, onEraseScheduled }) {
         begin();
         try {
             if (!verified?.belongsToVault) {
+                let demoErased = false;
+                try {
+                    demoErased = await eraseIfDemoVault({
+                        messaging,
+                        beforeReload: () => setForgotPasswordRestoreIntent('backup'),
+                    });
+                } catch {
+                    errors.fail(t('locked.forgot.eraseFailed'));
+                    end();
+                    return;
+                }
+                if (demoErased) return;
                 const schedule = await scheduleErase();
                 onBusy(false);
                 onEraseScheduled(schedule);
@@ -490,7 +508,7 @@ function BackupRestorePage({ messaging, onBusy, onEraseScheduled }) {
  * 3. Erase Everything, after a 48-hour hold. Where the device can prove its
  * owner (a registered biometric), it must before the erase is scheduled.
  */
-function EraseSchedulePage({ onBusy, onEraseScheduled }) {
+function EraseSchedulePage({ messaging, onBusy, onEraseScheduled }) {
     const WIPE_ID = useFieldId('forgot-erase-wipe');
     const errors = useFormErrors();
     const [wipeText, setWipeText] = useState('');
@@ -504,6 +522,15 @@ function EraseSchedulePage({ onBusy, onEraseScheduled }) {
         })) return;
         setBusy(true);
         onBusy(true);
+        // A demo vault is erased at once and the reload lands on Welcome.
+        try {
+            if (await eraseIfDemoVault({ messaging })) return;
+        } catch {
+            errors.fail(t('locked.forgot.eraseFailed'));
+            setBusy(false);
+            onBusy(false);
+            return;
+        }
         try {
             // Device authentication where the shell has it. The unwrapped
             // value is not used: only that the device owner answered.

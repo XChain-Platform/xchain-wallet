@@ -820,6 +820,7 @@ export {
     markDemoWallet,
     getDemoWalletId,
     getDemoWalletPassword,
+    DEMO_WALLET_PASSWORD,
     getDemoWalletExpiry,
     clearDemoWalletId,
     holdDemoLock,

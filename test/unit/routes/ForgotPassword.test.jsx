@@ -37,9 +37,18 @@ function named(name, extra = {}) {
     return Object.assign(new Error(name), { name, ...extra });
 }
 
+// A real vault: the demo password is refused, as every real wallet password
+// is 8 characters or more. Each other password in `refused` is wrong too.
+function realVaultUnlock(...refused) {
+    return vi.fn(async (password) => {
+        if (password === 'demo' || refused.includes(password)) throw named('InvalidPasswordError');
+        return { unlocked: true, passphraseCaptureNeeded: [] };
+    });
+}
+
 function baseMessaging(overrides = {}) {
     return {
-        unlockWallet: vi.fn().mockResolvedValue({ unlocked: true, passphraseCaptureNeeded: [] }),
+        unlockWallet: realVaultUnlock(),
         recoveryStatus: vi.fn().mockResolvedValue({ hasWallet: true, phraseReset: true }),
         resetPasswordWithPhrase: vi.fn().mockResolvedValue({ unlocked: true, passphraseCaptureNeeded: [], passwordReset: true, skippedWalletIds: [] }),
         verifyBackupForRestore: vi.fn().mockResolvedValue({ verified: true, walletName: 'Savings', belongsToVault: true }),
@@ -339,9 +348,12 @@ describe('Erase Everything with a 48-hour hold', () => {
     it('typing WIPE schedules, never wipes, and the lock screen shows the time left', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-16T12:00:00Z'));
-        mount();
+        const { messaging } = mount();
         await scheduleFromPage();
         expect(wipeWalletStorage).not.toHaveBeenCalled();
+        // One demo-password check, refused, before the hold was scheduled.
+        expect(messaging.unlockWallet).toHaveBeenCalledTimes(1);
+        expect(messaging.unlockWallet).toHaveBeenCalledWith('demo');
         const schedule = getEraseSchedule();
         expect(schedule.dueAt - schedule.scheduledAt).toBe(ERASE_HOLD_MS);
         expect(screen.getByText(/erased in 48 hours/)).toBeInTheDocument();
@@ -363,10 +375,7 @@ describe('Erase Everything with a 48-hour hold', () => {
     });
 
     it('Cancel Erase asks for the password through the unlock form; a wrong one keeps the erase', async () => {
-        const unlockWallet = vi.fn()
-            .mockRejectedValueOnce(named('InvalidPasswordError'))
-            .mockResolvedValueOnce({ unlocked: true, passphraseCaptureNeeded: [] });
-        mount(baseMessaging({ unlockWallet }));
+        mount(baseMessaging({ unlockWallet: realVaultUnlock('wrong') }));
         await scheduleFromPage();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel Erase' }));
         const submit = screen.getByRole('button', { name: 'Cancel Erase and Unlock' });
@@ -403,5 +412,78 @@ describe('Erase Everything with a 48-hour hold', () => {
         mount();
         expect(screen.getByRole('button', { name: 'Exit Demo & Wipe' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Forgot Password?' })).toBeNull();
+    });
+});
+
+describe('a demo vault whose marker was lost', () => {
+    // The vault opens with the demo password; no xc:demoWallet* keys remain,
+    // so the lock screen shows Forgot Password instead of Exit Demo.
+    function demoVaultMessaging(overrides = {}) {
+        return baseMessaging({
+            unlockWallet: vi.fn(async (password) => {
+                if (password !== 'demo') throw named('InvalidPasswordError');
+                return { unlocked: true, passphraseCaptureNeeded: [] };
+            }),
+            lockWallet: vi.fn().mockResolvedValue({ locked: true }),
+            ...overrides,
+        });
+    }
+
+    async function submitEraseEverything() {
+        const list = await openForgot();
+        fireEvent.click(within(list).getByRole('button', { name: /^Erase Everything/ }));
+        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Schedule Erase' }));
+    }
+
+    it('Erase Everything erases at once, skipping the 48-hour hold', async () => {
+        const { messaging } = mount(demoVaultMessaging());
+        await submitEraseEverything();
+        await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+        expect(messaging.unlockWallet).toHaveBeenCalledTimes(1);
+        expect(messaging.unlockWallet).toHaveBeenCalledWith('demo');
+        expect(wipeWalletStorage).toHaveBeenCalledTimes(1);
+        expect(getEraseSchedule()).toBeNull();
+    });
+
+    it('a backup from another wallet erases at once and opens the backup restore', async () => {
+        const messaging = demoVaultMessaging({
+            verifyBackupForRestore: vi.fn().mockResolvedValue({ verified: true, walletName: 'Other', belongsToVault: false }),
+        });
+        mount(messaging);
+        const list = await openForgot();
+        fireEvent.click(within(list).getByRole('button', { name: /^Restore from Backup File/ }));
+        const input = screen.getByLabelText('Choose Backup File');
+        fireEvent.change(input, { target: { files: [new File(['{}'], 'other.xchain-wallet', { type: 'application/json' })] } });
+        await screen.findByDisplayValue('other.xchain-wallet');
+        fireEvent.change(screen.getByLabelText('Backup File Password'), { target: { value: 'file-pw' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Check Backup File' }));
+        await screen.findByText('Backup File Checked');
+        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Schedule Erase' }));
+        await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+        expect(wipeWalletStorage).toHaveBeenCalledTimes(1);
+        expect(getEraseSchedule()).toBeNull();
+        expect(globalThis.localStorage.getItem(FORGOT_PASSWORD_RESTORE_LANE_KEY)).toBe('backup');
+    });
+
+    it('a failed wipe locks the vault again, says so, and schedules nothing', async () => {
+        wipeWalletStorage.mockRejectedValue(new Error('host storage is busy'));
+        const { messaging } = mount(demoVaultMessaging());
+        await submitEraseEverything();
+        await waitFor(() => expect(screen.getAllByText("Couldn't erase wallet data. Close and reopen the app, then try again.").length)
+            .toBeGreaterThan(0));
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
+        expect(getEraseSchedule()).toBeNull();
+        expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('typing demo on the lock screen opens it', async () => {
+        const { messaging, onUnlocked } = mount(demoVaultMessaging());
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'demo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await waitFor(() => expect(onUnlocked).toHaveBeenCalledTimes(1));
+        expect(messaging.unlockWallet).toHaveBeenCalledWith('demo');
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
     });
 });

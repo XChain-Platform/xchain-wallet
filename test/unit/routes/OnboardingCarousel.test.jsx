@@ -693,9 +693,10 @@ describe('Onboarding: demo entry', () => {
         const chainIds = importMnemonic.mock.calls[0][0].activeChainIds;
         expect(chainIds[0]).toBe('bitcoin-mainnet');
         expect(chainIds).toEqual(expect.arrayContaining(['bitcoin-testnet', 'bitcoin-regtest']));
-        expect(importMnemonic.mock.calls[0][0].password).toMatch(/^[0-9a-f]{64}$/);
+        // The fixed demo password, so a demo whose marker is lost still opens.
+        expect(importMnemonic.mock.calls[0][0].password).toBe('demo');
         expect(globalThis.localStorage.getItem('xc:demoWalletId')).toBe('demo-wallet');
-        expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe(importMnemonic.mock.calls[0][0].password);
+        expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe('demo');
     });
 
     it.each([

@@ -17,7 +17,7 @@ import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js'
 // device with no wallet, and the barrel would pull every flow into startup.
 import { generateBip39Mnemonic } from '../../crypto/mnemonic.js';
 import { demoCaptureMnemonic } from '../../flows/demoCapture.js';
-import { getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
+import { DEMO_WALLET_PASSWORD, getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
@@ -291,15 +291,11 @@ export function Onboarding({ onCreate, onImport, onConnectHardware, hardwareFact
         setDemoError(null);
         setWalletFound(false);
         try {
-            // 32-byte hex auto-password kept in the session cache; the
-            // user never sees it. Mnemonic generated locally per the
+            // The fixed demo password, shown on the lock screen, so a demo
+            // whose marker is lost can still be opened or recognised and
+            // erased (flows/demoMode.js). Mnemonic generated locally per the
             // standard CreateWallet path.
-            const passwordBytes = new Uint8Array(32);
-            globalThis.crypto.getRandomValues(passwordBytes);
-            const password = Array.from(passwordBytes, (b) =>
-                b.toString(16).padStart(2, '0'),
-            ).join('');
-            passwordBytes.fill(0);
+            const password = DEMO_WALLET_PASSWORD;
             // Fresh per demo session, except under the store-listing
             // capture harness, which needs the address in the public
             // screenshots to be the same address on every capture
@@ -348,9 +344,8 @@ export function Onboarding({ onCreate, onImport, onConnectHardware, hardwareFact
                     }
                 } catch { /* best-effort */ }
             }
-            // Persist the auto-password so a reload can silently re-unlock
-            // this throwaway demo wallet instead of stranding the user on
-            // the password screen with a key they never typed.
+            // Persist the password so a reload can silently re-unlock this
+            // throwaway demo wallet instead of stopping on the password screen.
             if (walletId) markDemoWallet(walletId, { password });
             // Seed a few demo contacts (random names, 1-3 chains each) into the
             // address book so the Contacts screen, Send picker, and message
