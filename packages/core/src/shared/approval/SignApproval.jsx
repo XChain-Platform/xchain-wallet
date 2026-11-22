@@ -59,9 +59,9 @@ import { resolveFeeUnit, settingsCustomToDisplayRate } from '@xchain-wallet/core
 import { exactNetworkFeeSats } from '@xchain-wallet/core/flows/psbtNetworkFee.js';
 import { actionWarningIds, withoutCoveredWarnings } from '@xchain-wallet/core/flows/actionWarnings.js';
 import { WATCH_ONLY_SIGNING_MESSAGE } from '@xchain-wallet/core/shared/addressSelection.js';
-import { ApprovalHeader } from '../ApprovalHeader.jsx';
-import { formatNativeBaseUnits, tickerForDescriptor } from '../../../../core/src/registry/coinTicker.js';
-import { walletModeOf } from '../../../../core/src/schemas/wallet.js';
+import { ApprovalHeader } from './ApprovalHeader.jsx';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
+import { walletModeOf } from '../../schemas/wallet.js';
 import {
     listWallets,
     resolveApproval,
@@ -74,9 +74,9 @@ import {
     preflight,
     describeAction as describeActionOnHost,
     getTokenInfo,
-} from '../messaging.js';
-import { signingPathLines } from '../signingPathLines.js';
-import shared from '../approval.module.css';
+} from './index.js';
+import { signingPathLines } from './signingPathLines.js';
+import shared from './approval.module.css';
 import styles from './SignApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();

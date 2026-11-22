@@ -32,10 +32,10 @@ const noticeToken = noticeCss.match(/\.row\s*\{[^}]*?font-size:\s*var\((--xc-tex
 const FLOOR = remOf(noticeToken);
 
 const APPROVAL_STYLES = [
-    'packages/extension/src/approval/approval.module.css',
-    'packages/extension/src/approval/kinds/ConnectApproval.module.css',
-    'packages/extension/src/approval/kinds/SignApproval.module.css',
-    'packages/extension/src/approval/ApprovalHeader.module.css',
+    'packages/core/src/shared/approval/approval.module.css',
+    'packages/core/src/shared/approval/ConnectApproval.module.css',
+    'packages/core/src/shared/approval/SignApproval.module.css',
+    'packages/core/src/shared/approval/ApprovalHeader.module.css',
 ];
 
 describe('approval window text floor', () => {
@@ -56,9 +56,9 @@ describe('approval window text floor', () => {
     }
 
     it('connect view lifts the shared full-origin line to the floor', () => {
-        const css = read('packages/extension/src/approval/kinds/ConnectApproval.module.css');
+        const css = read('packages/core/src/shared/approval/ConnectApproval.module.css');
         expect(css).toMatch(/\.siteOrigin\s*\{[^}]*font-size:\s*var\(--xc-text-sm\);/s);
-        const connect = read('packages/extension/src/approval/kinds/ConnectApproval.jsx');
+        const connect = read('packages/core/src/shared/approval/ConnectApproval.jsx');
         expect(connect).toMatch(/styles\.siteOrigin\b/);
     });
 
@@ -76,7 +76,7 @@ describe('approval window header reach', () => {
         expect(slot).toMatch(/padding-inline:\s*var\(--xc-page-gutter\)/);
         expect(slot).toMatch(/padding-inline-end:\s*calc\(var\(--xc-page-gutter\) - 2px\)/);
 
-        const css = read('packages/extension/src/approval/ApprovalHeader.module.css');
+        const css = read('packages/core/src/shared/approval/ApprovalHeader.module.css');
         expect(css).toMatch(/margin-block-start:\s*calc\(-1 \* \(var\(--xc-page-gutter\) - 2px\)\)/);
         expect(css).toMatch(
             /margin-inline:\s*calc\(-1 \* var\(--xc-page-gutter\)\) calc\(-1 \* \(var\(--xc-page-gutter\) - 2px\)\)/,
@@ -84,7 +84,7 @@ describe('approval window header reach', () => {
     });
 
     it('draws the in-app AppHeader, not a copy of it', () => {
-        const jsx = read('packages/extension/src/approval/ApprovalHeader.jsx');
+        const jsx = read('packages/core/src/shared/approval/ApprovalHeader.jsx');
         expect(jsx).toMatch(/shared\/components\/AppHeader\.jsx/);
         expect(jsx).toMatch(/styles\.bleed/);
     });

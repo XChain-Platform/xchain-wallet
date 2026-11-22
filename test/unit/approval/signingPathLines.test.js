@@ -10,7 +10,7 @@
 // never as "[object Object]".
 
 import { describe, expect, it } from 'vitest';
-import { signingPathLines } from '../../../packages/extension/src/approval/signingPathLines.js';
+import { signingPathLines } from '../../../packages/core/src/shared/approval/signingPathLines.js';
 
 describe('signingPathLines', () => {
     it('shows the input index and the address for an address path', () => {

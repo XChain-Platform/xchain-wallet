@@ -21,10 +21,10 @@ vi.mock('@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx', () => ({
     RouteErrorBoundary: ({ children }) => children,
 }));
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => mocks);
-vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/ConnectApproval.jsx', () => ({
     ConnectApproval: () => <section>Connect request</section>,
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/SignApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/SignApproval.jsx', () => ({
     SignApproval: () => <section>Sign request</section>,
 }));
 

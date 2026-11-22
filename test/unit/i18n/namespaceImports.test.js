@@ -132,7 +132,7 @@ describe('modules that render English keys', () => {
     it('scans the wallet shells', () => {
         expect(modules.length).toBeGreaterThan(500);
         expect(modules.some(([path]) => path.endsWith('core/src/shared/routes/Settings.jsx'))).toBe(true);
-        expect(modules.some(([path]) => path.endsWith('extension/src/approval/kinds/SignApproval.jsx'))).toBe(true);
+        expect(modules.some(([path]) => path.endsWith('core/src/shared/approval/SignApproval.jsx'))).toBe(true);
     });
 
     it('import every later namespace whose keys they name', () => {
