@@ -604,6 +604,9 @@ describe('translations', () => {
             ['components.placeOrderPanel.swap', 'palette.tradeSwap.title'],
             // The signing screen's title and the wallet menu row that opens Sign transaction.
             ['components.psbtConfirmScreen.signTransaction', 'walletMenu.row.signTransaction'],
+            // Re-sending an interrupted queued send, retrying a desktop update
+            // download and retrying a balance load.
+            ['components.queuedBroadcastBanner.trySendingAgain', 'desktopUpdate.retry', 'home.retryBalances'],
             // (The queued banner's Send Now is a Title Case button now, so it no
             // longer shares the multisig pill's "Send now" text.)
             // The token list editor's field label and the Home Tokens tab.
@@ -637,8 +640,6 @@ describe('translations', () => {
             // the form-draft dropdown's off choice and the Settings row status for a feature that is off.
             ['createWallet.extraPassphraseOff', 'settings.developer.offAlwaysPrompt', 'settings.privacy.off'],
             ['createWallet.extraPassphraseOn', 'settings.page.on'],
-            // Retrying a desktop update download and retrying a balance load.
-            ['desktopUpdate.retry', 'home.retryBalances'],
             // Every action form's From field: Execute contract, Send and Unbind controller.
             ['execute.caller', 'send.fields.from', 'unbindForm.from'],
             // Loading addresses on Execute contract and on the unbind form.

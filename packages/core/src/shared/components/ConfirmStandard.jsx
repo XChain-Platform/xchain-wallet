@@ -28,7 +28,7 @@
 // It draws only; shared/utils/confirmStandardModel.js decides what it says,
 // and ConfirmActionModal owns the gates, the focus and the two exits.
 
-import { AddressText, Button, Checkbox, Icon, Notice } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Checkbox, Icon, Notice, NoticeList } from '@xchain-wallet/core/ui';
 import factStyles from '../routes/FactRows.module.css';
 import { preflightFindingKey, consensusRefusalMessage } from '../utils/preflightFindingKey.js';
 import { unknownActionStatus, withAddressFact, withNetworkFact } from '../utils/confirmStandardModel.js';
@@ -144,16 +144,39 @@ export function ConfirmFacts({ facts }) {
     );
 }
 
+function pointContent(point) {
+    return (
+        <>
+            {point.text}
+            {point.detail ? <span className={styles.pointDetail}>{point.detail}</span> : null}
+        </>
+    );
+}
+
+/**
+ * A notice's points: its issues as one bulleted list when there are several
+ * (U101), a single issue as a plain line, with a `lead` sentence above them
+ * and an `after` line under them kept plain.
+ *
+ * @param {{ points: Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>, testId?: string }} props
+ */
 function Points({ points, testId }) {
     if (points.length === 0 && !testId) return null;
+    const line = (point) => (
+        <p key={point.key} data-testid="confirm-warning-point">{pointContent(point)}</p>
+    );
+    const issues = points.filter((point) => point.place !== 'lead' && point.place !== 'after');
     return (
         <div className={styles.points} data-testid={testId || undefined}>
-            {points.map((point) => (
-                <p key={point.key} data-testid="confirm-warning-point">
-                    {point.text}
-                    {point.detail ? <span className={styles.pointDetail}>{point.detail}</span> : null}
-                </p>
-            ))}
+            {points.filter((point) => point.place === 'lead').map(line)}
+            <NoticeList
+                items={issues.map((point) => ({
+                    key: point.key,
+                    content: pointContent(point),
+                    attrs: { 'data-testid': 'confirm-warning-point' },
+                }))}
+            />
+            {points.filter((point) => point.place === 'after').map(line)}
         </div>
     );
 }

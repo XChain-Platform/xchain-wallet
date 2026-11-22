@@ -191,6 +191,7 @@ export async function importWif({
         ? sessionMasterKey
         : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
     let encryptedWif;
+    let kept = null;
     try {
         let seedBytes;
         try {
@@ -214,8 +215,10 @@ export async function importWif({
         }
         const wifBytes = new TextEncoder().encode(wif);
         try {
-            const ct = await encrypt(masterKey, wifBytes);
-            encryptedWif = bytesToBase64(ct);
+            kept = await keptEntryForKey(vault, walletRecord, masterKey, wifBytes);
+            encryptedWif = kept
+                ? kept.encryptedWif
+                : bytesToBase64(await encrypt(masterKey, wifBytes));
         } finally {
             wifBytes.fill(0);
         }
@@ -257,6 +260,21 @@ export async function importWif({
             }
             if (document.addresses.some((record) => record.id === addressRecord.id)) {
                 throw new Error(`importWif: address id collision "${addressRecord.id}"`);
+            }
+            if (kept) {
+                // Point the kept entry at the new record; its ciphertext and
+                // position stay as they are (a wif-only wallet's first entry
+                // is its password probe).
+                updatedWallet = {
+                    ...currentWallet,
+                    importedKeys: repointEntry(
+                        currentWallet.importedKeys, kept, addressRecord.id, document.addresses,
+                    ),
+                };
+                return [
+                    { store: vault.addresses, record: addressRecord },
+                    { store: vault.wallets, record: updatedWallet },
+                ];
             }
             updatedWallet = {
                 ...currentWallet,
@@ -326,6 +344,51 @@ function hasImportedDuplicate(importedKeys, addresses, descriptor, address) {
         if (existing && matchesImportedAddress(existing, descriptor, address)) return true;
     }
     return false;
+}
+
+// This wallet's importedKeys entry whose Address record is gone and whose
+// ciphertext opens to `wifBytes`, or null. Deleting an imported address
+// leaves its entry in place for the Undo toast, and the Address-based
+// duplicate checks cannot see it, so a re-import looks here before it
+// stores the same key again. An entry that fails to open is skipped.
+async function keptEntryForKey(vault, walletRecord, masterKey, wifBytes) {
+    const keys = Array.isArray(walletRecord.importedKeys) ? walletRecord.importedKeys : [];
+    for (const k of keys) {
+        if (typeof k?.addressId !== 'string' || typeof k.encryptedWif !== 'string') continue;
+        if (await vault.addresses.get(k.addressId)) continue;
+        let plain;
+        try {
+            plain = await decrypt(masterKey, base64ToBytes(k.encryptedWif));
+        } catch {
+            continue;
+        }
+        try {
+            if (sameBytes(plain, wifBytes)) return k;
+        } finally {
+            if (plain instanceof Uint8Array) plain.fill(0);
+        }
+    }
+    return null;
+}
+
+function sameBytes(a, b) {
+    if (!(a instanceof Uint8Array) || a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+    return diff === 0;
+}
+
+// The entries with `entry` pointed at `addressId`. Throws ImportConflictError
+// when `entry` is no longer stored, or its Address record came back, since
+// the read the match was made on is then stale.
+function repointEntry(importedKeys, entry, addressId, addresses) {
+    const keys = Array.isArray(importedKeys) ? importedKeys : [];
+    const at = keys.findIndex((k) => k?.addressId === entry.addressId
+        && k.encryptedWif === entry.encryptedWif);
+    if (at < 0 || addresses.some((record) => record.id === entry.addressId)) {
+        throw new ImportConflictError();
+    }
+    return keys.map((k, i) => (i === at ? { ...k, addressId } : k));
 }
 
 function matchesImportedAddress(existing, descriptor, address) {

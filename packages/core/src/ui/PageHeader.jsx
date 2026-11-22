@@ -10,6 +10,7 @@
 
 import { useContext, useEffect, useRef } from 'react';
 import { useBackHandler } from './backStack.js';
+import { lastInputWasKeyboard } from './inputModality.js';
 import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
 import { NavHistoryContext } from './navHistory.js';
@@ -80,6 +81,10 @@ export function PageHeader({
         const heading = headerRef.current?.querySelector('h1');
         if (!heading) return;
         heading.tabIndex = -1;
+        // Only a keyboard user gets the focus box on the heading; on first
+        // load or after a click it would frame the title for no reason.
+        if (lastInputWasKeyboard()) delete heading.dataset.quietFocus;
+        else heading.dataset.quietFocus = '';
         heading.focus({ preventScroll: true });
         // A screen that swaps its content in place (a list becoming its edit
         // form) keeps this header mounted and changes only the title.

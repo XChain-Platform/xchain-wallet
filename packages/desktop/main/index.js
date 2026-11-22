@@ -92,6 +92,7 @@ import {
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { createTrezorBridge } from './trezorBridgeWindow.js';
 import { attachUpdater, desktopInstallChannel } from './updater.js';
+import { retainUpdaterEvent } from './updaterState/retainUpdaterEvent.js';
 import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
@@ -1157,7 +1158,8 @@ void runMainTask(async () => {
     // electron-updater is active only in packaged direct-download builds.
     // Events relay to every open renderer so every window can surface an
     // update offer. The launch check starts before the first window exists,
-    // so the latest event is retained for a renderer that subscribes later.
+    // so the latest offer or download state is retained for a renderer that
+    // subscribes later; a checking or failed-check event does not replace it.
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
     let downloadAndInstall = null;
@@ -1173,7 +1175,7 @@ void runMainTask(async () => {
             resourcesPath: process.resourcesPath,
             onEvent: (event) => {
                 if (updateCheckVisible) event.userInitiated = true;
-                lastUpdaterEvent = event;
+                lastUpdaterEvent = retainUpdaterEvent(lastUpdaterEvent, event);
                 broadcastToWindows('xchain:updater', event);
             },
             canRestart: () => activeSendOperations === 0,

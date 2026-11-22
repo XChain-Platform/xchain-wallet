@@ -62,6 +62,11 @@ function seededStores() {
         'xchain.broadcastQueue': '[]',
         'xchain.logConsole': '[]',
         'xchain.broadcastQueue.pruned.w-gone': 1,
+        governancePollsSeen: { known: ['poll-1'] },
+        deadlinesSeen: { known: ['order-1'] },
+        dispenserEscrowSeen: { known: ['disp-1'] },
+        priceAlertsFired: ['alert-1'],
+        coinpayAutopayNotified: ['order-2'],
         'xchain.layoutMode': 'sidepanel',
     });
     const session = fakeArea({

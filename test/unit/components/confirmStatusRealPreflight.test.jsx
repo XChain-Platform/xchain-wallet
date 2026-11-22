@@ -93,7 +93,10 @@ function realSdkFor(chainId, { failTokenRead = false, dryRunDown = false } = {})
         if (TOKENS[tick]) return TOKENS[tick];
         throw notFound();
     };
-    sdk.explorer.getBalances = async () => ({ data: [{ tick: 'XCP', quantity: '1000' }, { tick: 'EDITION', quantity: '1' }] });
+    sdk.explorer.getBalances = async () => ({ data: [
+        { tick: 'XCP', quantity: '1000', divisibility: 0 },
+        { tick: 'EDITION', quantity: '1', divisibility: 0 },
+    ] });
     sdk.getAddress = async () => ({ balances: { confirmed: '5' } });
     return sdk;
 }

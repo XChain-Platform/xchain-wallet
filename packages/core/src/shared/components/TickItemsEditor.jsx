@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Icon, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, Icon, NoticeList, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -353,11 +353,12 @@ export function TickItemsEditor({
             ) : null}
             {coinQualified && !checking && missingByChain.length > 0 ? (
                 <StatusMessage id={`${controlId}-missing`} variant="warning" role="alert">
-                    {missingByChain.map((entry) => (
-                        <p key={entry.chainId}>
-                            {t('components.tickItemsEditor.notFoundOn')} {entry.label}: {entry.ticks.join(', ')}{t('components.tickItemsEditor.theNetworkLeavesAnUnknown')} {entry.ticks.length === 1 ? t('components.tickItemsEditor.it') : t('components.tickItemsEditor.they')} {t('components.tickItemsEditor.willNotBeAMember')}
-                        </p>
-                    ))}
+                    <NoticeList
+                        items={missingByChain.map((entry) => ({
+                            key: entry.chainId,
+                            content: <>{t('components.tickItemsEditor.notFoundOn')} {entry.label}: {entry.ticks.join(', ')}{t('components.tickItemsEditor.theNetworkLeavesAnUnknown')} {entry.ticks.length === 1 ? t('components.tickItemsEditor.it') : t('components.tickItemsEditor.they')} {t('components.tickItemsEditor.willNotBeAMember')}</>,
+                        }))}
+                    />
                 </StatusMessage>
             ) : null}
             {!checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (

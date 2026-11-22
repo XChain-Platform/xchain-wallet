@@ -27,6 +27,7 @@
 // this one when the flow layer already owns the wording.
 
 import { t } from '../../i18n/index.js';
+import { hasWalletEncoderCopy } from '../../sdk/encoderErrorCode.js';
 
 // A leading `identifier:` or `some.namespaced-identifier:` segment, including
 // kebab-case producer names such as `multisig-envelope:`. The lowercase first
@@ -141,8 +142,11 @@ export function protocolRefusalReason(err) {
     const message = errorText(err);
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
+    // A refusal the wallet already words itself (no spendable coins, a lagging
+    // balance tracker, a fee under the relay floor) keeps that sentence too.
     if (!reason || isInternalRpcFailure(e, reason) || COIN_SELECTION_SHORTFALL.test(reason)
-        || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
+        || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)
+        || hasWalletEncoderCopy(err)) {
         return null;
     }
     return reason.slice(0, MAX_REFUSAL_REASON_LENGTH).trimEnd();

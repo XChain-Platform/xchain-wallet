@@ -36,8 +36,7 @@ const messages = {
     'receive.generateAnAddressToStart': 'Generate an address to start receiving.',
     'receive.generateAnAddress': 'Generate an Address',
     'receive.addressType': 'Address type',
-    'receive.thereIsNo': 'There is no',
-    'receive.addressYetCreateOneTo': 'address yet. Create one to receive funds with this address type.',
+    'receive.noAddressOfType': 'There is no {addressType} address yet. Create one to receive funds with this address type.',
     'receive.qrCodeFor': 'QR code for {address}',
     'receive.renderingQr': 'Rendering QR…',
     'receive.chooseReceiveAddress': 'Choose receive address',
@@ -46,15 +45,15 @@ const messages = {
     'receive.amountHelp': 'Optional. The amount to ask for: it goes into the QR code and payment link, so the payer\'s wallet fills it in.',
     'receive.verifyThisReceiveAddressOn': 'Verify this receive address on your hardware wallet',
     'receive.copyReceiveAddress': 'Copy Receive Address',
-    'receive.addressVerifiedOnYour': '✅ Address verified on your',
-    'receive.itIsSafeToShare': ". It's safe to share.",
     'receive.your': 'Your',
-    'receive.showedADifferentAddressDo':
-        "showed a different address. Don't use this address. Disconnect and re-pair the device.",
-    'receive.verifyThisAddressOnYour': 'Verify this address on your',
-    'receive.beforeSharingItThisProtects':
-        'before sharing it. This protects you if the computer has been compromised.',
-    // The device name falls back to the lower-case word "device", which a Title Case button capitalises.
+    // The device name falls back to the lower-case word "device": a sentence keeps
+    // it lower case and a Title Case button capitalises it.
+    'receive.addressVerifiedOnDevice':
+        "✅ Address verified on your {hwDeviceLabel, select, device {device} other {{hwDeviceLabel}}}. It's safe to share.",
+    'receive.deviceShowedDifferentAddress':
+        "Your {hwDeviceLabel, select, device {device} other {{hwDeviceLabel}}} showed a different address. Don't use this address. Disconnect and re-pair the device.",
+    'receive.verifyAddressOnDeviceHint':
+        'Verify this address on your {hwDeviceLabel, select, device {device} other {{hwDeviceLabel}}} before sharing it. This protects you if the computer has been compromised.',
     'receive.checkYour': 'Check Your {hwDeviceLabel, select, device {Device} other {{hwDeviceLabel}}}…',
     'receive.verifyOnYour': 'Verify on Your {hwDeviceLabel, select, device {Device} other {{hwDeviceLabel}}}',
     'receive.multisigReceiveAddress': 'Multisig receive address',

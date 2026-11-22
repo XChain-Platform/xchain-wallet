@@ -15,7 +15,7 @@
 // observed live at 1.19996808 BTC for an address holding 0.59998404.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { importWif, DuplicateImportError } from '../../../packages/core/src/flows/importWif.js';
+import { importWif, DuplicateImportError, ImportConflictError } from '../../../packages/core/src/flows/importWif.js';
 import { importSingleWif } from '../../../packages/core/src/flows/importSingleWif.js';
 import { importMnemonic } from '../../../packages/core/src/flows/importMnemonic.js';
 import { discoverUsedAddresses } from '../../../packages/core/src/flows/discoverUsedAddresses.js';
@@ -340,5 +340,54 @@ describe('importWif keeps a rename that lands during the import', () => {
         expect(stored.name).toBe('Renamed meanwhile');
         expect(stored.importedKeys).toHaveLength(1);
         expect(res.wallet.name).toBe('Renamed meanwhile');
+    });
+});
+
+// Deleting an imported address keeps its importedKeys entry for the Undo
+// toast, so a later re-import of the same key must reuse that entry.
+describe('importWif after the imported address was deleted', () => {
+    it('reuses the kept entry instead of storing the key a second time', async () => {
+        const first = await doImport();
+        await vault.addresses.delete(first.address.id);
+        const kept = (await vault.wallets.get('w1')).importedKeys[0];
+
+        const again = await doImport();
+        const stored = await vault.wallets.get('w1');
+        expect(stored.importedKeys).toEqual([{ ...kept, addressId: again.address.id }]);
+        expect((await vault.addresses.list()).map((a) => a.id)).toEqual([again.address.id]);
+    });
+
+    it('refuses as a conflict when the kept entry is gone by the time it writes', async () => {
+        const first = await doImport();
+        await vault.addresses.delete(first.address.id);
+        const realGet = vault.addresses.get;
+        vault.addresses.get = async (id) => {
+            if (id !== first.address.id) await vault.wallets.put({ ...(await vault.wallets.get('w1')), importedKeys: [] });
+            return realGet(id);
+        };
+        await expect(doImport()).rejects.toBeInstanceOf(ImportConflictError);
+        expect(await vault.addresses.list()).toEqual([]);
+    });
+
+    it('keeps one entry across repeated delete and re-import cycles', async () => {
+        for (let cycle = 0; cycle < 3; cycle += 1) {
+            const res = await doImport();
+            await vault.addresses.delete(res.address.id);
+        }
+        await doImport();
+        expect((await vault.wallets.get('w1')).importedKeys).toHaveLength(1);
+    });
+
+    it('appends when the kept entry holds a different key', async () => {
+        const other = bytesToBase64(await encrypt(MASTER_KEY, new TextEncoder().encode('cOtherKey')));
+        const w = await vault.wallets.get('w1');
+        w.importedKeys.push({ addressId: 'gone', encryptedWif: other, importedAt: '2026-07-27' });
+        await vault.wallets.put(w);
+
+        const res = await doImport();
+        const keys = (await vault.wallets.get('w1')).importedKeys;
+        expect(keys).toHaveLength(2);
+        expect(keys[0].addressId).toBe('gone');
+        expect(res.address.id).not.toBe('gone');
     });
 });

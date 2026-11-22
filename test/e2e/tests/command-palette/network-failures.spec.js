@@ -94,10 +94,21 @@ async function openFromHeader(page) {
     return dialog;
 }
 
-/** The palette opens, filters, and keeps focus in its search field. */
-async function expectPaletteWorks(page, dialog) {
+/**
+ * The palette opens, filters, and keeps focus in its search field. A pointer
+ * click on the menu button opens on the list instead, so a long menu scrolls
+ * at once, and the first typed key moves to search (operator 2026-11-21).
+ */
+async function expectPaletteWorks(page, dialog, { openedByClick = false } = {}) {
     const search = dialog.getByRole('combobox', { name: 'Search commands' });
-    await expect(search).toBeFocused();
+    if (openedByClick) {
+        await expect(search).not.toBeFocused();
+        await expect.poll(() => dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+        await page.keyboard.type('r');
+        await expect(search).toBeFocused();
+    } else {
+        await expect(search).toBeFocused();
+    }
     await search.fill('receive');
     await expect(dialog.getByRole('option', { name: /^Receive/ }).first()).toBeVisible();
     await expect(search).toBeFocused();
@@ -154,12 +165,12 @@ for (const vp of VIEWPORTS) {
                 // While the failing reads are in flight.
                 const dialogKeys = await openPaletteSearch(page, '');
                 await expectPaletteWorks(page, dialogKeys);
-                await expectPaletteWorks(page, await openFromHeader(page));
+                await expectPaletteWorks(page, await openFromHeader(page), { openedByClick: true });
                 await expectMoneyRoutes(page);
 
                 // After the feed recovers.
                 await restore();
-                await expectPaletteWorks(page, await openFromHeader(page));
+                await expectPaletteWorks(page, await openFromHeader(page), { openedByClick: true });
                 await expectMoneyRoutes(page);
             });
         }
@@ -188,11 +199,11 @@ for (const vp of VIEWPORTS) {
             await expectMoneyRoutes(page);
             await context.setOffline(true);
             await expectPaletteWorks(page, await openPaletteSearch(page, ''));
-            await expectPaletteWorks(page, await openFromHeader(page));
+            await expectPaletteWorks(page, await openFromHeader(page), { openedByClick: true });
             await expectMoneyRoutes(page);
 
             await context.setOffline(false);
-            await expectPaletteWorks(page, await openFromHeader(page));
+            await expectPaletteWorks(page, await openFromHeader(page), { openedByClick: true });
             await expectMoneyRoutes(page);
         });
     });

@@ -159,6 +159,33 @@ describe('D-152: a half-failed balance read must not read as an empty wallet', (
         expect(shape.unavailableReason).toBe('balance service unavailable');
     });
 
+    it('skips only a token row that names no scale and keeps the address readable', async () => {
+        const shape = await read(sdkWith({
+            tokenRows: [
+                { tick: 'GOOD', amount: '2', decimals: 0 },
+                { tick: 'NOSCALE', amount: '5' },
+                { tick: 'NULLSCALE', amount: '5', decimals: null },
+                { tick: 'ALSO', amount: '3', decimals: 2 },
+            ],
+        }));
+
+        expect(shape.tokens.map((row) => row.tick)).toEqual(['GOOD', 'ALSO']);
+        expect(shape.unavailable).toBeUndefined();
+        expect(shape.unavailableReason).toBeUndefined();
+    });
+
+    it('lists no tokens and does not crash when every token row names no scale', async () => {
+        const shape = await read(sdkWith({
+            tokenRows: [
+                { tick: 'A', amount: '1' },
+                { tick: 'B', amount: '2', decimals: null },
+            ],
+        }));
+
+        expect(shape.tokens).toEqual([]);
+        expect(shape.unavailable).toBeUndefined();
+    });
+
     it('keeps valid token rows but marks the token result unavailable when any row is malformed', async () => {
         const shape = await read(sdkWith({
             tokenRows: [

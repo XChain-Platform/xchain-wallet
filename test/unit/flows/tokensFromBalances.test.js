@@ -105,8 +105,18 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
     });
 
     it('defaults divisibility to 0 (not 8) when neither field is present', () => {
-        const [row] = tokensFromBalances({ data: [{ tick: 'N', amount: '7' }] });
-        expect(row.divisibility).toBe(0);
+        // Missing and null scales are invalid; an explicit zero remains valid.
+        const out = tokensFromBalances({
+            data: [
+                { tick: 'MISSING', amount: '7' },
+                { tick: 'NULL', amount: '7', decimals: null },
+                { tick: 'KNOWN', amount: '7', decimals: 0 },
+            ],
+        });
+        expect(out).toEqual([{
+            tick: 'KNOWN', quantity: '7', divisibility: 0,
+            displayName: 'KNOWN', imageUrl: null,
+        }]);
     });
 
     it('tolerates a missing/empty data array', () => {

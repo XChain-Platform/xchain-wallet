@@ -27,6 +27,7 @@ const messages = {
         "The password you set for this wallet on this device. It only unlocks the wallet here and isn't used to restore it.",
     'locked.useBiometrics': 'Use Biometrics',
     'locked.thisIsADemoWallet': 'This is a demo wallet.',
+    'locked.demoPasswordHint': 'The demo wallet password is “{password}”.',
     'locked.forgotPassword': 'Forgot Password?',
     // Forgot Password (operator ruling 2026-11-16): reset with a recovery
     // phrase, restore from a checked backup file, or erase after 48 hours.

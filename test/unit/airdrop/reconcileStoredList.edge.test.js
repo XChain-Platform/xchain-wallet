@@ -13,6 +13,7 @@ describe('reconcileStoredList edge cases', () => {
             expectedCount: 0,
             storedCount: 0,
             missing: [],
+            unexpected: [],
             ok: true,
         });
     });
@@ -25,6 +26,7 @@ describe('reconcileStoredList edge cases', () => {
             expectedCount: 2,
             storedCount: 2,
             missing: [],
+            unexpected: [],
             ok: true,
         });
     });

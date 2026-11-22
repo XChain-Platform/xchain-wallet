@@ -18,7 +18,7 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
-import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, NoticeList, StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDisplayAmount, groupDecodedAmounts } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
 import { t } from '../../i18n/index.js';
@@ -66,9 +66,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
 
             {decoded.warnings.length > 0 ? (
                 <StatusMessage variant="warning" role={null}>
-                    <ul>
-                        {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
-                    </ul>
+                    <NoticeList items={decoded.warnings.map((w, i) => ({ key: i, content: w }))} />
                 </StatusMessage>
             ) : null}
 

@@ -37,6 +37,7 @@ import {
     runDueErase,
 } from '../../flows/eraseSchedule.js';
 import {
+    DEMO_WALLET_PASSWORD,
     getDemoWalletId,
     getDemoWalletPassword,
     isDemoWalletExpired,
@@ -49,6 +50,7 @@ import { clearLastView } from '../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { setForgotPasswordRestoreIntent } from '../utils/forgotPasswordRecovery.js';
+import { restoreLostDemoMarker } from '../utils/demoGraduation.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import {
     readActiveWallet,
@@ -168,11 +170,9 @@ export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
         }
     }, []);
 
-    // Demo wallets use a randomly-generated 64-char hex password held in
-    // the session cache. If the cache evaporates (auto-lock, tab close
-    // followed by reopen, etc.) the user has no recoverable password.
-    // Surface an explicit exit-and-wipe confirmation so they can return
-    // to onboarding without being permanently stuck.
+    // Demo wallets open with DEMO_WALLET_PASSWORD, which this screen shows
+    // under the field. The exit-and-wipe confirmation stays for a user who
+    // would rather return to onboarding than unlock.
     const demoWalletId = getDemoWalletId();
 
     async function handleExitDemo() {
@@ -326,11 +326,11 @@ export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
         return () => window.clearInterval(handle);
     }, [lockout, remainingMs]);
 
-    // Demo wallets persist their auto-generated password (a throwaway
-    // wallet holding only synthetic data), so a reload can silently
-    // re-unlock instead of stranding the user on a password screen for a
-    // key they never typed. Try it once on mount, unless the user locked it; on any failure fall
-    // through to the normal unlock UI.
+    // Demo wallets persist their password (a throwaway wallet holding only
+    // synthetic data), so a reload can silently re-unlock instead of stopping
+    // on the password screen. A demo marked without a stored password tries
+    // the fixed one. Try it once on mount, unless the user locked it; on any
+    // failure fall through to the normal unlock UI.
     const demoAutoUnlockTriedRef = useRef(false);
     useEffect(() => {
         if (demoAutoUnlockTriedRef.current) return undefined;
@@ -338,8 +338,7 @@ export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
         // The user pressed Lock: stay on this screen instead of undoing it.
         if (isDemoLockHeld()) return undefined;
         if (typeof messaging?.unlockWallet !== 'function') return undefined;
-        const pw = getDemoWalletPassword();
-        if (!pw) return undefined;
+        const pw = getDemoWalletPassword() || DEMO_WALLET_PASSWORD;
         demoAutoUnlockTriedRef.current = true;
         let cancelled = false;
         setBusy(true);
@@ -485,6 +484,10 @@ export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
         setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
         setRemainingMs(0);
         haptic.success();
+        // A vault the demo password opened while no demo marker exists is a
+        // demo whose marker was lost; marking it again restores the demo
+        // banner, its synthetic data and its graduation on Add Wallet.
+        await restoreLostDemoMarker(messaging, opened);
         // Any successful unlock proves the owner is here, so it cancels a
         // scheduled erase and says so. The cancel is awaited: one the store
         // refused would otherwise read as done and still fire at a later start.
@@ -882,6 +885,9 @@ export function Locked({ onUnlocked, lockReason = null, onVaultUnavailable }) {
                         if (error) setError(null);
                     }}
                     autoComplete="current-password"
+                    hint={demoWalletId
+                        ? t('locked.demoPasswordHint', { password: DEMO_WALLET_PASSWORD })
+                        : undefined}
                     disabled={busy || isLockedOut}
                     error={error || undefined}
                 />
