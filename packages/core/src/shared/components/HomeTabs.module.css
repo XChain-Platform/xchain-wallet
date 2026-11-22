@@ -141,9 +141,12 @@
     min-width: 0;
 }
 
+/* The balance layer sits one step above the chart's range chips (z-index 2 in
+   PortfolioChart.module.css), so its actions menu opens over the chips
+   instead of under them; the layer passes clicks through to the chart. */
 .heroStack > section:first-child {
     position: relative;
-    z-index: 2;
+    z-index: 3;
     background: transparent;
     border: 0;
     box-shadow: none;
@@ -163,6 +166,12 @@
 
 .heroStackWithChart {
     min-height: 160px;
+}
+
+/* With no chart behind it (a test-coins wallet) the card clips nothing of its
+   own, and its short height would cut the actions menu off at the card foot. */
+.heroStack:not(.heroStackWithChart) {
+    overflow: visible;
 }
 
 /* The Home tabs take the shared view-toggle look (SegmentedControl.module.css). */

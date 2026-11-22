@@ -192,7 +192,9 @@ describe('Sparkline', () => {
         expect(SPARKLINE_CSS).toMatch(/\.scale\s*>\s*span\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\);/s);
         expect(SPARKLINE_CSS).not.toMatch(/data-scale-collision/);
         expect(SPARKLINE_CSS).toMatch(/\.scale\s*\{[^}]*z-index:\s*1;/s);
-        expect(HOME_TABS_CSS).toMatch(/\.heroStack\s*>\s*section:first-child\s*\{[^}]*z-index:\s*2;/s);
+        // The balance layer sits one step above the range chips, so its
+        // actions menu opens over them (operator 2026-11-21).
+        expect(HOME_TABS_CSS).toMatch(/\.heroStack\s*>\s*section:first-child\s*\{[^}]*z-index:\s*3;/s);
         expect(PORTFOLIO_CSS).toMatch(/\.behind \.ranges,[\s\S]*?\.behind \.foot\s*\{[^}]*z-index:\s*2;/s);
     });
 

@@ -244,10 +244,16 @@ form.licenseForm > [data-form-stack] {
 }
 
 /* The kit Checkbox owns its grid (box and native input share one cell), so
-   this rule only places it; a display override split the box from its input. */
-.licenseAck {
+   this rule only places it; a display override split the box from its input.
+   The row is the help dot's 24px target, not the kit's 44px floor, and pulls
+   into the 8px gaps by half the difference to the 20px box, so the painted box
+   sits 8px under the terms and 8px over Accept (G80). The element prefix
+   outranks the kit's single-class min-height in either bundle order. */
+label.licenseAck {
+    position: relative;
     flex: 0 1 auto;
-    margin: 0;
+    min-height: var(--xc-tap-min);
+    margin: calc((var(--xc-control-icon-md) - var(--xc-tap-min)) / 2) 0;
     width: auto;
     min-width: 0;
     font-size: var(--xc-text-sm);
@@ -256,9 +262,23 @@ form.licenseForm > [data-form-stack] {
     white-space: nowrap;
 }
 
-/* The controls follow the terms as one group: acknowledgement left, Accept
-   and continue right, one line at every width. The row wraps only when both
-   cannot fit, which is below the smallest phone width. */
+/* On a touch screen a transparent layer restores the 44px tap height,
+   centred on the row; Accept is positioned and later, so it keeps its own
+   area where the layer reaches over its top edge. */
+@media (pointer: coarse), (hover: none) {
+    label.licenseAck::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        inset-block-start: calc(50% - var(--xc-control-hit-min) / 2);
+        height: max(100%, var(--xc-control-hit-min));
+    }
+}
+
+/* The controls follow the terms as one group. Below 834px the
+   acknowledgement takes its own line and Accept and continue spans the full
+   width under it as the page's main action (G50, U68); from 834px both share
+   one line at opposite card edges. */
 .licenseControls {
     display: flex;
     flex: 0 0 auto;
@@ -275,14 +295,13 @@ form.licenseForm > [data-form-stack] {
    it must keep its one-pixel box, or it widens the page sideways. */
 .licenseActions {
     display: flex;
-    flex: 0 0 auto;
+    flex: 1 1 100%;
     justify-content: flex-end;
-    width: auto;
     margin: 0;
 }
 
 .licenseActions > button {
-    width: auto;
+    width: 100%;
 }
 
 /* From 834px the terms read as a centred card two-thirds of the available
@@ -298,6 +317,14 @@ form.licenseForm > [data-form-stack] {
     .licenseScroll {
         flex: 0 1 auto;
         max-height: 100%;
+    }
+
+    .licenseActions {
+        flex: 0 0 auto;
+    }
+
+    .licenseActions > button {
+        width: auto;
     }
 
     /* The filled form body stops at its content instead of taking the free
