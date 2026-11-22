@@ -80,6 +80,11 @@ function namesFrom(scans, key) {
     return new Set(scans.flatMap((scan) => [...scan[key]]));
 }
 
+function metadataFromModules(modules) {
+    return Object.entries(modules).flatMap(([path, module]) =>
+        (module.SECTION_META ?? []).map((meta) => ({ ...meta, path })));
+}
+
 function missingImporters(metas, imported) {
     return metas.flatMap((meta) => [
         ...(meta.components ?? []),
@@ -94,8 +99,7 @@ function missingCoreUses(sections, used) {
             .map((name) => `${repoPath(path)}: ${name}`));
 }
 
-const metas = Object.entries(sectionModules).flatMap(([path, module]) =>
-    (module.SECTION_META ?? []).map((meta) => ({ ...meta, path })));
+const metas = metadataFromModules(sectionModules);
 const metaSections = [...new Set(metas.map(({ path }) => path))]
     .map((path) => ({ path, source: sectionSources[path] }));
 const productScans = Object.entries(productSources)
@@ -110,6 +114,16 @@ describe('style guide section importers', () => {
     it('discovers section modules and shipped sources', () => {
         expect(Object.keys(sectionModules).length).toBeGreaterThan(10);
         expect(Object.keys(productSources).length).toBeGreaterThan(100);
+    });
+
+    it('scopes pre-closing checks to metadata sections', () => {
+        const modules = {
+            './LegacySection.jsx': { LegacySection: () => null },
+            './MetaSection.jsx': { SECTION_META: [{ id: 'meta' }] },
+        };
+        expect(metadataFromModules(modules)).toEqual([
+            { id: 'meta', path: './MetaSection.jsx' },
+        ]);
     });
 
     it('keeps every documented name imported by shipped source', () => {
