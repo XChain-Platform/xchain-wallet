@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Skeleton, StatusMessage, Notice, Icon, EmptyState } from '@xchain-wallet/core/ui';
+import { Skeleton, StatusMessage, Notice, NoticeList, Icon, EmptyState } from '@xchain-wallet/core/ui';
 import { DiagnosticDetails } from '@xchain-wallet/core/shared/components/DiagnosticDetails.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
@@ -97,6 +97,17 @@ showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
                 >
                     Insufficient balance. You have 0.001 BTC available.
                 </StatusMessage>
+            </LiveExample>
+
+            <LiveExample label="NoticeList: several issues are bullets inside the notice; one issue stays a plain line (U101)">
+                <Notice tone="danger" title="Only partly checked">
+                    <NoticeList
+                        items={[
+                            { key: 'list', content: 'The list this action names, which could not be read' },
+                            { key: 'fee', content: 'The fee for how long this stays open' },
+                        ]}
+                    />
+                </Notice>
             </LiveExample>
 
             <LiveExample label="DiagnosticDetails: collapsed technical context">

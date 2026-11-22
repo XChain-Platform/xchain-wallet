@@ -4340,7 +4340,7 @@ function ListShareBody({ cfg, walletId, listRef, actionField = null, shared, onS
                 {shareIntro}
                 {shareFacts}
                 {blockers.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={blockers} />
+                    <FormNotice variant="warning" role="alert" lines={blockers} bullets />
                 ) : null}
                 {/* The review's warnings card (actionWarnings LIST_SHARE) holds the
                     full warnings; a watcher build has no review, so it shows here. */}
