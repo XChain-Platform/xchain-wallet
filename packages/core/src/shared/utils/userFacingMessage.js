@@ -27,7 +27,7 @@
 // this one when the flow layer already owns the wording.
 
 import { t } from '../../i18n/index.js';
-import { hasWalletEncoderCopy } from '../../sdk/encoderErrors.js';
+import { hasWalletEncoderCopy } from '../../sdk/encoderErrorCode.js';
 
 // A leading `identifier:` or `some.namespaced-identifier:` segment, including
 // kebab-case producer names such as `multisig-envelope:`. The lowercase first
