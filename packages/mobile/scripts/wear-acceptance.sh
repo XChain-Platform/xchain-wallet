@@ -78,7 +78,7 @@ NODE
         adb_for "$watch" shell input swipe 225 360 225 100 100
     done
     adb_for "$watch" shell input tap 225 225
-    require_dump "W2 price line" 'price.{0,20}(line|chart)|(line|chart).{0,20}price'
+    require_dump "detail-native W2 price line node" '<node[^>]+(text|content-desc)="7-day price line"'
     adb_for "$watch" shell input keyevent KEYCODE_BACK
     adb_for "$watch" shell input tap 330 80
     require_dump "W6 address" '(xch|txch|bc1|0x)[[:alnum:]]{12,}'

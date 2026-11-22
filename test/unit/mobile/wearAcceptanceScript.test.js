@@ -40,7 +40,7 @@ describe('wear-acceptance.sh', () => {
         }
     });
 
-    it('discovers the phone and watch and reads every expected W1 line', () => {
+    it('discovers the phone and watch', () => {
         const fixture = makeFixture();
         const result = run(fixture, 'balances', { WEAR_PHONE_SERIAL: '', WEAR_WATCH_SERIAL: '' });
         const commands = readFileSync(fixture.log, 'utf8');
@@ -49,21 +49,30 @@ describe('wear-acceptance.sh', () => {
         expect(commands).toContain('adb devices -l');
         expect(commands).toContain('adb -s PHONE shell getprop ro.build.characteristics');
         expect(commands).toContain('adb -s WATCH shell getprop ro.build.characteristics');
-        for (const line of ['Balances', 'Token 01 $1.00', 'Token 50 $50.00']) {
-            expect(commands).not.toContain(`missing ${line}`);
-        }
     });
 
-    it('exits 1 naming the first missing expected line', () => {
+    it.each(['Balances', 'Token 01 $1.00', 'Token 50 $50.00'])(
+        'exits 1 when the copied W1 expectation %s is missing',
+        (missingLine) => {
+            const fixture = makeFixture();
+            const result = run(fixture, 'balances', {
+                FAKE_MISSING_LINE: missingLine,
+                WEAR_ACCEPTANCE_TIMEOUT_SECONDS: '0',
+            });
+
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain(`wear-acceptance: missing ${missingLine}`);
+        },
+    );
+
+    it('requires the detail-native W2 price line node', () => {
         const fixture = makeFixture();
         const result = run(fixture, 'balances', {
-            FAKE_MISSING_LINE: 'Token 01 $1.00',
-            WEAR_ACCEPTANCE_TIMEOUT_SECONDS: '0',
+            FAKE_MISSING_W2_NODE: '1',
         });
 
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain('wear-acceptance: missing Token 01 $1.00');
-        expect(result.stderr).not.toContain('Token 50 $50.00');
+        expect(result.stderr).toContain('wear-acceptance: missing detail-native W2 price line node');
     });
 
     it('rejects an unknown case before invoking tools', () => {
@@ -124,9 +133,15 @@ if [ "$1" = devices ]; then
 elif [ "$3 $4 $5" = 'shell getprop ro.build.characteristics' ]; then
     [ "$2" = WATCH ] && printf 'watch\\n' || printf 'phone\\n'
 elif [ "$3 $4" = 'shell cat' ]; then
-    line='Token 01 $1.00'
-    [ "\${FAKE_MISSING_LINE:-}" = "$line" ] && line=''
-    printf '<hierarchy text="Balances %s Token 50 $50.00 7-day price line xch1acceptanceaddress123 complication text 1 alert Tile text 1 alert •••• Show wallet on watch is off on your phone Watch acceptance alert"/>\\n' "$line"
+    header='Balances'
+    first='Token 01 $1.00'
+    last='Token 50 $50.00'
+    [ "\${FAKE_MISSING_LINE:-}" = "$header" ] && header=''
+    [ "\${FAKE_MISSING_LINE:-}" = "$first" ] && first=''
+    [ "\${FAKE_MISSING_LINE:-}" = "$last" ] && last=''
+    price_line='7-day price line'
+    [ -n "\${FAKE_MISSING_W2_NODE:-}" ] && price_line=''
+    printf '<hierarchy><node text="%s"/><node text="%s"/><node text="%s"/><node text="detail-native price line context"/><node content-desc="%s"/><node text="xch1acceptanceaddress123 complication text 1 alert Tile text 1 alert •••• Show wallet on watch is off on your phone Watch acceptance alert"/></hierarchy>\\n' "$header" "$first" "$last" "$price_line"
 elif [ "$3 $4 $5" = 'shell dumpsys notification' ]; then
     printf '%s\\n' 'NotificationRecord(1: pkg=io.xchain.wallet.android.debug user=u: Notification(channel=alert))'
     printf '%s\\n' '  extras={' '    android.title=String (Watch acceptance alert)' '  }'
