@@ -120,6 +120,7 @@ import send from './send.js';
 import settings from './settings.js';
 import shell from './shell.js';
 import signerSelect from './signerSelect.js';
+import siteRequest from './siteRequest.js';
 import stakeNew from './stakeNew.js';
 import tokenDetail from './tokenDetail.js';
 import tokenMarket from './tokenMarket.js';
@@ -204,6 +205,7 @@ export const en = {
     ...settings,
     ...shell,
     ...signerSelect,
+    ...siteRequest,
     ...stakeNew,
     ...tokenDetail,
     ...tokenMarket,
