@@ -61,7 +61,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function messageRefusalReason(message) {
     if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
-        return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for site sign-in and cannot be signed here.`;
+        return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for Login with XChain and cannot be signed here.`;
     }
     if (hasHiddenControls(message)) {
         return "This message has control characters that the signing form can't show. Remove them and try again.";
