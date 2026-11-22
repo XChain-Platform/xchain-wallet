@@ -14,13 +14,14 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { NavSurfaceContext } from '../../../packages/core/src/shared/components/navSurface.js';
 
 afterEach(() => {
     cleanup();
     resetWalletModes();
 });
 
-function renderSignerHome(props) {
+function renderSignerHome(props, navSurface = null) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({}),
         listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet', walletMode: 'signer' }]),
@@ -30,9 +31,11 @@ function renderSignerHome(props) {
         getActiveAddresses: vi.fn().mockResolvedValue({}),
     };
     return render(
-        <MessagingProvider shell="web" messaging={messaging}>
-            <Home activeWalletId="wallet-1" {...props} />
-        </MessagingProvider>,
+        <NavSurfaceContext.Provider value={navSurface}>
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Home activeWalletId="wallet-1" {...props} />
+            </MessagingProvider>
+        </NavSurfaceContext.Provider>,
     );
 }
 
@@ -79,5 +82,18 @@ describe('signer-mode Home actions (G101)', () => {
         expect(screen.getByRole('button', { name: /^Sign a Message/ })).not.toHaveAttribute('aria-disabled');
         // No Settings or Lock row without their handlers.
         expect(screen.queryByRole('button', { name: /^Lock Wallet/ })).toBeNull();
+    });
+
+    // A full-screen extension tab shows the side menu, whose Settings and Lock
+    // rows these would repeat; the popup and side panel keep them.
+    it.each([
+        ['the tab bar', 'tabBar', true],
+        ['the side menu', 'sidebar', false],
+    ])('offers Settings and Lock beside %s only where no side menu has them', async (_label, surface, shown) => {
+        renderSignerHome({ onSignPsbt: vi.fn(), onOpenSettings: vi.fn(), onLockWallet: vi.fn() }, surface);
+        await screen.findByText('Signer for another phone');
+        const list = screen.getByRole('list', { name: 'Actions' });
+        expect(Boolean(within(list).queryByRole('button', { name: /^Settings/ }))).toBe(shown);
+        expect(Boolean(within(list).queryByRole('button', { name: /^Lock Wallet/ }))).toBe(shown);
     });
 });

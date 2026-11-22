@@ -154,20 +154,22 @@ describe('layout tiers', () => {
             }
         });
 
+        // Every shell hands in both surfaces, the extension included: its
+        // toolbar popup measures compact and its full-screen tab gets the side menu.
         it.each([
-            ['web', 1200, true, 'Primary navigation'],
-            ['extension popup', 360, false, 'Bottom navigation'],
-            ['desktop renderer', 1200, true, 'Primary navigation'],
+            ['web', 1200, 'Primary navigation'],
+            ['extension popup', 360, 'Bottom navigation'],
+            ['extension full-screen tab', 1280, 'Primary navigation'],
+            ['desktop renderer', 1200, 'Primary navigation'],
         ])('gives the %s shell one main, one banner, and one labelled navigation', (
             _shell,
             width,
-            includeSidebar,
             navigationName,
         ) => {
             window.innerWidth = width;
             render(
                 <FullLayoutWithNav
-                    nav={includeSidebar ? <LeftNav currentView="home" onSelect={() => {}} /> : undefined}
+                    nav={<LeftNav currentView="home" onSelect={() => {}} />}
                     bottomBar={<BottomTabBar currentView="home" onSelect={() => {}} />}
                     header={<AppHeader />}
                 >

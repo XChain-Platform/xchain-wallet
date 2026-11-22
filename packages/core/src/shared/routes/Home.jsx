@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, Icon, ListPage, Notice, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -22,6 +22,7 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
+import { NavSurfaceContext } from '../components/navSurface.js';
 import { listDetailStyles } from '../components/PanelSplit.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
@@ -150,8 +151,10 @@ const { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } = flowsLib;
  * Locking is a shell concern, not a route concern: idle auto-lock runs
  * from each shell's AppInner via `useAutoLockPolicy`, and the manual
  * Lock affordance lives in the shell's menu + keyboard shortcut. A shell
- * with no header or menu (the extension popup) passes `onLockWallet` and
- * Home renders the button for it.
+ * with no side menu (the extension popup and side panel) passes
+ * `onLockWallet` and Home renders the button for it. The same shell in a
+ * full-screen tab shows the side menu, which has its own Lock and Settings
+ * rows, so Home leaves both out while the side menu is on screen.
  * found that wiring the idle timer here meant navigating off
  * Home cancelled it, so a wallet left on Send or Settings never locked.
  *
@@ -166,7 +169,7 @@ const { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } = flowsLib;
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
- * @param {() => void} [props.onLockWallet]   locks the wallet; only shells with no header (the extension popup and side panel) pass it, and Home then shows a lock button
+ * @param {() => void} [props.onLockWallet]   locks the wallet; only the extension passes it, and Home shows a lock button while no side menu is on screen
  * @param {number} [props.resumeKey]          changes once per unlocked native-app resume
  * @param {(item: any) => import('react').ReactNode} [props.renderDetail]  wide Home (G115): draws the selected coin, token, NFT or entry beside the list; a shell that leaves it out keeps the one-column Home at every width
  * @param {any} [props.detailSelection]       the item the shell holds as selected on wide Home (kept across a visit to Send or a form)
@@ -179,9 +182,17 @@ const { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } = flowsLib;
  * ActionsMenu screen instead: the "All actions" row of the wallet menu.
  * Add entries there, not here.
  */
-export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0, renderDetail, detailSelection, onDetailSelect }) {
+export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette: onCommandPaletteProp, onOpenSettings: onOpenSettingsProp, onLockWallet: onLockWalletProp, resumeKey = 0, renderDetail, detailSelection, onDetailSelect }) {
     useNativeExitRoot();
     const { shell } = useMessaging();
+    // The side menu (a full-screen extension tab) carries Settings and Lock
+    // rows and the header opens the command menu, so the hero's own rows
+    // would repeat them and its Balance actions menu would differ from the
+    // web wallet's; the popup and side panel, with the tab bar, keep them.
+    const sideMenuShown = useContext(NavSurfaceContext) === 'sidebar';
+    const onOpenSettings = sideMenuShown ? undefined : onOpenSettingsProp;
+    const onLockWallet = sideMenuShown ? undefined : onLockWalletProp;
+    const onCommandPalette = sideMenuShown ? undefined : onCommandPaletteProp;
     const variant = screenVariantFor(shell);
     // Home has no row of action buttons at any size: Send, Receive, Exchange
     // and All actions live in the navigation and the header menu.

@@ -94,38 +94,17 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The web shell can route scanned contact data into the contacts screen.',
         },
-        'FullLayoutWithNav.nav': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'The extension popup uses its compact tab bar instead of the full navigation layout.',
+        // Every shell hands FullLayoutWithNav a LeftNav; the extension's
+        // full-screen tab shows it from 640px as web and desktop do.
+        'LeftNav.onOpenWalletPicker': {
+            shells: ['desktop'],
+            kind: 'known-gap',
+            reason: 'LeftNav takes no wallet picker prop; the desktop shell still passes one it ignores, and the header opens the picker in every shell.',
         },
-        // Wide Home (G115): only the windowed shells reach the widths where
-        // Home splits into the list and the chosen item's detail panel; the
-        // extension popup and side panel and the phone keep one-column Home.
-        'Home.detailSelection': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Wide Home (G115) splits into the list and a detail panel only in the windowed shells; the shell holds the selected row.',
-        },
-        'Home.onDetailSelect': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Wide Home (G115) splits into the list and a detail panel only in the windowed shells; the shell holds the selected row.',
-        },
-        'Home.renderDetail': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Wide Home (G115) draws the chosen coin, token or DeFi row through the shell\'s own detail route only in the windowed shells.',
-        },
-        'TokenDetail.embedded': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Only the windowed shells embed the coin and token page as wide Home\'s detail panel (G115).',
-        },
-        'ActionDetail.embedded': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Only the windowed shells embed an action\'s detail as wide Home\'s DeFi detail panel (G115).',
+        'LeftNav.walletName': {
+            shells: ['desktop'],
+            kind: 'known-gap',
+            reason: 'LeftNav takes no wallet name prop; the desktop shell still passes one it ignores, and the header names the wallet in every shell.',
         },
         'Home.networkFilter': {
             shells: ['web'],
@@ -226,11 +205,6 @@ const SHELL_ONLY = {
             shells: ['desktop'],
             kind: 'known-gap',
             reason: 'Web and extension vault errors do not yet expose the desktop recovery action.',
-        },
-        'MyTokens.renderToken': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'Desktop and web can dock token detail beside the list, while the extension keeps compact route navigation.',
         },
         'AppInner.canOpenInTab': {
             shells: ['extension'],
