@@ -53,14 +53,30 @@ describe('privacy/wireAudit', () => {
         }
     });
 
-    it('collapses multiple wildcard entries to one disclosure host', () => {
+    it('keeps all three wildcard reasons distinct while collapsing their disclosure host', () => {
         const mobileWildcardRows = WIRE_AUDIT.filter(
             (entry) => entry.host === '*' && entry.shells.includes('mobile'),
         );
         const mobileWildcardHosts = egressHostsFor('mobile').filter((host) => host === '*');
 
-        expect(mobileWildcardRows.length).toBeGreaterThan(1);
+        expect(WIRE_AUDIT.filter((entry) => entry.host === '*')).toHaveLength(3);
+        expect(mobileWildcardRows).toHaveLength(3);
         expect(mobileWildcardHosts).toEqual(['*']);
+    });
+
+    it('classifies site callbacks as third-party desktop and mobile egress', () => {
+        const callback = WIRE_AUDIT.find(
+            (entry) => entry.source === 'native site-request callback sender',
+        );
+
+        expect(callback).toMatchObject({
+            host: '*',
+            party: 'third',
+            shells: ['desktop', 'mobile'],
+        });
+        expect(callback.why).toMatch(/site request result.*callback URL/i);
+        expect(callback.carries).toMatch(/requesting IP.*approved or rejected result.*signed payload/i);
+        expect(callback.control).toMatch(/user-initiated.*destination shown.*Approve or Reject/i);
     });
 
     it('returns fresh collections that cannot alter the audit', () => {
