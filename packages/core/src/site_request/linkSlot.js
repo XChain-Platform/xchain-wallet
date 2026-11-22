@@ -5,10 +5,13 @@ export function createLinkSlot({ now = Date.now } = {}) {
     let held = null;
     const accepted = new Map();
 
-    const dropExpired = (currentTime) => {
+    const forgetExpired = (currentTime) => {
         for (const [id, exp] of accepted) {
             if (exp <= currentTime) accepted.delete(id);
         }
+    };
+
+    const dropExpiredHeld = (currentTime) => {
         if (held !== null && held.exp <= currentTime) held = null;
     };
 
@@ -25,7 +28,8 @@ export function createLinkSlot({ now = Date.now } = {}) {
             }
 
             const currentTime = now();
-            dropExpired(currentTime);
+            forgetExpired(currentTime);
+            dropExpiredHeld(currentTime);
 
             if (exp <= currentTime) return { ok: false, reason: 'expired' };
             if (accepted.has(id)) return { ok: false, reason: 'reused' };
@@ -43,7 +47,9 @@ export function createLinkSlot({ now = Date.now } = {}) {
 
         recheck() {
             const hadHeld = held !== null;
-            dropExpired(now());
+            const currentTime = now();
+            forgetExpired(currentTime);
+            dropExpiredHeld(currentTime);
             if (!hadHeld) return { ok: false, reason: 'empty' };
             if (held === null) return { ok: false, reason: 'expired' };
             return { ok: true };
@@ -56,7 +62,7 @@ export function createLinkSlot({ now = Date.now } = {}) {
         },
 
         remembered() {
-            dropExpired(now());
+            forgetExpired(now());
             return accepted.size;
         },
     };

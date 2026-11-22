@@ -126,6 +126,20 @@ describe('createLinkSlot', () => {
         expect(slot.offer({ id: 'link-1', exp: 3_000 })).toEqual({ ok: true });
     });
 
+    it('does not consume an expired held request while counting remembered ids', () => {
+        const clock = createClock();
+        const slot = createLinkSlot({ now: clock.now });
+
+        slot.offer({ id: 'link-1', exp: 2_000 });
+        clock.set(2_000);
+
+        expect(slot.remembered()).toBe(0);
+        expect(slot.current()).toEqual({ id: 'link-1', exp: 2_000 });
+        expect(slot.recheck()).toEqual({ ok: false, reason: 'expired' });
+        expect(slot.current()).toBeNull();
+        expect(slot.recheck()).toEqual({ ok: false, reason: 'empty' });
+    });
+
     it.each([undefined, null, '', 7, {}])('throws for malformed id %j', (id) => {
         const slot = createLinkSlot({ now: () => 1_000 });
 
