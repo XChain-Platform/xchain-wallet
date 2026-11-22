@@ -4912,9 +4912,9 @@ export function createBackgroundHost(deps) {
             txid: advanced.txid ?? null,
             commitTxid: entry.txid ?? null,
         }, { persist: false });
-        // The reveal journal rebuilds bytes from the record, then applies this
-        // patch. Keep the downgraded verdict there when the vault write refuses.
-        recordOwedSettlement(walletId, advanced, 'patch', patch, { persist: false });
+        // The reveal replay rebuilds bytes and phase fields from the record, so the
+        // journal keeps only the downgraded verdict and never signed bytes.
+        if (advanced.adsCommit) recordOwedSettlement(walletId, advanced, 'patch', { adsCommit: advanced.adsCommit }, { persist: false });
         const checkpointSaved = await persistQueueAndSettlements();
         const settlement = await settleQueuedPendingTx(vault, advanced, patch);
         if (settlement !== 'unreachable') {

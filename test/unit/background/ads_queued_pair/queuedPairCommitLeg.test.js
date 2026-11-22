@@ -273,4 +273,24 @@ describe('broadcast.queue books the commit of a queued two-phase pair', () => {
             commitLanded: true, adsCommit: { donationIncluded: false, reservationId: null, encoding: ENVELOPE },
         });
     });
+
+    it('journals the accrue-only verdict without either signed transaction', async () => {
+        const w = walletVault();
+        const q = queueBlob();
+        const record = await queuePair(w, q, ENVELOPE);
+        const writes = [];
+        const storage = {
+            ...q.storage,
+            loadSettlements: async () => [],
+            saveSettlements: async (next) => { writes.push(JSON.parse(JSON.stringify(next))); },
+        };
+        w.refuseAdvanceOnce();
+        const host = makeHost(w.vault, storage, revealAnswer(() => { throw new Error('connection reset'); }));
+        expect((await host.call('broadcast.queue.broadcast', { walletId: W, id: q.blob[W][0].id })).ok).toBe(false);
+
+        const owed = writes.flat().filter((s) => s.pendingTxId === record.id);
+        expect(owed.some((s) => s.op === 'reveal' && s.patch?.adsCommit?.donationIncluded === false)).toBe(true);
+        expect(JSON.stringify(writes)).not.toContain(COMMIT.txHex);
+        expect(JSON.stringify(writes)).not.toContain(REVEAL.txHex);
+    });
 });
