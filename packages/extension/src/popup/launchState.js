@@ -7,6 +7,12 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
+import { LAYOUT_MODE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/layoutModeStorageKey.js';
+import {
+    FULL_SCREEN_TAB_SESSION_KEY,
+    POPUP_AFTER_TAB_SESSION_KEY,
+    storageAreaWrite,
+} from '../shared/walletViewState.js';
 
 export { createLaunchRouteState };
 
@@ -126,32 +132,101 @@ export async function openExtensionTab(handoff, options = {}) {
 }
 
 /**
- * Which view switches the wallet menu offers in this extension view: the
- * toolbar popup offers both, the side panel offers Full screen, and a full
- * browser tab offers Sidebar. Each is offered only when the browser has the
- * API it needs.
+ * Which view switches the wallet menu offers in this extension view: each
+ * view offers the two it is not. The toolbar popup offers Sidebar and Full
+ * screen, the side panel offers Popup and Full screen, and a full browser tab
+ * offers Popup and Sidebar. Each is offered only when the browser has the API
+ * it needs.
  *
  * @param {Window | undefined} [view]
  * @param {any} [chromeApi]
- * @returns {{ sidebar: boolean, fullScreen: boolean }}
+ * @returns {{ popup: boolean, sidebar: boolean, fullScreen: boolean }}
  */
 export function walletViewSwitches(view = globalThis.window, chromeApi = globalThis.chrome) {
     const pathname = view?.location?.pathname || '';
     const sidePanel = pathname.endsWith('/sidepanel.html');
+    const canPopup = typeof chromeApi?.action?.setPopup === 'function';
     const canSidebar = typeof chromeApi?.sidePanel?.open === 'function';
     const canTab = typeof chromeApi?.tabs?.create === 'function'
         && typeof chromeApi?.runtime?.getURL === 'function';
-    if (sidePanel) return { sidebar: false, fullScreen: canTab };
-    if (!pathname.endsWith('/popup.html')) return { sidebar: false, fullScreen: false };
-    if (isToolbarPopupView(view, chromeApi?.extension)) return { sidebar: canSidebar, fullScreen: canTab };
-    return { sidebar: canSidebar, fullScreen: false };
+    if (sidePanel) return { popup: canPopup, sidebar: false, fullScreen: canTab };
+    if (!pathname.endsWith('/popup.html')) return { popup: false, sidebar: false, fullScreen: false };
+    if (isToolbarPopupView(view, chromeApi?.extension)) return { popup: false, sidebar: canSidebar, fullScreen: canTab };
+    return { popup: canPopup, sidebar: canSidebar, fullScreen: false };
 }
 
 /**
- * Opens the wallet in the browser's side panel for `windowId` and closes the
- * view the user left: the popup closes itself, a full-screen tab removes its
- * own tab. Must run inside the click: the browser opens a side panel only
- * during a user gesture, so nothing is awaited before `sidePanel.open`.
+ * Opens the wallet as the toolbar popup from the side panel or a full-screen
+ * tab, and closes the view the user left. The popup mode goes out in the
+ * click's own turn: the stored choice, a dropped full-screen record, and the
+ * action's popup page set directly, so the icon opens the popup at once
+ * whatever the worker is doing. The view's close then reads to the worker as
+ * leaving for the popup, which the stored mode already says.
+ *
+ * From the side panel, `action.openPopup` (Chrome 127+) runs in the same
+ * turn, inside the click, before the panel closes. A popup opened from a tab
+ * closes when that tab goes, so a tab instead records itself for the worker,
+ * which opens the popup once the tab is removed. Where openPopup is missing or
+ * refused, the next toolbar click opens the popup.
+ *
+ * @param {{ chromeApi?: any, view?: Window }} [options]
+ * @returns {Promise<boolean>} true when the popup opened, or is handed to the worker to open
+ */
+export async function openWalletPopup(options = {}) {
+    const chromeApi = options.chromeApi || globalThis.chrome;
+    const view = options.view || globalThis.window;
+    if (typeof chromeApi?.action?.setPopup !== 'function') return false;
+    const settled = (fn) => {
+        try {
+            return Promise.resolve(fn()).then(() => true, () => false);
+        } catch {
+            return Promise.resolve(false);
+        }
+    };
+    const fromPanel = (view?.location?.pathname || '').endsWith('/sidepanel.html');
+    const pageSet = settled(() => chromeApi.action.setPopup({ popup: 'popup.html' }));
+    const recorded = Promise.all([
+        storageAreaWrite(chromeApi?.storage?.session, 'remove', FULL_SCREEN_TAB_SESSION_KEY),
+        storageAreaWrite(chromeApi?.storage?.local, 'set', { [LAYOUT_MODE_STORAGE_KEY]: 'popup' }),
+    ]);
+    const opening = fromPanel && typeof chromeApi.action.openPopup === 'function'
+        ? settled(() => chromeApi.action.openPopup())
+        : Promise.resolve(false);
+    await pageSet;
+    await recorded;
+    if (fromPanel) {
+        const opened = await opening;
+        try { view.close?.(); } catch { /* The popup mode is set either way. */ }
+        return opened;
+    }
+    try {
+        const tab = await chromeApi.tabs?.getCurrent?.();
+        if (!Number.isInteger(tab?.id)) return false;
+        const handed = await storageAreaWrite(chromeApi?.storage?.session, 'set', {
+            [POPUP_AFTER_TAB_SESSION_KEY]: { tabId: tab.id },
+        });
+        await chromeApi.tabs.remove(tab.id);
+        return handed;
+    } catch {
+        // The tab stays open; the toolbar icon opens the popup.
+        return false;
+    }
+}
+
+/**
+ * Opens the wallet in the browser's side panel for `windowId`, makes the
+ * toolbar icon toggle the panel, and closes the view the user left: the popup
+ * closes itself, a full-screen tab removes its own tab. Must run inside the
+ * click: the browser opens a side panel only during a user gesture, so nothing
+ * is awaited before `sidePanel.open`.
+ *
+ * The toolbar popup can close as soon as the panel takes focus, so it sends its
+ * mode write in the same turn as `sidePanel.open` and puts Popup back if the
+ * panel refuses (a view that offers Open in sidebar is always in popup or
+ * full-screen mode, and both store Popup). A full-screen tab outlives the open,
+ * so it records the mode after the panel opens and clears the full-screen
+ * record before the tab goes, so the worker does not read that removal as the
+ * user closing full screen.
  *
  * @param {{ windowId?: number | null, chromeApi?: any, view?: Window }} [options]
  * @returns {Promise<boolean>} true when the side panel opened
@@ -163,15 +238,29 @@ export async function openWalletSidebar(options = {}) {
         ? options.windowId
         : chromeApi?.windows?.WINDOW_ID_CURRENT;
     if (typeof chromeApi?.sidePanel?.open !== 'function' || !Number.isInteger(windowId)) return false;
+    const fromPopup = isToolbarPopupView(view, chromeApi.extension);
+    let opening;
     try {
-        await chromeApi.sidePanel.open({ windowId });
+        opening = Promise.resolve(chromeApi.sidePanel.open({ windowId }));
     } catch {
         return false;
     }
-    if (isToolbarPopupView(view, chromeApi.extension)) {
+    const earlyRecord = fromPopup ? recordSidebarMode(chromeApi) : null;
+    try {
+        await opening;
+    } catch {
+        if (earlyRecord) {
+            await earlyRecord;
+            await storageAreaWrite(chromeApi?.storage?.local, 'set', { [LAYOUT_MODE_STORAGE_KEY]: 'popup' });
+        }
+        return false;
+    }
+    if (fromPopup) {
+        await earlyRecord;
         try { view.close?.(); } catch { /* The side panel is open either way. */ }
         return true;
     }
+    await recordSidebarMode(chromeApi);
     try {
         const tab = await chromeApi.tabs?.getCurrent?.();
         if (Number.isInteger(tab?.id)) await chromeApi.tabs.remove(tab.id);
@@ -183,8 +272,12 @@ export async function openWalletSidebar(options = {}) {
 
 /**
  * Opens the wallet full screen: popup.html in a new browser tab, which lays
- * the wallet out for the window's size. The popup or side panel the user
- * left closes itself.
+ * the wallet out for the window's size, and makes the toolbar icon jump to
+ * that tab. The tab opens in the background and comes forward only once it is
+ * recorded: the toolbar popup closes when an active tab takes focus, which
+ * would drop a record still being written. The popup or side panel the user
+ * left then closes itself, so the worker reads a closing panel as the move to
+ * full screen rather than the panel's X.
  *
  * @param {{ chromeApi?: any, view?: Window }} [options]
  * @returns {Promise<boolean>} true when the tab opened
@@ -195,14 +288,52 @@ export async function openWalletFullScreen(options = {}) {
     if (typeof chromeApi?.tabs?.create !== 'function' || typeof chromeApi?.runtime?.getURL !== 'function') {
         return false;
     }
+    let created;
     try {
-        await chromeApi.tabs.create({ url: chromeApi.runtime.getURL('popup.html') });
+        created = await chromeApi.tabs.create({ url: chromeApi.runtime.getURL('popup.html'), active: false });
     } catch {
         return false;
+    }
+    await recordFullScreenTab(chromeApi, created);
+    if (Number.isInteger(created?.id)) {
+        try {
+            await chromeApi.tabs.update(created.id, { active: true });
+        } catch {
+            // The tab is open in the background; the toolbar icon still jumps to it.
+        }
     }
     const pathname = view?.location?.pathname || '';
     if (pathname.endsWith('/sidepanel.html') || isToolbarPopupView(view, chromeApi.extension)) {
         try { view.close?.(); } catch { /* The new tab is open either way. */ }
     }
     return true;
+}
+
+/**
+ * Side-panel mode: the stored choice becomes the sidebar and any full-screen
+ * record is dropped. Both writes go out in the calling turn. Failures leave the
+ * icon on its previous view.
+ *
+ * @param {any} chromeApi
+ */
+async function recordSidebarMode(chromeApi) {
+    await Promise.all([
+        storageAreaWrite(chromeApi?.storage?.session, 'remove', FULL_SCREEN_TAB_SESSION_KEY),
+        storageAreaWrite(chromeApi?.storage?.local, 'set', { [LAYOUT_MODE_STORAGE_KEY]: 'sidepanel' }),
+    ]);
+}
+
+/**
+ * Full-screen mode: the session record names the new tab, written before the
+ * stored choice returns to the popup, which is where the icon goes once the
+ * tab closes or the browser restarts.
+ *
+ * @param {any} chromeApi
+ * @param {{ id?: number, windowId?: number } | undefined} tab
+ */
+async function recordFullScreenTab(chromeApi, tab) {
+    if (!Number.isInteger(tab?.id)) return;
+    const record = { tabId: tab.id, windowId: Number.isInteger(tab.windowId) ? tab.windowId : null };
+    const recorded = await storageAreaWrite(chromeApi?.storage?.session, 'set', { [FULL_SCREEN_TAB_SESSION_KEY]: record });
+    if (recorded) await storageAreaWrite(chromeApi?.storage?.local, 'set', { [LAYOUT_MODE_STORAGE_KEY]: 'popup' });
 }

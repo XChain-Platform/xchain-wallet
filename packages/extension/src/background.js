@@ -86,12 +86,7 @@ import {
     createBridgeEventBroadcaster,
     notifyDisconnectedSites,
 } from './bridge/bridgeEvents.js';
-import {
-    applyLayoutMode,
-    attachLayoutModeListener,
-    currentLayoutMode,
-    readLayoutMode,
-} from './background/layoutMode.js';
+import { createToolbarViewController } from './background/layoutMode.js';
 import { attachExtensionCommandListener } from './background/extensionCommands.js';
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
@@ -109,17 +104,13 @@ import {
 
 logConsole.attach();
 
-// Apply the user's saved layout mode (popup vs sidepanel) at worker
-// boot, then watch storage for live changes from the in-wallet
-// settings UI. The controller keeps the applied mode in memory so a
-// keyboard gesture can call chrome.sidePanel.open synchronously.
-(async () => {
-    const mode = await readLayoutMode();
-    await applyLayoutMode(mode);
-})().catch((err) => {
-    console.warn('[xchain-wallet/extension] layout mode initialization failed:', err);
-});
-attachLayoutModeListener();
+// The toolbar icon follows the view the user picked (popup, side panel or
+// full-screen tab). Its listeners register in this first turn so the click,
+// port or tab event that wakes the worker reaches them; the controller keeps
+// the applied mode in memory so a click or keyboard gesture can call
+// chrome.sidePanel.open synchronously.
+const toolbarView = createToolbarViewController();
+toolbarView.start();
 
 const surfaceStateBroadcaster = createSurfaceStateBroadcaster();
 const surfaceStateEvents = {
@@ -850,15 +841,8 @@ const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
 attachExtensionCommandListener({
     commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
-    openWallet: (tab) => {
-        if (currentLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
-            const windowId = Number.isInteger(tab?.windowId)
-                ? tab.windowId
-                : chrome.windows?.WINDOW_ID_CURRENT;
-            if (Number.isInteger(windowId)) return chrome.sidePanel.open({ windowId });
-        }
-        return chrome.action.openPopup();
-    },
+    // The open-wallet shortcut does what a toolbar click does.
+    openWallet: (tab) => toolbarView.activate(tab),
     lockWallet: lockWalletNow,
 });
 

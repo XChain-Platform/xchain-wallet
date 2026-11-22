@@ -116,7 +116,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { LockedSendOutcomeNotice } from '@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx';
 import { EraseScheduledNotice } from '@xchain-wallet/core/shared/components/EraseScheduledNotice.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
-import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { FullLayoutWithNav, LeftNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { navItemKey, useNavHistory, WALLET_SWITCH_KEEPS } from '@xchain-wallet/core/ui/navHistory.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
@@ -211,6 +211,7 @@ import {
     isToolbarPopupView,
     openExtensionTab,
     openWalletFullScreen,
+    openWalletPopup,
     openWalletSidebar,
     parseExtensionHandoff,
     shellForExtensionView,
@@ -403,6 +404,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     });
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
+    );
+    // Wide Home's selected item (G115) in a full-screen tab, held here so a
+    // visit to Send or a form opened from the detail panel comes back to the
+    // same item. Scoped to the wallet it was picked in.
+    const [homeDetail, setHomeDetail] = useState(
+        /** @type {{ walletId: string, item: any } | null} */ (null),
     );
     // The page that opened the current action form, when that page hands the
     // form an asset to prefill ('manage-token', 'token-detail', 'settings') or
@@ -1300,9 +1307,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         navigate: openRootView,
         currentView: unlockedView,
     });
-    // The wallet menu's Open in sidebar and Open full screen buttons. The
-    // window id is read ahead, since the side panel opens only inside the
-    // click and an await there would drop the gesture.
+    // The wallet menu's Open as popup, Open in sidebar and Open full screen
+    // buttons. The window id is read ahead, since the side panel opens only
+    // inside the click and an await there would drop the gesture.
     const viewSwitches = useMemo(() => walletViewSwitches(), []);
     const windowIdRef = useRef(/** @type {number | null} */ (null));
     useEffect(() => {
@@ -1313,6 +1320,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }, [viewSwitches.sidebar]);
     const openSidebarView = useCallback(() => { openWalletSidebar({ windowId: windowIdRef.current }); }, []);
     const openFullScreenView = useCallback(() => { openWalletFullScreen(); }, []);
+    const openPopupView = useCallback(() => { openWalletPopup(); }, []);
     const heldSwitchNavigated = heldWalletSwitch.navigated;
     useEffect(() => { heldSwitchNavigated(); }, [unlockedView, palette.navigationKey, heldSwitchNavigated]);
     const loadPaletteSites = useCallback(() => messaging.listConnectedSites(), []);
@@ -1383,6 +1391,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         // starts over on it, so it shows no Back (G06).
         palette.navigate(viewId);
     };
+    // The side menu's Settings row and the Settings tab open Settings as a
+    // root, as every nav row does.
+    const openSettingsRoot = () => {
+        setSettingsInitialSection(null);
+        palette.navigate('settings');
+    };
 
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
@@ -1406,7 +1420,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         // Token rows open TokenDetail with the full ref the row
         // carries.: settings-section and settings-backed help commands
         // are no longer omitted - the popup HAS a Settings route now, and
-        // these are its entry points in a shell with no navigation surface.
+        // these are its entry points beside the tab bar or side menu.
         // Connected sites land on the popup's own Connected Sites
         // route, so the "Sites" palette category works here too.
         ...balancesToCommands(paletteTokenRows, {
@@ -1553,8 +1567,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         case 'unlocked': {
             // §33: the palette must overlay whatever route is showing, so the
             // route tree is computed in an IIFE and the case returns it beside
-            // a single <CommandPalette> mount (this shell has no shared layout
-            // wrapper like the web/desktop FullLayoutWithNav to hang it on).
+            // a single <CommandPalette> mount inside FullLayoutWithNav.
             const routeNode = (() => {
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
@@ -3145,14 +3158,21 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     />
                 );
             }
-            // One TokenDetail for the coin and token page and for My Tokens'
-            // token page (`ownerView`, the manage-token route): one page, one
-            // layout (operator ruling 2026-11-15).
-            const renderTokenDetail = ({ ownerView = false } = {}) => {
+            // One TokenDetail for the coin and token page, for wide Home's
+            // detail panel in a full-screen tab (G115, `embedded`) and for My
+            // Tokens' token page (`ownerView`, the manage-token route): one
+            // page, one layout (operator ruling 2026-11-15). Every action
+            // first makes this asset the shell's token, so a form opened from
+            // an embedded panel gets the panel's asset, not the last page's.
+            const renderTokenDetail = (assetRef, { embedded = false, ownerView = false } = {}) => {
+                const asset = () => {
+                    setTokenDetailRef(assetRef);
+                    return assetRef;
+                };
                 // The issuer's actions: each form opens with this token and the
                 // issuer the page resolved, and Back returns to the page.
                 const openOwnerForm = (view, ctx, options = {}) => {
-                    if (ctx?.issuer) setTokenDetailRef({ ...tokenDetailRef, issuer: ctx.issuer });
+                    setTokenDetailRef(ctx?.issuer ? { ...assetRef, issuer: ctx.issuer } : assetRef);
                     setFormSource('token-detail');
                     setTokenAdminInitialPicker(options.initialPicker || null);
                     setUnlockedView(view);
@@ -3175,7 +3195,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     onManageRoster: (ctx) => openOwnerForm('project-roster', ctx),
                     onTransferOwnership: (ctx) => openOwnerForm('transfer', ctx),
                     onSellOwnership: (ctx) => {
-                        setSellNameRef({ chainId: tokenDetailRef.chainId, tick: tokenDetailRef.tick, fromAddress: ctx?.issuer || tokenDetailRef.issuer || undefined });
+                        setSellNameRef({ chainId: assetRef.chainId, tick: assetRef.tick, fromAddress: ctx?.issuer || assetRef.issuer || undefined });
                         openOwnerForm('sell-name', ctx);
                     },
                     onCreateDispenser: (ctx) => openOwnerForm('dispenser', ctx),
@@ -3188,38 +3208,41 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <TokenDetail
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
-                        kind={tokenDetailRef.kind}
-                        displayName={tokenDetailRef.displayName}
-                        divisibility={tokenDetailRef.divisibility}
-                        fiatRate={tokenDetailRef.fiatRate}
-                        fiatRateSource={tokenDetailRef.fiatRateSource}
-                        fiatRateStale={tokenDetailRef.fiatRateStale === true}
-                        fiatRateFetchedAt={tokenDetailRef.fiatRateFetchedAt || null}
-                        quantity={tokenDetailRef.quantity}
-                        imageUrl={tokenDetailRef.imageUrl}
-                        manageActions={tokenDetailRef.kind === 'native' ? null : manageActions}
+                        chainId={assetRef.chainId}
+                        tick={assetRef.tick}
+                        kind={assetRef.kind}
+                        displayName={assetRef.displayName}
+                        divisibility={assetRef.divisibility}
+                        fiatRate={assetRef.fiatRate}
+                        fiatRateSource={assetRef.fiatRateSource}
+                        fiatRateStale={assetRef.fiatRateStale === true}
+                        fiatRateFetchedAt={assetRef.fiatRateFetchedAt || null}
+                        quantity={assetRef.quantity}
+                        imageUrl={assetRef.imageUrl}
+                        embedded={embedded}
+                        manageActions={assetRef.kind === 'native' ? null : manageActions}
                         ownerView={ownerView}
-                        onIssuerResolved={(creator) => setTokenDetailRef(withResolvedIssuer(creator))}
+                        onIssuerResolved={embedded ? undefined : (creator) => setTokenDetailRef(withResolvedIssuer(creator))}
                         onBack={goBack}
                         onSend={() => {
+                            const a = asset();
                             setSendPrefill({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
-                                imageUrl: tokenDetailRef.imageUrl,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
+                                imageUrl: a.imageUrl,
                             });
                             setUnlockedView('send');
                         }}
                         onReceive={() => {
+                            const a = asset();
                             setReceivePrefill({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
-                                imageUrl: tokenDetailRef.imageUrl,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
+                                imageUrl: a.imageUrl,
                             });
                             setUnlockedView('receive');
                         }}
@@ -3227,24 +3250,25 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             // Chain scope plus the tick as the search term for a
                             // token; chain scope alone for the native coin. See
                             // historyEntryScope.js for why neither half is enough.
-                            const scope = historyScopeForAsset(tokenDetailRef);
+                            const scope = historyScopeForAsset(asset());
                             setHistoryInitialQuery(scope.searchQuery);
                             setHistoryInitialChainCoin(scope.chainCoin);
                             setUnlockedView('history');
                         }}
                         onBuy={() => {
+                            const a = asset();
                             setMarketsAsset({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
                             });
                             setUnlockedView('markets');
                         }}
                         // Same hop MyTokens' onSelectTick uses: tokenDetailRef
-                        // already carries this tick's chainId/tick, so Manage
-                        // Token only needs the view switch.
-                        onManageToken={() => setUnlockedView('manage-token')}
+                        // carries this tick's chainId/tick, so Manage Token
+                        // only needs the view switch.
+                        onManageToken={() => { asset(); setUnlockedView('manage-token'); }}
                         // The Actions tab: each form opens pre-filled with this
                         // asset (the ManageToken prefill path) and Back returns
                         // here. TokenDetail offers only the ones the asset allows.
@@ -3256,6 +3280,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         }}
                         assetActions={(() => {
                             const openFromAsset = (view) => {
+                                asset();
                                 setFormSource('token-detail');
                                 setTokenAdminInitialPicker(null);
                                 setUnlockedView(view);
@@ -3282,8 +3307,24 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 );
             };
             if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
-                return renderTokenDetail();
+                return renderTokenDetail(tokenDetailRef);
             }
+            // Wide Home's detail panel (G115): a coin, token or NFT is the
+            // coin and token page embedded; a DeFi row is its entry detail.
+            // Home splits only when its own measured width allows, so the
+            // toolbar popup and a narrow side panel keep one-column Home.
+            const renderHomeDetail = (item) => (item?.type === 'entry' ? (
+                <ActionDetail
+                    embedded
+                    entry={item.entry}
+                    walletId={activeWalletId}
+                    onOpenDispenser={(chainId, actionIndex) => {
+                        setDispenserRef({ chainId, actionIndex });
+                        setUnlockedView('dispenser-detail');
+                    }}
+                />
+            ) : renderTokenDetail(item.token, { embedded: true }));
+            const selectHomeDetail = (item) => setHomeDetail({ walletId: activeWalletId, item });
             if (unlockedView === 'market-activity') {
                 return (
                     <MarketActivity
@@ -3303,6 +3344,20 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         accountId={activeAccountId || undefined}
                         onBack={goBack}
                         onIssue={() => { setFormSource(null); setUnlockedView('wizard'); }}
+                        // A full-screen tab docks the token page beside the
+                        // list as the web wallet does; My Tokens keeps one
+                        // column wherever its own width is narrow.
+                        renderToken={(row) => renderTokenDetail({
+                            chainId: row.chainId,
+                            tick: row.tick,
+                            kind: 'token',
+                            divisibility: row.divisibility ?? null,
+                            // A demo wallet's issued tokens carry the holding and
+                            // artwork the page would otherwise read from Home's row.
+                            ...(row.demo === true ? {
+                                displayName: row.displayName, quantity: row.quantity, fiatRate: row.fiatRate, imageUrl: row.imageUrl,
+                            } : {}),
+                        }, { embedded: true, ownerView: true })}
                         onSelectTick={(tick, chainId, row) => {
                             setTokenDetailRef({
                                 chainId,
@@ -3318,7 +3373,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             if (unlockedView === 'manage-token' && activeWalletId && tokenDetailRef) {
                 // My Tokens opens the same asset page Home does (operator
                 // ruling 2026-11-15), with the issuer's groups shown at once.
-                return renderTokenDetail({ ownerView: true });
+                return renderTokenDetail(tokenDetailRef, { ownerView: true });
             }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
@@ -3737,15 +3792,20 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
                         onCommandPalette={palette.openPalette}
-                        // The popup's only VISIBLE route into Settings.
-                        // Web and desktop deliberately pass nothing here: they
-                        // reach Settings from the nav rail, and a second entry
-                        // in the hero would be duplicate chrome. A control on
+                        // The hero's Settings row, for the popup and side
+                        // panel. Home drops it while the side menu shows (a
+                        // full-screen tab), since the menu has its own
+                        // Settings row, as web and desktop do. A control on
                         // Home is a push, so Settings offers Back to Home.
                         onOpenSettings={() => openSettingsSection(null, setUnlockedView)}
-                        // No header here either, so Home shows the lock
-                        // button that web and desktop keep in their header.
+                        // Same rule as the Settings row: the hero's lock row
+                        // shows only where no side menu offers Lock.
                         onLockWallet={handleLock}
+                        // Wide Home (G115) in a full-screen tab: the list and
+                        // the chosen item's detail panel side by side.
+                        renderDetail={activeWalletId ? renderHomeDetail : undefined}
+                        detailSelection={homeDetail?.walletId === activeWalletId ? homeDetail.item : null}
+                        onDetailSelect={selectHomeDetail}
                     />
                 </Fragment>
             );
@@ -3755,8 +3815,26 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 // card, the header bell's badge and the Notifications list all
                 // read it.
                 <CoinpayObligationsProvider walletId={activeWalletId} accountId={activeAccountId}>
+                {/* Both nav surfaces are handed in, as the web shell does:
+                    FullLayoutWithNav measures its own width and mounts one.
+                    The toolbar popup and a narrow side panel measure compact
+                    and keep the bottom tab bar; a full-screen tab gets the
+                    icon rail from 640px and the labelled side menu from 900px. */}
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
+                    nav={(
+                        <LeftNav
+                            currentView={unlockedView}
+                            onSelect={handleWalletMenuSelect}
+                            onLock={handleLock}
+                            onOpenSettings={openSettingsRoot}
+                            hasVmAddress={hasVmAddress}
+                            hasBtcAddress={hasBtcAddress}
+                            hasGovernanceAddress={hasGovernanceAddress}
+                            hasDexSurface
+                            isSignerMode={isSignerMode}
+                        />
+                    )}
                     header={(
                         <ShellAppHeader
                             walletId={activeWalletId}
@@ -3788,11 +3866,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         <BottomTabBar
                             currentView={unlockedView}
                             onSelect={handleWalletMenuSelect}
-                            // The Settings tab opens Settings as a root, as every tab does.
-                            onOpenSettings={() => {
-                                setSettingsInitialSection(null);
-                                palette.navigate('settings');
-                            }}
+                            onOpenSettings={openSettingsRoot}
                             isSignerMode={isSignerMode}
                         />
                     )}
@@ -3837,6 +3911,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onSelect: handleWalletMenuSelect,
                             onOpenSettings: () => openSettingsSection(null),
                             onLock: handleLock,
+                            onOpenPopup: viewSwitches.popup ? openPopupView : undefined,
                             onOpenSidebar: viewSwitches.sidebar ? openSidebarView : undefined,
                             onOpenFullScreen: viewSwitches.fullScreen ? openFullScreenView : undefined,
                         }}

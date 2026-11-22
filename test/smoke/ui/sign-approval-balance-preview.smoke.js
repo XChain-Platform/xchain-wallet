@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const signPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx');
+const signPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx');
 const approvalMsgPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'messaging.js');
 
 const signSrc = readFileSync(signPath, 'utf8');

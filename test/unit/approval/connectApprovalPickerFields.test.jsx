@@ -14,10 +14,10 @@ const messaging = vi.hoisted(() => ({
     resolveApproval: vi.fn(),
 }));
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => messaging);
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => messaging);
 
 const { ConnectApproval, CONNECT_PICKER_MAX_ICONS, connectPickerPresentation } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 const chain = BUNDLED_DESCRIPTORS[0];
@@ -144,7 +144,7 @@ describe('Connect approval dock geometry', () => {
     it('uses eight pixels at the sides, between buttons, and above and below', () => {
         const tokens = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
         const screenCss = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
-        const approvalCss = readFileSync('packages/extension/src/approval/approval.module.css', 'utf8');
+        const approvalCss = readFileSync('packages/core/src/shared/approval/approval.module.css', 'utf8');
 
         expect(tokens).toMatch(/--xc-space-1:\s*4px/);
         expect(tokens).toMatch(/--xc-space-2:\s*8px/);

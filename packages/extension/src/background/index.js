@@ -41,6 +41,5 @@ export {
     isSidePanelSupported,
     readLayoutMode,
     writeLayoutMode,
-    applyLayoutMode,
-    attachLayoutModeListener,
+    createToolbarViewController,
 } from './layoutMode.js';

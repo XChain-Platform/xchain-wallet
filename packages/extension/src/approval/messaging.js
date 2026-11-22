@@ -14,6 +14,7 @@
 
 import { sendMessage } from '../shared/chromeMessaging.js';
 import { interruptedApprovalMessage } from './interruptedMessage.js';
+import { injectApprovalAdapter } from '@xchain-wallet/core/shared/approval/index.js';
 
 // A runtime reply that never arrives means the service worker that held the
 // parked request stopped; the request is gone just as when the broker no
@@ -214,3 +215,18 @@ export function describeAction(opts) {
 export function parseCoSign(opts) {
     return /** @type {any} */ (sendMessage('coSign.parse', opts));
 }
+
+injectApprovalAdapter({
+    listWallets,
+    fetchApproval,
+    resolveApproval,
+    getAddressBalances,
+    getTokenInfo,
+    getAddressesByChain,
+    getSettings,
+    parsePsbt,
+    requoteNativeFee,
+    preflight,
+    describeAction,
+    parseCoSign,
+});

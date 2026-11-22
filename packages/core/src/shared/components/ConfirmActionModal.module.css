@@ -170,6 +170,37 @@
     text-overflow: clip;
 }
 
+@supports selector(:has(*)) {
+    :global(html[data-fold='horizontal'] div:has(> main > [data-testid='confirm-modal']):has(> footer [data-testid='confirm-decision'])) {
+        position: fixed;
+        inset: 0;
+        block-size: var(--xc-viewport-h, 100vh);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) var(--xc-fold-height, calc(var(--xc-space-1) - var(--xc-space-1)))
+            max(0px, calc(
+                var(--xc-viewport-h, 100vh)
+                - var(--xc-fold-y, calc(var(--xc-space-1) - var(--xc-space-1)))
+                - var(--xc-fold-height, calc(var(--xc-space-1) - var(--xc-space-1)))
+            ));
+    }
+
+    :global(html[data-fold='horizontal'] div:has(> main > [data-testid='confirm-modal']) > main) {
+        grid-row: 2;
+        min-block-size: 0;
+    }
+
+    :global(html[data-fold='horizontal'] div:has(> main > [data-testid='confirm-modal']) > footer:has([data-testid='confirm-decision'])) {
+        box-sizing: border-box;
+        grid-row: 4;
+        display: flex;
+        align-items: flex-end;
+    }
+
+    :global(html[data-fold='horizontal'] div:has(> main > [data-testid='confirm-modal']) > footer:has([data-testid='confirm-decision'])) > * {
+        width: 100%;
+    }
+}
+
 /* Phone viewports include page padding and a scrollbar gutter, so reflow
    before the usable content width drops below 400px. */
 @media (max-width: 480px) {

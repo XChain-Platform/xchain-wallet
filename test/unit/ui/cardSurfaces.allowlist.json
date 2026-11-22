@@ -73,7 +73,7 @@
         "packages/core/src/shared/routes/CreateBetFeedForm.module.css | .previewOutcome": "One outcome chip inside the accent-filled market preview, not a card.",
         "packages/core/src/ui/QrDisplay.module.css | .frame": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/ui/SegmentedControl.module.css | .segmented": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/extension/src/approval/kinds/ConnectApproval.module.css | .fieldControl": "A multi-select picker trigger styled as a standard field control, not a card; it opens a picker screen because the shared single-choice dropdown cannot represent several accounts or coin families.",
+        "packages/core/src/shared/approval/ConnectApproval.module.css | .fieldControl": "A multi-select picker trigger styled as a standard field control, not a card; it opens a picker screen because the shared single-choice dropdown cannot represent several accounts or coin families.",
         "packages/web/src/DevVariantBadge.module.css | .clear": "Development-only or style-guide chrome, not product UI.",
         "packages/web/src/DevVariantBadge.module.css | .flip": "Development-only or style-guide chrome, not product UI.",
         "packages/web/src/DevVariantBadge.module.css | .picker": "Development-only or style-guide chrome, not product UI.",

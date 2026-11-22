@@ -16,13 +16,13 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { pngDataUrl } from '../../helpers/siteIconFixtures.js';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     getSettings: async () => ({}),
     resolveApproval: async () => ({ approved: true }),
 }));
 
 const { ConnectApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 function mount(payload) {

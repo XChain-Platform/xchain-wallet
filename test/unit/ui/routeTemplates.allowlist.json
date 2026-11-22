@@ -212,13 +212,13 @@
                 "reason": "A signing tool form still on its own Screen until the form-standard port (wave B) moves every *Form route onto FormPage at once."
             }
         },
-        "packages/extension/src/approval/kinds/ConnectApproval.jsx": {
+        "packages/core/src/shared/approval/ConnectApproval.jsx": {
             "empty": {
                 "count": 1,
                 "reason": "The connection request's unavailable-account state sits inside the approval form rather than replacing the whole page."
             }
         },
-        "packages/extension/src/approval/kinds/SignApproval.jsx": {
+        "packages/core/src/shared/approval/SignApproval.jsx": {
             "form": {
                 "count": 1,
                 "reason": "The password credential form is the approval screen footer beneath ConfirmStandard, not a standalone page form."
