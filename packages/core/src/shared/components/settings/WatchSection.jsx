@@ -12,17 +12,17 @@ const labelledOptions = (control, labels) => ({
     ...control,
     options: (settings) => control.options(settings).map((option) => ({
         ...option,
-        label: t(labels[option.value]),
+        label: labels[option.value],
     })),
 });
 
 const rows = [
     { id: 'watch-enabled', title: t('watch.showWallet'), control: watchControls.enabled },
     { id: 'watch-token-mode', title: t('watch.tokens'), control: labelledOptions(watchControls.tokenMode, {
-        home: 'watch.tokens.followHome', pinned: 'watch.tokens.pinnedOnly',
+        home: t('watch.tokens.followHome'), pinned: t('watch.tokens.pinnedOnly'),
     }) },
     { id: 'watch-start-in', title: t('watch.startIn'), control: labelledOptions(watchControls.startIn, {
-        fiat: 'watch.startIn.fiat', units: 'watch.startIn.units',
+        fiat: t('watch.startIn.fiat'), units: t('watch.startIn.units'),
     }) },
     { id: 'watch-show-total', title: t('watch.showTotal'), control: watchControls.showTotal },
 ];
