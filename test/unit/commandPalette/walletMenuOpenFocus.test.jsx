@@ -101,8 +101,43 @@ describe('wallet menu open focus', () => {
         expect(onOpenFullScreen).toHaveBeenCalledTimes(1);
     });
 
+    it('offers Open as popup first among the view switches, before Lock and Close', () => {
+        // Each view offers the two it is not (operator 2026-11-22): the side
+        // panel offers popup and full screen, a full-screen tab popup and sidebar.
+        const onOpenPopup = vi.fn();
+        const onClose = vi.fn();
+        const { unmount } = render(
+            <CommandPalette
+                open
+                onClose={onClose}
+                commands={commands}
+                menu={{ ...menu, onOpenPopup, onOpenFullScreen: vi.fn() }}
+                focusSearch={false}
+            />,
+        );
+        const labels = () => [...screen.getByRole('dialog').querySelector('header').querySelectorAll('input[type="search"], button')]
+            .map((el) => (el.tagName === 'INPUT' ? 'search' : el.getAttribute('aria-label')));
+        expect(labels()).toEqual(['search', 'Open as popup', 'Open full screen', 'Lock wallet', 'Close menu']);
+        fireEvent.click(screen.getByRole('button', { name: 'Open as popup' }));
+        expect(onOpenPopup).toHaveBeenCalledTimes(1);
+        expect(onOpenPopup.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0]);
+        unmount();
+
+        render(
+            <CommandPalette
+                open
+                onClose={vi.fn()}
+                commands={commands}
+                menu={{ ...menu, onOpenPopup: vi.fn(), onOpenSidebar: vi.fn() }}
+                focusSearch={false}
+            />,
+        );
+        expect(labels()).toEqual(['search', 'Open as popup', 'Open in sidebar', 'Lock wallet', 'Close menu']);
+    });
+
     it('shows no view switches when the shell passes none', () => {
         renderMenu(false);
+        expect(screen.queryByRole('button', { name: 'Open as popup' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Open in sidebar' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Open full screen' })).toBeNull();
     });

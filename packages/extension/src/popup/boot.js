@@ -19,4 +19,11 @@
 // size (popup-size.js) with the boot screen's logo and progress bar while the
 // wallet loads behind it. A failed import rejects unhandled, which
 // popup-size.js turns into the "couldn't start" notice.
+//
+// The side panel tells the worker it is open before the wallet bundle loads,
+// so a reloading panel reconnects quickly and the toolbar icon keeps toggling
+// it (popup/sidePanelPresence.js).
+if (globalThis.location?.pathname?.endsWith('/sidepanel.html')) {
+    import('./sidePanelPresence.js').then((m) => m.holdSidePanelPresence(), () => {});
+}
 import('./main.jsx');

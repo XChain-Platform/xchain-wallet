@@ -211,6 +211,7 @@ import {
     isToolbarPopupView,
     openExtensionTab,
     openWalletFullScreen,
+    openWalletPopup,
     openWalletSidebar,
     parseExtensionHandoff,
     shellForExtensionView,
@@ -1306,9 +1307,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         navigate: openRootView,
         currentView: unlockedView,
     });
-    // The wallet menu's Open in sidebar and Open full screen buttons. The
-    // window id is read ahead, since the side panel opens only inside the
-    // click and an await there would drop the gesture.
+    // The wallet menu's Open as popup, Open in sidebar and Open full screen
+    // buttons. The window id is read ahead, since the side panel opens only
+    // inside the click and an await there would drop the gesture.
     const viewSwitches = useMemo(() => walletViewSwitches(), []);
     const windowIdRef = useRef(/** @type {number | null} */ (null));
     useEffect(() => {
@@ -1319,6 +1320,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }, [viewSwitches.sidebar]);
     const openSidebarView = useCallback(() => { openWalletSidebar({ windowId: windowIdRef.current }); }, []);
     const openFullScreenView = useCallback(() => { openWalletFullScreen(); }, []);
+    const openPopupView = useCallback(() => { openWalletPopup(); }, []);
     const heldSwitchNavigated = heldWalletSwitch.navigated;
     useEffect(() => { heldSwitchNavigated(); }, [unlockedView, palette.navigationKey, heldSwitchNavigated]);
     const loadPaletteSites = useCallback(() => messaging.listConnectedSites(), []);
@@ -3909,6 +3911,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onSelect: handleWalletMenuSelect,
                             onOpenSettings: () => openSettingsSection(null),
                             onLock: handleLock,
+                            onOpenPopup: viewSwitches.popup ? openPopupView : undefined,
                             onOpenSidebar: viewSwitches.sidebar ? openSidebarView : undefined,
                             onOpenFullScreen: viewSwitches.fullScreen ? openFullScreenView : undefined,
                         }}

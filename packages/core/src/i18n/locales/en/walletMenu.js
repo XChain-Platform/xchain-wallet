@@ -82,6 +82,7 @@ const messages = {
     'walletMenu.search': 'Search the wallet',
     'walletMenu.openMenu': 'Open menu',
     'walletMenu.closeMenu': 'Close menu',
+    'walletMenu.openPopup': 'Open as popup',
     'walletMenu.openSidebar': 'Open in sidebar',
     'walletMenu.openFullScreen': 'Open full screen',
     'walletMenu.menu': 'Wallet menu',

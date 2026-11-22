@@ -853,6 +853,16 @@ export function SidebarIcon() {
     );
 }
 
+/** A small window with a caret on top, hanging from the toolbar: open the wallet as the toolbar popup. */
+export function PopupWindowIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <rect x="5" y="7" width="14" height="13" rx="2" />
+            <path d="m13 7 2.5-3L18 7" />
+        </svg>
+    );
+}
+
 /** Two arrows out to opposite corners: open the wallet full screen in a browser tab. */
 export function MaximizeIcon() {
     return (

@@ -96,10 +96,12 @@ describe('extension background async lifecycle', () => {
         expect(area.values.get(LABEL_SYNC_RESULTS_SESSION_KEY)).toEqual({});
     });
 
-    it('observes both background boot promises without changing SDK refusal semantics', () => {
+    it('observes the background boot promises without changing SDK refusal semantics', () => {
         const source = readFileSync(join(root, 'packages/extension/src/background.js'), 'utf8');
 
-        expect(source).toMatch(/applyLayoutMode\(mode\);\s*\}\)\(\)\.catch\(/);
+        // The toolbar view controller handles its own boot read; it is started
+        // synchronously, so no boot promise of its own is left unobserved.
+        expect(source).toMatch(/const toolbarView = createToolbarViewController\(\);\s*toolbarView\.start\(\);/);
         expect(source).toContain('void sdkResolved.catch(() => {});');
         expect(source).toMatch(/if \(import\.meta\.env\?\.PROD\)[\s\S]*?throw err;/);
     });
