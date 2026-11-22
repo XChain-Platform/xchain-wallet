@@ -155,6 +155,6 @@ apply from: 'capacitor.build.gradle'
 
 // Capacitor's template ends with a block that applies the google-services
 // plugin whenever a google-services.json appears. Removed rather than left
-// inert: Play Services / FCM is an explicit non-goal for this wallet (§1,
-// §9), so the only thing that block can ever do is quietly wire Firebase
+// inert: Firebase and FCM are explicit non-goals for this wallet (§1, §9), so
+// the only thing that block can ever do is quietly wire Firebase
 // into a self-custody wallet the day a file lands in this directory.
