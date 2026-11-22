@@ -389,8 +389,8 @@
     height: var(--xc-control-h-md);
 }
 
-/* The extension's Open in sidebar and Open full screen buttons take Lock's
-   box, left of it. */
+/* The extension's view switches (Open as popup, Open in sidebar, Open full
+   screen; each view shows the two it is not) take Lock's box, left of it. */
 .viewSwitch {
     display: inline-flex;
     width: var(--xc-control-h-md);

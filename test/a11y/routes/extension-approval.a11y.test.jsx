@@ -13,13 +13,13 @@ const approvalMessaging = vi.hoisted(() => ({
     resolveApproval: vi.fn(async () => ({ approved: true })),
 }));
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     getSettings: (...args) => approvalMessaging.getSettings(...args),
     resolveApproval: (...args) => approvalMessaging.resolveApproval(...args),
 }));
 
 const { ConnectApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 
 const CHAIN = BUNDLED_DESCRIPTORS[0];

@@ -199,9 +199,11 @@ describe('shipping JSX localization', () => {
     test('translated screens, E-K routes, extension screens and shell code keep user-facing copy in the locale dictionary', () => {
         expect(Object.keys(extensionSources)).toEqual(expect.arrayContaining([
             '../../packages/extension/src/approval/Router.jsx',
-            '../../packages/extension/src/approval/kinds/ConnectApproval.jsx',
-            '../../packages/extension/src/approval/kinds/SignApproval.jsx',
             '../../packages/extension/src/popup/App.jsx',
+        ]));
+        expect(Object.keys(sharedSources)).toEqual(expect.arrayContaining([
+            '../../packages/core/src/shared/approval/ConnectApproval.jsx',
+            '../../packages/core/src/shared/approval/SignApproval.jsx',
         ]));
         const violations = [];
         const missingKeys = [];

@@ -102,11 +102,13 @@ function orderMenuSearchResults(results, commands, query = '') {
  *   onSelect: (viewId: string) => void,
  *   onOpenSettings: () => void,
  *   onLock?: () => void,
+ *   onOpenPopup?: () => void,
  *   onOpenSidebar?: () => void,
  *   onOpenFullScreen?: () => void,
  * }} [props.menu]
- *        onOpenSidebar and onOpenFullScreen are the extension's view switches;
- *        each shows as a header button only when the shell passes it.
+ *        onOpenPopup, onOpenSidebar and onOpenFullScreen are the extension's
+ *        view switches; each shows as a header button only when the shell
+ *        passes it.
  * @param {boolean} [props.focusSearch=true]  with a menu, false opens with the
  *        menu's scroll surface focused instead of the search field, so a
  *        click on the menu button can scroll the menu at once; typing a
@@ -425,9 +427,10 @@ export function CommandPalette({
         </span>
     ) : null;
 
-    // The extension's view switches sit left of Lock: search, Open in
-    // sidebar, Open full screen, Lock, Close (operator 2026-11-21). The opener
-    // runs first, inside the click, since the browser opens a side panel only
+    // The extension's view switches sit left of Lock: search, Open as popup,
+    // Open in sidebar, Open full screen, Lock, Close, each view offering the
+    // two it is not (operator 2026-11-22). The opener runs first, inside the
+    // click, since the browser opens a side panel or the toolbar popup only
     // during a user gesture.
     const viewButton = (handler, label, ButtonIcon, attr) => (handler ? (
         <span className={styles.viewSwitch}>
@@ -442,6 +445,7 @@ export function CommandPalette({
             />
         </span>
     ) : null);
+    const popupButton = viewButton(menu?.onOpenPopup, t('walletMenu.openPopup'), Icon.PopupWindowIcon, 'data-wallet-menu-popup');
     const sidebarButton = viewButton(menu?.onOpenSidebar, t('walletMenu.openSidebar'), Icon.SidebarIcon, 'data-wallet-menu-sidebar');
     const fullScreenButton = viewButton(menu?.onOpenFullScreen, t('walletMenu.openFullScreen'), Icon.MaximizeIcon, 'data-wallet-menu-full-screen');
 
@@ -471,6 +475,7 @@ export function CommandPalette({
                     <header className={styles.menuHeader}>
                         {searchControl}
                         <div className={styles.menuActions}>
+                            {popupButton}
                             {sidebarButton}
                             {fullScreenButton}
                             {lockButton}

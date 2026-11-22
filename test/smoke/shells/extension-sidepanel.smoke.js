@@ -17,8 +17,8 @@
 //   1. manifest.json declares `side_panel.default_path` + `sidePanel`
 //      permission.
 //   2. The two HTML entry points (popup.html, sidepanel.html) exist.
-//   3. Background `layoutMode.js` exports the controller surface and
-//      detects API support; background.js calls into it on boot.
+//   3. Background `layoutMode.js` exports the toolbar view controller and
+//      detects API support; background.js starts it on boot.
 //   4. Shared `LayoutModeToggle` component renders both modes and
 //      writes to chrome.storage.local under the canonical key.
 
@@ -50,7 +50,7 @@ for (const html of ['packages/extension/popup.html', 'packages/extension/sidepan
 
 // 3. Background controller exports the canonical surface.
 const layoutSrc = read('packages/extension/src/background/layoutMode.js');
-for (const fn of ['isSidePanelSupported', 'readLayoutMode', 'writeLayoutMode', 'applyLayoutMode', 'attachLayoutModeListener']) {
+for (const fn of ['isSidePanelSupported', 'readLayoutMode', 'writeLayoutMode', 'createToolbarViewController']) {
     assert.ok(new RegExp(`export (async )?function ${fn}\\(`).test(layoutSrc)
         || new RegExp(`export const ${fn}\\b`).test(layoutSrc),
         `layoutMode.js exports ${fn}`);
@@ -59,21 +59,23 @@ assert.ok(/LAYOUT_MODES\s*=\s*\/\*\*[^]*?\*\/\s*\(\['popup',\s*'sidepanel'\]\)/.
     'LAYOUT_MODES is exactly [popup, sidepanel]');
 assert.ok(/STORAGE_KEY\s*=\s*'xchain\.layoutMode'/.test(layoutSrc),
     'storage key is xchain.layoutMode');
-assert.ok(/chrome\.action\.setPopup\(\{ popup: '' \}\)/.test(layoutSrc),
-    'sidepanel mode clears action.popup so click falls through to side panel');
-assert.ok(/chrome\.sidePanel\.setPanelBehavior\(\{ openPanelOnActionClick: true \}\)/.test(layoutSrc),
-    'sidepanel mode flips openPanelOnActionClick: true');
+assert.ok(/chromeApi\.action\.setPopup\(\{ popup: mode === 'popup' \? POPUP_PATH : '' \}\)/.test(layoutSrc),
+    'the panel and full-screen modes clear action.popup so the click reaches the panel or the worker');
+assert.ok(/openPanelOnActionClick: mode === 'sidepanel' && !anyPanelOpen\(\)/.test(layoutSrc),
+    'side-panel mode lets Chrome open a closed panel and routes a click on an open one to the worker');
+assert.ok(/listen\(chromeApi\?\.action\?\.onClicked, onClicked\)/.test(layoutSrc),
+    'the controller handles toolbar clicks itself');
+assert.ok(/listen\(chromeApi\?\.sidePanel\?\.onClosed, onPanelClosed\)/.test(layoutSrc),
+    'the controller learns of the panel X from chrome.sidePanel.onClosed');
 
 // background.js wires it on boot.
 const bgSrc = read('packages/extension/src/background.js');
-for (const fn of ['applyLayoutMode', 'attachLayoutModeListener', 'readLayoutMode']) {
-    assert.ok(new RegExp(`\\b${fn}\\b`).test(bgSrc),
-        `background.js references ${fn}`);
-}
-assert.ok(/await applyLayoutMode\(mode\)/.test(bgSrc),
-    'background.js applies the saved mode at boot');
-assert.ok(/attachLayoutModeListener\(\)/.test(bgSrc),
-    'background.js attaches the storage-change listener');
+assert.ok(/const toolbarView = createToolbarViewController\(\);\s*toolbarView\.start\(\);/.test(bgSrc),
+    'background.js starts the toolbar view controller at boot');
+assert.ok(/openWallet: \(tab\) => toolbarView\.activate\(tab\)/.test(bgSrc),
+    'the open-wallet command follows the toolbar view');
+assert.ok(/import\('\.\/sidePanelPresence\.js'\)\.then\(\(m\) => m\.holdSidePanelPresence\(\)/.test(read('packages/extension/src/popup/boot.js')),
+    'the side panel holds its presence port from the boot entry');
 
 // 4. Shared toggle component.
 const togglePath = 'packages/core/src/shared/components/LayoutModeToggle.jsx';

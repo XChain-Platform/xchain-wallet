@@ -28,7 +28,7 @@ describe('extension background public surface', () => {
             getTransport: expect.any(Function),
         }));
         expect(background.LAYOUT_MODES).toEqual(['popup', 'sidepanel']);
-        expect(background.applyLayoutMode).toEqual(expect.any(Function));
+        expect(background.createToolbarViewController).toEqual(expect.any(Function));
         expect(background.readLayoutMode).toEqual(expect.any(Function));
         expect(background.writeLayoutMode).toEqual(expect.any(Function));
     });

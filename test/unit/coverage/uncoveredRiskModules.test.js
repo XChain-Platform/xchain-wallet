@@ -20,9 +20,7 @@ import replShim, { start as startRepl } from '../../../packages/core/src/shims/r
 
 const bg = vi.hoisted(() => ({
     alarmListener: vi.fn(),
-    applyLayoutMode: vi.fn(async () => {}),
     attachChromeRuntime: vi.fn(() => vi.fn()),
-    attachLayoutModeListener: vi.fn(),
     attachSessionMetaListener: vi.fn(),
     attachSignerBridgeListener: vi.fn(),
     attachWipeStorageListener: vi.fn(),
@@ -31,7 +29,7 @@ const bg = vi.hoisted(() => ({
     ensureBuilds: vi.fn(),
     keepalive: vi.fn(async () => {}),
     publish: vi.fn(async () => {}),
-    readLayoutMode: vi.fn(async () => 'popup'),
+    toolbarViewStart: vi.fn(),
     sessionLoad: vi.fn(async () => null),
 }));
 
@@ -128,9 +126,7 @@ vi.mock('../../../packages/extension/src/bridge/bridgeEvents.js', () => ({
     createBridgeEventBroadcaster: vi.fn(() => ({})),
 }));
 vi.mock('../../../packages/extension/src/background/layoutMode.js', () => ({
-    applyLayoutMode: bg.applyLayoutMode,
-    attachLayoutModeListener: bg.attachLayoutModeListener,
-    readLayoutMode: bg.readLayoutMode,
+    createToolbarViewController: () => ({ start: bg.toolbarViewStart, activate: vi.fn() }),
 }));
 vi.mock('../../../packages/extension/src/background/extensionCommands.js', () => ({
     attachExtensionCommandListener: vi.fn(),
@@ -175,8 +171,7 @@ describe('extension service-worker entry', () => {
         const { sdkResolved } = await import('../../../packages/extension/src/background.js');
 
         await expect(sdkResolved).resolves.toBe('xchain-sdk');
-        await vi.waitFor(() => expect(bg.applyLayoutMode).toHaveBeenCalledWith('popup'));
-        expect(bg.attachLayoutModeListener).toHaveBeenCalledOnce();
+        expect(bg.toolbarViewStart).toHaveBeenCalledOnce();
         expect(bg.attachSessionMetaListener).toHaveBeenCalledOnce();
         expect(bg.attachSignerBridgeListener).toHaveBeenCalledOnce();
         expect(bg.attachWipeStorageListener).toHaveBeenCalledOnce();

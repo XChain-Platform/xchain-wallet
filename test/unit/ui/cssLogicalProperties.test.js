@@ -349,7 +349,7 @@ describe('wallet CSS logical properties', () => {
         const assetCard = read('packages/web/src/style-guide/sections/AssetCardSection.module.css');
         const badge = read('packages/web/src/DevVariantBadge.module.css');
         const shell = read('packages/web/src/DevVariantShell.module.css');
-        const approval = read('packages/extension/src/approval/kinds/SignApproval.jsx');
+        const approval = read('packages/core/src/shared/approval/SignApproval.jsx');
         const confirm = read('packages/core/src/shared/components/ConfirmStandard.jsx');
 
         expect(assetCard).toMatch(/\.chevron:dir\(rtl\)[^{]*\{[^}]*transform:\s*scaleX\(-1\)/s);

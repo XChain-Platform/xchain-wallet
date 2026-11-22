@@ -64,7 +64,7 @@ assert.ok(router.includes('<SignApproval'), 'Router renders SignApproval (all ot
 assert.ok(router.includes('resolveApproval'), 'Router wires reject via resolveApproval');
 
 const connect = readFileSync(
-    join(ext, 'src', 'approval', 'kinds', 'ConnectApproval.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'ConnectApproval.jsx'),
     'utf8',
 );
 assert.ok(
@@ -83,7 +83,7 @@ assert.ok(
 );
 
 const sign = readFileSync(
-    join(ext, 'src', 'approval', 'kinds', 'SignApproval.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx'),
     'utf8',
 );
 assert.ok(

@@ -209,10 +209,17 @@ function makeBackground(chrome) {
     return { detach, host };
 }
 
+// The toolbar popup is 360px wide. jsdom's default 1024px window would lay
+// the shell out as a full-screen tab, with the side menu repeating every
+// bottom-bar and menu row this walk presses.
+const JSDOM_WIDTH = window.innerWidth;
+const POPUP_WIDTH = 360;
+
 afterEach(() => {
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: JSDOM_WIDTH });
 });
 
 describe('extension popup with the background message router', () => {
@@ -220,6 +227,7 @@ describe('extension popup with the background message router', () => {
         const chrome = makeChrome();
         vi.stubGlobal('chrome', chrome);
         const background = makeBackground(chrome);
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: POPUP_WIDTH });
 
         render(<App />);
 
@@ -268,7 +276,8 @@ describe('extension popup with the background message router', () => {
 
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.01' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        // The form's own Send, not the bottom bar's Send tab.
+        fireEvent.click(within(screen.getByRole('form', { name: 'Send' })).getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Send 0.01 BTC');

@@ -124,7 +124,7 @@ assert.ok(!/recipients: sendLegs\.map/.test(sendConfirmBlock),
 
 // --- 4. the dApp approval window describes host-side too -------------
 
-const approval = read('packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx');
+const approval = read('packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx');
 assert.ok(!/decoderLib\.decodeAction/.test(approval),
     'the approval window no longer describes attacker-supplied params with the local describer');
 assert.match(approval, /describeActionOnHost\(/,

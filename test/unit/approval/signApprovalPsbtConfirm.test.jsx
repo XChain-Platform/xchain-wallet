@@ -17,7 +17,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
     useFeeFiat: () => ({ formatNativeFee: () => null }),
 }));
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
     getSettings: async () => ({ walletMode: 'full' }),
     getAddressesByChain: async () => ({
@@ -42,7 +42,7 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
 
 function psbtPayload() {

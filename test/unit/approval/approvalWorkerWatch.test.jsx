@@ -34,10 +34,10 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     fetchApproval: mocks.fetchApproval,
     resolveApproval: mocks.resolveApproval,
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/SignApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/SignApproval.jsx', () => ({
     SignApproval: () => <label>Password<input type="password" /></label>,
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/ConnectApproval.jsx', () => ({
     ConnectApproval: () => <section>connect</section>,
 }));
 

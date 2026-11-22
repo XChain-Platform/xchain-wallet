@@ -76,18 +76,19 @@ assert.ok(/\.layout\[data-xc-tier='rail'\]\s+\.sidebar\s*\{[\s\S]*?flex:\s*0 0 6
     'the rail reserves 64px');
 assert.ok(!/\.badge\s*\{/.test(cssSrc), 'unread badge styles are absent');
 
+// Every shell hands FullLayoutWithNav both surfaces and lets its measured
+// width choose: the extension's toolbar popup and a narrow side panel get the
+// bottom tab bar, its full-screen tab the side menu.
 for (const appPath of [
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
     join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+    join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
 ]) {
     const source = readFileSync(appPath, 'utf8');
     assert.ok(/FullLayoutWithNav/.test(source), `${appPath} uses FullLayoutWithNav`);
-    assert.ok(/LeftNav/.test(source), `${appPath} wires LeftNav`);
+    assert.ok(/nav=\{\(?\s*<LeftNav[\s>/]/.test(source), `${appPath} hands FullLayoutWithNav a LeftNav`);
+    assert.ok(/bottomBar=\{\(?\s*<BottomTabBar[\s>/]/.test(source), `${appPath} hands FullLayoutWithNav a BottomTabBar`);
     assert.ok(/currentView=\{unlockedView\}/.test(source), `${appPath} supplies the active view`);
 }
-
-const popupApp = readFileSync(join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'), 'utf8');
-assert.ok(!/<LeftNav[\s>/]/.test(popupApp), 'the compact extension does not mount LeftNav');
-assert.ok(/BottomTabBar/.test(popupApp), 'the compact extension mounts BottomTabBar');
 
 console.log('OK: left-nav smoke (catalogue rows, no unread badges, active route state, responsive rail and sidebar)');

@@ -133,6 +133,7 @@ import verifySignature from './verifySignature.js';
 import walletDetails from './walletDetails.js';
 import walletMenu from './walletMenu.js';
 import walletPicker from './walletPicker.js';
+import watch from './watch.js';
 
 export const en = {
     ...accountPicker,
@@ -216,6 +217,7 @@ export const en = {
     ...walletDetails,
     ...walletMenu,
     ...walletPicker,
+    ...watch,
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

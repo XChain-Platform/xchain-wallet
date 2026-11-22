@@ -8,14 +8,13 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 const controls = vi.hoisted(() => ({
     alarmListener: null,
     commandOptions: null,
-    layoutMode: 'popup',
-    applyLayoutMode: vi.fn(async () => {}),
-    attachLayoutModeListener: vi.fn(),
+    createToolbarView: vi.fn(),
+    toolbarViewStart: vi.fn(),
+    toolbarViewActivate: vi.fn(async (tab) => ({ activated: tab })),
     keepaliveTick: vi.fn(async () => {}),
     maybeAutoLock: vi.fn(async () => 'skipped'),
     openPopup: vi.fn(async () => 'popup-opened'),
     openSidePanel: vi.fn(async () => 'side-panel-opened'),
-    readLayoutMode: vi.fn(async () => controls.layoutMode),
 }));
 
 vi.mock('@xchain-wallet/core', () => ({
@@ -99,10 +98,10 @@ vi.mock('../../../packages/extension/src/bridge/bridgeEvents.js', () => ({
     createBridgeEventBroadcaster: vi.fn(),
 }));
 vi.mock('../../../packages/extension/src/background/layoutMode.js', () => ({
-    applyLayoutMode: controls.applyLayoutMode,
-    attachLayoutModeListener: controls.attachLayoutModeListener,
-    currentLayoutMode: () => controls.layoutMode,
-    readLayoutMode: controls.readLayoutMode,
+    createToolbarViewController: (...args) => {
+        controls.createToolbarView(...args);
+        return { start: controls.toolbarViewStart, activate: controls.toolbarViewActivate };
+    },
 }));
 vi.mock('../../../packages/extension/src/background/extensionCommands.js', () => ({
     attachExtensionCommandListener: vi.fn((options) => { controls.commandOptions = options; }),
@@ -141,32 +140,19 @@ beforeAll(async () => {
 });
 
 describe('extension background entrypoint', () => {
-    it('initializes the saved layout and publishes SDK readiness', async () => {
+    it('starts the toolbar view controller at boot and publishes SDK readiness', async () => {
         await expect(backgroundModule.sdkResolved).resolves.toBe('sdk');
-        await vi.waitFor(() => {
-            expect(controls.applyLayoutMode).toHaveBeenCalledWith('popup');
-        });
-        expect(controls.attachLayoutModeListener).toHaveBeenCalledOnce();
+        // Started in the first turn, so a waking click or port reaches it.
+        expect(controls.createToolbarView).toHaveBeenCalledOnce();
+        expect(controls.toolbarViewStart).toHaveBeenCalledOnce();
     });
 
-    it('opens commands in a side panel or popup according to the live setting', async () => {
-        controls.layoutMode = 'sidepanel';
-        const firstOpen = controls.commandOptions.openWallet({ windowId: 7 });
-        expect(controls.openSidePanel).toHaveBeenCalledWith({ windowId: 7 });
-        await expect(firstOpen)
-            .resolves.toBe('side-panel-opened');
-
-        await controls.commandOptions.openWallet({ windowId: 23 });
-        expect(controls.openSidePanel).toHaveBeenLastCalledWith({ windowId: 23 });
-
-        await controls.commandOptions.openWallet({});
-        expect(controls.openSidePanel).toHaveBeenLastCalledWith({ windowId: -2 });
-        expect(controls.readLayoutMode).toHaveBeenCalledTimes(1);
-
-        controls.layoutMode = 'popup';
+    it('runs the open-wallet command through the toolbar view controller', async () => {
         await expect(controls.commandOptions.openWallet({ windowId: 7 }))
-            .resolves.toBe('popup-opened');
-        expect(controls.openPopup).toHaveBeenCalledOnce();
+            .resolves.toEqual({ activated: { windowId: 7 } });
+        expect(controls.toolbarViewActivate).toHaveBeenCalledWith({ windowId: 7 });
+        expect(controls.openSidePanel).not.toHaveBeenCalled();
+        expect(controls.openPopup).not.toHaveBeenCalled();
     });
 
     it('checks the idle deadline once at boot, before any keepalive alarm', async () => {

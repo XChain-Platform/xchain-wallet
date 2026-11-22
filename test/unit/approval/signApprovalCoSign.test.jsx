@@ -15,7 +15,7 @@ import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
     getSettings: async () => ({}),
     getAddressesByChain: async () => ({}),
@@ -32,9 +32,9 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
-const messaging = await import('../../../packages/extension/src/approval/messaging.js');
+const messaging = await import('../../../packages/core/src/shared/approval/index.js');
 
 const ACCOUNT = { id: 'acct-1', name: 'Agent one', chainId: 'bitcoin-regtest', aggregateAddress: 'bcrt1qagent' };
 const RAW_CODE = /[A-Z]{2,}_[A-Z_]+/;

@@ -72,7 +72,7 @@ const UNRESOLVED = new Map([
         "an inline Settings row's action label from its row entry in Settings.jsx ('Reset'), each a Title Case literal"],
     ['packages/core/src/shared/routes/Onboarding.jsx :: title :: {title}',
         'firstRunFrame passes the license, wallet setup or product name title, each from onboarding keys'],
-    ['packages/extension/src/approval/kinds/SignApproval.jsx :: title :: {title}',
+    ['packages/core/src/shared/approval/SignApproval.jsx :: title :: {title}',
         'the KIND_TITLE table (Sign Message, Sign Transaction, Sign Action, Co-sign Transaction, Sign In) or the Approve Request fallback, each Title Case'],
     ['packages/core/src/shared/routes/BetFeedDetail.jsx :: button :: {feed.source}',
         'the oracle source address, shown as a link; data, not copy'],
