@@ -1,0 +1,49 @@
+{
+  "v": 1,
+  "builtAt": 1700000000000,
+  "balancesAt": 1700000000000,
+  "pricesAt": 1700000000000,
+  "session": "unlocked",
+  "network": {
+    "kind": "mainnet",
+    "isTest": false
+  },
+  "fiatCode": "USD",
+  "hidden": false,
+  "unitDefault": "fiat",
+  "walletName": "Wallet WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+  "totals": {
+    "fiatText": "$20,000.00",
+    "unitsText": "Balances"
+  },
+  "rows": [
+    {
+      "id": "bitcoin-mainnet:LONG",
+      "chainId": "bitcoin-mainnet",
+      "tick": "LONG",
+      "displayName": "Extremely long asset name NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+      "amountText": "123,456,789.12345678 LONG",
+      "fiatText": "$123,456,789.12",
+      "noPrice": false,
+      "pendingText": "99,999.12345678 LONG pending",
+      "unavailable": false,
+      "iconHash": "",
+      "tickerColor": "#B45309",
+      "hasDetail": true
+    }
+  ],
+  "capped": false,
+  "receive": [],
+  "inbox": [],
+  "request": {
+    "id": "0123456789abcdef0123456789abcdef",
+    "kind": "request",
+    "iconHash": "",
+    "sentence": "Review this request on your phone",
+    "amountText": "0.50 BTC"
+  },
+  "settings": {
+    "showTotal": true,
+    "enabled": true
+  }
+}
