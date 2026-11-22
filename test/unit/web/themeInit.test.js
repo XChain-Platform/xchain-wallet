@@ -134,11 +134,14 @@ describe('startup theme', () => {
         );
         const emitted = [];
         await plugin.buildStart.call({ emitFile: (asset) => emitted.push(asset) });
-        expect(emitted).toEqual([{
+        // popup-size.js rides the same plugin for popup.html; its own test is
+        // test/unit/popup/popupSize.test.js.
+        expect(emitted.map(({ fileName }) => fileName)).toEqual(['theme-init.js', 'popup-size.js']);
+        expect(emitted[0]).toEqual({
             type: 'asset',
             fileName: 'theme-init.js',
             source: webScript,
-        }]);
+        });
     });
 
     it('declares install metadata and theme colors for both browser palettes', () => {

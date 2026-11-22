@@ -101,9 +101,18 @@ for (const html of htmlEntries) {
     const m = src.match(/<script[^>]*type="module"[^>]*src="\.\/([^"]+)"/);
     assert.ok(m, `${html} declares a module entry script`);
     const entry = join(extension, m[1]);
-    const entrySrc = readFileSync(entry, 'utf8');
-    checked.push(`${html} -> ${m[1]}`);
-    if (!/installExtensionWipeHook\(\)/.test(entrySrc)) missing.push(`${html} -> ${m[1]}`);
+    let entrySrc = readFileSync(entry, 'utf8');
+    let label = `${html} -> ${m[1]}`;
+    // A boot entry (src/popup/boot.js) loads the app with one dynamic
+    // import so the page's first load stays small; follow that one hop.
+    const boot = entrySrc.match(/^import\('\.\/([^']+)'\);$/m);
+    if (boot && !/installExtensionWipeHook\(\)/.test(entrySrc)) {
+        const next = join(dirname(entry), boot[1]);
+        entrySrc = readFileSync(next, 'utf8');
+        label += ` -> ${boot[1]}`;
+    }
+    checked.push(label);
+    if (!/installExtensionWipeHook\(\)/.test(entrySrc)) missing.push(label);
 }
 assert.equal(
     missing.join(', '),
