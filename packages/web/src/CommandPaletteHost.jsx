@@ -37,9 +37,10 @@ import {
  * @param {object} props.parseCtx context for free-form queries such as "send 100 MYTOKEN"
  * @param {{ developerMode?: boolean } | null} [props.settings] decides which Settings sections the palette lists
  * @param {object} [props.menu] wallet menu catalogue and shell handlers
+ * @param {boolean} [props.focusSearch] true when the shortcut opened the palette
  */
 export function CommandPaletteHost({
-    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx, settings, menu,
+    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx, settings, menu, focusSearch,
 }) {
     const commands = [
         ...buildCommands(ctx),
@@ -60,6 +61,7 @@ export function CommandPaletteHost({
             commands={commands}
             parseQuery={parseQuery}
             menu={menu}
+            focusSearch={focusSearch}
         />
     );
 }
