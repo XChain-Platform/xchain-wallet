@@ -269,9 +269,10 @@ describe('discardQueuedBroadcast idempotency and in-flight branches', () => {
         const draining = drainQueuedBroadcast(h.args);
         await entered;
 
+        // Busy, not done: the drain can still fail and leave the record queued.
         await expect(discardQueuedBroadcast({
             vault: h.args.vault, pendingTxId: 'queued-1',
-        })).resolves.toBe(false);
+        })).rejects.toMatchObject({ code: 'QUEUED_BROADCAST_BUSY' });
         expect(h.pendingTxs.delete).not.toHaveBeenCalled();
 
         resolveBroadcast({ txid: 'tx-1' });

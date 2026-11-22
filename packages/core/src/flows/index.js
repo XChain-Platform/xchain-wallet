@@ -185,6 +185,7 @@ export { getProjectForTick } from './projectQueries.js';
 export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {
     unlockGatedFile,
+    unlockGatedFileWithStatus,
     unlockGatedPack,
     unlockGatedFileForAddress,
     listGatedFiles,
@@ -630,7 +631,7 @@ export {
     ADS_RECIPIENT_ROLE,
 } from './ads.js';
 export { checkReachability } from './reachability.js';
-export { bookQueuedDelivery } from './adsDelivery.js';
+export { bookQueuedCommitLeg, bookQueuedDelivery } from './adsDelivery.js';
 export {
     emptyLockoutState,
     delayForAttempts,

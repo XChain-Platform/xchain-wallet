@@ -169,7 +169,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 <dt className={styles.tick}>{delta.feeLabel || t('send.networkFee')}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
-                        signed="− unknown"
+                        signed={t('components.balanceChanges.unknownDebit')}
                         tick={delta.tick}
                         fiatCurrency={fiatCurrency}
                         showFiat={showFiat}
@@ -220,7 +220,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
-                        signed="− unknown"
+                        signed={t('components.balanceChanges.unknownDebit')}
                         tick={delta.tick}
                         fiatCurrency={fiatCurrency}
                         showFiat={showFiat}

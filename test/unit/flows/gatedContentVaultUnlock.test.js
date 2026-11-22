@@ -26,6 +26,7 @@ vi.mock('../../../packages/core/src/flows/exportPrivateKey.js', () => ({
 }));
 
 import {
+    unlockGatedFile,
     unlockGatedFileForAddress,
     clearGatedContentCaches,
 } from '../../../packages/core/src/flows/gatedContent.js';
@@ -210,5 +211,82 @@ describe('unlockGatedFileForAddress write-back', () => {
             password: 'pw', addressId: 'a1',
         }));
         expect(res.plaintextBase64).toBe(PLAINTEXT.toString('base64'));
+    });
+});
+
+/** An SDK for one chain whose explorer serves that chain's own file bytes. */
+function chainSdk(plain, extra = {}) {
+    const sdk = makeSdk({ 'same-address': [KEY] });
+    sdk.gatedFile.decryptFileBytes = vi.fn(() => new Uint8Array(Buffer.from(plain)));
+    return Object.assign(sdk, extra);
+}
+
+function vaultRows(chainIds) {
+    return makeVault(chainIds.map((chainId) => createGatedKey({
+        ...ROW_ID_INPUT, chainId, keyHex: KEY.toString('hex'), source: 'published',
+    })));
+}
+
+describe('gated plaintext cache chain identity', () => {
+    it('unlocks the same action index on two chains from each chain own file', async () => {
+        const sdks = { 'btc-regtest': chainSdk('btc-plain'), 'doge-regtest': chainSdk('doge-plain') };
+        const vault = vaultRows(['btc-regtest', 'doge-regtest']);
+        const registry = { sdkRegistry: { get: (id) => sdks[id] } };
+        const btc = await unlockGatedFileForAddress(makeArgs(null, vault, { ...registry, actionIndex: '42' }));
+        const doge = await unlockGatedFileForAddress(makeArgs(null, vault, {
+            ...registry, actionIndex: '42', chainId: 'doge-regtest',
+        }));
+        expect(Buffer.from(btc.plaintextBase64, 'base64').toString()).toBe('btc-plain');
+        expect(Buffer.from(doge.plaintextBase64, 'base64').toString()).toBe('doge-plain');
+        expect(doge.chainId).toBe('doge-regtest');
+        expect(sdks['btc-regtest'].getGatedFileRaw).toHaveBeenCalledTimes(1);
+        expect(sdks['doge-regtest'].getGatedFileRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('keys the address path by chain and key hash as well as address', async () => {
+        const otherKey = Buffer.alloc(32, 8);
+        const otherHash = createHash('sha256').update(otherKey).digest('hex');
+        const btc = chainSdk('btc-plain');
+        const doge = chainSdk('doge-plain');
+        const rotated = chainSdk('rotated-plain', {
+            getMessagesForAddress: vi.fn(async () => [{ bytes: Buffer.concat([Buffer.from([1]), otherKey]) }]),
+        });
+        const unlock = (sdk, chainId, keyHash) => unlockGatedFile({
+            sdk, address: 'same-address', wif: 'wif', chainId, actionIndex: '42', keyHash,
+        });
+        await unlock(btc, 'btc-regtest', KEY_HASH);
+        await unlock(doge, 'doge-regtest', KEY_HASH);
+        await unlock(rotated, 'btc-regtest', otherHash);
+        expect(doge.getGatedFileRaw).toHaveBeenCalledTimes(1);
+        expect(rotated.getGatedFileRaw).toHaveBeenCalledTimes(1);
+        expect(Buffer.from(await unlock(doge, 'doge-regtest', KEY_HASH)).toString()).toBe('doge-plain');
+        expect(Buffer.from(await unlock(rotated, 'btc-regtest', otherHash)).toString()).toBe('rotated-plain');
+    });
+
+    it('refuses an address-path unlock with no chain id', async () => {
+        await expect(unlockGatedFile({
+            sdk: makeSdk(), address: 'holder', wif: 'wif', actionIndex: '42', keyHash: KEY_HASH,
+        })).rejects.toThrow(/chainId is required/);
+    });
+});
+
+describe('vault-path stored-form status', () => {
+    it('returns the stored-form flag and error code on a miss and on a cache hit', async () => {
+        const sdk = chainSdk('not deflate', {
+            getAction: vi.fn(async () => ({ data: { tx_data: 'FILE|0|a|b|c|d|GATED|1|kh||1' } })),
+        });
+        const vault = vaultRows(['btc-regtest']);
+        const first = await unlockGatedFileForAddress(makeArgs(sdk, vault));
+        const second = await unlockGatedFileForAddress(makeArgs(sdk, vault));
+        for (const res of [first, second]) {
+            expect(res).toMatchObject({ storedForm: true, inflateError: 'INVALID_DEFLATE_STREAM' });
+            expect(Buffer.from(res.plaintextBase64, 'base64').toString()).toBe('not deflate');
+        }
+        expect(sdk.getGatedFileRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns a clear status for an uncompressed file', async () => {
+        const res = await unlockGatedFileForAddress(makeArgs(makeSdk(), vaultRows(['btc-regtest'])));
+        expect(res).toMatchObject({ storedForm: false, inflateError: null });
     });
 });

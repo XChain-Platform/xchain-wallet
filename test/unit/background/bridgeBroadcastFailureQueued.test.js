@@ -60,7 +60,11 @@ function fakeVault() {
     const account = { id: 'acct-1', walletId: 'wallet-1' };
     return {
         settings: { get: async () => ({ activeNetwork: 'regtest', blockedOrigins: [] }), put: async () => {} },
-        connectedSites: { findBy: async (f, v) => [site].filter((s) => s[f] === v), put: async () => site },
+        connectedSites: {
+            findBy: async (f, v) => [site].filter((s) => s[f] === v),
+            put: async () => site,
+            update: async (id, decide) => decide(site.id === id ? site : null) != null,
+        },
         wallets: { list: async () => [{ id: 'wallet-1' }], get: async () => ({ id: 'wallet-1' }) },
         accounts: { list: async () => [account], get: async () => account, findBy: async (f, v) => [account].filter((a) => a[f] === v) },
         addresses: {

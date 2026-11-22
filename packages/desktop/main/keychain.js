@@ -69,9 +69,30 @@ export class KeychainSessionBackend {
         // Set by clear() and reset only by save(): a session.bin an unlink
         // could not remove is never decrypted again in this process.
         this._revoked = false;
+        // Bumped by every clear(). A save captures it before its disk steps and
+        // stops writing once a clear has overtaken it; _revoked cannot serve,
+        // since a later save() lifts it.
+        this._generation = 0;
+        // One FIFO lane for every disk mutation, so a clear() resolves only
+        // after the disk work of each save that started before it is done.
+        this._diskLane = Promise.resolve();
     }
 
     get filePath() { return this._filePath; }
+
+    /**
+     * Queue a disk task behind every earlier one. A failed task rejects its
+     * own caller only; the lane itself keeps running.
+     *
+     * @template T
+     * @param {() => Promise<T>} task
+     * @returns {Promise<T>}
+     */
+    _enqueueDisk(task) {
+        const run = this._diskLane.then(task);
+        this._diskLane = run.catch(() => {});
+        return run;
+    }
 
     /**
      * True iff the OS keychain is usable for confidentiality. False
@@ -162,6 +183,10 @@ export class KeychainSessionBackend {
      * the keychain IS available, also encrypts + persists to disk so a
      * later launch in the same OS-user session can auto-unlock.
      *
+     * Once a clear() resolves, no save that started before it can leave
+     * session.bin or its .tmp sibling on disk: a save that a clear overtakes
+     * skips its remaining disk steps and still resolves.
+     *
      * @param {Uint8Array} blob
      * @param {{ expected?: Uint8Array | null }} [options]   when present, the
      *   save lands only while the slot holds exactly these bytes (null = empty)
@@ -193,22 +218,38 @@ export class KeychainSessionBackend {
         if (!this.isAvailable()) return;
         const hex = bytesToHex(blob);
         const cipher = this._safeStorage.encryptString(hex);
-        await fs.mkdir(dirname(this._filePath), { recursive: true });
-        await fs.writeFile(this._tmpPath, cipher, { mode: 0o600 });
-        await fs.rename(this._tmpPath, this._filePath);
+        // No await sits between the in-memory write and the enqueue, so the
+        // lane runs disk work in call order.
+        const generation = this._generation;
+        const overtaken = () => this._generation !== generation;
+        await this._enqueueDisk(async () => {
+            // A clear queued behind this task removes anything written here.
+            if (overtaken()) return;
+            await fs.mkdir(dirname(this._filePath), { recursive: true });
+            if (overtaken()) return;
+            await fs.writeFile(this._tmpPath, cipher, { mode: 0o600 });
+            if (overtaken()) return;
+            await fs.rename(this._tmpPath, this._filePath);
+        });
     }
 
     /**
      * Drop the cached key. Revokes first, so `load()` returns null for the
      * rest of this process however the unlinks below end; a caller that
-     * swallows the rejection still gets the lock it asked for.
+     * swallows the rejection still gets the lock it asked for. Resolves only
+     * after every save that started before it has finished on disk.
      */
     async clear() {
+        this._generation += 1;
         this._revoked = true;
         if (this._inMemory) {
             this._inMemory.fill(0);
             this._inMemory = null;
         }
+        return this._enqueueDisk(() => this._unlinkSessionFiles());
+    }
+
+    async _unlinkSessionFiles() {
         // Remove both the live ciphertext and any half-written .tmp sibling
         // a crash mid-save may have left. clear() runs on Lock/Reset, so a
         // stray session.bin.tmp holding the encrypted master key must not

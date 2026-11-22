@@ -69,7 +69,10 @@ function gatedGroups() {
     ];
 }
 
-function mount({ quantity = '0', info = fixture(), groups = gatedGroups(), groupsError = null, tick = 'PEPECASH', subassets = [] } = {}) {
+function mount({
+    quantity = '0', info = fixture(), groups = gatedGroups(), groupsError = null, tick = 'PEPECASH', subassets = [],
+    unlockResp = { plaintextBase64: 'c2VjcmV0', byteLength: 6 },
+} = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getTokenInfo: vi.fn().mockResolvedValue(info),
@@ -79,7 +82,7 @@ function mount({ quantity = '0', info = fixture(), groups = gatedGroups(), group
             ? vi.fn().mockRejectedValue(groupsError)
             : vi.fn().mockResolvedValue(groups),
         listGatedKeys: vi.fn().mockResolvedValue([{ keyHash: 'key-1' }, { keyHash: 'key-2' }]),
-        unlockGatedContent: vi.fn().mockResolvedValue({ plaintextBase64: 'c2VjcmV0', byteLength: 6 }),
+        unlockGatedContent: vi.fn().mockResolvedValue(unlockResp),
         getSupplyHistory: vi.fn().mockResolvedValue([]),
     };
     render(
@@ -128,6 +131,42 @@ describe('TokenDetail linked content design', () => {
 
         await waitFor(() => expect(messaging.unlockGatedContent).toHaveBeenCalled());
         expect(await screen.findByRole('button', { name: 'Open unlocked file one.zip' })).toBeInTheDocument();
+    });
+
+    it('carries a failed decompression from the unlock response into the file viewer', async () => {
+        mount({
+            quantity: '25000',
+            unlockResp: { plaintextBase64: 'c2VjcmV0', byteLength: 6, storedForm: true, inflateError: 'INVALID_DEFLATE_STREAM' },
+        });
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        fireEvent.click(await screen.findByRole('tab', { name: /Holders/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock and open one.zip' }));
+
+        expect((await screen.findByText(/couldn't be decompressed/i)).textContent).toMatch(/not the original file/i);
+    });
+
+    it('carries a failed decompression from a vault-key unlock into the file viewer', async () => {
+        const messaging = mount({
+            quantity: '25000',
+            groups: [{ keyHash: 'key-1', files: [{ actionIndex: '42', name: 'real.bin', title: 'Real file', type: 'application/octet-stream', gateMinAmount: '1000' }] }],
+            unlockResp: { plaintextBase64: 'c2VjcmV0', byteLength: 6, storedForm: true, inflateError: 'RATIO_GUARD_TRIPPED' },
+        });
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        fireEvent.click(await screen.findByRole('tab', { name: /Holders/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open real.bin' }));
+
+        expect((await screen.findByText(/safe decompression limit/i)).textContent).toMatch(/not the original file/i);
+        expect(messaging.unlockGatedContent).toHaveBeenCalledWith(expect.objectContaining({ actionIndex: '42', gateTicker: 'PEPECASH', chainId: CHAIN }));
+    });
+
+    it('opens a recovered gated file with no stored-form notice', async () => {
+        mount({ quantity: '25000' });
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        fireEvent.click(await screen.findByRole('tab', { name: /Holders/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock and open one.zip' }));
+
+        expect(await screen.findByRole('button', { name: 'Download' })).toBeInTheDocument();
+        expect(screen.queryByText(/decompress/i)).toBeNull();
     });
 
     it('filters file titles from the standard header filter and marks it active', async () => {

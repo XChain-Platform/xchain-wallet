@@ -57,6 +57,7 @@ import {
     deviceInstalledArch,
     laneDeviceCannotWitness,
     swapExercisesLane,
+    swapIsSameVersion,
 } from '../../../tools/release/rehearse.mjs';
 import { LANES, ALL_OS_TRIGGER_PACKAGES, deviceNamesCiRunner } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
@@ -667,6 +668,52 @@ const check = (over) => assertRecord({
         const written = JSON.parse(readFileSync(recordFile, 'utf8')).swaps;
         assert.equal(written.length, 1);
         assert.equal(written[0]['exercised-arch'], 'arm64', 'attest records the arch the swap exercised');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// --- a swap from a version to itself watched nothing ---------------------
+{
+    const same = { lane: 'mac-arm64', device: 'Mac Studio', from: '0.333.1', to: '0.333.1' };
+    assert.equal(swapIsSameVersion(same, TAG), true);
+    assert.equal(swapIsSameVersion({ from: 'v0.333.1' }, TAG), true, 'a missing to falls back to the record tag');
+    assert.equal(swapIsSameVersion({ from: '0.333.0' }, TAG), false);
+    assert.equal(swapIsSameVersion({ to: '0.333.1' }, TAG), false, 'an entry without from is not judged');
+    for (const swap of [same, { ...same, to: undefined }, { ...same, from: 'v0.333.1' }]) {
+        const r = check({ swaps: [swap] });
+        assert.ok(!r.ok, `a same-version swap must not satisfy one-os: ${JSON.stringify(swap)}`);
+        assert.match(r.problems.join(' '), /no observed swap on any OS/);
+    }
+    assert.match(check({ 'swap-requirement': 'all-os', swaps: [same] }).problems.join(' '), /darwin has none/,
+        'a same-version swap does not satisfy darwin under all-os');
+    const alongside = check({ swaps: [same, ...baseRecord.swaps] });
+    assert.ok(alongside.ok, 'a genuine swap beside a same-version entry still passes');
+    assert.match(alongside.notes.join(' '), /same version, so nothing was swapped/);
+
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-same-version-'));
+    try {
+        const recordFile = join(work, 'REHEARSAL-test.json');
+        writeFileSync(recordFile, JSON.stringify({ ...baseRecord, swaps: [] }));
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '', BUILDKITE: '', GITLAB_CI: '' };
+        const rehearse = (args) => spawnSync(process.execPath,
+            [join(root, 'tools/release/rehearse.mjs'), ...args], { encoding: 'utf8', env });
+        for (const from of ['0.333.1', 'v0.333.1']) {
+            const refused = rehearse(['attest', '--record', recordFile, '--lane', 'mac-arm64',
+                '--from', from, '--by', 'Test Person']);
+            assert.notEqual(refused.status, 0, `attest must refuse --from ${from} on ${TAG}`);
+            assert.match(refused.stderr, /nothing was swapped/);
+        }
+        assert.equal(JSON.parse(readFileSync(recordFile, 'utf8')).swaps.length, 0, 'a refused attest writes nothing');
+
+        const recs = join(work, 'recs');
+        mkdirSync(recs);
+        writeFileSync(join(recs, 'REHEARSAL-v1.json'), JSON.stringify({ ...baseRecord, swaps: [same] }));
+        assert.doesNotMatch(rehearse(['coverage', '--records', recs]).stdout, /✅ mac-arm64\b/,
+            'coverage does not count a same-version swap');
+        writeFileSync(join(recs, 'REHEARSAL-v1.json'), JSON.stringify({ ...baseRecord }));
+        assert.match(rehearse(['coverage', '--records', recs]).stdout, /✅ mac-arm64\b/,
+            'control: coverage counts the genuine swap');
     } finally {
         rmSync(work, { recursive: true, force: true });
     }

@@ -502,8 +502,9 @@ export interface XChainProvider {
 
     // Phase 4+. Wallet presents a grouped approval modal and signs each
     // action's sign screen in sequence. Order of the result array matches
-    // the input.
-    parallel(actions: SignActionParams[]): Promise<SignActionResult[]>;
+    // the input. Each entry may carry its own params type (a SEND beside a
+    // SWEEP), exactly as signAction accepts them.
+    parallel(actions: readonly SignActionParams<unknown>[]): Promise<SignActionResult[]>;
 
     on<E extends BridgeEvent>(event: E, handler: BridgeEventMap[E]): void;
     off<E extends BridgeEvent>(event: E, handler: BridgeEventMap[E]): void;

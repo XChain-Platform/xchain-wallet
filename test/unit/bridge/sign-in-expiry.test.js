@@ -99,6 +99,7 @@ function makeVault() {
             list: async () => [site],
             findBy: async (field, value) => (site[field] === value ? [site] : []),
             put: async (s) => s,
+            update: async (id, decide) => decide(site.id === id ? site : null) != null,
             delete: async () => {},
         },
     };

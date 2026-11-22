@@ -206,7 +206,14 @@ export function ConnectedSitesSection({
                             await messaging.restoreConnectedSite({ site: snapshot });
                             await reload();
                         } catch (err) {
-                            setError(err instanceof Error ? err.message : String(err));
+                            // A failed reconnect leaves the page usable: the list
+                            // still reads true, so the refusal is a toast, not a page state.
+                            showToast({
+                                message: t(err?.code === 'BLOCKED_BY_USER'
+                                    ? 'settings.connectedSites.undoBlocked'
+                                    : 'settings.connectedSites.undoFailed'),
+                                variant: 'error',
+                            });
                         }
                     },
                 });

@@ -5,7 +5,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import { deflateRawSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GATED_MULTIPART_MAX_BYTES } from '../../../packages/core/src/flows/fileSizeLimits.js';
-import { clearGatedContentCaches, unlockGatedFile } from '../../../packages/core/src/flows/gatedContent.js';
+import {
+    clearGatedContentCaches, unlockGatedFile, unlockGatedFileWithStatus,
+} from '../../../packages/core/src/flows/gatedContent.js';
+import { composeGatedManifestBatch } from '../../../packages/core/src/flows/gatedMultipartBatch.js';
 import { resolveGatedInflate } from '../../../packages/core/src/flows/gatedInflateLimit.js';
 
 const V0_ACTION = 'FILE|0|a.bin|application/octet-stream|T|M|||||1';
@@ -37,7 +40,7 @@ async function unlockFixture(fixture, actionString) {
     const sdk = sdkFor(fixture.stored, actionString);
     const actionIndex = String(nextActionIndex++);
     const bytes = await unlockGatedFile({
-        sdk, address: `holder-${actionIndex}`, wif: 'wif', actionIndex, keyHash: KEY_HASH,
+        sdk, address: `holder-${actionIndex}`, wif: 'wif', chainId: 'btc-regtest', actionIndex, keyHash: KEY_HASH,
     });
     return { bytes: Buffer.from(bytes), sdk };
 }
@@ -149,5 +152,76 @@ describe('small version 1 inflation', () => {
         const { bytes } = await unlockFixture(fixture, V1_ACTION);
         expect(bytes.equals(original)).toBe(true);
         expect(bytes).toHaveLength(2_000);
+    });
+});
+
+const BATCH_V0_ACTION = `BATCH|0|${V0_ACTION};MESSAGE|2|BTC|addr|ct`;
+
+function batchV1Action() {
+    const batch = composeGatedManifestBatch({
+        manifest: {
+            FILE_HASH: 'a'.repeat(64), TOTAL_PARTS: '2', TOTAL_BYTES: '20',
+            NAME: 'a.bin', TYPE: 'application/octet-stream', TITLE: 'T', MEMO: 'M',
+            GATE_TICKER: 'GATE', KEY_HASH: KEY_HASH, COMPRESSION: '1',
+        },
+        keyHandoffCiphertext: 'ct', coin: 'BTC', sourceAddress: 'addr',
+    });
+    return `${batch.action}|${batch.params.VERSION}|${batch.params.COMMAND}`;
+}
+
+describe('BATCH-wrapped gated inflate resolution', () => {
+    it('reads a version 0 FILE leg with ratio-only options', async () => {
+        const getAction = vi.fn(async () => ({ data: { tx_data: BATCH_V0_ACTION } }));
+        await expect(resolveGatedInflate({ sdk: { getAction }, actionIndex: 12 })).resolves.toEqual({
+            declared: '1', options: {},
+        });
+    });
+
+    it('reads the published manifest leg with the multipart cap', async () => {
+        const getAction = vi.fn(async () => ({ data: { tx_data: batchV1Action() } }));
+        await expect(resolveGatedInflate({ sdk: { getAction }, actionIndex: 13 })).resolves.toEqual({
+            declared: '1', options: { maxOutputBytes: GATED_MULTIPART_MAX_BYTES },
+        });
+    });
+});
+
+describe('BATCH-published gated unlock', () => {
+    it('inflates the decrypted bytes of a FILE published inside a BATCH', async () => {
+        const original = Buffer.from('gated original bytes '.repeat(12));
+        const fixture = { original, stored: deflateRawSync(original) };
+        expect(fixture.stored.length).toBeLessThan(original.length);
+        const { bytes } = await unlockFixture(fixture, BATCH_V0_ACTION);
+        expect(bytes.equals(original)).toBe(true);
+    });
+});
+
+async function unlockWithStatus(sdk, actionIndex) {
+    return unlockGatedFileWithStatus({
+        sdk, address: 'holder-status', wif: 'wif', chainId: 'btc-regtest', actionIndex, keyHash: KEY_HASH,
+    });
+}
+
+describe('gated unlock stored-form status', () => {
+    it('reports an invalid stream as stored form with its error, on a cache hit too', async () => {
+        const junk = Buffer.from('not a deflate stream at all');
+        const sdk = sdkFor(junk, V1_ACTION);
+        const first = await unlockWithStatus(sdk, '300');
+        expect(first.storedForm).toBe(true);
+        expect(first.inflateError).toBe('INVALID_DEFLATE_STREAM');
+        expect(Buffer.from(first.plaintext).equals(junk)).toBe(true);
+        const second = await unlockWithStatus(sdk, '300');
+        expect(sdk.gatedFile.decryptFileBytes).toHaveBeenCalledTimes(1);
+        expect(second.storedForm).toBe(true);
+        expect(second.inflateError).toBe('INVALID_DEFLATE_STREAM');
+    });
+
+    it('reports a valid stream and an uncompressed file as recovered content', async () => {
+        const original = Buffer.from('recovered content '.repeat(10));
+        const inflated = await unlockWithStatus(sdkFor(deflateRawSync(original), V1_ACTION), '301');
+        expect(inflated).toMatchObject({ storedForm: false, inflateError: null });
+        expect(Buffer.from(inflated.plaintext).equals(original)).toBe(true);
+        const raw = await unlockWithStatus(sdkFor(original, V1_ACTION.replace(/\|1$/, '|0')), '302');
+        expect(raw).toMatchObject({ storedForm: false, inflateError: null });
+        expect(Buffer.from(raw.plaintext).equals(original)).toBe(true);
     });
 });

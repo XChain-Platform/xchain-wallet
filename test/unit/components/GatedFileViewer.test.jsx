@@ -230,3 +230,27 @@ describe('MarketLifecycleTimeline states', () => {
         expect(screen.getByText('#1234567')).toBeTruthy();
     });
 });
+
+describe('GatedFileViewer stored-form notice', () => {
+    const storedBytes = b64('still compressed bytes');
+    const viewer = (extra) => render(
+        <GatedFileViewer name="a.bin" plaintextBase64={storedBytes} onClose={() => {}} {...extra} />,
+    );
+
+    it('says plainly that a failed decompression shows the stored bytes', () => {
+        viewer({ storedForm: true, inflateError: 'INVALID_DEFLATE_STREAM' });
+        const notice = screen.getByText(/couldn't be decompressed/i);
+        expect(notice.textContent).toMatch(/not the original file/i);
+        expect(screen.getByRole('button', { name: 'Download' }).disabled).toBe(false);
+    });
+
+    it('names the size limit when the decompression guard tripped', () => {
+        viewer({ storedForm: true, inflateError: 'RATIO_GUARD_TRIPPED' });
+        expect(screen.getByText(/safe decompression limit/i).textContent).toMatch(/not the original file/i);
+    });
+
+    it('shows no stored-form notice for recovered content', () => {
+        viewer({});
+        expect(screen.queryByText(/decompress/i)).toBeNull();
+    });
+});

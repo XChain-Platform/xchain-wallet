@@ -408,6 +408,22 @@ export function swapExercisesLane(swap) {
     return deviceInstalledArch(lane) === lane.arch;
 }
 
+/**
+ * Whether a human swap entry updated a version to itself, the case validateSwapCheck refuses
+ * for machine results as "nothing was swapped". An entry without `to` claims a swap into the
+ * record's own release, so its target is the record tag; one without `from` is not judged here.
+ *
+ * @param {{from?: string, to?: string}} swap
+ * @param {string} recordTag
+ * @returns {boolean}
+ */
+export function swapIsSameVersion(swap, recordTag) {
+    const norm = (v) => String(v ?? '').trim().replace(/^v/, '');
+    const from = norm(swap?.from);
+    if (!from) return false;
+    return from === (norm(swap?.to) || norm(recordTag));
+}
+
 /** Whether a lane's named device installs another lane's artifact, so `attest` refuses it for this lane. */
 export function laneDeviceCannotWitness(lane) {
     return Boolean(lane?.device) && deviceInstalledArch(lane) !== lane.arch;
@@ -1460,9 +1476,16 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
             + `${laneById(swap.lane).arch}, so it is not counted as ${swap.lane} evidence.`,
         );
     }
+    // An entry that updated a version to itself watched nothing, so it is reported and never counted.
+    const sameVersion = (s) => swapIsSameVersion(s, record.tag);
+    for (const swap of swaps.filter(sameVersion)) {
+        notes.push(`the swap on ${swap.lane} (${swap.device}) is from ${swap.from} to the same version, `
+            + 'so nothing was swapped and it is not counted.');
+    }
     // Desktop lanes only: a direct lane's swap says nothing about the desktop OS tally.
     const swappedOs = new Set(
-        swaps.filter(swapExercisesLane).map((s) => LANES.find((l) => l.id === s.lane)?.os).filter(Boolean),
+        swaps.filter((s) => swapExercisesLane(s) && !sameVersion(s))
+            .map((s) => LANES.find((l) => l.id === s.lane)?.os).filter(Boolean),
     );
     const requirement = record['swap-requirement'];
     // Checked whatever the release contains: this is the record's SHAPE,
@@ -1542,8 +1565,9 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
                 problems.push(`lane ${result.id} failed at ${result.failed}: ${result.reason}`);
                 continue;
             }
-            const observed = swaps.find((s) => s.lane === lane.id);
-            if (observed && !lane.device) {
+            const claimed = swaps.find((s) => s.lane === lane.id);
+            const observed = swaps.find((s) => s.lane === lane.id && !sameVersion(s));
+            if (claimed && !lane.device) {
                 // `attest` refuses this, so it can only arrive by hand. An
                 // install-over that names no device is a claim about
                 // nothing, and it would otherwise silence the note below.
@@ -1917,6 +1941,10 @@ async function main(argv) {
             fail(`lane ${laneId} did not pass its feed-side probe, so there is nothing\n`
                 + '  a swap on it would prove. Fix the probe failure and re-run.');
         }
+        if (swapIsSameVersion({ from }, record.tag)) {
+            fail(`--from ${from} is the version this record is for (${record.tag}): nothing was swapped.\n`
+                + '  --from is the version that was installed BEFORE the update.');
+        }
         record.swaps = record.swaps || [];
         record.swaps.push({
             lane: laneId,
@@ -2070,6 +2098,8 @@ async function main(argv) {
                 for (const swap of record.swaps || []) {
                     // A swap that installed another lane's artifact covers nothing for its own lane.
                     if (!swapExercisesLane(swap)) continue;
+                    // A swap from a version to itself watched nothing.
+                    if (swapIsSameVersion(swap, record.tag)) continue;
                     // A swap filed against a runner was not watched by anyone.
                     if (deviceNamesCiRunner(swap.device)) continue;
                     seen.set(swap.lane, { tag: record.tag, device: swap.device, at: swap.at });

@@ -90,6 +90,12 @@ function makeVault(site = connectedSite()) {
                 [...sites.values()].filter((entry) => entry[field] === value)
             )),
             put: vi.fn(async (entry) => { sites.set(entry.id, entry); return entry; }),
+            update: async (id, decide) => {
+                const next = decide(sites.get(id) ?? null);
+                if (next == null) return false;
+                sites.set(next.id, next);
+                return true;
+            },
             delete: vi.fn(async (id) => { sites.delete(id); }),
         },
     };

@@ -62,6 +62,7 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/projectRoster.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
@@ -3795,7 +3796,7 @@ function ListMembersBody({
                     <Input
                         label="Name"
                         help={`Leave this empty to keep the current name. The X sets the name to nothing on the chain. The name is public and can be at most ${LIST_META_NAME_MAX_BYTES} bytes. A new name is its own transaction, published apart from a member change.`}
-                        counter={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
+                        counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedName), max: LIST_META_NAME_MAX_BYTES })}
                         error={nameError || undefined}
                         value={name}
                         onChange={(event) => { setName(event.target.value); setFormError(null); }}
@@ -3807,7 +3808,7 @@ function ListMembersBody({
                     <Textarea
                         label="Description"
                         help={`Leave this empty to keep the current description. The X sets the description to nothing on the chain. The description is public and can be at most ${LIST_META_DESCRIPTION_MAX_BYTES} bytes.`}
-                        counter={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
+                        counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedDescription), max: LIST_META_DESCRIPTION_MAX_BYTES })}
                         error={descriptionError || undefined}
                         value={description}
                         onChange={(event) => { setDescription(event.target.value.replace(/[\r\n]+/g, ' ')); setFormError(null); }}

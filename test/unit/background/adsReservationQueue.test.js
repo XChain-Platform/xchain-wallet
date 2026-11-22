@@ -225,7 +225,7 @@ describe('a send waiting in the retry queue holds the payout', () => {
         expect(q.blob[W]).toHaveLength(1);
         expect(q.blob[W][0].adsCommit).toEqual({
             chainId: MAIN, donationIncluded: true, donatedFiat: '30', currency: 'EUR', mainnet: true, reservationId: record.id,
-            bookingKey: record.id,
+            bookingKey: record.id, encoding: 'OP_RETURN',
         });
         expect(w.ads()).toMatchObject({ queued: '30', donated: '0', donationCount: 0 });
         expect(w.ads().reserved).toMatchObject({ id: record.id, fiat: '30', currency: 'EUR', chainId: MAIN, pendingTxId: record.id });

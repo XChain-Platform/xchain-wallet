@@ -283,8 +283,12 @@ export async function submitAction({
             : { donationIncluded: false, donatedFiat: null, currency: null, ...booking };
     };
     // The verdict a durable copy of these bytes carries. Its key is the record id,
-    // which stays fixed while a two-phase record's txid moves to the reveal.
-    const checkpointAdsCommit = () => ({ chainId, ...adsVerdict(), bookingKey: pending?.id ?? null });
+    // which stays fixed while a two-phase record's txid moves to the reveal. The
+    // signed encoding tells a drain which leg of a queued pair carries the payout.
+    const checkpointAdsCommit = () => ({
+        chainId, ...adsVerdict(), bookingKey: pending?.id ?? null,
+        ...(typeof signedEncoding === 'string' && signedEncoding ? { encoding: signedEncoding } : {}),
+    });
     // Let the claim go: these bytes will never broadcast, or no longer carry
     // the donation, so the next send may carry the payout. Never fails the send.
     // `toReview` hands a taken-over claim back to its confirm screen instead

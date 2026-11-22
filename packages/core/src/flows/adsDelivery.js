@@ -53,6 +53,42 @@ export async function bookLandedCommit({ vault, verdict, encoding, landedPhase, 
     return { carries, booking };
 }
 
+/**
+ * Book the commit a queued two-phase drain just delivered, under the same key
+ * the live send books it, so a commit already booked is not counted again.
+ * Once it settled the payout the final leg only accrues, and a release run for
+ * a refused or discarded reveal finds no claim left to let go. A verdict with
+ * no encoding books the commit accrue-only and leaves the payout to the final
+ * leg. Never throws: accounting must not fail a landed broadcast.
+ *
+ * @returns {Promise<{ adsCommit?: object, adsBooking?: object }>} fields for the record written next
+ */
+export async function bookQueuedCommitLeg({
+    vault, chainRegistry, pendingTxId = null, adsCommit = null, stampBooking = null, onError = null,
+}) {
+    if (!adsCommit) return {};
+    try {
+        const descriptor = chainRegistry?.get?.(adsCommit.chainId) ?? null;
+        const verdict = {
+            donationIncluded: adsCommit.donationIncluded,
+            donatedFiat: adsCommit.donatedFiat ?? null,
+            currency: adsCommit.currency ?? null,
+            mainnet: adsCommit.mainnet !== false && descriptor?.networkKind === 'mainnet',
+            reservationId: adsCommit.reservationId ?? null,
+        };
+        const { carries, booking } = await bookLandedCommit({
+            vault, verdict, encoding: adsCommit.encoding ?? null, landedPhase: null, pendingTxId,
+        });
+        if (!carries) return { adsCommit };
+        const adsBooking = booking && pendingTxId ? { id: pendingTxId, ...booking, paid: true, booked: true } : null;
+        if (adsBooking && typeof stampBooking === 'function') await stampBooking(vault, pendingTxId, booking);
+        return { adsCommit: accrueOnlyVerdict(adsCommit), ...(adsBooking ? { adsBooking } : {}) };
+    } catch (error) {
+        if (typeof onError === 'function') onError(error);
+        return { adsCommit };
+    }
+}
+
 /** Book bytes delivered by either queued-broadcast implementation. */
 export async function bookQueuedDelivery({
     vault,

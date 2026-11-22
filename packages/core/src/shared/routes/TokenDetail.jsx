@@ -2917,6 +2917,19 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     );
 }
 
+/** @typedef {{ plaintextBase64: string, byteLength: number, storedForm: boolean, inflateError: string | null }} UnlockedGatedFile */
+
+// Keeps the inflate outcome beside the bytes so the viewer can say when it is
+// showing a file's stored form because decompression failed.
+function unlockedGatedFileOf(resp) {
+    return /** @type {UnlockedGatedFile} */ ({
+        plaintextBase64: resp.plaintextBase64,
+        byteLength: resp.byteLength,
+        storedForm: resp.storedForm === true,
+        inflateError: resp.inflateError ?? null,
+    });
+}
+
 function GatedGroupCard({
     group,
     heading,
@@ -2937,11 +2950,11 @@ function GatedGroupCard({
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
-    /** @type {[Map<string, { plaintextBase64: string, byteLength: number }>, Function]} */
+    /** @type {[Map<string, UnlockedGatedFile>, Function]} */
     const [unlocked, setUnlocked] = useState(() => new Map());
     /** @type {[any | null, Function]} */
     const [pendingFile, setPendingFile] = useState(null);
-    /** @type {[{ name: string, declaredType: string | null, plaintextBase64: string } | null, Function]} */
+    /** @type {[({ name: string, declaredType: string | null } & UnlockedGatedFile) | null, Function]} */
     const [viewer, setViewer] = useState(null);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileOpenBusyRef = useRef(false);
@@ -2961,9 +2974,9 @@ function GatedGroupCard({
     function openFile(plain, file) {
         if (!plain) return;
         setViewer({
+            ...plain,
             name: file.name || `Action #${file.actionIndex}`,
             declaredType: file.type || null,
-            plaintextBase64: plain.plaintextBase64,
         });
     }
 
@@ -3004,10 +3017,7 @@ function GatedGroupCard({
                         actionIndex: f.actionIndex,
                         keyHash: group.keyHash,
                     });
-                    results.set(String(f.actionIndex), {
-                        plaintextBase64: resp.plaintextBase64,
-                        byteLength: resp.byteLength,
-                    });
+                    results.set(String(f.actionIndex), unlockedGatedFileOf(resp));
                 }
                 setUnlocked(results);
                 const target = results.get(String(file.actionIndex));
@@ -3048,10 +3058,7 @@ function GatedGroupCard({
                             gateTicker: tick,
                             chainId,
                         });
-                        results.set(String(f.actionIndex), {
-                            plaintextBase64: resp.plaintextBase64,
-                            byteLength: resp.byteLength,
-                        });
+                        results.set(String(f.actionIndex), unlockedGatedFileOf(resp));
                     }
                     setUnlocked(results);
                     const target = results.get(String(file.actionIndex));
@@ -3140,10 +3147,7 @@ function GatedGroupCard({
                         { code: 'GATED_FILE_KEY_MISSING' },
                     );
                 }
-                results.set(String(firstFile.actionIndex), {
-                    plaintextBase64: firstResp.plaintextBase64,
-                    byteLength: firstResp.byteLength,
-                });
+                results.set(String(firstFile.actionIndex), unlockedGatedFileOf(firstResp));
                 for (const file of group.files) {
                     if (results.has(String(file.actionIndex))) continue;
                     const resp = await messaging.unlockGatedContent({
@@ -3155,10 +3159,7 @@ function GatedGroupCard({
                         gateTicker: tick,
                         chainId,
                     });
-                    results.set(String(file.actionIndex), {
-                        plaintextBase64: resp.plaintextBase64,
-                        byteLength: resp.byteLength,
-                    });
+                    results.set(String(file.actionIndex), unlockedGatedFileOf(resp));
                 }
             }
             setUnlocked(results);
@@ -3288,6 +3289,8 @@ function GatedGroupCard({
                     name={viewer.name}
                     declaredType={viewer.declaredType}
                     plaintextBase64={viewer.plaintextBase64}
+                    storedForm={viewer.storedForm}
+                    inflateError={viewer.inflateError}
                     onClose={() => setViewer(null)}
                 />
             ) : null}

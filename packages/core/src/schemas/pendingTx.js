@@ -110,8 +110,9 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @property {{id: string, fiat: string, currency: string, paid: boolean, booked: boolean, reversed?: boolean} | null} [adsBooking]
  *          the donation payout booked for this replacement family. `paid`
  *          describes whether this record's own outputs still carry it.
- * @property {{chainId: string, donationIncluded: boolean, donatedFiat?: string | null, currency?: string | null, mainnet?: boolean, reservationId?: string | null, bookingKey?: string | null} | null} [adsCommit]
- *          the compose-time donation verdict for queued signed bytes.
+ * @property {{chainId: string, donationIncluded: boolean, donatedFiat?: string | null, currency?: string | null, mainnet?: boolean, reservationId?: string | null, bookingKey?: string | null, encoding?: string | null} | null} [adsCommit]
+ *          the compose-time donation verdict for queued signed bytes; `encoding` is the
+ *          signed encoding, which says whether a two-phase commit carries the payout.
  */
 
 /**
@@ -325,6 +326,8 @@ export function validatePendingTx(record) {
                 || isNonEmptyString(r.adsCommit.reservationId))
             && (r.adsCommit.bookingKey === undefined || r.adsCommit.bookingKey === null
                 || isNonEmptyString(r.adsCommit.bookingKey))
+            && (r.adsCommit.encoding === undefined || r.adsCommit.encoding === null
+                || isNonEmptyString(r.adsCommit.encoding))
         ),
         'must be null or a queued donation verdict',
     );

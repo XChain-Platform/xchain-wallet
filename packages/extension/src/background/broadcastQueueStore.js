@@ -441,6 +441,26 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
 // Fold stored state into live collections without trusting stored sibling links.
 // Preserve live array and journal record identity for active routes and flushes.
 
+// Leave out stored rows this store removed while their save was refused: the
+// key held them at the last known write (`named`) and the live array no longer
+// does. A row whose transaction a live entry still carries is not a removal.
+// Returns `rows` itself when nothing was left out.
+function withoutLocalRemovals(rows, live, named) {
+    if (!Array.isArray(rows) || !live || !named) return rows;
+    const liveIds = new Set(live.map((entry) => entry?.id));
+    const liveTxs = new Set(live.flatMap((entry) => pendingTxIdsOfEntry(entry)));
+    const kept = rows.filter((row) => !(row && typeof row === 'object'
+        && named.has(row.id)
+        && !liveIds.has(row.id)
+        && !(row.pendingTxId && liveTxs.has(row.pendingTxId))));
+    return kept.length === rows.length ? rows : kept;
+}
+
+function pendingTxIdsOfEntry(entry) {
+    const ids = [entry?.pendingTxId, ...(Array.isArray(entry?.siblingPendingTxIds) ? entry.siblingPendingTxIds : [])];
+    return ids.filter((id) => typeof id === 'string' && id);
+}
+
 // Report whether anything was carried over that the stored key now lacks.
 function adoptStoredState(store, snapshot, settlements, known) {
     const pruned = store.prunedWallets;
@@ -452,7 +472,9 @@ function adoptStoredState(store, snapshot, settlements, known) {
             continue;
         }
         const live = store.queues.get(walletId);
-        const stored = adoptStoredQueueEntries(snapshot[walletId], live);
+        const rows = withoutLocalRemovals(snapshot[walletId], live, known.queues?.get(walletId));
+        if (rows !== snapshot[walletId]) carried = true;
+        const stored = adoptStoredQueueEntries(rows, live);
         const storedIds = new Set(stored.map((entry) => entry.id));
         const storedTxs = new Set(stored.map((entry) => entry.pendingTxId).filter(Boolean));
         const kept = (live ?? []).filter((entry) => isMemoryOnlyEntry(known.queues, walletId, entry)

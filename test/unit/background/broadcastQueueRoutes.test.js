@@ -974,7 +974,9 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         expect(payload.pendingTxId).toBe(record.id);
         // The verdict names the claim these bytes hold, so the queue settles it,
         // and books under the record id, the key every booking of this send shares.
-        expect(payload.adsCommit).toEqual({ ...PAID, mainnet: true, reservationId: record.id, bookingKey: record.id });
+        expect(payload.adsCommit).toEqual({
+            ...PAID, mainnet: true, reservationId: record.id, bookingKey: record.id, encoding: 'OP_RETURN',
+        });
         // Nothing books on the failed attempt (the queued tx is what donates),
         // but the claim stays held while the bytes wait in the queue.
         expect(settings.ads).toMatchObject({ queued: '30', donated: '0', donationCount: 0 });
