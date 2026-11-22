@@ -236,7 +236,6 @@ export class MockXChainProvider implements XChainProvider {
             canSignMessage: true,
             canSignAction: { SEND: 'ask', SWEEP: 'ask' },
         };
-        this.emit('accountsChanged', this.opts.accounts);
         return {
             ok: true,
             version: this.version,
@@ -248,9 +247,10 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async disconnect(): Promise<void> {
+        const wasConnected = this.connected;
         this.connected = false;
         this.grantedPermissions = null;
-        this.emit('disconnect', 'user-requested');
+        if (wasConnected) this.emit('disconnect', 'user-requested');
     }
 
     async getAccounts(): Promise<Account[]> {

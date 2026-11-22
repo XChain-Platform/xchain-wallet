@@ -116,6 +116,12 @@ android {
             applicationIdSuffix ".debug"
         }
     }
+    // Instrumented watch tests read the shared watch fixtures as assets.
+    sourceSets {
+        androidTest {
+            assets.srcDirs += ['../../../../test/fixtures/watch']
+        }
+    }
 }
 
 repositories {

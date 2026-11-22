@@ -12,7 +12,7 @@ import { useEffect, useId, useMemo, useRef } from 'react';
 import { AlertCircleIcon } from './icons/index.jsx';
 import { formErrorList } from './formErrors.js';
 import { NoticeAction } from './StatusMessage.jsx';
-import styles from './FormErrorSummary.module.css';
+import { NoticeList } from './NoticeList.jsx';
 import statusStyles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
@@ -89,7 +89,8 @@ function showsLabel(error) {
  * The form error notice (Notice Standard, 2026-11-15): the danger notice at
  * the top of a form after a failed Next or submit. Its bold title counts the
  * problems ("Fix 2 things to continue") and the body lists each one in plain
- * text. It has no close X, because it clears itself: each line leaves as soon
+ * text, as a bulleted list when there are several (U101) and a plain line
+ * when there is one. It has no close X, because it clears itself: each line leaves as soon
  * as its field changes, and the next press validates again. A form-level
  * failure (no field id) shows as a plain line with no title.
  *
@@ -189,15 +190,22 @@ export function FormErrorSummary({ errors: errorsProp, focusKey: focusKeyProp, f
                         {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
                     </p>
                 ) : null}
-                {/* One problem reads as a plain line under the title; several are a bulleted list. */}
-                <ul className={namesFields && errors.length > 1 ? styles.list : styles.listBare}>
-                    {errors.map((error, index) => (
-                        <li key={`${error.id || 'form'}-${index}`} data-error-for={error.id || undefined}>
-                            {showsLabel(error) ? <span>{error.label}: </span> : null}
-                            <span>{error.message}</span>
-                        </li>
-                    ))}
-                </ul>
+                {/* One problem reads as a plain line under the title; several,
+                    form-level failures included, are a bulleted list (U101). */}
+                <div className={statusStyles.body}>
+                    <NoticeList
+                        items={errors.map((error, index) => ({
+                            key: `${error.id || 'form'}-${index}`,
+                            attrs: { 'data-error-for': error.id || undefined },
+                            content: (
+                                <>
+                                    {showsLabel(error) ? <span>{error.label}: </span> : null}
+                                    <span>{error.message}</span>
+                                </>
+                            ),
+                        }))}
+                    />
+                </div>
             </div>
             {/* The one action sits where every Notice puts it. */}
             {shownAction ? <NoticeAction action={shownAction} /> : null}

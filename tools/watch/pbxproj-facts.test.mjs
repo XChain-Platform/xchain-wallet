@@ -15,7 +15,7 @@ test('reads facts from the current App Xcode project', async () => {
     const facts = pbxprojFacts(await readFile(projectUrl, 'utf8'));
 
     assert.deepEqual(facts, {
-        objectVersion: 60,
+        objectVersion: 77,
         preferredProjectObjectVersion: undefined,
         targets: [
             {
@@ -33,8 +33,18 @@ test('reads facts from the current App Xcode project', async () => {
                 productType: 'com.apple.product-type.bundle.ui-testing',
                 bundleIds: ['io.xchain.wallet.ios.uitests'],
             },
+            {
+                name: 'WatchApp',
+                productType: 'com.apple.product-type.application',
+                bundleIds: ['io.xchain.wallet.ios.watch'],
+            },
+            {
+                name: 'WatchAppTests',
+                productType: 'com.apple.product-type.bundle.unit-test',
+                bundleIds: ['io.xchain.wallet.ios.watch.tests'],
+            },
         ],
-        synchronizedGroups: [],
+        synchronizedGroups: ['WatchApp', 'WatchAppTests'],
         copyPhases: [],
     });
 });

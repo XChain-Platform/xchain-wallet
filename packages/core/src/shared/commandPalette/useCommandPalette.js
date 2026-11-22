@@ -51,18 +51,22 @@ export function useCommandPaletteOnlineRetry(active) {
  * @param {(view: string) => void} [opts.navigate]  shell route setter
  * @param {string} [opts.currentView]  the view the shell shows now; when it
  *        changes the palette closes
- * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number, onlineRetryKey: number }}
+ * @returns {{ open: boolean, focusSearch: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number, onlineRetryKey: number }}
+ *          focusSearch is true only when the shortcut opened the palette: a
+ *          click on a menu button shows the menu with its list focused, so
+ *          the list scrolls at once, while the search shortcut types.
  */
 export function useCommandPalette(opts = {}) {
     const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
     const comboKey = isValidBinding(binding, 'combo') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
+    const [focusSearch, setFocusSearch] = useState(false);
     const [navigationKey, setNavigationKey] = useState(0);
     const onlineRetryKey = useCommandPaletteOnlineRetry(open && enabled);
 
-    const openPalette = useCallback(() => setOpen(true), []);
+    const openPalette = useCallback(() => { setFocusSearch(false); setOpen(true); }, []);
     const closePalette = useCallback(() => setOpen(false), []);
-    const togglePalette = useCallback(() => setOpen((v) => !v), []);
+    const togglePalette = useCallback(() => { setFocusSearch(false); setOpen((v) => !v); }, []);
     // Give every palette selection a fresh route mount, including when the
     // selected action is already showing a completed form.
     const navigate = useCallback((view) => {
@@ -90,6 +94,7 @@ export function useCommandPalette(opts = {}) {
             if ((e.key || '').toLowerCase() === comboKey
                 && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
+                setFocusSearch(true);
                 setOpen((v) => !v);
             }
         };
@@ -97,5 +102,5 @@ export function useCommandPalette(opts = {}) {
         return () => window.removeEventListener('keydown', onKey);
     }, [enabled, comboKey]);
 
-    return { open, openPalette, closePalette, togglePalette, navigate, navigationKey, onlineRetryKey };
+    return { open, focusSearch, openPalette, closePalette, togglePalette, navigate, navigationKey, onlineRetryKey };
 }

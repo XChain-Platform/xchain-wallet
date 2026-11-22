@@ -641,6 +641,7 @@ export async function copyGatedKeysToWallet({ vault, fromWalletId, toWalletId, c
  *   tick: string,
  * }} params
  * @returns {Promise<Array<{
+ *   publisher: string,
  *   keyHash: string,
  *   encryptionMethod: number,
  *   gateTicker: string,
@@ -650,9 +651,9 @@ export async function copyGatedKeysToWallet({ vault, fromWalletId, toWalletId, c
  *     type: string | null,
  *     title: string | null,
  *     status: string | null,
- *     gateMinAmount: string | null,   PC-29 unlock threshold; null until the
- *                                     GATE_MIN_AMOUNT flag day lands and the
- *                                     explorer starts serving the column
+ *     gateMinAmount: string | null,   PC-29 unlock threshold; null means the
+ *                                     file is unconditional or the explorer
+ *                                     did not serve the column
  *   }>,
  * }>>}
  */
@@ -682,7 +683,7 @@ export async function listGatedFiles({ sdk, tick }) {
         else rows = await sdk.getFiles(tick, 'token').catch(() => []);
     }
     const list = Array.isArray(rows) ? rows : (rows && Array.isArray(rows.data) ? rows.data : []);
-    const byKeyHash = /** @type {Map<string, any>} */ (new Map());
+    const byPack = /** @type {Map<string, any>} */ (new Map());
     const seenActionIndexes = new Set();
     for (const row of list) {
         const gate = row && row.gate_ticker ? String(row.gate_ticker) : null;
@@ -692,18 +693,21 @@ export async function listGatedFiles({ sdk, tick }) {
         if (row.status != null && String(row.status) !== 'valid') continue;
         const keyHash = row.key_hash ? String(row.key_hash).toLowerCase() : null;
         if (!keyHash) continue;
+        const publisher = row.source == null ? '' : String(row.source).trim();
+        const packKey = `${publisher}|${keyHash}`;
         const actionIndex = String(row.action_index);
         if (seenActionIndexes.has(actionIndex)) continue;
         seenActionIndexes.add(actionIndex);
-        if (!byKeyHash.has(keyHash)) {
-            byKeyHash.set(keyHash, {
+        if (!byPack.has(packKey)) {
+            byPack.set(packKey, {
+                publisher,
                 keyHash,
                 encryptionMethod: Number(row.encryption_method) || 1,
                 gateTicker: gate,
                 files: [],
             });
         }
-        byKeyHash.get(keyHash).files.push({
+        byPack.get(packKey).files.push({
             actionIndex,
             name: row.name ? String(row.name) : '(unnamed)',
             type: row.type ? String(row.type) : null,
@@ -719,5 +723,5 @@ export async function listGatedFiles({ sdk, tick }) {
             })(),
         });
     }
-    return [...demoGroups, ...Array.from(byKeyHash.values())];
+    return [...demoGroups, ...Array.from(byPack.values())];
 }

@@ -22,6 +22,7 @@ const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
 const KEPT = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const DROPPED = '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs';
+const FOREIGN = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
 const PENDING_NOTICE = /Checking the published list/;
 
 const ADDRESSES = {
@@ -190,6 +191,48 @@ describe('AirdropForm reconcile with a row that has no member array', () => {
         expect(document.body.textContent).not.toMatch(/The published list holds/);
         expect(signButton()).toBeInTheDocument();
         expect(document.body.textContent).toMatch(/Recipients\s*2(?!\d)/);
+    });
+
+    it('blocks signing and names a stored member nobody submitted, counting only submitted members as held', async () => {
+        const messaging = mountReview({ read: () => Promise.resolve({ type: '2', list: [KEPT, FOREIGN] }) });
+        await flush();
+
+        expect(document.body.textContent).toMatch(/The published list holds 1 address you did not submit/);
+        expect(document.body.textContent).toMatch(/pick a list you checked under Existing list/);
+        expect(document.body.textContent).toContain(FOREIGN);
+        expect(document.body.textContent).toMatch(/The published list holds 1 of the 2 addresses you submitted/);
+        await submitReview();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('blocks signing on a pure extra even when every submitted address was kept', async () => {
+        const messaging = mountReview({ read: () => Promise.resolve({ type: '2', list: [KEPT, DROPPED, FOREIGN] }) });
+        await flush();
+
+        expect(document.body.textContent).toMatch(/you did not submit/);
+        expect(document.body.textContent).not.toMatch(/of the 2 addresses you submitted/);
+        await submitReview();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps signing open when a submitted base58 member reads back in another case', async () => {
+        const respelled = `${DROPPED.slice(0, 2)}w${DROPPED.slice(3)}`;
+        const messaging = mountReview({ read: () => Promise.resolve({ type: '2', list: [KEPT, respelled] }) });
+        await flush();
+
+        expect(document.body.textContent).not.toMatch(/you did not submit/);
+        await submitReview();
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps signing open when the indexer returns an accented stored spelling', async () => {
+        const accented = DROPPED.replace('Donk', 'Dönk');
+        const messaging = mountReview({ read: () => Promise.resolve({ type: '2', list: [KEPT, accented] }) });
+        await flush();
+
+        expect(document.body.textContent).not.toMatch(/you did not submit|network rejected/);
+        await submitReview();
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
     });
 
     it('still reports every address as rejected when the stored list really is empty', async () => {

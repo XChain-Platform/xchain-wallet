@@ -635,6 +635,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const reconcilePending = sourceMode === 'paste' && !!listActionIndex && !!chainId
         && submittedKey !== '' && typeof messaging.getListByActionIndex === 'function'
         && reconcileSettledFor !== reconcileKey;
+    // A stored member nobody submitted would be paid without ever being
+    // reviewed, so step 2 stays unsignable; the way out is a new list.
+    const reconcileForeign = sourceMode === 'paste' && Array.isArray(listReconcile?.unexpected)
+        ? listReconcile.unexpected : [];
+    const reconcileBlocked = reconcileForeign.length > 0;
+    const reconcileBlockedMessage = reconcileBlocked
+        ? `The published list holds ${reconcileForeign.length === 1 ? '1 address' : `${reconcileForeign.length} addresses`} you did not submit: ${reconcileForeign.join(', ')}. This airdrop would pay ${reconcileForeign.length === 1 ? 'it' : 'them'}, so signing is blocked. Start a new airdrop to publish a corrected list, or pick a list you checked under Existing list.`
+        : null;
     useEffect(() => {
         if (sourceMode !== 'paste' || !listActionIndex || !chainId) return undefined;
         if (typeof messaging.getListByActionIndex !== 'function') return undefined;
@@ -1008,7 +1016,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         const reconcileWarning = listReconcile && listReconcile.missing.length > 0
             // Names each rejected address so the sender can see which recipient
             // the network dropped (most often one from another network).
-            ? `The published list holds ${listReconcile.storedCount} of the ${listReconcile.expectedCount} addresses you submitted. The network rejected ${listReconcile.missing.length}, so this airdrop pays ${recipientPreview.count ?? listReconcile.storedCount}. Rejected: ${listReconcile.missing.join(', ')}.`
+            ? `The published list holds ${listReconcile.expectedCount - listReconcile.missing.length} of the ${listReconcile.expectedCount} addresses you submitted. The network rejected ${listReconcile.missing.length}, so this airdrop pays ${recipientPreview.count ?? listReconcile.storedCount}. Rejected: ${listReconcile.missing.join(', ')}.`
             : null;
         const volatileWarning = recipientPreview.volatile
             ? 'This airdrop pays current token holders. The holder set is fixed only when the transaction confirms, so the count and final cost can change.'
@@ -1022,12 +1030,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             warnings: [
                 ...(airdropDecoded.warnings || []),
                 ...(reconcilePendingNotice ? [reconcilePendingNotice] : []),
+                ...(reconcileBlockedMessage ? [reconcileBlockedMessage] : []),
                 ...(reconcileWarning ? [reconcileWarning] : []),
                 ...(accessListNotice ? [accessListNotice] : []),
                 ...(volatileWarning ? [volatileWarning] : []),
             ],
         };
-    }, [accessListNotice, airdropDecoded, listReconcile, reconcilePending, recipientPreview.count, recipientPreview.volatile]);
+    }, [accessListNotice, airdropDecoded, listReconcile, reconcileBlockedMessage, reconcilePending, recipientPreview.count, recipientPreview.volatile]);
     const airdropLegacyComposed = useMemo(() => (airdropReviewDecoded ? {
         action: 'AIRDROP', chainId, decoded: airdropReviewDecoded,
     } : null), [airdropReviewDecoded, chainId]);
@@ -1525,6 +1534,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         if (reconcilePending) return;
+        if (reconcileBlocked) { setSubmitError(reconcileBlockedMessage); return; }
         if (singleEncode) { openAirdropConfirm(); return; }
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
@@ -1824,7 +1834,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 reportLoading={false}
                 acknowledged={NO_ACKNOWLEDGMENTS}
                 onAcknowledge={() => {}}
-                canApprove={Boolean(listActionIndex) && !reconcilePending && !submitting && !actionConfirm.composing
+                canApprove={Boolean(listActionIndex) && !reconcilePending && !reconcileBlocked && !submitting && !actionConfirm.composing
                     && !(sourceMode === 'existing' && existingListDetail?.unsupported)}
                 onApprove={() => handleSignAirdrop({ preventDefault() {} })}
                 onReject={headerBack}

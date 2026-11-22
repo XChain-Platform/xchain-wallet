@@ -147,13 +147,15 @@ for (const viewport of WIDE) {
 }
 
 for (const viewport of NARROW) {
-    test(`license Accept stays compact on one line at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    // Below 834px Accept is the page's main action and spans the full lane
+    // (G50; operator 2026-11-21 on the installed extension popup).
+    test(`license Accept spans the lane on one line at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize(viewport);
         await page.goto('/');
         const layout = await measure(page);
         const laneWidth = layout.laneRight - layout.laneLeft;
-        expect(layout.acceptWidth, 'Accept is sized to its label, not stretched across the lane')
-            .toBeLessThanOrEqual(laneWidth * 0.75);
+        expect(layout.acceptWidth, 'Accept spans the content lane')
+            .toBeGreaterThanOrEqual(laneWidth - 2);
         expect(layout.acceptLabelLines, 'Accept label sits on one line').toBe(1);
         expect(layout.acceptLeft, 'Accept starts inside the content lane').toBeGreaterThanOrEqual(layout.laneLeft - 1);
         expect(layout.acceptRight, 'Accept ends inside the content lane').toBeLessThanOrEqual(layout.laneRight + 1);

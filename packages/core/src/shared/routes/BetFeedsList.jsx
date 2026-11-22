@@ -232,6 +232,7 @@ export function BetFeedsList({
     // listed; All and My bets share the network's own list.
     const readMode = view === 'markets' ? 'own' : 'network';
     const [rowsMode, setRowsMode] = useState(/** @type {string | null} */ (null));
+    const [rowsPartial, setRowsPartial] = useState(false);
 
     useEffect(() => {
         if (!chainId) return undefined;
@@ -240,10 +241,12 @@ export function BetFeedsList({
 
         // The markets this network's wallet addresses created, newest first,
         // with the Status filter applied here since a creator read carries
-        // every status. Fails only when no address answered.
+        // every status. Fails only when no address answered. Each address is
+        // read to its last page, so an older market still waiting on a result
+        // is listed; `partial` says a walk stopped with rows still missing.
         const readOwn = () => Promise.all([...ownAddresses].map((address) => Promise.resolve()
-            .then(() => messaging.betFeeds({ chainId, query: address, type: 'source', opts: { limit: 100 } }))
-            .then(extractRows)
+            .then(() => messaging.betFeeds({ chainId, query: address, type: 'source', opts: { limit: 100 }, allPages: true }))
+            .then((r) => ({ rows: extractRows(r), truncated: r?.truncated === true }))
             .catch(() => null)))
             .then((answers) => {
                 if (answers.length > 0 && answers.every((a) => a === null)) {
@@ -251,12 +254,13 @@ export function BetFeedsList({
                 }
                 const seen = new Set();
                 const all = [];
-                for (const m of answers.flat()) {
+                for (const m of answers.flatMap((a) => (a ? a.rows : []))) {
                     if (!m || seen.has(String(m.action_index))) continue;
                     seen.add(String(m.action_index));
                     if (!openOnly || m.feed_status === 'open') all.push(m);
                 }
-                return all.sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+                const list = all.sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+                return { list, partial: answers.some((a) => a?.truncated === true) };
             });
 
         // `clear` separates the FIRST read of a chain/filter from the refreshes
@@ -264,7 +268,7 @@ export function BetFeedsList({
         // and doing that every 30 seconds would flash the whole list.
         const load = (clear) => {
             const requestId = ++latestRequestId;
-            if (clear) { setRows(null); setError(null); }
+            if (clear) { setRows(null); setError(null); setRowsPartial(false); }
             // Filter on the stored feed status rather than fetching everything and
             // deciding client-side, so paging stays meaningful on a busy chain.
             const req = openOnly
@@ -272,11 +276,12 @@ export function BetFeedsList({
                 : { chainId, opts: { limit: 50 } };
             const read = readMode === 'own'
                 ? readOwn()
-                : messaging.betFeeds(req).then(extractRows);
+                : messaging.betFeeds(req).then((r) => ({ list: extractRows(r), partial: false }));
             return read
-                .then((list) => {
+                .then(({ list, partial }) => {
                     if (!cancelled && requestId === latestRequestId) {
                         setRows(list);
+                        setRowsPartial(partial);
                         setRowsMode(readMode);
                         setError(null);
                     }
@@ -527,6 +532,12 @@ export function BetFeedsList({
         notice = (
             <StatusMessage variant="error" recovery={{ label: 'Try Again', onAction: walletBets.reload }}>
                 {walletBets.error}
+            </StatusMessage>
+        );
+    } else if (readMode === 'own' && rowsPartial) {
+        notice = (
+            <StatusMessage variant="info">
+                Some of your older markets could not be loaded, so this list may be incomplete.
             </StatusMessage>
         );
     }

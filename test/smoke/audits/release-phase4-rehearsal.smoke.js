@@ -179,6 +179,25 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     const hostBlocked = 'launch-probe: 2 artifact(s) could NOT be probed because this host is missing a facility\n';
     assert.equal(classify(hostBlocked), 'signature-gate', 'the word "missing" in a launch-probe refusal is not lane scope');
 
+    // sign.sh refuses a gate that exited 0 without its strict receipt; whatever the tag tree's gate echoed
+    // before that line (a loose ok line, gpg-like or lane-scope words), the signature gate did not pass.
+    const receiptRefused = (gateLines) => 'release/lib.sh: artifact-set gate ok (5 artifact(s))\n' + gateLines
+        + 'sign.sh: signature gate exited 0 without its completion receipt.\n'
+        + '  Refusing to sign: the installer-signature checks did not prove\n'
+        + '  that they reached their final verdict.\n';
+    const receiptRefusals = [receiptRefused('signature gate ok (2 verified)\n'), receiptRefused(''),
+        receiptRefused('X.exe: missing timestamp, UNSIGNED nested file\n'), receiptRefused('passphrase cache: none\n')];
+    for (const output of receiptRefusals) {
+        assert.equal(classify(output), 'artifact-set', 'a run refused for a missing gate receipt reached only the artifact set');
+        assert.equal(firstRefusal(output), 'sign.sh: signature gate exited 0 without its completion receipt.',
+            'the blocker of a receipt refusal is sign.sh\'s own refusal line');
+        assert.deepEqual(gateFallbackMismatch({ computed: ['tools/release/launch-probe.mjs'], output,
+            reached: classify(output) }), [], 'a run refused at the receipt check never resolved the launch probe');
+    }
+    assert.ok(readFileSync(fileURLToPath(new URL('../../../tools/release/sign.sh', import.meta.url)), 'utf8')
+        .includes('echo "sign.sh: signature gate exited 0 without its completion receipt." >&2'),
+    'sign.sh no longer prints its receipt refusal; update classify() with it');
+
     // A dev-mock gate refusal, framed the way sign.sh prints it, means only the GPG key was named.
     const devMockRefusal = (gateLines) => 'sign.sh: running pre-sign dev-mock gate against /tmp/stage ...\n'
         + '  gate (tool tree): /repo/tools/build-reproduce/check-no-dev-mock.sh\n'
@@ -299,7 +318,7 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         assert.equal(classify(quiet), 'invoked', `a non-refusal gate mention claimed depth: ${quiet.split('\n')[0]}`);
     }
     assert.equal(classify('something nobody recognises\n'), 'invoked', 'unrecognised output stays conservative');
-    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals,
+    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals, ...receiptRefusals,
         ...earlyRefusals.map(([out]) => out)]) {
         assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
     }

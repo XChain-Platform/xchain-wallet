@@ -196,7 +196,9 @@ function pendingOutgoingAtomic(pending) {
 // exactly as nativeFromAddress does for the coin balance; passing it through
 // unscaled made every decimals>0 token read 10^decimals too small (3000
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
-// fixtures, dev mocks) are atomic already and pass through untouched.
+// fixtures, dev mocks) are atomic already and pass through untouched. Every
+// token row must carry an explicit scale, including indivisible tokens whose
+// scale is zero; otherwise an atomic quantity cannot be interpreted safely.
 export function tokensFromBalances(balResp, scope) {
     return tokenRowsFromBalances(balResp, scope).rows;
 }
@@ -212,7 +214,15 @@ function tokenRowsFromBalances(balResp, scope) {
     const truncated = Number.isSafeInteger(total) && total > balResp.data.length;
     const rows = [];
     let invalid = false;
+    let unscaled = 0;
     for (const row of balResp.data) {
+        // A row that names no scale cannot be read safely, so it alone is left
+        // out. It says nothing about the other rows, so it does not mark the
+        // read invalid; `unscaled` counts them for a caller that wants a note.
+        if (rowNamesNoScale(row, scope)) {
+            unscaled += 1;
+            continue;
+        }
         const normalized = normalizeTokenBalanceRow(row, scope);
         if (!normalized) {
             invalid = true;
@@ -220,14 +230,21 @@ function tokenRowsFromBalances(balResp, scope) {
         }
         rows.push(normalized);
     }
-    return { rows, invalid, truncated };
+    return { rows, invalid, truncated, unscaled };
+}
+
+function rowNamesNoScale(row, scope) {
+    if (!row || typeof row !== 'object' || !balanceScopeMatches(row, scope)) return false;
+    return (row.divisibility ?? row.decimals) == null;
 }
 
 function normalizeTokenBalanceRow(row, scope) {
     if (!row || typeof row !== 'object') return null;
     if (!balanceScopeMatches(row, scope)) return null;
     const tick = typeof row.tick === 'string' ? row.tick.trim() : '';
-    const divisibility = Number(row.divisibility ?? row.decimals ?? 0);
+    const rawDivisibility = row.divisibility ?? row.decimals;
+    if (rawDivisibility === undefined || rawDivisibility === null) return null;
+    const divisibility = Number(rawDivisibility);
     if (!tick || !Number.isInteger(divisibility) || divisibility < 0 || divisibility > 18) return null;
 
     let quantity;

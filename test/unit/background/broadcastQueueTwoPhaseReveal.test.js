@@ -312,6 +312,28 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         expect(h.sent()).toEqual([COMMIT.txHex]);
     });
 
+    // A reveal signed without a txid leaves the advanced entry on the commit's txid,
+    // so the record must take the txid the encoder reported for the reveal.
+    it('tracks the reveal under the txid the encoder reported when the entry names none', async () => {
+        const pendingTxs = memCollection();
+        await pendingTxs.put(record({ revealTxid: null }));
+        const { revealTxid: _t, ...noRevealTxid } = pair;
+        const h = bootHost({
+            pendingTxs,
+            entries: [noRevealTxid],
+            broadcastTx: async (hex) => ({ txid: hex === REVEAL.txHex ? 'txid-PHASE2' : 'txid-PHASE1' }),
+        });
+
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+
+        expect(res.ok, JSON.stringify(res.error)).toBe(true);
+        expect(res.result.txid).toBe('txid-PHASE2');
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex]);
+        expect(await pendingTxs.get('p1')).toMatchObject({
+            status: 'broadcast', txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
+        });
+    });
+
     it('sends an entry written before the reveal field as the one transaction it names', async () => {
         const pendingTxs = memCollection();
         const old = record();

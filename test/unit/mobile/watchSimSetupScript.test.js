@@ -181,6 +181,19 @@ describe('watch-sim-setup.sh', () => {
         expect(result.stderr).toContain('pair: missing XC iPhone 17 + XC Watch 41mm');
     });
 
+    it('checks noisy Android manager output without exiting on SIGPIPE', () => {
+        const fixture = makeFixture({
+            managerTrailingLines: 5000,
+            watchRuntime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-2',
+        });
+        const result = run(fixture, ['--check']);
+
+        expect(result.status).toBe(1);
+        expect(result.status).not.toBe(141);
+        expect(result.stderr).toContain('device: XC Watch 41mm must use');
+        expect(result.stderr).toContain('device: XC Watch 49mm must use');
+    });
+
     it.each([
         ['small', { smallDimensions: false }, 'xc-wear-small-round', '192 dp'],
         ['large', { largeDimensions: false }, 'xc-wear-large-round', '227 dp'],
@@ -232,6 +245,7 @@ function makeFixture(options = {}) {
         smallDimensions: true,
         largeDimensions: true,
         malformed: false,
+        managerTrailingLines: 0,
         watchRuntime: undefined,
         ...options,
     };
@@ -290,6 +304,7 @@ function run(fixture, args = []) {
             FAKE_EMULATOR_TEMPLATE: fixture.emulatorTemplate,
             FAKE_IMAGE: fixture.settings.image ? '1' : '0',
             FAKE_INSTALL_EMULATOR: fixture.settings.installEmulator ? '1' : '0',
+            FAKE_MANAGER_TRAILING_LINES: fixture.settings.managerTrailingLines,
             FAKE_PAIRS: fixture.pairs,
             FAKE_RUNTIMES: fixture.runtimes,
             PATH: `${fixture.bin}:${process.env.PATH}`,
@@ -391,6 +406,7 @@ function sdkmanagerStub() {
 printf 'sdkmanager %s\n' "$*" >> "$FAKE_COMMAND_LOG"
 if [[ "$*" == *'--list_installed'* ]]; then
   [ "$FAKE_IMAGE" = 1 ] && printf '%s\n' 'system-images;android-36;android-wear-signed;arm64-v8a'
+  for ((i = 0; i < FAKE_MANAGER_TRAILING_LINES; i++)); do printf 'package-%04d\n' "$i"; done
 elif [ "$FAKE_INSTALL_EMULATOR" = 1 ]; then
   mkdir -p "$(dirname "$FAKE_EMULATOR")"
   cp "$FAKE_EMULATOR_TEMPLATE" "$FAKE_EMULATOR"
@@ -407,6 +423,7 @@ if [ "$*" = 'list avd' ] && [ "$FAKE_AVDS" = 1 ]; then
     'Name: xc-wear-small-round' "Path: $FAKE_AVD_HOME/xc-wear-small-round.avd" \
     '---------' \
     'Name: xc-wear-large-round' "Path: $FAKE_AVD_HOME/xc-wear-large-round.avd"
+  for ((i = 0; i < FAKE_MANAGER_TRAILING_LINES; i++)); do printf 'avd-%04d\n' "$i"; done
 fi
 `;
 }

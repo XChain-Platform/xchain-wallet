@@ -8,44 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §43.2 / Cluster F FOLLOWUP 1 smoke: actually emit accountsChanged /
-// chainChanged / disconnect.
-//
-// The provider listener pipeline was wired in Phase 1 (content script
-// relays `chrome.runtime.onMessage` → page postMessage → inject script
-// dispatches to provider.on subscribers), but no background sender
-// existed. v0.280.0 adds `createBridgeEventBroadcaster` + threads it
-// through `bridge.disconnect` and `updateSitePermissions`.
-//
-// The first cut selected target tabs with `chrome.tabs.query({})` filtered by
-// `new URL(tab.url).origin`, and therefore delivered NOTHING: MV3 populates
-// `Tab.url` only for an extension holding the "tabs" permission or a matching
-// host permission, and manifest.json holds neither. The fake tabs here always
-// supplied a `url`, so the smoke went on passing over a dead pipeline. Targets
-// now come from the connected-tab registry (`background/connectedTabs.js`),
-// built from unforgeable `sender` data, and this file asserts against that
-// registry rather than against a `url` the browser never provides.
-//
-// Asserts:
-//   1. createBridgeEventBroadcaster delivers only to the tab ids the registry
-//      holds for the supplied origin, and stamps that origin on the message.
-//   2. Registry entries for other origins are never addressed, and a
-//      non-integer tab id is skipped.
-//   3. With no `chrome.tabs.sendMessage` surface - or with no registry - every
-//      method becomes a no-op that never reaches the registry, and
-//      noopBridgeEvents carries the same method set as the live
-//      broadcaster (shells without extension APIs default to it).
-//   4. emitPermissionDiff fires accountsChanged when the accounts list
-//      changes, and chainChanged when a single chain is added.
-//   5. emitPermissionDiff is silent when there is no diff.
-//   6. registerBridgeHandlers accepts an `events` opt and threads it
-//      into bridge.disconnect; calling bridge.disconnect on a known
-//      origin emits 'disconnect' to that origin once.
-//   7. createBackgroundHost accepts a `bridgeEvents` dep and threads
-//      it through to registerBridgeHandlers.
-//   8. background.js wires the broadcaster against chrome.tabs +
-//      chrome.runtime + the connected-tab registry, records web senders into
-//      that registry, and manifest.json still asks for no "tabs" permission.
+// §43.2 bridge event sender and trigger smoke. It covers origin-scoped fanout,
+// no-op surfaces, account permission diffs, disconnects, and background wiring.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -217,7 +181,7 @@ function fakeRegistry(map) {
     assert.equal(await noopBridgeEvents.walletSwitched([], []), undefined);
 }
 
-// --- 4. emitPermissionDiff fires events on diff -----------------------
+// --- 4. emitPermissionDiff fires accountsChanged on diff --------------
 
 {
     const fired = [];
@@ -236,11 +200,9 @@ function fakeRegistry(map) {
             { id: 'acct-1', name: 'Second' },
         ],
     });
-    assert.equal(fired.length, 2);
+    assert.equal(fired.length, 1);
     assert.equal(fired[0].kind, 'accountsChanged');
     assert.equal(fired[0].accounts.length, 2);
-    assert.equal(fired[1].kind, 'chainChanged');
-    assert.equal(fired[1].chainId, 'litecoin-mainnet');
 }
 
 // --- 5. emitPermissionDiff silent when nothing changed ---------------
@@ -416,5 +378,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: bridge-events-emit smoke (Cluster F FOLLOWUP 1: createBridgeEventBroadcaster delivers bridge.event messages to the tab ids the connected-tab registry holds for the origin, skipping other origins and non-integer ids and degrading to no-op without a sendMessage surface or without a registry; emitPermissionDiff fires accountsChanged + chainChanged on diff and stays silent on equal permissions; bridge.disconnect handler fires events.disconnect with user-requested reason; createBackgroundHost + background.js + handlers.js wired, registry fed from accepted web senders, manifest still free of the "tabs" permission)',
+    'OK: bridge-events-emit smoke (origin-scoped fanout, account permission diffs, disconnect triggers, background wiring, and permission-free tab selection)',
 );

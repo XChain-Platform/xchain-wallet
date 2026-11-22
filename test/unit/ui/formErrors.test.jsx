@@ -76,7 +76,8 @@ function SignUp() {
 }
 
 const summary = () => screen.queryByRole('alert', { name: 'Form errors' });
-const lines = () => within(summary()).getAllByRole('listitem').map((item) => item.textContent);
+// Several problems are list items; a single one is a plain line (U101).
+const lines = () => [...summary().querySelectorAll('li, [data-notice-issue]')].map((item) => item.textContent);
 
 describe('useFormErrors', () => {
     it('keeps every truthy entry in order and reports whether the form may go on', () => {

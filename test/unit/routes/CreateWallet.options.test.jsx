@@ -72,17 +72,17 @@ describe('CreateWallet security options', () => {
         // Typing in Password clears only that field; Confirm stays marked.
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'long-enough' } });
         expect(screen.getByLabelText('Password')).not.toHaveAttribute('aria-invalid');
-        expect(within(summary()).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-            'Confirm your password.',
-        ]);
+        // One problem left is a plain line, not a list (U101).
+        expect(within(summary()).queryByRole('list')).toBeNull();
+        expect(summary().querySelector('[data-notice-issue]')).toHaveTextContent('Confirm your password.');
         expect(summary()).toHaveTextContent('Fix 1 thing to continue');
         expect(screen.getByLabelText('Confirm')).toHaveAttribute('aria-invalid', 'true');
 
         // Next validates again.
         fireEvent.click(action);
-        expect(within(summary()).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-            'Confirm your password.',
-        ]);
+        // One problem left is a plain line, not a list (U101).
+        expect(within(summary()).queryByRole('list')).toBeNull();
+        expect(summary().querySelector('[data-notice-issue]')).toHaveTextContent('Confirm your password.');
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
     });
 
