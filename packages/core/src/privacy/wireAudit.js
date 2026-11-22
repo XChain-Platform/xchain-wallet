@@ -228,6 +228,15 @@ export const WIRE_AUDIT = Object.freeze([
         shells: ['web', 'desktop', 'extension', 'mobile'],
         source: 'restore-from-link flow',
     },
+    {
+        host: '*',
+        party: 'third',
+        why: 'delivers a site request result to the callback URL the site supplied',
+        carries: 'the requesting IP plus the approved or rejected result, including any signed payload',
+        control: 'user-initiated only; destination shown before approval; no delivery before Approve or Reject',
+        shells: ['desktop', 'mobile'],
+        source: 'native site-request callback sender',
+    },
 ].map((entry) => Object.freeze({
     ...entry,
     shells: Object.freeze([...entry.shells]),
