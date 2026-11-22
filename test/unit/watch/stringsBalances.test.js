@@ -34,6 +34,7 @@ const expectedStrings = {
     'w2.openOnPhone': 'Open on phone',
     'w2.moreDetails': 'More details when your phone is near',
     'w2.detailsUnavailable': 'Details unavailable',
+    'w6.empty': 'Open the phone once',
     'state.status': 'Status',
     'state.phoneReachable': 'Phone reachable',
     'state.lastSync': 'Last sync',
@@ -66,7 +67,7 @@ describe('watch balance strings', () => {
 
     it('contains only watch namespaces and U12-safe copy', () => {
         const entries = Object.entries(strings);
-        expect(entries.every(([key]) => /^(w1|w2|state|color)\./u.test(key))).toBe(true);
+        expect(entries.every(([key]) => /^(w1|w2|w6|state|color)\./u.test(key))).toBe(true);
         expect(entries.every(([, value]) => typeof value === 'string' && value.length > 0)).toBe(true);
 
         const copy = entries.map(([, value]) => value).join('\n');

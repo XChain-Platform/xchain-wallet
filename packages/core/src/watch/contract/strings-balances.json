@@ -15,6 +15,7 @@
   "w2.openOnPhone": "Open on phone",
   "w2.moreDetails": "More details when your phone is near",
   "w2.detailsUnavailable": "Details unavailable",
+  "w6.empty": "Open the phone once",
   "state.status": "Status",
   "state.phoneReachable": "Phone reachable",
   "state.lastSync": "Last sync",
