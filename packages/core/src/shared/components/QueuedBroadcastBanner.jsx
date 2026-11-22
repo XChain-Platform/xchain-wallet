@@ -287,7 +287,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 type="button"
                                 variant="secondary"
                                 size="sm"
-                                icon={<Icon.SendIcon />}
+                                icon={entry.resumedClaim ? <Icon.RefreshIcon /> : <Icon.SendIcon />}
                                 onClick={() => broadcast(entry.id)}
                                 disabled={busyId !== null}
                                 data-queued-send

@@ -121,7 +121,7 @@ import { imagePreviewDataUrl } from '../shared/utils/publishingFile.js';
  * @property {string | null} callbackBlock                ISSUE v4 `CALLBACK_BLOCK`: earliest block CALLBACK may fire, null when unset (PC-03)
  * @property {string | null} allowList                    ISSUE v5 `ALLOW_LIST`: LIST action index of the address allow-list gating this tick, null when unset (PC-04)
  * @property {string | null} blockList                    ISSUE v5 `BLOCK_LIST`: LIST action index of the address block-list gating this tick, null when unset (PC-04)
- * @property {string | null} bridgeChains                 ISSUE v7 `BRIDGE_CHAINS`: the issuer's opt-in destination list, still in its wire form (a comma list, or the '-' sentinel for "opted out"); null when the field is absent, which means UNKNOWN and not "none"
+ * @property {string | null} bridgeChains                 ISSUE v7 `BRIDGE_CHAINS`: the issuer's opt-in destination list, still in its wire form (a comma list, or the '-' sentinel for "no destinations", which a reported null also becomes); null when the field is absent, which means UNKNOWN and not "none"
  * @property {string | null} minDepth                     ISSUE v7 `MIN_DEPTH`: issuer-raised confirmation depth before a lock is bridged, null when unset (the coin's own resolveConfirmations then stands alone)
  * @property {boolean | null} lockBridge                  ISSUE v7 `LOCK_BRIDGE`: BRIDGE_CHAINS and MIN_DEPTH frozen forever; null when the field is absent (unknown), never guessed false
  * @property {boolean | null} bridged                     set by the first applied XBRIDGE lock and never cleared: a copy of this token exists on another chain; null when the field is absent (unknown)
@@ -925,6 +925,29 @@ function extractMediaUrlsFromText(text) {
 }
 
 /**
+ * A token row's BRIDGE_CHAINS in its wire form, not pre-split: '-' means "no
+ * destinations" and '' means "unchanged" on the wire, a distinction
+ * bridgeChainsList() owns and an array would erase (String([]) === '' reads
+ * as unknown).
+ *
+ * A key that is PRESENT with a null value is not absence: the indexer stores
+ * NULL both for a token that never opted in and for the '-' opt-out, and
+ * refuses a v3 lock on either, so that reported "no destinations" becomes
+ * '-'. Only a source that omits the key (an explorer without the bridge
+ * columns) leaves the field unknown, which is null.
+ *
+ * @param {any} row explorer row, grouped or flat
+ * @returns {string | null}
+ */
+function readBridgeChains(row) {
+    const raw = row?.info?.bridge_chains ?? row?.bridge_chains ?? null;
+    if (raw != null && String(raw).trim() !== '') return String(raw).trim();
+    const reportedNone = raw === null
+        && (row?.info?.bridge_chains === null || row?.bridge_chains === null);
+    return reportedNone ? '-' : null;
+}
+
+/**
  * Normalize the explorer's `getToken` response into the stable
  * `TokenInfo` shape the wallet renderer consumes. Optionally merges a
  * fetched TIS document onto the result via `tisBundle`.
@@ -1001,12 +1024,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // default: bridgeDestinationError makes no claim on a null bridgeChains but
     // refuses the move on an empty one, and a lockBridge guessed false would
     // offer an edit consensus has already frozen. Nothing here is defaulted.
-    const bridgeChainsRaw = row?.info?.bridge_chains ?? row?.bridge_chains ?? null;
-    // Kept in its wire form, not pre-split: '-' means "opted out" and '' means
-    // "never set", a distinction bridgeChainsList() owns and an array would
-    // erase (String([]) === '' reads as unknown).
-    const bridgeChains = (bridgeChainsRaw != null && String(bridgeChainsRaw).trim() !== '')
-        ? String(bridgeChainsRaw).trim() : null;
+    const bridgeChains = readBridgeChains(row);
     const minDepthRaw = row?.info?.min_depth ?? row?.min_depth ?? null;
     const minDepth = (minDepthRaw != null && String(minDepthRaw).trim() !== '')
         ? String(minDepthRaw).trim() : null;

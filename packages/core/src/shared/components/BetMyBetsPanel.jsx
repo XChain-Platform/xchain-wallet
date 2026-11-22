@@ -50,8 +50,9 @@ export function useWalletBets({ byChain, messaging }) {
                 for (const a of addrs || []) pairs.push({ chainId, address: a.address });
             }
             const results = await Promise.all(pairs.map((p) => Promise.resolve()
-                .then(() => messaging.bets({ chainId: p.chainId, query: p.address, type: 'address', opts: { limit: 100 } }))
-                .then((r) => ({ p, bets: extractRows(r) }))
+                // Every page: an address past one page would lose its oldest open positions.
+                .then(() => messaging.bets({ chainId: p.chainId, query: p.address, type: 'address', opts: { limit: 100 }, allPages: true }))
+                .then((r) => ({ p, bets: extractRows(r), truncated: r?.truncated === true }))
                 .catch(() => ({ p, bets: [], failed: true }))));
             if (requestId !== loadRequestId.current) return;
             const seen = new Set();
@@ -75,6 +76,8 @@ export function useWalletBets({ byChain, messaging }) {
                 setError(failures === results.length
                     ? 'Could not load positions for any of your addresses.'
                     : `Could not load positions for ${failures} of your addresses. The list may be incomplete.`);
+            } else if (results.some((r) => r.truncated)) {
+                setError('Some older positions could not be loaded. The list may be incomplete.');
             }
             setRows(all);
         } catch {

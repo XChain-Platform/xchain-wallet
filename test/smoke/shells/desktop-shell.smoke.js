@@ -136,9 +136,10 @@ assert.ok(
         + 'the launch check can still learn an update is on offer',
     );
     assert.ok(
-        /lastUpdaterEvent = event/.test(mainIndex),
+        /lastUpdaterEvent = retainUpdaterEvent\(lastUpdaterEvent, event\)/.test(mainIndex),
         'main RETAINS the event it broadcasts: a state handler that answers from '
-        + 'nothing is the same silence with an extra channel',
+        + 'nothing is the same silence with an extra channel, and a failed check '
+        + 'does not erase a standing offer',
     );
 }
 

@@ -36,6 +36,24 @@ import { serializeError } from './MessageHost.js';
 /** Message type the extension pages send to ask for a wipe. */
 export const WIPE_STORAGE_MESSAGE_TYPE = 'wallet.wipeStorage';
 
+/**
+ * Keys the service worker's notification watchers persist their seen, fired
+ * and notified sets under. background.js imports these names for its
+ * writers, so the wipe list below cannot drift from what is written.
+ */
+export const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
+export const DEADLINE_SEEN_KEY = 'deadlinesSeen';
+export const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
+export const PRICE_ALERT_FIRED_KEY = 'priceAlertsFired';
+export const COINPAY_AUTOPAY_NOTIFIED_KEY = 'coinpayAutopayNotified';
+export const WATCHER_STATE_LOCAL_KEYS = Object.freeze([
+    GOV_POLL_SEEN_KEY,
+    DEADLINE_SEEN_KEY,
+    DISPENSER_ESCROW_SEEN_KEY,
+    PRICE_ALERT_FIRED_KEY,
+    COINPAY_AUTOPAY_NOTIFIED_KEY,
+]);
+
 /** Key the worker mirrors its diagnostic log to (background/logConsoleStorage.js). */
 const LOG_CONSOLE_KEY = 'xchain.logConsole';
 
@@ -81,9 +99,7 @@ export const WALLET_LOCAL_KEYS = Object.freeze([
     'xchain.signThrottle',          // background/signThrottleStorage.js
     'xchain.broadcastQueue',        // background/broadcastQueueStorage.js
     'xchain.logConsole',            // background/logConsoleStorage.js
-    'xchain.governancePolls.seen',  // background.js governance watcher
-    'xchain.deadlines.seen',        // background.js deadline watcher
-    'xchain.dispenserEscrow.seen',  // background.js dispenser watcher
+    ...WATCHER_STATE_LOCAL_KEYS,    // background.js notification watchers
 ]);
 
 /**

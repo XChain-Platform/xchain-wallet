@@ -470,6 +470,19 @@ export function pngHeader(buf) {
     return header ? { ...header, hasAlpha } : null;
 }
 
+export const WEAR_SCREENSHOT_MIN = 384;
+
+export function wearScreenshotProblems(header) {
+    if (!header) return ['not a PNG'];
+
+    const problems = [];
+    if (header.width !== header.height) problems.push('not square');
+    if (header.width < WEAR_SCREENSHOT_MIN || header.height < WEAR_SCREENSHOT_MIN) {
+        problems.push(`under ${WEAR_SCREENSHOT_MIN} x ${WEAR_SCREENSHOT_MIN}`);
+    }
+    return problems;
+}
+
 /** PNG dimensions straight out of the IHDR, no image library needed. */
 function pngSize(buf) {
     if (buf.length < 24 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;

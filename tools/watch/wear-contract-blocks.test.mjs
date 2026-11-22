@@ -1,0 +1,41 @@
+// Copyright © 2025-2026 Dankest, LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { kotlinSerialFields, schemaFields } from './contract-fields.mjs';
+
+const watchToolsDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(watchToolsDirectory, '../..');
+
+function readJson(relativePath) {
+    return JSON.parse(readFileSync(join(repositoryRoot, relativePath), 'utf8'));
+}
+
+test('Wear WatchContract serializable blocks exactly match completed snapshot schemas', () => {
+    const source = readFileSync(join(
+        repositoryRoot,
+        'packages/mobile/android/wear/src/main/kotlin/io/xchain/wallet/android/wear/data/WatchContract.kt',
+    ), 'utf8');
+    const row = readJson('packages/core/src/watch/contract/row.schema.json');
+    const receive = readJson('packages/core/src/watch/contract/receive.schema.json');
+    const inbox = readJson('packages/core/src/watch/contract/inbox.schema.json');
+    const settings = readJson('packages/core/src/watch/contract/settings.schema.json');
+
+    assert.deepEqual(kotlinSerialFields(source), {
+        SnapshotRow: schemaFields(row),
+        SnapshotReceive: schemaFields(receive.items),
+        SnapshotQr: schemaFields(receive.items.properties.qr),
+        SnapshotInboxItem: schemaFields(inbox.items),
+        SnapshotSettings: schemaFields(settings),
+    });
+
+    const imports = [...source.matchAll(/^import\s+([^\s]+)\s*$/gm)]
+        .map((match) => match[1]);
+    assert.ok(imports.length > 0);
+    assert.ok(imports.every((name) => name.startsWith('kotlinx.serialization')));
+});

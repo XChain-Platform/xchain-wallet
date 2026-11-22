@@ -70,4 +70,5 @@
     <string name="w4_request_expiry">Expires</string>
     <string name="w4_request_sentence">Request</string>
     <string name="w4_title">Alert detail</string>
+    <string name="w6_empty">Open the phone once</string>
 </resources>

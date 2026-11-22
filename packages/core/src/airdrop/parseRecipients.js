@@ -335,35 +335,66 @@ export async function classifyRecipientEntriesAsync(entries, chain, options = {}
  *
  * Stored items arrive either as bare strings or as `{ address }` /
  * `{ item }` rows depending on the read; both are accepted. Matching is
- * exact first, then case-insensitive, since bech32 is case-folding while
- * base58 is not.
+ * exact first. Folded comparisons use the indexer's case-and-accent-insensitive
+ * row identity because it keeps the first spelling it saw, which can be an
+ * invalid spelling from an earlier rejected list item. A membership read then
+ * returns that spelling for every later valid member of the same row.
+ *
+ * The check runs both ways. A LIST item can travel as a `^id` reference the
+ * indexer resolves at index time, so the stored list can also hold an address
+ * nobody submitted; `unexpected` names those, in stored order, because the
+ * airdrop would pay them. A stored spelling that equals a valid submitted
+ * address under the indexer identity is never unexpected, base58 included: the
+ * indexer resolves both spellings to the same row, so it is the submitted
+ * member read back in another spelling, not a foreign one.
  *
  * @param {string[]} expected  addresses the wallet submitted
  * @param {Array<string|{address?: string, item?: string}>} stored  list read back from the chain
- * @returns {{ expectedCount: number, storedCount: number, missing: string[], ok: boolean }}
+ * @returns {{ expectedCount: number, storedCount: number, missing: string[], unexpected: string[], ok: boolean }}
  */
 export function reconcileStoredList(expected, stored) {
     const want = Array.isArray(expected) ? expected.map((a) => String(a ?? '').trim()) : [];
     const got = Array.isArray(stored) ? stored : [];
     const gotExact = new Set();
-    const gotBech32 = new Set();
+    const gotAccented = new Set();
     for (const row of got) {
         const s = String(
             (row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row) ?? '',
         ).trim();
         if (!s) continue;
         gotExact.add(s);
-        if (isValidBech32Address(s)) gotBech32.add(s.toLowerCase());
+        if (/\p{M}/u.test(s.normalize('NFD'))) gotAccented.add(indexAddressIdentity(s));
     }
-    const missing = want.filter((a) => a
-        && !gotExact.has(a)
-        && !(isValidBech32Address(a) && gotBech32.has(a.toLowerCase())));
+    const gotFolded = new Set([...gotExact].map(indexAddressIdentity));
+    const wantFolded = validFolds(want);
+    const missing = want.filter((a) => {
+        if (!a || gotExact.has(a)) return false;
+        const identity = indexAddressIdentity(a);
+        return !(isValidBech32Address(a) && gotFolded.has(identity))
+            && !(isValidAddressAnyNetwork(a) && gotAccented.has(identity));
+    });
+    const wantExact = new Set(want);
+    const unexpected = [...gotExact].filter((s) => !wantExact.has(s)
+        && !wantFolded.has(indexAddressIdentity(s)));
     return {
         expectedCount: want.length,
         storedCount: gotExact.size,
         missing,
-        ok: missing.length === 0,
+        unexpected,
+        ok: missing.length === 0 && unexpected.length === 0,
     };
+}
+
+function validFolds(addresses) {
+    const folds = new Set();
+    for (const a of addresses) {
+        if (a && isValidAddressAnyNetwork(a)) folds.add(indexAddressIdentity(a));
+    }
+    return folds;
+}
+
+function indexAddressIdentity(address) {
+    return address.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }
 
 function isValidBech32Address(address) {

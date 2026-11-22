@@ -99,6 +99,13 @@ import { announceAutoLockUnsaved, createSurfaceStateBroadcaster } from './shared
 import { attachApprovalWatchListener } from './shared/approvalWatch.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
 import { createRestartStringSetStorage } from './background/restartStateStorage.js';
+import {
+    COINPAY_AUTOPAY_NOTIFIED_KEY,
+    DEADLINE_SEEN_KEY,
+    DISPENSER_ESCROW_SEEN_KEY,
+    GOV_POLL_SEEN_KEY,
+    PRICE_ALERT_FIRED_KEY,
+} from './background/wipeExtensionStorage.js';
 
 logConsole.attach();
 
@@ -249,11 +256,6 @@ let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
 let dispenserEscrowWatcher = null;
-const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
-const DEADLINE_SEEN_KEY = 'deadlinesSeen';
-const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
-const PRICE_ALERT_FIRED_KEY = 'priceAlertsFired';
-const COINPAY_AUTOPAY_NOTIFIED_KEY = 'coinpayAutopayNotified';
 const EXTENSION_AUTOPAY_INSTANCE_ID = 'extension-service-worker';
 const priceAlertFiredStore = createRestartStringSetStorage(PRICE_ALERT_FIRED_KEY);
 const coinpayAutopayNotifiedStore = createRestartStringSetStorage(COINPAY_AUTOPAY_NOTIFIED_KEY);

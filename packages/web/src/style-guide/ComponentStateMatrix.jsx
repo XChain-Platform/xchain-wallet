@@ -30,6 +30,7 @@ const componentSizes = {
     Notice: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
     StatusMessageGroup: FIXED_SIZE,
+    NoticeList: FIXED_SIZE,
     Button: ALL_SIZES,
     Spinner: ALL_SIZES,
     Checkbox: FIXED_SIZE,
@@ -141,6 +142,12 @@ function ComponentPreview({ name, size, state }) {
         );
     case 'StatusMessage':
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
+    case 'NoticeList':
+        return (
+            <UI.Notice tone="danger" title="Fix 2 things to continue">
+                <UI.NoticeList items={[{ key: 'to', content: 'Enter a recipient address.' }, { key: 'amount', content: 'Amount must be a positive number.' }]} />
+            </UI.Notice>
+        );
     case 'StatusMessageGroup':
         return <UI.StatusMessageGroup entries={[{ key: 'preview', variant: statusVariant, children: state === 'error' ? error : 'Wallet is ready' }]} />;
     case 'Button':

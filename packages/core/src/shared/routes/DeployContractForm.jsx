@@ -13,7 +13,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector render inside the standard
 // FromSection and FeeSection.
-import { Button, ChainBadge, FieldIconButton, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, FieldIconButton, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NoticeList, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/components.js';
@@ -761,8 +761,9 @@ export function DeployContractForm({ walletId, onBack }) {
     // share one error box instead of stacking two.
     function renderDiagnosticList(entries, kind) {
         return (
-            <ul aria-label={`Validation ${kind}s`}>
-                {entries.map((entry, index) => {
+            <NoticeList
+                label={`Validation ${kind}s`}
+                items={entries.map((entry, index) => {
                     const meta = [
                         entry.line ? `Line ${entry.line}` : null,
                         entry.column !== null ? `Column ${entry.column}` : null,
@@ -774,24 +775,24 @@ export function DeployContractForm({ walletId, onBack }) {
                             {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
                         </>
                     );
-                    return (
-                        <li key={`${entry.message}-${index}`} className={styles.validationItem}>
-                            {entry.line ? (
-                                <Button
-                                    type="button"
-                                    className={styles.validationLink}
-                                    icon={<Icon.ArrowRightIcon />}
-                                    onClick={() => moveToCodeLine(entry.line)}
-                                >
-                                    {content}
-                                </Button>
-                            ) : (
-                                <div className={styles.validationText}>{content}</div>
-                            )}
-                        </li>
-                    );
+                    return {
+                        key: `${entry.message}-${index}`,
+                        className: styles.validationItem,
+                        content: entry.line ? (
+                            <Button
+                                type="button"
+                                className={styles.validationLink}
+                                icon={<Icon.ArrowRightIcon />}
+                                onClick={() => moveToCodeLine(entry.line)}
+                            >
+                                {content}
+                            </Button>
+                        ) : (
+                            <div className={styles.validationText}>{content}</div>
+                        ),
+                    };
                 })}
-            </ul>
+            />
         );
     }
 

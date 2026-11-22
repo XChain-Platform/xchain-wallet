@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { networks } from 'bitcoinjs-lib';
+import { networks, Transaction } from 'bitcoinjs-lib';
 import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import {
@@ -22,12 +22,12 @@ const SOURCE = 'bcrt1qwallet';
 const DESTINATION = 'bcrt1qrecipient';
 const ORIGINAL = 'aa'.repeat(32);
 const CANCEL = 'bb'.repeat(32);
-const REPLACEMENT = 'cc'.repeat(32);
 const INPUT = '11'.repeat(32);
 // A replacement that lands in the broadcast queue is verified again before it
 // goes out, so the signer returns a real signed spend the tracker can establish.
 const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 const SIGNED_TX = SIGNED.txHex;
+const REPLACEMENT = Transaction.fromHex(SIGNED_TX).getId();
 
 const decomposition = (outputs) => ({
     inputs: [{
