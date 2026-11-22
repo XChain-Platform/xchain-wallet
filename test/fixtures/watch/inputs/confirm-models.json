@@ -1,0 +1,28 @@
+{
+    "request-confirm": {
+        "phase": "ready",
+        "kind": "request",
+        "iconHash": "0a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef",
+        "sentence": "Confirm this Send request on your phone.",
+        "amountText": "0.025 BTC",
+        "randomBytes": [16, 35, 69, 103, 137, 171, 205, 239, 1, 35, 69, 103, 137, 171, 205, 239]
+    },
+    "request-paydue": {
+        "phase": "due",
+        "kind": "paydue",
+        "iconHash": "1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0a",
+        "sentence": "Payment is due for this request.",
+        "amountText": "125.00 USDC",
+        "expiresAt": 4102444800000,
+        "randomBytes": [33, 35, 69, 103, 137, 171, 205, 239, 1, 35, 69, 103, 137, 171, 205, 239]
+    },
+    "request-expired": {
+        "phase": "due",
+        "kind": "paydue",
+        "iconHash": "2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0a1b",
+        "sentence": "This payment request has expired.",
+        "amountText": "48.50 USDC",
+        "expiresAt": 946684800000,
+        "randomBytes": [49, 35, 69, 103, 137, 171, 205, 239, 1, 35, 69, 103, 137, 171, 205, 239]
+    }
+}
