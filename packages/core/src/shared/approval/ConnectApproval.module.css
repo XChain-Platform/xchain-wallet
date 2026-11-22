@@ -1,6 +1,6 @@
 .appBarBleed {
-    margin-block-start: calc(-1 * (var(--xc-page-gutter) - 2px));
-    margin-inline: calc(-1 * var(--xc-page-gutter)) calc(-1 * (var(--xc-page-gutter) - 2px));
+    margin-block-start: calc(-1 * (var(--xc-page-gutter) - var(--xc-space-1) / 2));
+    margin-inline: calc(-1 * var(--xc-page-gutter)) calc(-1 * (var(--xc-page-gutter) - var(--xc-space-1) / 2));
 }
 
 .page,
@@ -140,13 +140,13 @@
 }
 
 .stackedIcon {
-    --xc-avatar-size-list: 28px;
+    --xc-avatar-size-list: var(--xc-avatar-size-header);
     --xc-avatar-initials-list: var(--xc-text-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--xc-avatar-size-list);
+    height: var(--xc-avatar-size-list);
     overflow: hidden;
     border-radius: 50%;
     background: var(--xc-surface);
@@ -154,7 +154,7 @@
 }
 
 .stackedIcon + .stackedIcon {
-    margin-inline-start: -8px;
+    margin-inline-start: calc(-1 * var(--xc-space-2));
 }
 
 .stackedIcon > * {
@@ -164,9 +164,9 @@
 .emptyIcon {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 28px;
-    width: 28px;
-    height: 28px;
+    flex: 0 0 var(--xc-avatar-size-header);
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
     border: 1px solid var(--xc-border-strong);
     border-radius: 50%;
     color: var(--xc-text-muted);
