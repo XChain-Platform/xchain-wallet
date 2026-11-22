@@ -18,6 +18,10 @@ const sectionSources = import.meta.glob(
     '../../../packages/web/src/style-guide/sections/*.jsx',
     { query: '?raw', import: 'default', eager: true },
 );
+const [guideModule] = Object.values(import.meta.glob(
+    '../../../packages/web/src/style-guide/StyleGuidePage.jsx',
+    { eager: true },
+));
 const productSources = import.meta.glob(
     [
         '../../../packages/*/src/**/*.{js,jsx}',
@@ -80,9 +84,12 @@ function namesFrom(scans, key) {
     return new Set(scans.flatMap((scan) => [...scan[key]]));
 }
 
-function metadataFromModules(modules) {
-    return Object.entries(modules).flatMap(([path, module]) =>
+function sectionsInScope(modules, sections, legacySectionIds) {
+    const metas = Object.entries(modules).flatMap(([path, module]) =>
         (module.SECTION_META ?? []).map((meta) => ({ ...meta, path })));
+    if (legacySectionIds?.length !== 0) return metas;
+    const paths = new Map(metas.map(({ id, path }) => [id, path]));
+    return sections.map((section) => ({ ...section, path: paths.get(section.id) }));
 }
 
 function missingImporters(metas, imported) {
@@ -99,7 +106,11 @@ function missingCoreUses(sections, used) {
             .map((name) => `${repoPath(path)}: ${name}`));
 }
 
-const metas = metadataFromModules(sectionModules);
+const metas = sectionsInScope(
+    sectionModules,
+    guideModule.SECTIONS,
+    guideModule.LEGACY_SECTION_IDS,
+);
 const metaSections = [...new Set(metas.map(({ path }) => path))]
     .map((path) => ({ path, source: sectionSources[path] }));
 const productScans = Object.entries(productSources)
@@ -116,14 +127,16 @@ describe('style guide section importers', () => {
         expect(Object.keys(productSources).length).toBeGreaterThan(100);
     });
 
-    it('scopes pre-closing checks to metadata sections', () => {
+    it('scopes metadata sections only until closing mode', () => {
         const modules = {
             './LegacySection.jsx': { LegacySection: () => null },
             './MetaSection.jsx': { SECTION_META: [{ id: 'meta' }] },
         };
-        expect(metadataFromModules(modules)).toEqual([
-            { id: 'meta', path: './MetaSection.jsx' },
-        ]);
+        const sections = [{ id: 'legacy' }, { id: 'meta' }];
+        expect(sectionsInScope(modules, sections, ['legacy']).map(({ id }) => id))
+            .toEqual(['meta']);
+        expect(sectionsInScope(modules, sections, []).map(({ id }) => id))
+            .toEqual(['legacy', 'meta']);
     });
 
     it('keeps every documented name imported by shipped source', () => {
