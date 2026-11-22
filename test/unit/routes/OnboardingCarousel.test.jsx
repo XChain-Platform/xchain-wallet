@@ -373,6 +373,9 @@ describe('Onboarding: explainer gating', () => {
             .toBeInTheDocument();
         expect(within(licenseBanner).getByRole('heading', { name: 'License Agreement' }))
             .toBeInTheDocument();
+        // The page header carries the title, so the card under the logo does
+        // not repeat it (operator 2026-11-22).
+        expect(screen.getAllByRole('heading', { name: 'License Agreement' })).toHaveLength(1);
 
         license.unmount();
         acceptLicense();

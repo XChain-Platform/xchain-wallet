@@ -127,6 +127,14 @@
     max-width: 100%;
 }
 
+/* The screen takes focus on its heading so a screen reader announces it;
+   without a key press first, that focus draws no box (inputModality.js).
+   The outline is transparent rather than removed, so forced-colors mode
+   still paints it in the system colour. */
+.title[data-quiet-focus]:focus {
+    outline: 2px solid transparent;
+}
+
 /* The trailing actions match the app bar's buttons above them in
    size and spacing, so the two rows line up column for column. */
 .trailing {

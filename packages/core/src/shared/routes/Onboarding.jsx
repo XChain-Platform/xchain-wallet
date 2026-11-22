@@ -457,8 +457,11 @@ export function Onboarding({ onCreate, onImport, onConnectHardware, hardwareFact
                     fullWidth
                     className={styles.licenseForm}
                     errors={licenseErrors}
-                    headingAs={onBack ? 'h1' : 'h2'}
-                    title={t('onboarding.licenseAgreement')}
+                    headingAs="h1"
+                    // First run shows the title once, in the boot page
+                    // header (G109); the Add Wallet path has no page
+                    // header, so the card carries it (operator 2026-11-22).
+                    title={onBack ? t('onboarding.licenseAgreement') : undefined}
                     visual={(
                         <img
                             src={branding.logoUrl()}
