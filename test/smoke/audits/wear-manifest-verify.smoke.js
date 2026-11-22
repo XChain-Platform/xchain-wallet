@@ -8,14 +8,25 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-    EXPECTED_COMPONENTS,
-    EXPECTED_PERMISSIONS,
-} from '../../../tools/release/verify-wear-manifest.mjs';
-
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const verifier = join(root, 'tools/release/verify-wear-manifest.mjs');
 const directory = mkdtempSync(join(tmpdir(), 'wear-manifest-'));
+const EXPECTED_COMPONENTS = [
+    { type: 'activity', name: 'com.google.android.gms.common.api.GoogleApiActivity', exported: false },
+    { type: 'activity', name: 'io.xchain.wallet.android.wear.MainActivity', exported: true },
+    { type: 'provider', name: 'androidx.startup.InitializationProvider', exported: false },
+    { type: 'receiver', name: 'androidx.profileinstaller.ProfileInstallReceiver', exported: true },
+    {
+        type: 'service',
+        name: 'io.xchain.wallet.android.wear.complication.WalletComplicationService',
+        exported: true,
+    },
+    { type: 'service', name: 'io.xchain.wallet.android.wear.sync.WatchListenerService', exported: true },
+    { type: 'service', name: 'io.xchain.wallet.android.wear.tile.BalanceTileService', exported: true },
+];
+const EXPECTED_PERMISSIONS = [
+    'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+];
 
 const manifest = ({
     feature = '<uses-feature android:name="android.hardware.type.watch" android:required="true" />',
