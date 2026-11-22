@@ -22,8 +22,9 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/components/HomeListFilterMenu.module.css': ['1'],
     // The flip button straddles the gap between the Give and Get cards.
     'shared/components/giveGet/GiveGet.module.css': ['1'],
-    // The hero's first card layers above its overlapped grid sibling in a local stack.
-    'shared/components/HomeTabs.module.css': ['2'],
+    // The hero's first card layers above its overlapped grid sibling in a local
+    // stack, one step over the chart's range chips (2) so its menu opens over them.
+    'shared/components/HomeTabs.module.css': ['3'],
     'shared/components/outcomeDetail/OutcomeDetail.module.css': ['1'],
     'shared/components/TxStatusTimeline.module.css': ['1'],
     'shared/routes/AddressList.module.css': ['200'],

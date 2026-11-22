@@ -82,7 +82,7 @@ describe('Licence gate actions sit under the terms', () => {
         const [controls] = ruleBodies(onboardingCss, '.licenseControls');
         expect(controls).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
         // No margin or padding on the licence parts may exceed the 8px token.
-        for (const selector of ['.licenseGate', '.licenseControls', '.licenseAck', '.licenseActions']) {
+        for (const selector of ['.licenseGate', '.licenseControls', 'label.licenseAck', '.licenseActions']) {
             for (const body of ruleBodies(onboardingCss, selector)) {
                 expect(body, selector).not.toMatch(/(?:margin|padding)(?:-[a-z]+)?\s*:[^;]*(?:space-[3-9]|form-gap|page-top)/);
             }
@@ -133,7 +133,7 @@ describe('Licence gate actions sit under the terms', () => {
         expect(checkbox.compareDocumentPosition(accept) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('keeps the checkbox and button on one row at every width, including the 834px tablet window', () => {
+    it('wraps Accept to a full-width line below 834px and shares one row from 834px', () => {
         const bodies = ruleBodies(onboardingCss, '.licenseControls');
         expect(bodies.length).toBeGreaterThan(0);
         // No rule at any breakpoint may stack the row.
@@ -146,12 +146,13 @@ describe('Licence gate actions sit under the terms', () => {
         expect(base).toMatch(/align-items\s*:\s*center\s*;/);
         expect(base).toMatch(/justify-content\s*:\s*space-between\s*;/);
         expect(base).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
-        // The button keeps its natural width at the tablet breakpoint.
-        for (const body of ruleBodies(onboardingCss, '.licenseActions > button')) {
-            expect(body).not.toMatch(/width\s*:\s*100%/);
-        }
-        for (const body of ruleBodies(onboardingCss, '.licenseActions')) {
-            expect(body).not.toMatch(/width\s*:\s*100%/);
-        }
+        // Below 834px Accept takes its own line at full width, the page's main
+        // action (G50); from 834px it keeps its natural width at the row end (U68).
+        const [baseButton, wideButton] = ruleBodies(onboardingCss, '.licenseActions > button');
+        expect(baseButton).toMatch(/width\s*:\s*100%\s*;/);
+        expect(wideButton).toMatch(/width\s*:\s*auto\s*;/);
+        const [baseActions, wideActions] = ruleBodies(onboardingCss, '.licenseActions');
+        expect(baseActions).toMatch(/flex\s*:\s*1 1 100%\s*;/);
+        expect(wideActions).toMatch(/flex\s*:\s*0 0 auto\s*;/);
     });
 });

@@ -150,6 +150,11 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingSource).not.toMatch(
             /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,
         );
+        // Below 834px Accept spans the full width (G50); from 834px it keeps
+        // its natural width at the end of the shared row (U68).
+        expect(onboardingCss).toMatch(
+            /\.licenseActions > button\s*\{[^}]*width:\s*100%;/s,
+        );
         expect(onboardingCss).toMatch(
             /\.licenseActions > button\s*\{[^}]*width:\s*auto;/s,
         );

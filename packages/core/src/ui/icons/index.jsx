@@ -843,6 +843,28 @@ export function ExternalLinkIcon() {
     );
 }
 
+/** A window with a panel docked on its right edge: open the wallet in the browser's side panel. */
+export function SidebarIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+        </svg>
+    );
+}
+
+/** Two arrows out to opposite corners: open the wallet full screen in a browser tab. */
+export function MaximizeIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M15 3h6v6" />
+            <path d="M9 21H3v-6" />
+            <path d="m21 3-7 7" />
+            <path d="m3 21 7-7" />
+        </svg>
+    );
+}
+
 export function MultisigIcon() {
     return (
         <svg {...STROKE_PROPS}>
