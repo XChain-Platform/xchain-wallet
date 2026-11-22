@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.wear.ambient.AmbientLifecycleObserver
 import io.xchain.wallet.android.wear.data.WatchDisplayRules
@@ -22,11 +23,21 @@ class AmbientRedaction internal constructor(val redacted: Boolean) {
     }
 }
 
+internal val LocalAmbientObserverFactory = staticCompositionLocalOf<(
+    ComponentActivity,
+    AmbientLifecycleObserver.AmbientLifecycleCallback,
+) -> AmbientLifecycleObserver> {
+    { activity, callback ->
+        AmbientLifecycleObserver(activity, callback)
+    }
+}
+
 @Composable
 fun rememberAmbientRedaction(phoneHidden: Boolean, hideAmounts: Boolean): AmbientRedaction {
     val activity = LocalContext.current as ComponentActivity
+    val observerFactory = LocalAmbientObserverFactory.current
     var ambient by remember { mutableStateOf(false) }
-    DisposableEffect(activity) {
+    DisposableEffect(activity, observerFactory) {
         val callback = object : AmbientLifecycleObserver.AmbientLifecycleCallback {
             override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
                 ambient = true
@@ -36,7 +47,7 @@ fun rememberAmbientRedaction(phoneHidden: Boolean, hideAmounts: Boolean): Ambien
                 ambient = false
             }
         }
-        val observer = AmbientLifecycleObserver(activity, callback)
+        val observer = observerFactory(activity, callback)
         activity.lifecycle.addObserver(observer)
         onDispose { activity.lifecycle.removeObserver(observer) }
     }
