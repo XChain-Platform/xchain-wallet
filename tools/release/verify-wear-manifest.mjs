@@ -8,13 +8,33 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
+
 import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
-const USAGE = `Usage: node tools/release/verify-wear-manifest.mjs --help
+const USAGE = `Usage: node tools/release/verify-wear-manifest.mjs <merged-manifest.xml>
 
-Reads Android manifest XML and the expected component and permission policy.
-Reports the manifest checks that pass and fail without changing the manifest.
+Reads merged Wear Android manifest XML and verifies its watch feature, standalone
+metadata, exact component exports and exact permission set without changing it.
 `;
+
+export const EXPECTED_COMPONENTS = [
+    { type: 'activity', name: 'com.google.android.gms.common.api.GoogleApiActivity', exported: false },
+    { type: 'activity', name: 'io.xchain.wallet.android.wear.MainActivity', exported: true },
+    { type: 'provider', name: 'androidx.startup.InitializationProvider', exported: false },
+    { type: 'receiver', name: 'androidx.profileinstaller.ProfileInstallReceiver', exported: true },
+    {
+        type: 'service',
+        name: 'io.xchain.wallet.android.wear.complication.WalletComplicationService',
+        exported: true,
+    },
+    { type: 'service', name: 'io.xchain.wallet.android.wear.sync.WatchListenerService', exported: true },
+    { type: 'service', name: 'io.xchain.wallet.android.wear.tile.BalanceTileService', exported: true },
+];
+
+export const EXPECTED_PERMISSIONS = [
+    'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+];
 
 function attribute(tag, name) {
     return new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, 's').exec(tag)?.[2];
@@ -133,8 +153,25 @@ export function checkWearManifest(xml, { components, permissions }) {
     return { failures, passes };
 }
 
-if (isInvokedDirectly(import.meta.url)
-    && process.argv.length === 3
-    && (process.argv[2] === '--help' || process.argv[2] === '-h')) {
-    process.stdout.write(USAGE);
+export function main(args, stdout = process.stdout, stderr = process.stderr) {
+    if (args.length === 1 && (args[0] === '--help' || args[0] === '-h')) {
+        stdout.write(USAGE);
+        return 0;
+    }
+    if (args.length !== 1) {
+        stderr.write(USAGE);
+        return 2;
+    }
+
+    const result = checkWearManifest(readFileSync(args[0], 'utf8'), {
+        components: EXPECTED_COMPONENTS,
+        permissions: EXPECTED_PERMISSIONS,
+    });
+    for (const pass of result.passes) stdout.write(`PASS ${pass}\n`);
+    for (const failure of result.failures) stderr.write(`FAIL ${failure}\n`);
+    return result.failures.length === 0 ? 0 : 1;
+}
+
+if (isInvokedDirectly(import.meta.url)) {
+    process.exitCode = main(process.argv.slice(2));
 }
