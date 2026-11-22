@@ -126,20 +126,29 @@ for (const [attr, why] of [
 
 // --- 3. The permission SET, not a count ---------------------------------
 //
-// §5 states the rule as a set - "camera (QR) and biometrics only; no location,
-// no contacts, no background anything" - and every added permission is Play
-// review surface. A count passed a swapped permission, a dropped one, and an
-// added vendor permission, which is how FCM and Play Services announce
-// themselves. The non-android entry is AndroidX's own signature-level
-// permission for RECEIVER_NOT_EXPORTED registration, listed because it is REAL
-// and merged in, not because it is wanted.
+// §5 states the rule as a set, and every added permission is Play review
+// surface. D1 adds the one ruled background exception: WorkManager checks for
+// activity a few times a day. POST_NOTIFICATIONS stays for its local alert. A
+// count passed a swapped permission, a dropped one, and an added vendor
+// permission, which is how FCM and Play Services announce themselves. The
+// non-android entry is AndroidX's own signature-level permission for
+// RECEIVER_NOT_EXPORTED registration, listed because it is REAL and merged in,
+// not because it is wanted.
 const EXPECTED_PERMISSIONS = [
+    // WorkManager observes connectivity before its background activity check.
+    'android.permission.ACCESS_NETWORK_STATE',
     'android.permission.CAMERA',
+    // WorkManager can promote a long-running worker to a foreground service.
+    'android.permission.FOREGROUND_SERVICE',
     'android.permission.INTERNET',
     'android.permission.POST_NOTIFICATIONS',
+    // WorkManager reschedules durable work after the device restarts.
+    'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.USE_BIOMETRIC',
     'android.permission.USE_FINGERPRINT',
     'android.permission.VIBRATE',
+    // WorkManager holds the CPU while its background activity check runs.
+    'android.permission.WAKE_LOCK',
     'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
 ];
 const actualPermissions = [...new Set(

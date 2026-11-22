@@ -166,8 +166,8 @@ mustFail('a vendor permission added, which is how FCM announces itself',
     buildManifest({ permissions: [...PERMISSIONS, 'com.google.android.c2dm.permission.RECEIVE'] }),
     /added: \[com\.google\.android\.c2dm\.permission\.RECEIVE\]/);
 mustFail('a permission dropped, which only moves a count DOWN',
-    buildManifest({ permissions: PERMISSIONS.filter((p) => p !== 'android.permission.USE_FINGERPRINT') }),
-    /removed: \[android\.permission\.USE_FINGERPRINT\]/);
+    buildManifest({ permissions: PERMISSIONS.filter((p) => p !== 'android.permission.FOREGROUND_SERVICE') }),
+    /removed: \[android\.permission\.FOREGROUND_SERVICE\]/);
 mustFail('a versionCode that is not the one the tag derives',
     buildManifest({ versionCode: '3340050' }), /versionCode is 3340050/,
     ['--version-code', VERSION_CODE]);
