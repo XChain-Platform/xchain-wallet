@@ -35,7 +35,7 @@ describe('Sign message refusal wording', () => {
     });
 
     it('names the reserved sign-in prefix', () => {
-        expect(messageRefusalReason('XChain Sign-In v2 challenge')).toMatch(/reserved for site sign-in/);
+        expect(messageRefusalReason('XChain Sign-In v2 challenge')).toMatch(/reserved for Login with XChain/);
     });
 
     it.each([
