@@ -33,8 +33,10 @@ bundle_id="io.xchain.wallet.ios"
 # Confirm the required sizes in ASC at submission; Apple changes them.
 if [ "$#" -gt 0 ]; then
     devices=("$@")
+    capture_watches=0
 else
     devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)" "XC iPhone Duo")
+    capture_watches=1
 fi
 
 if [ ! -d "$project" ]; then
@@ -178,6 +180,50 @@ for device in "${devices[@]}"; do
     fi
 done
 
+if [ "$capture_watches" = 1 ]; then
+    for watch_case in "XC Watch 49mm:422:514" "XC Watch 41mm:352:430"; do
+        IFS=: read -r watch_name watch_width watch_height <<< "$watch_case"
+        pair_data="$(xcrun simctl list pairs -j | WATCH_NAME="$watch_name" node -e '
+            const data = JSON.parse(require("fs").readFileSync(0));
+            const matches = Object.entries(data.pairs || {}).filter(([, p]) =>
+                p.watch?.name === process.env.WATCH_NAME && p.phone?.name === "XC iPhone 17");
+            matches.sort(([a, x], [b, y]) => Number(y.state === "active") - Number(x.state === "active") || a.localeCompare(b));
+            if (matches[0]) console.log([matches[0][0], matches[0][1].phone.udid, matches[0][1].watch.udid].join("\t"));
+        ')"
+        if [ -z "$pair_data" ]; then
+            echo "screenshots: no XC iPhone 17 pair for '$watch_name'" >&2
+            exit 1
+        fi
+        IFS=$'\t' read -r pair_id phone_udid watch_udid <<< "$pair_data"
+        watch_slug="$(echo "$watch_name" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"
+        watch_dest="$outdir/$watch_slug"
+        rm -rf "$watch_dest"; mkdir -p "$watch_dest"
+        xcrun simctl pair_activate "$pair_id"
+        xcrun simctl boot "$phone_udid" >/dev/null 2>&1 || true
+        xcrun simctl boot "$watch_udid" >/dev/null 2>&1 || true
+        xcrun simctl bootstatus "$phone_udid" -b >/dev/null
+        xcrun simctl bootstatus "$watch_udid" -b >/dev/null
+        xcrun simctl uninstall "$phone_udid" "$bundle_id" >/dev/null 2>&1 || true
+
+        result="$(mktemp -d)/run.xcresult"
+        xcodebuild test -project "$project" -scheme AppUITests -destination "id=$phone_udid" \
+            -resultBundlePath "$result" -only-testing:AppUITests/ScreenshotTests/testCaptureListingScreenshots \
+            > "$watch_dest/xcodebuild.log" 2>&1 &
+        harness_pid=$!
+        for scene in 01-balances 02-receive 03-send 04-settings; do
+            while kill -0 "$harness_pid" 2>/dev/null && ! grep -Fq "SCREENSHOT: $scene" "$watch_dest/xcodebuild.log"; do sleep 1; done
+            grep -Fq "SCREENSHOT: $scene" "$watch_dest/xcodebuild.log" || break
+            xcrun simctl io "$watch_udid" screenshot "$watch_dest/$scene.png"
+        done
+        set +e; wait "$harness_pid"; status=$?; set -e
+        if [ "$status" -ne 0 ]; then
+            echo "screenshots: '$watch_name' phone onboarding failed; see $watch_dest/xcodebuild.log" >&2
+            exit "$status"
+        fi
+        echo "screenshots: captured $watch_name at ${watch_width}x${watch_height}"
+    done
+fi
+
 echo
 echo "screenshots: wrote $outdir"
 echo "Before these go in a listing: no real recovery phrase, no mainnet address holding real funds."
@@ -195,6 +241,33 @@ echo "Before these go in a listing: no real recovery phrase, no mainnet address 
 echo
 echo "screenshots: pinning the set to $(git -C "$repo" rev-parse --short HEAD)"
 node "$repo/tools/release/verify-listing-assets.mjs" --set ios --write --how capture
+node --input-type=module - "$repo" "$outdir" <<'NODE'
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const [repo, outdir] = process.argv.slice(2);
+const { pngHeader } = await import(pathToFileURL(join(repo, 'tools/release/verify-listing-assets.mjs')));
+const pinPath = join(outdir, 'capture-pin.json');
+const pin = JSON.parse(readFileSync(pinPath));
+const cases = [['xc-watch-49mm', 422, 514], ['xc-watch-41mm', 352, 430]];
+for (const [dir, width, height] of cases) {
+    for (const scene of ['01-balances', '02-receive', '03-send', '04-settings']) {
+        const name = `${dir}/${scene}.png`;
+        const bytes = readFileSync(join(outdir, name));
+        const header = pngHeader(bytes);
+        if (!header || header.width !== width || header.height !== height || header.hasAlpha) {
+            throw new Error(`${name}: expected opaque ${width}x${height} PNG, got ${JSON.stringify(header)}`);
+        }
+        pin.assets[name] = {
+            sha256: createHash('sha256').update(bytes).digest('hex'),
+            width, height, shows: `${dir === 'xc-watch-49mm' ? 'Watch Ultra 4 49mm' : 'Watch Series 9 41mm'}: ${scene}`,
+        };
+    }
+}
+writeFileSync(pinPath, `${JSON.stringify(pin, null, 4)}\n`);
+NODE
 
 # Put the tree back the way it was found.
 #
