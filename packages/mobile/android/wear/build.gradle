@@ -3,6 +3,16 @@ apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
 
+def versionPropsFile = file('../version.properties')
+if (!versionPropsFile.exists()) {
+    throw new GradleException(
+        "packages/mobile/android/version.properties is missing. Run" +
+        " `pnpm --filter @xchain-wallet/mobile build` before building."
+    )
+}
+def versionProps = new Properties()
+versionPropsFile.withInputStream { versionProps.load(it) }
+
 def mainManifest = file('src/main/AndroidManifest.xml')
 def manifestTask = null
 if (!mainManifest.exists()) {
@@ -24,7 +34,7 @@ android {
         applicationId 'io.xchain.wallet.android'
         minSdk = 30
         targetSdk = rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode versionProps['wearVersionCode'].toInteger()
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
