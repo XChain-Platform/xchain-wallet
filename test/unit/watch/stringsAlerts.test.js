@@ -22,6 +22,10 @@ describe('watch alert strings', () => {
         expect(strings).toEqual({
             'w3.title': 'Alerts',
             'w3.empty': 'No alerts',
+            'w3.timeJustNow': 'Just now',
+            'w3.timeMinutes': '{n} min ago',
+            'w3.timeHours': '{n} h ago',
+            'w3.timeDays': '{n} d ago',
             'w4.title': 'Alert detail',
             'w4.requestSentence': 'Request',
             'w4.requestAmount': 'Amount',
