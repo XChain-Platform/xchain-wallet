@@ -78,7 +78,7 @@ const expected = { ...repoExpectations, marketingVersion: MARKETING, buildNumber
 
 assert.equal(expected.bundleId, 'io.xchain.wallet.ios',
     'the pbxproj bundle id did not come back; every check below would then compare undefined');
-assert.deepEqual(expected.associatedDomains, ['applinks:xchain.io'],
+assert.deepEqual(expected.associatedDomains, ['applinks:wallet.xchain.io', 'applinks:xchain.io'],
     'App.entitlements did not yield the associated-domains claim, so the link fixtures are meaningless');
 assert.ok(expected.usageDescriptionKeys.includes('NSCameraUsageDescription'),
     'the source Info.plist did not yield its usage descriptions');
@@ -99,7 +99,7 @@ const buildInfo = (over = {}) => ({
 const buildEntitlements = (over = {}) => ({
     'application-identifier': `829JG9YLH3.${expected.bundleId}`,
     'com.apple.developer.team-identifier': '829JG9YLH3',
-    'com.apple.developer.associated-domains': [APPLINK],
+    'com.apple.developer.associated-domains': expected.associatedDomains,
     'get-task-allow': false,
     ...over,
 });

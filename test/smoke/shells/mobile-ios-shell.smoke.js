@@ -158,7 +158,11 @@ for (const f of families) assert.equal(f, '1,2', 'D6: universal, so iPad is a sh
 
 assert.match(pbxproj, /CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/, 'entitlements not wired into the build');
 const domains = plistValue(entitlements, 'com.apple.developer.associated-domains');
-assert.deepEqual(domains, ['applinks:xchain.io'], 'one domain, applinks only');
+assert.deepEqual(
+    domains,
+    ['applinks:xchain.io', 'applinks:wallet.xchain.io'],
+    'both Universal Link domains, applinks only, with xchain.io first',
+);
 assert.ok(
     !entitlements.includes('webcredentials:'),
     'webcredentials offers password autofill for an account the wallet does not have',
@@ -1204,7 +1208,8 @@ assert.equal(
 console.log(
     'OK: iOS shell smoke (S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
-    + ' universal device family; associated domains applinks:xchain.io only, entitlements wired into the build;'
+    + ' universal device family; associated domains applinks:xchain.io then applinks:wallet.xchain.io only,'
+    + ' entitlements wired into the build;'
     + ' default ATS asserted by absence; camera + Face ID usage strings present and honest about what biometrics'
     + ' do; inbound xchain and payment schemes; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
