@@ -33,9 +33,11 @@ bundle_id="io.xchain.wallet.ios"
 # Confirm the required sizes in ASC at submission; Apple changes them.
 if [ "$#" -gt 0 ]; then
     devices=("$@")
+    duo_devices=()
     capture_watches=0
 else
-    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)" "XC iPhone Duo")
+    devices=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)")
+    duo_devices=("XC iPhone Duo")
     capture_watches=1
 fi
 
@@ -83,7 +85,7 @@ echo "screenshots: staged bundle profile is '$profile'"
 
 mkdir -p "$outdir"
 
-for device in "${devices[@]}"; do
+for device in "${devices[@]}" "${duo_devices[@]}"; do
     echo
     echo "=== $device ==="
     slug="$(echo "$device" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"
