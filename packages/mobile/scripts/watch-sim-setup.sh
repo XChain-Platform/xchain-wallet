@@ -83,10 +83,10 @@ ensure_pair() {
 avd_config() {
     "$avdmanager" list avd 2>/dev/null | awk -v wanted="$1" '
         $1 == "Name:" { selected = ($2 == wanted) }
-        selected && $1 == "Path:" {
+        selected && !found && $1 == "Path:" {
             sub(/^[[:space:]]*Path:[[:space:]]*/, "")
             print $0 "/config.ini"
-            exit
+            found = 1
         }
     '
 }
@@ -197,7 +197,7 @@ check() {
     [ -x "$avdmanager" ] || miss "android: missing avdmanager at $avdmanager"
     [ -x "$emulator" ] || miss "android: missing emulator at $emulator"
     if [ -x "$sdkmanager" ]; then
-        "$sdkmanager" --sdk_root="$sdk" --list_installed 2>/dev/null | grep -Fq "$image" || \
+        "$sdkmanager" --sdk_root="$sdk" --list_installed 2>/dev/null | grep -F "$image" >/dev/null || \
             miss "android: missing image $image"
     fi
     if [ -x "$avdmanager" ]; then

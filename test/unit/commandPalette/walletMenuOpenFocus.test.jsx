@@ -9,9 +9,9 @@
 // contact legal@dankest.llc.
 
 // A click on the menu button shows the menu with its scroll surface focused,
-// so a long menu scrolls at once; the search shortcut still opens with the
-// cursor in search, and typing on the surface moves to search (operator
-// 2026-11-21 on the extension popup).
+// so a long menu scrolls at once; the search shortcut and a keyboard press on
+// the menu button still open with the cursor in search, and typing on the
+// surface moves to search (operator 2026-11-21 on the extension popup).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -125,5 +125,18 @@ describe('wallet menu open focus', () => {
         act(() => result.current.closePalette());
         act(() => result.current.openPalette());
         expect(result.current.focusSearch).toBe(false);
+    });
+
+    it('keeps search focus when Enter or Space on the menu button opened it', () => {
+        const { result } = renderHook(() => useCommandPalette());
+        act(() => result.current.togglePalette({ detail: 0 }));
+        expect(result.current.open).toBe(true);
+        expect(result.current.focusSearch).toBe(true);
+        act(() => result.current.closePalette());
+        act(() => result.current.togglePalette({ detail: 1 }));
+        expect(result.current.focusSearch).toBe(false);
+        act(() => result.current.closePalette());
+        act(() => result.current.openPalette({ detail: 0 }));
+        expect(result.current.focusSearch).toBe(true);
     });
 });

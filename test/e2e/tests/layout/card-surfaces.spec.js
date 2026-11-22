@@ -353,8 +353,8 @@ for (const viewport of VIEWPORTS) {
         }
 
         // The locked demo wallet: its exit block, then a lockout notice.
-        // Without the stored demo password it stays on the Locked screen.
-        await page.evaluate(() => localStorage.removeItem('xc:demoWalletPassword'));
+        // The Lock press holds the lock for the tab session, reloads included,
+        // so the demo's silent re-unlock (stored or fixed password) stays off.
         await lock(page);
         measured += await measure(page, 'Locked demo', faults);
         await showLockout(page);

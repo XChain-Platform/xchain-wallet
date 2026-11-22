@@ -42,6 +42,12 @@ export function useCommandPaletteOnlineRetry(active) {
     return retryKey;
 }
 
+// A button's click reports detail 0 when Enter or Space fired it and the click
+// count when a pointer did, so a keyboard open keeps the cursor in search.
+function keyboardActivated(event) {
+    return Boolean(event) && typeof event === 'object' && event.detail === 0;
+}
+
 /**
  * @param {object} [opts]
  * @param {boolean} [opts.enabled=true]  install the global shortcut listener
@@ -51,10 +57,11 @@ export function useCommandPaletteOnlineRetry(active) {
  * @param {(view: string) => void} [opts.navigate]  shell route setter
  * @param {string} [opts.currentView]  the view the shell shows now; when it
  *        changes the palette closes
- * @returns {{ open: boolean, focusSearch: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number, onlineRetryKey: number }}
- *          focusSearch is true only when the shortcut opened the palette: a
- *          click on a menu button shows the menu with its list focused, so
- *          the list scrolls at once, while the search shortcut types.
+ * @returns {{ open: boolean, focusSearch: boolean, openPalette: (event?: { detail?: number }) => void, closePalette: () => void, togglePalette: (event?: { detail?: number }) => void, navigate: (view: string) => void, navigationKey: number, onlineRetryKey: number }}
+ *          focusSearch is true when the shortcut or a keyboard press on the
+ *          menu button opened the palette: a pointer click shows the menu
+ *          with its list focused, so the list scrolls at once, while a
+ *          keyboard open lands in search, where the arrows move the rows.
  */
 export function useCommandPalette(opts = {}) {
     const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
@@ -64,9 +71,9 @@ export function useCommandPalette(opts = {}) {
     const [navigationKey, setNavigationKey] = useState(0);
     const onlineRetryKey = useCommandPaletteOnlineRetry(open && enabled);
 
-    const openPalette = useCallback(() => { setFocusSearch(false); setOpen(true); }, []);
+    const openPalette = useCallback((event) => { setFocusSearch(keyboardActivated(event)); setOpen(true); }, []);
     const closePalette = useCallback(() => setOpen(false), []);
-    const togglePalette = useCallback(() => { setFocusSearch(false); setOpen((v) => !v); }, []);
+    const togglePalette = useCallback((event) => { setFocusSearch(keyboardActivated(event)); setOpen((v) => !v); }, []);
     // Give every palette selection a fresh route mount, including when the
     // selected action is already showing a completed form.
     const navigate = useCallback((view) => {

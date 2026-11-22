@@ -97,7 +97,7 @@ export function FormStatusSlot({ status }) {
             title: entry.title || entry.lead,
             testId: entry.testId,
             onDismiss: entry.onDismiss,
-            children: entry.lines ? <NoticeLines lines={entry.lines} /> : entry.text,
+            children: entry.lines ? <NoticeLines lines={entry.lines} bullets={entry.bullets} /> : entry.text,
         });
     }
     // The shell's reachability sentence joins a form that has a notice of its

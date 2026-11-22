@@ -178,11 +178,14 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         expect(walletKeys.filter((key) => globalThis.localStorage.getItem(key) !== null)).toEqual([]);
         expect(globalThis.localStorage.getItem('xc:licenseAcceptedVersion')).toBe('1');
         expect(globalThis.localStorage.getItem('xchain.layoutMode')).toBe('sidepanel');
+        // The extension worker keeps its watcher sets in chrome.storage.local
+        // under its own names, so its wipe list carries those, not these.
         expect(WALLET_LOCAL_KEYS).toEqual(expect.arrayContaining([
-            'xchain.governancePolls.seen',
-            'xchain.deadlines.seen',
-            'xchain.dispenserEscrow.seen',
+            'governancePollsSeen',
+            'deadlinesSeen',
+            'dispenserEscrowSeen',
         ]));
+        expect(WALLET_LOCAL_KEYS).not.toContain('xchain.deadlines.seen');
     });
 
     it('clears only one wallet\'s cache and preference records', () => {

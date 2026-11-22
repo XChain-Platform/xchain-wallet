@@ -29,3 +29,7 @@ unzip
 # test/unit/mobile/watchEntitlements.test.js sits behind a darwin check that
 # skips with a printed reason elsewhere. No Linux venue has it or reaches it.
 -plutil
+# sips is a FALSE POSITIVE once tools/watch/make-watch-icons.test.mjs
+# brings its own stand-in: when sips is missing the test puts a node
+# script named sips on PATH, so a Linux venue runs the test without it.
+-sips

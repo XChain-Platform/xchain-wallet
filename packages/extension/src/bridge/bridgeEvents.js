@@ -209,9 +209,9 @@ export async function notifyAccountsChanged(args) {
 }
 
 /**
- * Notify persisted site grants after a network switch. The bridge contract
- * names this event `chainChanged`, so each origin receives one active chain it
- * may use and never learns a chain outside its grant.
+ * Notify persisted site grants after a network switch. Each origin receives
+ * one representative active chain inside its grant and should re-read
+ * getActiveChains(). An origin with no granted active chain gets no event.
  *
  * @param {{
  *   events?: { chainChanged?: (origin: string, chainId: string) => Promise<void> | void },
@@ -287,8 +287,8 @@ export const noopBridgeEvents = {
  * @param {{
  *   events: ReturnType<typeof createBridgeEventBroadcaster> | typeof noopBridgeEvents,
  *   origin: string,
- *   prevPermissions?: { chains?: string[], accounts?: string[] } | null,
- *   nextPermissions: { chains?: string[], accounts?: string[] },
+ *   prevPermissions?: { accounts?: string[] } | null,
+ *   nextPermissions: { accounts?: string[] },
  *   accountsChangedPayload?: Array<{ id: string, name?: string }>,
  * }} args
  */
@@ -299,15 +299,6 @@ export async function emitPermissionDiff(args) {
     const nextAccounts = sortedSet(nextPermissions?.accounts);
     if (prevAccounts !== nextAccounts && accountsChangedPayload) {
         await events.accountsChanged(origin, accountsChangedPayload);
-    }
-    const prevChains = prevPermissions?.chains ?? [];
-    const nextChains = nextPermissions?.chains ?? [];
-    const addedChains = nextChains.filter((c) => !prevChains.includes(c));
-    if (addedChains.length === 1 && prevChains.length > 0) {
-        // Most "user added a chain" flows surface a single chain at a
-        // time, so emit chainChanged with the new chainId so the dApp
-        // can re-bind its chain-scoped state.
-        await events.chainChanged(origin, addedChains[0]);
     }
 }
 

@@ -1,26 +1,7 @@
 /* The form error notice is the danger Notice: FormErrorSummary.jsx puts the
-   StatusMessage.module.css row, error, icon, text and title classes on it.
-   Only the notice's own list lives here; its one action is Notice's own
-   (NoticeAction, a kit secondary Button). The list is plain text: no links and no underlines (Notice Standard,
-   2026-11-15). */
-.list {
-    margin: var(--xc-space-1) 0 0;
-    padding-inline-start: var(--xc-space-5);
-    list-style: disc;
-}
-
-/* A single problem, or a form-level failure, is a plain line with no bullet. */
-.listBare {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-/* Under the title the single line keeps the title's 4px gap. */
-p + .listBare {
-    margin-top: var(--xc-space-1);
-}
-
-.list li + li {
-    margin-top: var(--xc-space-1);
-}
+   StatusMessage.module.css row, error, icon, text, title and body classes on
+   it, and its problems render through NoticeList (NoticeList.module.css), the
+   one bulleted list every notice uses for several issues (U101). Its one
+   action is Notice's own (NoticeAction, a kit secondary Button). The list is
+   plain text: no links and no underlines (Notice Standard, 2026-11-15). This
+   sheet holds no rules of its own. */

@@ -32,8 +32,11 @@ import {
     readVaultOccupancy,
     isVaultEmpty,
     exitDemoWallet,
+    eraseIfDemoVault,
+    restoreLostDemoMarker,
 } from '../../../packages/core/src/shared/utils/demoGraduation.js';
 import {
+    DEMO_WALLET_PASSWORD,
     getDemoWalletExpiry,
     getDemoWalletId,
     getDemoWalletPassword,
@@ -361,5 +364,100 @@ describe('exitDemoWallet', () => {
         expect(removeCalls).toBe(2);
         expect(wipeCalls).toBe(2);
         expect(globalThis.localStorage.getItem(DEMO_ID_KEY)).toBe(null);
+    });
+});
+
+describe('the fixed demo password', () => {
+    it('is the word demo, shorter than any password a real wallet may choose', () => {
+        expect(DEMO_WALLET_PASSWORD).toBe('demo');
+        // Every password-choosing screen demands 8 or more characters; the
+        // lost-marker erase below relies on the demo password falling short.
+        expect(DEMO_WALLET_PASSWORD.length).toBeLessThan(8);
+    });
+});
+
+describe('eraseIfDemoVault', () => {
+    function invalid() {
+        return Object.assign(new Error('Incorrect password'), { name: 'InvalidPasswordError' });
+    }
+
+    it('erases at once when the demo password opens the vault', async () => {
+        globalThis.localStorage.setItem('xc:activeWallet', 'w1');
+        const unlockWallet = vi.fn(async () => ({ unlocked: true }));
+        const wipe = vi.fn(async () => {});
+        const reload = vi.fn(() => true);
+        const beforeReload = vi.fn();
+        await expect(eraseIfDemoVault({ messaging: { unlockWallet }, wipe, reload, beforeReload }))
+            .resolves.toBe(true);
+        expect(unlockWallet).toHaveBeenCalledTimes(1);
+        expect(unlockWallet).toHaveBeenCalledWith('demo');
+        expect(wipe).toHaveBeenCalledTimes(1);
+        expect(beforeReload).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(readActiveWallet()).toBe(null);
+    });
+
+    it('leaves a real vault alone after one refused attempt', async () => {
+        const unlockWallet = vi.fn(async () => { throw invalid(); });
+        const wipe = vi.fn(async () => {});
+        const reload = vi.fn(() => true);
+        await expect(eraseIfDemoVault({ messaging: { unlockWallet }, wipe, reload })).resolves.toBe(false);
+        expect(unlockWallet).toHaveBeenCalledTimes(1);
+        expect(wipe).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('reads any other refusal, and a shell without unlock, as not a demo', async () => {
+        const wipe = vi.fn(async () => {});
+        const throttled = vi.fn(async () => { throw Object.assign(new Error('wait'), { name: 'UnlockThrottledError' }); });
+        await expect(eraseIfDemoVault({ messaging: { unlockWallet: throttled }, wipe, reload: () => true }))
+            .resolves.toBe(false);
+        await expect(eraseIfDemoVault({ messaging: {}, wipe, reload: () => true })).resolves.toBe(false);
+        expect(wipe).not.toHaveBeenCalled();
+    });
+
+    it('locks the vault it opened again when the wipe fails, and says so', async () => {
+        const lockWallet = vi.fn(async () => ({ locked: true }));
+        const reload = vi.fn(() => true);
+        await expect(eraseIfDemoVault({
+            messaging: { unlockWallet: async () => ({}), lockWallet },
+            wipe: async () => { throw new Error('host storage is busy'); },
+            reload,
+        })).rejects.toThrow(/host storage is busy/);
+        expect(lockWallet).toHaveBeenCalledTimes(1);
+        expect(reload).not.toHaveBeenCalled();
+    });
+});
+
+describe('restoreLostDemoMarker', () => {
+    it('re-marks the demo-origin wallet a demo-password unlock opened', async () => {
+        const listWallets = vi.fn(async () => [{ id: 'demo-9', origin: 'demo' }]);
+        await expect(restoreLostDemoMarker({ listWallets }, 'demo')).resolves.toBe(true);
+        expect(getDemoWalletId()).toBe('demo-9');
+        expect(getDemoWalletPassword()).toBe('demo');
+    });
+
+    it('prefers the demo-origin wallet and otherwise marks any wallet the demo vault holds', async () => {
+        const mixed = vi.fn(async () => [{ id: 'w1', origin: 'imported-xchain-backup' }, { id: 'demo-2', origin: 'demo' }]);
+        await expect(restoreLostDemoMarker({ listWallets: mixed }, 'demo')).resolves.toBe(true);
+        expect(getDemoWalletId()).toBe('demo-2');
+        globalThis.localStorage.clear();
+        const restored = vi.fn(async () => [{ id: 'w1', origin: 'imported-xchain-backup' }]);
+        await expect(restoreLostDemoMarker({ listWallets: restored }, 'demo')).resolves.toBe(true);
+        expect(getDemoWalletId()).toBe('w1');
+    });
+
+    it('does nothing for any other password, an existing marker, or an empty or unreadable list', async () => {
+        const listWallets = vi.fn(async () => [{ id: 'w1', origin: 'created' }]);
+        await expect(restoreLostDemoMarker({ listWallets }, 'a-real-password')).resolves.toBe(false);
+        expect(listWallets).not.toHaveBeenCalled();
+        await expect(restoreLostDemoMarker({ listWallets: async () => [] }, 'demo')).resolves.toBe(false);
+        await expect(restoreLostDemoMarker({ listWallets: async () => { throw new Error('locked'); } }, 'demo'))
+            .resolves.toBe(false);
+        await expect(restoreLostDemoMarker({}, 'demo')).resolves.toBe(false);
+        expect(getDemoWalletId()).toBe(null);
+        markDemoWallet('demo-1', { password: 'demo' });
+        await expect(restoreLostDemoMarker({ listWallets }, 'demo')).resolves.toBe(false);
+        expect(getDemoWalletId()).toBe('demo-1');
     });
 });

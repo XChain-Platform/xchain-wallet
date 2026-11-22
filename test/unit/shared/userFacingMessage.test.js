@@ -20,6 +20,7 @@ import {
     protocolRefusalReason,
     unsupportedAddressTypeMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
+import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 const FALLBACK = 'Could not import that private key.';
 
@@ -239,5 +240,48 @@ describe('userFacingMessage for an address type the SDK does not know', () => {
         expect(userFacingMessage(new Error('device disconnected'), FALLBACK_UNLOCK))
             .toBe('device disconnected');
         expect(unsupportedAddressTypeMessage(new Error('wallet.unlock: bad password'))).toBeNull();
+    });
+});
+
+describe('encoder refusals the wallet words itself', () => {
+    // In-process the SDK error carries code and data.reason; across messaging only name and message survive.
+    const inProcess = (reason, message) => Object.assign(protocolRefusal(message), {
+        details: { rpcError: { code: -32010, message, data: { reason } }, context: { reason } },
+    });
+    const acrossBoundary = (err) => Object.assign(new Error(err.message), { name: err.name });
+    const WORDED = [
+        ['an empty funding address', 'NO_UTXOS', 'no utxos were provided and no utxos found on the blockchain',
+            /add DOGE to this address/i],
+        ['a lagging tracker', 'UTXO_TRACKER_STALE',
+            'utxo-tracker view is stale (lag 12 blocks, exceeds 6-block threshold); refusing to select utxos from it',
+            /not a problem with your wallet or your address/i],
+        ['an unsynced tracker', 'UTXO_TRACKER_STALE', 'utxo-tracker did not assert that it is synced; refusing to select utxos from it',
+            /not a problem with your wallet or your address/i],
+        ['a fee rate under the relay floor', 'FEE_BELOW_RELAY_MINIMUM',
+            'feePerKb 500 base units/kB produces fee 83, below the node relay minimum 165 base units for a ~165-byte transaction',
+            /below the network minimum/i],
+        ['a fee under the relay floor', 'FEE_BELOW_RELAY_MINIMUM',
+            'fee 83 is below the node relay minimum 165 base units for a ~165-byte transaction', /below the network minimum/i],
+    ];
+    const cases = WORDED.flatMap(([label, reason, message, copy]) => [
+        [`${label} in-process`, inProcess(reason, message), copy],
+        [`${label} across the boundary`, acrossBoundary(inProcess(reason, message)), copy],
+    ]);
+
+    it.each(cases)('shows the wallet sentence, never the encoder wording, for %s', (_label, err, copy) => {
+        expect(protocolRefusalReason(err)).toBeNull();
+        const shown = submitFailureMessage(err, { coinTicker: 'DOGE' });
+        expect(shown).toMatch(copy);
+        expect(shown).not.toMatch(/utxo|Encoder RPC error|feePerKb|base units/i);
+        expect(userFacingMessage(err, FALLBACK)).toBe(FALLBACK);
+    });
+
+    it('still shows a protocol verdict the wallet has no sentence for as written', () => {
+        const verdict = 'This token symbol is already registered.';
+        for (const err of [inProcess('TOKEN_ALREADY_REGISTERED', verdict),
+            acrossBoundary(inProcess('TOKEN_ALREADY_REGISTERED', verdict))]) {
+            expect(protocolRefusalReason(err)).toBe(verdict);
+            expect(submitFailureMessage(err, { coinTicker: 'DOGE' })).toBe(verdict);
+        }
     });
 });

@@ -207,6 +207,7 @@ export function forwardSignMessage(params) {
 /**
  * @param {{ chainId: string, action: string, params: object,
  *   feeStrategyHint?: 'low' | 'normal' | 'fast' }} params
+ * The feeStrategyHint property is deprecated, accepted, and ignored by the wallet.
  */
 export function forwardSignAction(params) {
     const provider = getExtensionProvider();

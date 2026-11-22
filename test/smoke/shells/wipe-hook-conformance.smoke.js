@@ -101,9 +101,18 @@ for (const html of htmlEntries) {
     const m = src.match(/<script[^>]*type="module"[^>]*src="\.\/([^"]+)"/);
     assert.ok(m, `${html} declares a module entry script`);
     const entry = join(extension, m[1]);
-    const entrySrc = readFileSync(entry, 'utf8');
-    checked.push(`${html} -> ${m[1]}`);
-    if (!/installExtensionWipeHook\(\)/.test(entrySrc)) missing.push(`${html} -> ${m[1]}`);
+    let entrySrc = readFileSync(entry, 'utf8');
+    let label = `${html} -> ${m[1]}`;
+    // A boot entry (src/popup/boot.js) loads the app with one dynamic
+    // import so the page's first load stays small; follow that one hop.
+    const boot = entrySrc.match(/^import\('\.\/([^']+)'\);$/m);
+    if (boot && !/installExtensionWipeHook\(\)/.test(entrySrc)) {
+        const next = join(dirname(entry), boot[1]);
+        entrySrc = readFileSync(next, 'utf8');
+        label += ` -> ${boot[1]}`;
+    }
+    checked.push(label);
+    if (!/installExtensionWipeHook\(\)/.test(entrySrc)) missing.push(label);
 }
 assert.equal(
     missing.join(', '),
@@ -169,6 +178,32 @@ assert.ok(
     /sealBroadcastQueueStore\(broadcastQueueStore\)/.test(background)
         && /createBackgroundHost\(\{[\s\S]*?\bbroadcastQueueStore,[\s\S]*?\}\);/.test(background),
     'background.js hands every host one queue store and seals that store, not only the live host',
+);
+
+// --- 5. every key the worker persists itself is on the wipe list -------
+
+// The watcher keys are named once, in the wipe module, and background.js
+// imports them; a key the worker writes under any other name survives a wipe.
+const wipeImport = background.match(/import\s*\{([^}]*)\}\s*from\s*'\.\/background\/wipeExtensionStorage\.js'/);
+const importedKeys = new Set((wipeImport ? wipeImport[1] : '').split(',').map((s) => s.trim()).filter(Boolean));
+const watcherList = wipeModule.match(/WATCHER_STATE_LOCAL_KEYS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
+const watcherListed = new Set((watcherList ? watcherList[1] : '').split(',').map((s) => s.trim()).filter(Boolean));
+const KEPT_LOCAL_KEYS = new Set(["'xchain.layoutMode'"]);
+const workerKeyRefs = [
+    ...background.matchAll(/chrome\.storage\.local\.(?:get|set)\(\s*(?:\{\s*\[?\s*)?([^\s,:)\]}]+)/g),
+    ...background.matchAll(/createRestartStringSetStorage\(\s*([^\s,)]+)/g),
+].map((m) => m[1]);
+assert.ok(workerKeyRefs.length >= 5, `the worker key census found its watcher writers (${workerKeyRefs.length})`);
+const unwiped = [...new Set(workerKeyRefs)].filter((ref) => !KEPT_LOCAL_KEYS.has(ref)
+    && !(importedKeys.has(ref) && watcherListed.has(ref)));
+assert.equal(
+    unwiped.join(', '),
+    '',
+    `every chrome.storage.local key background.js writes is on the wipe list; missing: ${unwiped.join(', ')}`,
+);
+assert.ok(
+    /WALLET_LOCAL_KEYS\s*=\s*Object\.freeze\(\[[^\]]*\.\.\.WATCHER_STATE_LOCAL_KEYS/.test(wipeModule),
+    'the extension wipe list carries the watcher state keys',
 );
 
 console.log(

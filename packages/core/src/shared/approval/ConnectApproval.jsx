@@ -17,6 +17,7 @@ import {
     InfoTip,
     ListPage,
     Notice,
+    NoticeList,
     OptionSwitch,
     OptionSwitchList,
     PageHeader,
@@ -459,7 +460,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                             title={summaryTitle}
                             testId="connect-error-summary"
                         >
-                            <ul>{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+                            <NoticeList items={problems.map((problem) => ({ key: problem, content: problem }))} />
                         </Notice>
                     </div>
                 ) : null}

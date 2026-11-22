@@ -53,9 +53,14 @@
     font-size: var(--xc-text-xs);
 }
 
+/* The two actions stack in one narrow column beside the entry, each as wide
+   as the wider label, so the entry's text keeps most of the row at every
+   width; a side-by-side pair leaves the text a column one or two words wide
+   at phone width. */
 .actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
     gap: var(--xc-space-1);
     flex-shrink: 0;
 }

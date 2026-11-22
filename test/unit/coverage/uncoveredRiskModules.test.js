@@ -202,7 +202,9 @@ describe('test-dApp runtime modules', () => {
     it('models permissions, signing, unsupported actions, and disconnect', async () => {
         const provider = new MockXChainProvider();
         const accountsChanged = vi.fn();
+        const disconnected = vi.fn();
         provider.on('accountsChanged', accountsChanged);
+        provider.on('disconnect', disconnected);
 
         const connected = await provider.connect({ appName: 'Unit dApp' });
         expect(connected).toMatchObject({
@@ -210,7 +212,7 @@ describe('test-dApp runtime modules', () => {
             chains: ['bitcoin-regtest'],
             permissions: { canSignMessage: true },
         });
-        expect(accountsChanged).toHaveBeenCalledOnce();
+        expect(accountsChanged).not.toHaveBeenCalled();
         const [address] = await provider.getAddresses('bitcoin-regtest');
 
         await expect(provider.signMessage({
@@ -229,6 +231,7 @@ describe('test-dApp runtime modules', () => {
         });
 
         await provider.disconnect();
+        expect(disconnected).toHaveBeenCalledOnce();
         await expect(provider.getAccounts()).rejects.toMatchObject({
             name: 'BridgeError',
             code: 'NOT_CONNECTED',

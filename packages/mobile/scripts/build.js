@@ -39,7 +39,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
 const webDist = join(pkgRoot, '..', 'web', 'dist');
 const www = join(pkgRoot, 'www');
-const versionProps = join(pkgRoot, 'android', 'version.properties');
+// Shared by the phone and Wear Gradle modules.
+const androidVersionProps = join(pkgRoot, 'android', 'version.properties');
 const versionXcconfig = join(pkgRoot, 'ios', 'App', 'Version.xcconfig');
 
 // The tag to number this build as. CI passes the pushed tag; a developer
@@ -157,8 +158,8 @@ writeFileSync(join(www, WEBDIR_STAMP_FILE), `${webDirStamp(www)}\n`);
 // release they are. Written unconditionally: the Xcode project carries no
 // literal version to fall back on, so a missing file is a visibly broken
 // build rather than a silently misnumbered one.
-mkdirSync(dirname(versionProps), { recursive: true });
-writeFileSync(versionProps, versionPropertiesFor(tag));
+mkdirSync(dirname(androidVersionProps), { recursive: true });
+writeFileSync(androidVersionProps, versionPropertiesFor(tag));
 mkdirSync(dirname(versionXcconfig), { recursive: true });
 writeFileSync(versionXcconfig, versionXcconfigFor(tag));
 

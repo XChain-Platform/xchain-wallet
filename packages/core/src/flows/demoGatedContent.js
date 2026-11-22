@@ -244,6 +244,7 @@ const FIXTURE_BY_INDEX = (() => {
  *
  * @param {string} tick
  * @returns {Array<{
+ *   publisher: string,
  *   keyHash: string,
  *   encryptionMethod: number,
  *   gateTicker: string,
@@ -255,6 +256,7 @@ export function getDemoGatedGroupsForTick(tick) {
     const fixtures = FIXTURES[String(tick || '').toUpperCase()];
     if (!fixtures) return [];
     return fixtures.map((g) => ({
+        publisher: 'demo',
         keyHash: g.keyHash,
         encryptionMethod: g.encryptionMethod,
         gateTicker: g.gateTicker,

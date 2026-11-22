@@ -113,7 +113,7 @@ const messages = {
         "Sending was interrupted, so this may already have been sent. Sending it again is safe and can't pay twice.",
     'components.queuedBroadcastBanner.sending': 'Sending: {summary}',
     'components.queuedBroadcastBanner.sendNow': 'Send now: {summary}',
-    'components.queuedBroadcastBanner.trySendingAgain': 'Try Sending Again',
+    'components.queuedBroadcastBanner.trySendingAgain': 'Retry',
     'components.queuedBroadcastBanner.sendNow2': 'Send Now',
     'components.queuedBroadcastBanner.removingFromQueue': 'Removing from queue: {summary}',
     'components.queuedBroadcastBanner.removeFromQueue': 'Remove from queue: {summary}',

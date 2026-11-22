@@ -499,6 +499,14 @@ for (const dir of dirs) {
         `${dir} is not a directory ${'packages/mobile/scripts/screenshots.sh'} writes (it writes ${slugs.join(', ')})`,
     );
 }
+const duoSlugs = captureScript.split('\n')
+    .filter((line) => /^\s*duo_devices=\(\s*"/.test(line))
+    .flatMap((line) => [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]))
+    .map((name) => name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, ''));
+assert.deepEqual(duoSlugs, ['xc-iphone-duo'],
+    'the Duo remains default extra coverage outside the App Store display-type pairing');
+assert.match(captureScript, /for device in "\$\{devices\[@\]\}" "\$\{duo_devices\[@\]\}"; do/,
+    'the capture loop must run the App Store display devices and the extra Duo device');
 
 // And the reader must survive a repository with no capture at all rather than
 // throwing, since that is the state of any fresh clone.

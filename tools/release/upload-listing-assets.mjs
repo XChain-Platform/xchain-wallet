@@ -65,10 +65,46 @@ import {
     selectVersionRecord,
     tagDerivations,
 } from './verify-appstore-version.mjs';
+import { pngHeader } from './verify-listing-assets.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WS_ROOT = join(HERE, '..', '..');
 const API = 'https://api.appstoreconnect.apple.com';
+export const WATCH_LISTING = Object.freeze({
+    type: 'APP_WATCH_ULTRA',
+    dir: 'xc-watch-49mm',
+    width: 422,
+    height: 514,
+    scenes: Object.freeze(['01-balances.png', '02-receive.png', '03-send.png', '04-settings.png']),
+});
+
+export function watchListingEntries(wsRoot = WS_ROOT) {
+    const root = join(wsRoot, 'packages', 'mobile', 'screenshots');
+    let watchPin;
+    try {
+        watchPin = JSON.parse(readFileSync(join(root, 'capture-pin.json'), 'utf8'));
+    } catch (err) {
+        return { error: `The watch listing capture pin cannot be read: ${err.message}` };
+    }
+    const entries = [];
+    for (const name of WATCH_LISTING.scenes) {
+        const rel = `${WATCH_LISTING.dir}/${name}`;
+        const recorded = watchPin.assets?.[rel];
+        const file = join(root, rel);
+        if (!recorded) return { error: `The watch listing capture pin is missing ${rel}.` };
+        if (!existsSync(file)) return { error: `The pinned watch listing asset is missing ${rel}.` };
+        const bytes = readFileSync(file);
+        if (createHash('sha256').update(bytes).digest('hex') !== recorded.sha256) {
+            return { error: `The pinned watch listing asset changed after capture: ${rel}.` };
+        }
+        const header = pngHeader(bytes);
+        if (header?.width !== WATCH_LISTING.width || header?.height !== WATCH_LISTING.height || header.hasAlpha) {
+            return { error: `${rel} must be an opaque ${WATCH_LISTING.width}x${WATCH_LISTING.height} PNG.` };
+        }
+        entries.push({ name, md5: createHash('md5').update(bytes).digest('hex') });
+    }
+    return { entries };
+}
 
 export const USAGE = `upload-listing-assets.mjs - upload the pinned iOS listing
 screenshots to App Store Connect (row 63).
@@ -243,7 +279,6 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
         log('which writes the pin as part of a successful run.');
         return EXIT.CONFIG;
     }
-
     const creds = credentialsFromEnv(env);
     if (creds.error) { log(creds.error); return EXIT.CONFIG; }
     const token = ascToken({ keyPem: creds.keyPem, keyId: creds.keyId, issuer: creds.issuer });
@@ -278,6 +313,14 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
     log(`${app.attributes.name} (${bundleId})  version ${version.attributes.versionString}  ${state}`);
     log(`Pin: ${pin.version} @ ${(pin.commit ?? '').slice(0, 8)}`);
 
+    const watch = watchListingEntries(wsRoot);
+    if (watch.error) {
+        log(watch.error);
+        return EXIT.CONFIG;
+    }
+    pin.byType[WATCH_LISTING.type] = watch.entries;
+    const screenshotTypes = [...REQUIRED_SCREENSHOT_TYPES, WATCH_LISTING.type];
+
     const buildRel = await api.get(`/v1/appStoreVersions/${version.id}/build`);
     if (buildRel.body.data) {
         const b = await api.get(`/v1/builds/${buildRel.body.data.id}`);
@@ -296,10 +339,11 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
     const setByType = new Map((sets.body.data ?? []).map((s) => [s.attributes.screenshotDisplayType, s]));
 
     let failed = false;
-    for (const type of REQUIRED_SCREENSHOT_TYPES) {
+    for (const type of screenshotTypes) {
         const wanted = pin.byType[type] ?? [];
         if (!wanted.length) { log(`\n${type}: the pin names no images; skipping`); continue; }
-        const dir = join(wsRoot, 'packages', 'mobile', 'screenshots', SCREENSHOT_DIR_BY_TYPE[type]);
+        const dir = join(wsRoot, 'packages', 'mobile', 'screenshots',
+            type === WATCH_LISTING.type ? WATCH_LISTING.dir : SCREENSHOT_DIR_BY_TYPE[type]);
         const ordered = [...wanted].sort((a, b) => a.name.localeCompare(b.name));
 
         log(`\n${type}: ${ordered.length} pinned image(s) -> ${args.locale}`);

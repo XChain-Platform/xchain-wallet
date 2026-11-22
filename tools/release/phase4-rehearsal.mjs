@@ -286,6 +286,10 @@ export function classify(output, { lane = null } = {}) {
     if (/pre-sign dev-mock gate FAILED/.test(output)) return 'gpg-key-named';
     if (/XCHAIN_RELEASE_GPG_KEY is not set/.test(output)) return 'invoked';
     if (/unknown argument/.test(output)) return 'invoked';
+    // sign.sh exits right after refusing a signature gate that printed no strict receipt, so nothing
+    // deeper ran. The gate output echoed before it comes from the tag tree and may hold an ok line in
+    // another form or words the matchers below read as depth, so this sits above all of them.
+    if (/^sign\.sh: signature gate exited 0 without its completion receipt\.$/m.test(output)) return 'artifact-set';
     // The gpg markers are tested FIRST, because reaching them means every
     // earlier step passed. They used to sit below the generic word match, and a
     // run that wrote a manifest and then failed at the signature was filed as
