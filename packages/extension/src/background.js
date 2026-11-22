@@ -72,6 +72,7 @@ import {
     stampAutoLockActivity,
     clearAutoLockState,
     armProvisionalAutoLock,
+    armedOrLocked,
     shouldAutoLock,
 } from './background/autoLockState.js';
 import {
@@ -480,13 +481,7 @@ async function buildHost() {
         // watcher rebinds its socket to the new one.
         onSdkEndpointsChanged: async () => { await notificationService?.refresh(); },
         // §26: an auto-lock arm storage refused locks at once (fail closed).
-        onAutoLockArmRefused: async () => {
-            try {
-                await lockBackstop.lockWalletNow();
-            } finally {
-                void announceAutoLockUnsaved();
-            }
-        },
+        onAutoLockArmRefused: lockAfterRefusedAutoLockArm,
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
@@ -839,6 +834,16 @@ const lockBackstop = createLockBackstop({
 
 const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
+// An auto-lock arm storage refused locks at once (fail closed), on the
+// foreground arm route and on the unlock path alike.
+async function lockAfterRefusedAutoLockArm() {
+    try {
+        await lockBackstop.lockWalletNow();
+    } finally {
+        void announceAutoLockUnsaved();
+    }
+}
+
 attachExtensionCommandListener({
     commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
     // The open-wallet shortcut does what a toolbar click does.
@@ -874,11 +879,21 @@ attachSessionMetaListener({
         return sequenceUnlockedSession({
             clearAutoLockState,
             continueUnlock: () => ensureHost()
-                .finally(() => armProvisionalAutoLock(() => (vault ? vault.settings.get() : null), Date.now())
-                    .catch((err) => { console.error('[xchain] provisional auto-lock record could not be saved:', err); }))
-                .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
-                .catch((err) => {
+                .then(() => true, (err) => {
                     console.error('[xchain] ensureHost after unlock failed:', err);
+                    return false;
+                })
+                .then(async (built) => {
+                    // A refused record would die with this worker while the
+                    // session key survives it, so that unlock locks instead.
+                    const armed = await armedOrLocked(
+                        () => armProvisionalAutoLock(() => (vault ? vault.settings.get() : null), Date.now()),
+                        lockAfterRefusedAutoLockArm,
+                    );
+                    if (built && armed) await surfaceStateEvents.publish('session', { state: 'unlocked' });
+                })
+                .catch((err) => {
+                    console.error('[xchain] unlocked session could not be published:', err);
                 }),
         });
     },

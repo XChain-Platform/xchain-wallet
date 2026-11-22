@@ -66,6 +66,7 @@ function fakeVault() {
         connectedSites: {
             findBy: async (field, value) => [site].filter((s) => s[field] === value),
             put: async () => site,
+            update: async (id, decide) => decide(site.id === id ? site : null) != null,
         },
         wallets: { list: async () => [{ id: 'wallet-1' }], get: async () => ({ id: 'wallet-1' }) },
         accounts: { list: async () => [], get: async () => ({ id: 'acct-1', walletId: 'wallet-1' }) },

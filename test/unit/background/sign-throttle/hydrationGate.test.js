@@ -45,6 +45,7 @@ function makeVault({ settings = {}, settingsError = null } = {}) {
         connectedSites: {
             findBy: async (_field, value) => (value === ORIGIN ? [site] : []),
             put: async () => {},
+            update: async (id, decide) => decide(site.id === id ? site : null) != null,
         },
         addresses: { list: async () => [] },
         accounts: { get: async () => null },

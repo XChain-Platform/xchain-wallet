@@ -81,6 +81,22 @@ export function signerOwnsCustody(signer, custody) {
 }
 
 /**
+ * Refuse a derivation into an account whose keys another signer holds. The
+ * derive flows tag a record with whatever signer they are handed, so this is
+ * the check every caller passes through, not only the host routes that pick
+ * their signer from the account first.
+ *
+ * @param {{ id?: string, kind?: string }} signer
+ * @param {string} accountId
+ * @param {Array<any>} addresses   every stored Address record
+ * @param {string} route           flow named in the refusal
+ */
+export function assertSignerOwnsAccount(signer, accountId, addresses, route) {
+    if (signerOwnsCustody(signer, accountCustody(accountId, addresses))) return;
+    throw new Error(`${route}: this account's keys are held by a different signer, so this one adds no address to it`);
+}
+
+/**
  * Custody of the account a derive request targets, resolved the way the
  * receive and dispenser flows resolve it (accountId, else accountIndex,
  * else index 0). Undefined when the request or vault cannot name one, so

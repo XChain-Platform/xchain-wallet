@@ -94,6 +94,12 @@ function makeVault({ autoSignLocalhostMs, developerMode = true, origin = ORIGIN 
             list: async () => [...sites.values()],
             findBy: async (field, value) => [...sites.values()].filter((s) => s[field] === value),
             put: async (s) => { sites.set(s.id, s); return s; },
+            update: async (id, decide) => {
+                const next = decide(sites.get(id) ?? null);
+                if (next == null) return false;
+                sites.set(next.id, next);
+                return true;
+            },
             delete: async (id) => { sites.delete(id); },
         },
     };

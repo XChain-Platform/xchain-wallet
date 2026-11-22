@@ -109,9 +109,14 @@ function kindLabel(kind, mime) {
  * @param {string} props.name              display name for the file row / download
  * @param {string | null} [props.declaredType]  on-chain declared MIME (cosmetic only)
  * @param {string} props.plaintextBase64   decrypted plaintext, base64
+ * @param {boolean} [props.storedForm]     the declared compression could not be undone,
+ *                                         so the bytes are the stored form, not the file
+ * @param {string | null} [props.inflateError]  why decompression failed
  * @param {() => void} props.onClose
  */
-export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }) {
+export function GatedFileViewer({
+    name, declaredType, plaintextBase64, storedForm = false, inflateError = null, onClose,
+}) {
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(onClose);
     // Tab stays inside the dialog and focus returns to whatever opened it.
@@ -297,6 +302,13 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
                 {mismatch ? (
                     <StatusMessage variant="error" className={styles.mismatch}>
                         {t('components.gatedFileViewer.thePublishedFileType')}{declared}{t('components.gatedFileViewer.doesnTMatchTheActual')}{kindLabel(sniffed.kind, sniffed.mime)}{t('components.gatedFileViewer.treatThisFileWithCaution')}
+                    </StatusMessage>
+                ) : null}
+                {storedForm ? (
+                    <StatusMessage variant="error" className={styles.mismatch}>
+                        {t(inflateError === 'RATIO_GUARD_TRIPPED'
+                            ? 'components.gatedFileViewer.storedFormOverLimit'
+                            : 'components.gatedFileViewer.storedFormNotDecompressed')}
                     </StatusMessage>
                 ) : null}
                 <div className={styles.body}>{body}</div>

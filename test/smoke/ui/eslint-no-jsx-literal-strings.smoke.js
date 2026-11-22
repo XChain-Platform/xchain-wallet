@@ -83,6 +83,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'winnerLabel', 'chartRegionLabel', 'tabsLabel', 'infoLabel',
     'infoAria', 'pill', 'tag', 'notice', 'noneOption', 'walletName', 'targetName', 'fileLabel',
     'getNote', 'valueText', 'statusText', 'subLeft', 'subRight', 'badgeTitle',
+    'signed', 'aside', 'counter',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -288,6 +289,18 @@ v = findViolations(jsxAttr('getNote', jsxExpr(template('at ', ' each'))));
 assert.strictEqual(v.length, 1, 'flags template copy in a getNote prop');
 v = findViolations(jsxAttr('valueText', literal('Free, 0 percent')));
 assert.strictEqual(v.length, 1, 'flags literal copy in a valueText prop');
+// 18e. Three props a component renders verbatim: ChangeLine's `signed`,
+// OutcomeDetailLayout's `aside` and the field counter. A counter whose only
+// static text is a separator stays silent.
+v = findViolations(jsxAttr('signed', literal('− unknown')));
+assert.strictEqual(v.length, 1, 'flags a signed literal');
+assert.match(v[0].message, /signed/);
+v = findViolations(jsxAttr('aside', jsxExpr(template('', ' positions'))));
+assert.strictEqual(v.length, 1, 'flags template copy in an aside prop');
+v = findViolations(jsxAttr('counter', jsxExpr(template('', ' / ', ' bytes'))));
+assert.strictEqual(v.length, 1, 'flags a counter template ending in bytes');
+v = findViolations(jsxAttr('counter', jsxExpr(template('', ' / ', ''))));
+assert.strictEqual(v.length, 0, 'leaves a pure-interpolation counter silent');
 
 // 18c. Toggle copy in a ternary attribute value. Both attribute paths
 // enumerated three value shapes (Literal, container Literal, container
@@ -1001,6 +1014,13 @@ visitors.JSXAttribute(actionAttr(objectExpr(prop('label', identifier('retryLabel
 visitors.JSXAttribute(jsxAttr('extra', jsxExpr(identifier('appliedExtra'))));
 visitors.ObjectPattern(objectPattern(defaulted('action', literal('stake'))));
 assert.strictEqual(reports.length, 34, 'create() keeps action mode strings, runtime labels and defaults silent');
+// Test 18e on the shipping side.
+visitors.JSXAttribute(jsxAttr('signed', literal('− unknown')));
+visitors.JSXAttribute(jsxAttr('aside', jsxExpr(template('', ' positions'))));
+visitors.JSXAttribute(jsxAttr('counter', jsxExpr(template('', ' / ', ' bytes'))));
+assert.strictEqual(reports.length, 37, 'create() flags the signed, aside and counter copy props');
+visitors.JSXAttribute(jsxAttr('counter', jsxExpr(template('', ' / ', ''))));
+assert.strictEqual(reports.length, 37, 'create() leaves a pure-interpolation counter silent');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

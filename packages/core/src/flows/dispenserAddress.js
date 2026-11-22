@@ -42,6 +42,7 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
+import { assertSignerOwnsAccount } from './addressCustody/accountCustody.js';
 
 const MAX_DERIVATION_INDEX = 0x7fffffff;
 
@@ -225,6 +226,8 @@ export async function dispenserAddress({
     const signerKind = signer.kind;
 
     try {
+        // Inside the try so an unlocked seed is locked again on refusal.
+        assertSignerOwnsAccount(signer, account.id, allAddresses, 'dispenserAddress');
         const addressSource = addressSourceForSignerKind(signerKind);
         // Fill the lowest gap below `highest` whose address the chain has
         // never funded; a gap the chain shows was actually used stays

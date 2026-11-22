@@ -181,7 +181,9 @@ describe('dispenserAddress (§16)', () => {
             role: 'receive',
         })];
         const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hwAddrs });
-        const rec = await dispenserAddress(base(vault, signer));
+        // The account is held on the Trezor, so the Trezor derives the next one.
+        const trezor = { ...makeSigner(), id: 'trezor-test', kind: 'trezor' };
+        const rec = await dispenserAddress(base(vault, trezor));
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
     });
 

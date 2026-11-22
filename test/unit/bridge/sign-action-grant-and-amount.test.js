@@ -42,6 +42,7 @@ function fakeVault(canSignAction = {}) {
         connectedSites: {
             findBy: async (field, value) => [site].filter((s) => s[field] === value),
             put: async () => site,
+            update: async (id, decide) => decide(site.id === id ? site : null) != null,
         },
         wallets: { list: async () => [{ id: 'wallet-1' }] },
         accounts: { list: async () => [], get: async () => ({ walletId: 'wallet-1' }) },

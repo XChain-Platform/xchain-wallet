@@ -34,7 +34,7 @@
 import { isBridgeErrorCode } from '@xchain-wallet/bridge-spec';
 
 /**
- * The twelve codes bridge handlers emit that the published union does not
+ * The thirteen codes bridge handlers emit that the published union does not
  * contain, each mapped to the published code a dApp should act on.
  *
  * @type {Readonly<Record<string, string>>}
@@ -56,6 +56,9 @@ export const INTERNAL_TO_BRIDGE_ERROR_CODE = Object.freeze({
     // from the page both mean "you may not use this address".
     ADDRESS_NOT_PERMITTED: 'ADDRESS_NOT_AUTHORIZED',
     ADDRESS_NOT_FOUND: 'ADDRESS_NOT_AUTHORIZED',
+    // The vault holds it, but its key is on a device or it has none, and the
+    // bridge signs only with the wallet's own keys.
+    ADDRESS_NOT_SIGNABLE: 'ADDRESS_NOT_AUTHORIZED',
 
     // No co-signer account backs the aggregate address the agent named.
     UNKNOWN_COSIGNER_ACCOUNT: 'ACCOUNT_NOT_AUTHORIZED',

@@ -246,8 +246,8 @@ function expectAccessibleFormControls(container) {
 async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null, approveCount = 1 }) {
     const { messagingOverrides, ...formProps } = props;
     // The same drive, sourced from a paired device instead of an HD
-    // key. Auto-select only picks `source === 'hd'`, so the hardware address
-    // is named explicitly, as a user would via the source picker, and the
+    // key. The hardware address is named explicitly, as a user would via the
+    // source picker, rather than left to the default, and the
     // device reports ready - that, not a typed password, is what gates
     // Approve on this path.
     const { messaging, calls } = recordingMessaging(hw ? {
@@ -1256,9 +1256,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 React.createElement(
                     MessagingProvider,
                     { shell: 'web', messaging },
-                    // Auto-select only picks `source === 'hd'`, so a hardware
-                    // address is chosen explicitly, as a user would via the
-                    // source picker.
+                    // The hardware address is chosen explicitly, as a user
+                    // would via the source picker.
                     React.createElement(BroadcastForm, {
                         walletId: 'w',
                         chainId: CHAIN,

@@ -533,6 +533,14 @@ const check = (over, releaseArtifacts) => assertRecord({
     });
     assert.ok(attested.ok, attested.problems.join(' '));
     assert.equal(attested.notes.length, 0);
+
+    // An install-over from this release to itself watched nothing, so the lane is still unobserved.
+    const sameVersion = assertRecordAgainst(named, {
+        lanes: [],
+        swaps: [{ lane: 'android-direct', device: named.device, from: VERSION }],
+    });
+    assert.ok(!sameVersion.ok, 'a same-version install-over must not satisfy the direct lane');
+    assert.match(sameVersion.problems.join(' '), /has no observed install-over/);
 }
 
 // The lane list is module state, so the device is swapped in place around

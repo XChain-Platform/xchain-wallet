@@ -234,3 +234,83 @@ describe('KeychainSessionBackend conditional save', () => {
         expect(await backend.load()).toEqual(NEW_KEY);
     });
 });
+
+describe('KeychainSessionBackend save and clear overlap', () => {
+    const PATH = '/profile/session.bin';
+    const TMP = `${PATH}.tmp`;
+    // Decrypt inverts the mock encrypt, so a surviving file loads as a key.
+    const roundTrip = () => safeStorage({
+        decryptString: vi.fn((cipher) => Buffer.from(cipher).toString('utf8').replace(/^encrypted:/, '')),
+    });
+
+    // Model the two files so a test can read what survives on disk.
+    function modelDisk() {
+        const files = new Map();
+        fs.writeFile.mockImplementation(async (p, data) => { files.set(p, data); });
+        fs.rename.mockImplementation(async (from, to) => {
+            files.set(to, files.get(from));
+            files.delete(from);
+        });
+        fs.unlink.mockImplementation(async (p) => {
+            if (!files.delete(p)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+        });
+        fs.readFile.mockImplementation(async (p) => {
+            if (!files.has(p)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+            return files.get(p);
+        });
+        return files;
+    }
+
+    // Hold the next call of one fs step until release() is called.
+    function gate(step) {
+        const original = fs[step].getMockImplementation();
+        let reached;
+        let release;
+        const hit = new Promise((resolve) => { reached = resolve; });
+        const open = new Promise((resolve) => { release = resolve; });
+        fs[step].mockImplementationOnce(async (...args) => {
+            reached();
+            await open;
+            return original ? original(...args) : undefined;
+        });
+        return { hit, release };
+    }
+
+    it.each(['mkdir', 'writeFile', 'rename'])('leaves no session file when a clear lands during %s', async (step) => {
+        const files = modelDisk();
+        const backend = new KeychainSessionBackend({ safeStorage: roundTrip(), filePath: PATH });
+        const held = gate(step);
+
+        const pending = backend.save(new Uint8Array([5, 6, 7]));
+        await held.hit;
+        const cleared = backend.clear();
+        held.release();
+        const [saved, wiped] = await Promise.allSettled([pending, cleared]);
+
+        expect(saved.status).toBe('fulfilled');
+        expect(wiped.status).toBe('fulfilled');
+        expect(files.has(PATH)).toBe(false);
+        expect(files.has(TMP)).toBe(false);
+        const fresh = new KeychainSessionBackend({ safeStorage: roundTrip(), filePath: PATH });
+        expect(await fresh.load()).toBeNull();
+        expect(await backend.load()).toBeNull();
+    });
+
+    it('keeps the save that follows a clear and drops the one the clear overtook', async () => {
+        const files = modelDisk();
+        const backend = new KeychainSessionBackend({ safeStorage: roundTrip(), filePath: PATH });
+        const held = gate('mkdir');
+
+        const first = backend.save(new Uint8Array([1, 1]));
+        await held.hit;
+        const cleared = backend.clear();
+        const second = backend.save(new Uint8Array([2, 2]));
+        held.release();
+        await Promise.all([first, cleared, second]);
+
+        expect(files.has(TMP)).toBe(false);
+        const fresh = new KeychainSessionBackend({ safeStorage: roundTrip(), filePath: PATH });
+        expect(await fresh.load()).toEqual(new Uint8Array([2, 2]));
+        expect(fs.writeFile).toHaveBeenCalledTimes(1);
+    });
+});

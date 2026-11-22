@@ -31,6 +31,7 @@ import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
+import { assertSignerOwnsAccount } from './addressCustody/accountCustody.js';
 
 export class NoMatchingAccountError extends Error {
     constructor(walletId, accountIndex) {
@@ -267,6 +268,8 @@ async function deriveReceiveAddress({
 
     const isHardware = isDeviceSignerKind(signerKind);
     try {
+        // Inside the try so an unlocked seed is locked again on refusal.
+        assertSignerOwnsAccount(signer, account.id, allAddresses, 'receiveAddress');
         const addressSource = addressSourceForSignerKind(signerKind);
         let targetIndex = derivationIndex;
         let derived;

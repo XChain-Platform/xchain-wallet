@@ -141,6 +141,29 @@ function packument({ tags, time = {} }) {
         time: { '43.0.0': daysAgo(POLICY.MAJOR_GRACE_DAYS) },
     });
     assert.equal(assess('42.8.0', boundary).ok, true, 'exactly at the window is inside it');
+
+    // A major with no channel tag is still clocked: the latest one, and one in between.
+    const untagged = (time, pin = '44.2.0', tags = { latest: '45.0.0', '44-x-y': '44.2.0' }) =>
+        assess(pin, packument({ tags, time }));
+    const lateUntagged = untagged({ '45.0.0': daysAgo(82) });
+    assert.equal(lateUntagged.state, 'behind', 'an untagged latest major past the window fails');
+    assert.ok(lateUntagged.problems.some((p) => p.kind === 'major' && /Electron 45/.test(p.detail)));
+    assert.equal(untagged({ '45.0.0': daysAgo(POLICY.MAJOR_GRACE_DAYS - 1) }).ok, true,
+        'an untagged latest major inside the window is not a false alarm');
+    const undatedUntagged = untagged({});
+    assert.equal(undatedUntagged.state, 'inconclusive', 'an untagged undated major is missing evidence');
+    assert.ok(undatedUntagged.missing.some((m) => m.includes('45.0.0')));
+    const middleTags = { latest: '45.0.0', '45-x-y': '45.0.0', '43-x-y': '43.2.0' };
+    const lateMiddle = untagged({ '45.0.0': daysAgo(5), '44.0.0': daysAgo(60) }, '43.2.0', middleTags);
+    assert.equal(lateMiddle.state, 'behind', 'an untagged middle major past the window fails');
+    assert.ok(lateMiddle.problems.some((p) => p.kind === 'major' && /Electron 44/.test(p.detail)));
+    const undatedMiddle = untagged({ '45.0.0': daysAgo(5) }, '43.2.0', middleTags);
+    assert.equal(undatedMiddle.state, 'inconclusive', 'an untagged undated middle major is missing evidence');
+    assert.ok(undatedMiddle.missing.some((m) => m.includes('44.0.0')));
+
+    const malformedHuge = untagged({}, '44.2.0', { latest: '1000000000.0.0', '44-x-y': '44.2.0' });
+    assert.equal(malformedHuge.state, 'behind', 'a malformed huge latest major still reports unsupported');
+    assert.equal(malformedHuge.missing.length, 32, 'a malformed latest major cannot make the clock loop unbounded');
 }
 
 // --------------------------------------------------- the support window

@@ -74,3 +74,29 @@ describe('invalid inflation output cap', () => {
         },
     );
 });
+
+describe('BATCH-wrapped FILE compression fields', () => {
+    const fileV0 = 'FILE|0|a.bin|application/octet-stream|T|M|GATE|1|kh||1';
+    const fileV1 = 'FILE|1|hash|2|20|a.bin|application/octet-stream|T|M|GATE|1|kh||1';
+    const message = 'MESSAGE|2|BTC|addr|ct';
+
+    it('reads the FILE leg of a gated publish BATCH in either order and case', () => {
+        expect(fileCompressionFieldOf(`BATCH|0|${fileV0};${message}`)).toBe('1');
+        expect(fileCompressionFieldOf(`BATCH|0|${message};${fileV0}`)).toBe('1');
+        expect(fileCompressionFieldOf(`batch|0|${fileV0.replace('FILE', 'file')};${message}`)).toBe('1');
+    });
+
+    it('reads a version 1 manifest leg inside a BATCH', () => {
+        expect(fileCompressionFieldOf(`BATCH|0|${fileV1};${message}`)).toBe('1');
+    });
+
+    it('reads nothing from a BATCH without a FILE leg', () => {
+        expect(fileCompressionFieldOf(`BATCH|0|SEND|0|T|1|addr;${message}`)).toBe('');
+        expect(fileCompressionFieldOf('BATCH|0|')).toBe('');
+    });
+
+    it('resolves gated compression from a BATCH tx_data', async () => {
+        const sdk = { getAction: async () => ({ data: { tx_data: `BATCH|0|${fileV0};${message}` } }) };
+        await expect(resolveGatedCompression({ sdk, actionIndex: 11 })).resolves.toBe('1');
+    });
+});
