@@ -204,17 +204,14 @@ export function forwardSignMessage(params) {
     return provider.signMessage(params);
 }
 
-/**
- * @param {{ chainId: string, action: string, params: object,
- *   feeStrategyHint?: 'low' | 'normal' | 'fast' }} params
- */
+/** @param {{ chainId: string, action: string, params: object }} params */
 export function forwardSignAction(params) {
     const provider = getExtensionProvider();
     if (!provider) throw new ExtensionUnavailableError('signAction');
     return provider.signAction(params);
 }
 
-/** @param {{ chainId: string, psbtHex: string, signingPaths: unknown[], broadcast?: boolean }} params */
+/** @param {{ chainId: string, psbtHex: string, signingPaths: unknown[] }} params */
 export function forwardSignPsbt(params) {
     const provider = getExtensionProvider();
     if (!provider) throw new ExtensionUnavailableError('signPsbt');
