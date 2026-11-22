@@ -190,5 +190,7 @@ the app on both stores.
   K10 (direct APK) are custody rows in the key-rotation runbook; K10 cannot be
   rotated at all. Release artifacts are built *and* signed in the maintainer
   ceremony (§7).
-- **No Firebase / Play Services.** The template's google-services wiring was
-  removed, not left inert; push notifications are an explicit non-goal.
+- **No Firebase or FCM; `play-services-wearable` is the one Play Services
+  dependency, for the Wear OS Data Layer, and Wear OS ships on the
+  Play lane only.** The template's google-services wiring was removed, not
+  left inert; push notifications are an explicit non-goal.
