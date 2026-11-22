@@ -86,7 +86,7 @@ assert.ok(/register\(\s*'coSign\.parse'/.test(bgHost), 'background registers coS
 assert.ok(/previewCoSignRequest/.test(bgHost), 'coSign.parse handler calls previewCoSignRequest');
 
 // 6. Approval UI surfaces a legible co-sign intent (always-prompt safety).
-const approvalUi = read('packages/extension/src/approval/kinds/SignApproval.jsx');
+const approvalUi = read('packages/core/src/shared/approval/SignApproval.jsx');
 assert.ok(/coSign:\s*'Co-sign transaction'/i.test(approvalUi), 'SignApproval titles the coSign kind');
 assert.ok(
     /kind === 'coSign'[\s\S]*?coSignPreview\.preview\?\.action/.test(approvalUi)

@@ -99,7 +99,7 @@ for (const parts of SIGN_SURFACES) {
 // The extension approval window has no unlocked branch: it always asks for a
 // password, so it reads the freeze itself and states it first.
 const approvalSrc = readFileSync(
-    join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx'),
     'utf8',
 );
 assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_REJECT_ONLY, (?:t\(.extension\.approval\.reject.\)|.Reject.)\)/, 'the approval window reads the reject-only freeze and names the Reject label');

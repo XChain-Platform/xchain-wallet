@@ -100,7 +100,7 @@ describe('WarningCard', () => {
             'packages/core/src/shared/routes/MigrateToBip39.jsx',
             'packages/core/src/shared/components/settings/BackupSection.jsx',
             'packages/core/src/shared/routes/VaultUnavailable.jsx',
-            'packages/extension/src/approval/kinds/ConnectApproval.jsx',
+            'packages/core/src/shared/approval/ConnectApproval.jsx',
         ]) {
             expect(read(file), file).not.toMatch(/<WarningLine\s+critical/);
         }

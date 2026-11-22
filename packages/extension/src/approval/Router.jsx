@@ -16,9 +16,9 @@ import { ListPage, Notice, Screen, Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { watchApprovalRequest } from './watchRequest.js';
-import { ConnectApproval } from './kinds/ConnectApproval.jsx';
-import { SignApproval } from './kinds/SignApproval.jsx';
-import { ApprovalHeader } from './ApprovalHeader.jsx';
+import { ConnectApproval } from '@xchain-wallet/core/shared/approval/ConnectApproval.jsx';
+import { SignApproval } from '@xchain-wallet/core/shared/approval/SignApproval.jsx';
+import { ApprovalHeader } from '@xchain-wallet/core/shared/approval/ApprovalHeader.jsx';
 
 const { t } = i18n;
 const SIGN_APPROVAL_KINDS = new Set([

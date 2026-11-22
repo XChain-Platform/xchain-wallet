@@ -12,7 +12,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => ({
     listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
     getSettings: async () => ({ walletMode: 'full', developerMode: false }),
     getAddressesByChain: async () => ({
@@ -44,10 +44,10 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
 vi.stubGlobal('React', React);
 
 const { ConnectApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+    '../../../packages/core/src/shared/approval/ConnectApproval.jsx'
 );
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
 
 const chain = BUNDLED_DESCRIPTORS.find((descriptor) => descriptor.id === 'bitcoin-regtest');

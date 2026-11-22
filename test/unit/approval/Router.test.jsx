@@ -26,7 +26,7 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     fetchApproval: mocks.fetchApproval,
     resolveApproval: mocks.resolveApproval,
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/ConnectApproval.jsx', () => ({
     ConnectApproval: ({ id, payload, onReject }) => (
         <section data-testid="connect-approval">
             <span>{id}:{payload.origin}</span>
@@ -34,7 +34,7 @@ vi.mock('../../../packages/extension/src/approval/kinds/ConnectApproval.jsx', ()
         </section>
     ),
 }));
-vi.mock('../../../packages/extension/src/approval/kinds/SignApproval.jsx', () => ({
+vi.mock('../../../packages/core/src/shared/approval/SignApproval.jsx', () => ({
     SignApproval: ({ id, kind }) => <section data-testid="sign-approval">{id}:{kind}</section>,
 }));
 
@@ -157,11 +157,11 @@ describe('approval Router', () => {
     });
 
     it('keeps help off page headers and preserves whole-word wrapping', () => {
-        const header = readFileSync('packages/extension/src/approval/ApprovalHeader.jsx', 'utf8');
-        const connect = readFileSync('packages/extension/src/approval/kinds/ConnectApproval.jsx', 'utf8');
+        const header = readFileSync('packages/core/src/shared/approval/ApprovalHeader.jsx', 'utf8');
+        const connect = readFileSync('packages/core/src/shared/approval/ConnectApproval.jsx', 'utf8');
         const locale = readFileSync('packages/core/src/i18n/locales/en/extension.js', 'utf8');
-        const sharedCss = readFileSync('packages/extension/src/approval/approval.module.css', 'utf8');
-        const signCss = readFileSync('packages/extension/src/approval/kinds/SignApproval.module.css', 'utf8');
+        const sharedCss = readFileSync('packages/core/src/shared/approval/approval.module.css', 'utf8');
+        const signCss = readFileSync('packages/core/src/shared/approval/SignApproval.module.css', 'utf8');
 
         expect(header).not.toMatch(/InfoTip|trailing=|\{ title, help \}/);
         expect(locale).toContain("'extension.connect.title': 'Connect Wallet'");

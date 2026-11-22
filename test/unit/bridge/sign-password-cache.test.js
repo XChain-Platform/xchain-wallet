@@ -162,17 +162,17 @@ describe('createSignPasswordCache: remember / recall / expiry', () => {
 // behavioural assertion would notice it coming back.
 describe('the bridge decision shapes carry no bip39Passphrase', () => {
     const surfaces = [
-        'bridge/handlers.js',
-        'bridge/Approvals.js',
-        'bridge/signPasswordCache.js',
-        'approval/kinds/SignApproval.jsx',
+        'packages/extension/src/bridge/handlers.js',
+        'packages/extension/src/bridge/Approvals.js',
+        'packages/extension/src/bridge/signPasswordCache.js',
+        'packages/core/src/shared/approval/SignApproval.jsx',
     ];
 
     for (const rel of surfaces) {
         it(`${rel} never mentions it`, () => {
             // Workspace-root relative, the convention the other source-scanning
             // unit tests here use (chainRegistrySync, docsSiblingGuard).
-            const src = readFileSync(join(process.cwd(), 'packages/extension/src', rel), 'utf8');
+            const src = readFileSync(join(process.cwd(), rel), 'utf8');
             expect(src).not.toContain('bip39Passphrase');
         });
     }

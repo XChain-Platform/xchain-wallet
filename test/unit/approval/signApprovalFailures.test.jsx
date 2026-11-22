@@ -21,11 +21,11 @@ const mocks = vi.hoisted(() => ({
     getTokenInfo: vi.fn(),
 }));
 
-vi.mock('../../../packages/extension/src/approval/messaging.js', () => mocks);
+vi.mock('../../../packages/core/src/shared/approval/index.js', () => mocks);
 vi.stubGlobal('React', React);
 
 const { SignApproval } = await import(
-    '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
+    '../../../packages/core/src/shared/approval/SignApproval.jsx'
 );
 
 function mount(kind, payload, id = `${kind}-failure`) {
