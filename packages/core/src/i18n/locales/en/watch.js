@@ -16,6 +16,10 @@ const messages = {
     'watch.startIn.units': 'Units',
     'watch.showTotal': 'Show total on watch face and Tile',
     'watch.backgroundActivityCheck': 'Background activity check',
+    'watch.backgroundActivityCheck.help':
+        "Checks this wallet's public addresses a few times a day and alerts you when activity changes.",
+    'watch.backgroundActivityRuns': 'Last runs ({count})',
+    'watch.backgroundActivityNeverRun': 'No background checks have run yet.',
     'watch.value.on': 'On',
     'watch.value.off': 'Off',
     'watch.status.title': 'Status',
