@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import { WatchSection } from '../../../packages/core/src/shared/components/settings/WatchSection.jsx';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
 
@@ -56,6 +57,9 @@ const GROUPED_SECTIONS = [
     { id: 'notifications-quiet', title: 'Quiet Hours', component: 'NotificationsSection' },
     { id: 'backup-contacts', title: 'Backup and Recovery', component: 'ContactsSection' },
 ];
+const STANDALONE_SECTIONS = [
+    { title: 'Show wallet on watch', component: 'WatchSection', Component: WatchSection },
+];
 
 function pending() {
     return new Promise(() => {});
@@ -100,7 +104,7 @@ afterEach(() => {
 
 describe('Settings route accessibility', () => {
     it('accounts for every settings section component', () => {
-        const renderedComponents = [...DRILLDOWN_SECTIONS, ...GROUPED_SECTIONS]
+        const renderedComponents = [...DRILLDOWN_SECTIONS, ...GROUPED_SECTIONS, ...STANDALONE_SECTIONS]
             .map(({ component }) => component)
             .sort();
         const sectionComponents = Object.keys(sectionModules)
@@ -120,6 +124,16 @@ describe('Settings route accessibility', () => {
         const { container } = renderSettings({ initialSubpageId: id });
         // A grouped page repeats its own title as the heading of its first part.
         await screen.findAllByRole('heading', { name: title });
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    it.each(STANDALONE_SECTIONS)('scans $component', async ({ title, Component }) => {
+        const { container } = render(
+            <MessagingContext.Provider value={{ shell: 'web', messaging: settingsMessaging() }}>
+                <Component />
+            </MessagingContext.Provider>,
+        );
+        await screen.findByText(title);
         await expectNoSeriousAxeViolations(container);
     });
 
