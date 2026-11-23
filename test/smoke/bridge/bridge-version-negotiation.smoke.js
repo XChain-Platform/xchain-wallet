@@ -47,8 +47,8 @@ const wsRoot = join(here, '..', '..', '..');
 // below true of "the bridge spec source" without caring which file a given
 // declaration ended up in.
 const specSrc = [
-    readFileSync(join(wsRoot, 'packages', 'bridge-spec', 'src', 'runtime.js'), 'utf8'),
-    readFileSync(join(wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'connect', 'src', 'runtime.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'connect', 'src', 'index.ts'), 'utf8'),
 ].join('\n');
 const handlersSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'bridge', 'handlers.js'),
@@ -82,7 +82,7 @@ assert.doesNotMatch(
 
 assert.match(
     handlersSrc,
-    /import \{[\s\S]+?BRIDGE_SPEC_VERSION,[\s\S]+?BRIDGE_SUPPORTED_VERSIONS,[\s\S]+?isBridgeVersionSupported,[\s\S]+?\} from '@xchain-wallet\/bridge-spec'/,
+    /import \{[\s\S]+?BRIDGE_SPEC_VERSION,[\s\S]+?BRIDGE_SUPPORTED_VERSIONS,[\s\S]+?isBridgeVersionSupported,[\s\S]+?\} from '@dankest-llc\/xchain-connect'/,
     'handlers imports the version-negotiation symbols',
 );
 // The handler must read the option name the spec publishes. Reading
@@ -129,7 +129,7 @@ assert.doesNotMatch(
 // --- 3. isBridgeVersionSupported range behaviour --------------------------
 
 const { BRIDGE_SPEC_VERSION, isBridgeVersionSupported, BRIDGE_SUPPORTED_VERSIONS } =
-    await import(join(wsRoot, 'packages', 'bridge-spec', 'src', 'runtime.js'));
+    await import(join(wsRoot, 'packages', 'connect', 'src', 'runtime.js'));
 
 assert.deepEqual(BRIDGE_SUPPORTED_VERSIONS, ['0.1.0'], 'one supported version today');
 assert.ok(

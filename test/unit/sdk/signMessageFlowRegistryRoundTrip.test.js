@@ -14,7 +14,7 @@ import {
     signMessageFlow,
     signSignInChallengeFlow,
 } from '../../../packages/core/src/flows/signFlows.js';
-import { formatSignInChallenge } from '../../../packages/bridge-spec/src/runtime.js';
+import { formatSignInChallenge } from '../../../packages/connect/src/runtime.js';
 import { unlockWallet } from '../../../packages/core/src/flows/unlockWallet.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { adaptXChainSDK } from '../../../packages/core/src/sdk/defaultFactory.js';

@@ -5,7 +5,7 @@ import type {
     CoSignApprovedSuccess,
     CoSignParams,
     PsbtSigningPath,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 
 export function signingPathsError(entries: PsbtSigningPath[]): string | null {
     if (!Array.isArray(entries) || entries.length === 0) {

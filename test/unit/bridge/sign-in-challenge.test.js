@@ -36,7 +36,7 @@ import {
     formatSignInChallenge,
     parseSignInChallenge,
     validateSignInChallenge,
-} from '../../../packages/bridge-spec/src/index.ts';
+} from '../../../packages/connect/src/index.ts';
 
 const NOW = 1_700_000_000_000;
 

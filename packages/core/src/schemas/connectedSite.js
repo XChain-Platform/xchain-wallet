@@ -10,7 +10,7 @@
 
 // ConnectedSite record. §11.3.5. Per-origin permissions for dApps that
 // have called the bridge. Granularity matches the bridge-spec permissions
-// model (@xchain-wallet/bridge-spec SitePermissions).
+// model (@dankest-llc/xchain-connect SitePermissions).
 
 import { ACTION_PERMISSIONS } from './constants.js';
 import {

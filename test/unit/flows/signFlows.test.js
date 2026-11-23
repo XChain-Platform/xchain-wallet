@@ -18,7 +18,7 @@ import {
     signSignInChallengeFlow,
     signPsbtFlow,
 } from '../../../packages/core/src/flows/signFlows.js';
-import { formatSignInChallenge } from '../../../packages/bridge-spec/src/runtime.js';
+import { formatSignInChallenge } from '../../../packages/connect/src/runtime.js';
 import {
     activatePanicMode,
     clearPanicModeState,

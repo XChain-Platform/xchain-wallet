@@ -39,7 +39,7 @@ describe('wallet version lockstep', () => {
         const packageFiles = [
             'package.json',
             ...filesBelow('packages', (name) => name === 'package.json'),
-        ];
+        ].filter((path) => path !== 'packages/connect/package.json');
         const versions = Object.fromEntries(
             packageFiles.map((path) => [path, readJson(path).version]),
         );

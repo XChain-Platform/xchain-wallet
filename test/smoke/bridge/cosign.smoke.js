@@ -53,7 +53,7 @@ const codecSrc = read('packages/core/src/storage/codec.js');
 assert.ok(/coSignerAccounts/.test(codecSrc), 'codec includes coSignerAccounts (emptyDocument + merge)');
 
 // 3. bridge-spec exposes the coSign surface.
-const spec = read('packages/bridge-spec/src/index.ts');
+const spec = read('packages/connect/src/index.ts');
 for (const t of ['CoSignParams', 'CoSignResult', 'coSign(params: CoSignParams)']) {
     assert.ok(spec.includes(t), `bridge-spec declares ${t}`);
 }

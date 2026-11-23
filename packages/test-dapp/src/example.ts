@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Worked example: what a third-party dApp author writes to talk to the
-// XChain wallet via @xchain-wallet/bridge-spec.
+// XChain wallet via @dankest-llc/xchain-connect.
 //
 // Covers the full Phase 1 surface: discover provider, connect, read
 // accounts/addresses/balances, sign-in, sign a message, sign a SEND,
@@ -33,7 +33,7 @@ import {
     type SendActionParams,
     type SignActionParams,
     type SignActionResult,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 import { MockXChainProvider } from './mock-provider.js';
 
 const APP_ID = 'example.com';

@@ -6,8 +6,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import * as spec from '../../../../packages/bridge-spec/src/index.ts';
-import * as runtime from '../../../../packages/bridge-spec/src/runtime.js';
+import * as spec from '../../../../packages/connect/src/index.ts';
+import * as runtime from '../../../../packages/connect/src/runtime.js';
 import { BUNDLED_DESCRIPTORS } from '../../../../packages/core/src/registry/index.js';
 import { resolveAutoApproveScope } from '../../../../packages/core/src/shared/utils/originAutoApprove.js';
 import { EXAMPLE_CONNECT_OPTS } from '../../../../packages/test-dapp/src/example.ts';
@@ -28,7 +28,7 @@ const { ConnectApproval } = await import(
 );
 
 const bridgeSpecSource = readFileSync(
-    join(process.cwd(), 'packages/bridge-spec/src/index.ts'),
+    join(process.cwd(), 'packages/connect/src/index.ts'),
     'utf8',
 );
 const injectSource = readFileSync(

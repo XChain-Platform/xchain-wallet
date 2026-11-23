@@ -26,7 +26,7 @@
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^12.3.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
-        "@xchain-wallet/bridge-spec": "workspace:*",
+        "@dankest-llc/xchain-connect": "workspace:*",
         "@xchain-wallet/core": "workspace:*",
         "@xchain-wallet/extension": "workspace:*",
         "@xchain-wallet/signers-ledger": "workspace:*",

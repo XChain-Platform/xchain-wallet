@@ -39,7 +39,7 @@ const ROOTS = [
     join(PACKAGES, 'signers-ledger', 'src'),
     join(PACKAGES, 'signers-trezor', 'src'),
     join(PACKAGES, 'test-dapp', 'src'),
-    join(PACKAGES, 'bridge-spec', 'src'),
+    join(PACKAGES, 'connect', 'src'),
 ];
 
 function walk(dir, out) {

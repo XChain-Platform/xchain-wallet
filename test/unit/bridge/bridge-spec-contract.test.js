@@ -50,7 +50,7 @@ const ORIGIN = 'https://dapp.example';
 const CHAIN = 'bitcoin-regtest';
 const FROM = 'bcrt1qfromaddress';
 const TO = 'bcrt1qtoaddress';
-const SPEC_SOURCE = readFileSync('packages/bridge-spec/src/index.ts', 'utf8');
+const SPEC_SOURCE = readFileSync('packages/connect/src/index.ts', 'utf8');
 
 function interfaceBody(name) {
     return SPEC_SOURCE.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';

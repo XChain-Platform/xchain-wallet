@@ -19,7 +19,7 @@ import type {
     SignActionResult,
     SweepActionParams,
     XChainProvider,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 import type { MockXChainProvider } from './mock-provider.ts';
 
 export async function bridgeSpecConformance(

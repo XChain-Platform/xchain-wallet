@@ -8,26 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for: every package ships at the root's version.
-//
-// The README's Versioning section states the rule and gives its purpose:
-// every shell's About screen shows its own package.json version "so users
-// can confirm the extension, web, and desktop builds came from the same
-// codebase". A user comparing two shells that disagree learns the opposite
-// of what that sentence promises.
-//
-// It drifted anyway. On 2026-08-01 six packages sat a patch version behind
-// the root (core, web, bridge-spec, test-dapp, signers-ledger,
-// signers-trezor at 0.333.0 against a root of 0.333.1) while the README
-// claimed they were in lockstep, and nothing anywhere noticed. There was
-// no bump tool and no check; the rule existed only as prose.
-//
-// MEMBERSHIP IS DERIVED FROM THE FILESYSTEM, not from a list in this file
-// and not from the list the README used to carry. A hardcoded roster is
-// exactly what failed: it cannot know about a package added tomorrow, and
-// a new package that quietly ships at 0.0.1 is the same defect wearing a
-// different hat. Everything under packages/ is in scope the moment it
-// exists.
+// Smoke for wallet package version lockstep. Membership comes from the
+// packages directory, with the documented independently versioned connect
+// package excluded.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -50,6 +33,7 @@ const packagesDir = join(root, 'packages');
 const members = readdirSync(packagesDir)
     .filter((name) => statSync(join(packagesDir, name)).isDirectory())
     .filter((name) => existsSync(join(packagesDir, name, 'package.json')))
+    .filter((name) => name !== 'connect')
     .sort();
 
 assert.ok(members.length >= 6,
@@ -123,6 +107,9 @@ assert.equal(declared[1], rootVersion,
 
 const E2E = 'test/e2e/package.json';
 const readme = readFileSync(join(root, 'README.md'), 'utf8');
+
+assert.ok(/`packages\/connect` is exempt/.test(readme),
+    'packages/connect has independent semver, so the README must document its lockstep exemption.');
 
 if (existsSync(join(root, E2E))) {
     assert.ok(/`test\/e2e` is exempt/.test(readme),
@@ -224,4 +211,4 @@ if (!isPrerelease) {
 console.log(`OK: version-lockstep smoke (${members.length} packages + the store-facing`
     + ` manifest.json at ${manifestVersion} (derived from ${rootVersion}) + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
     + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : `, with a CHANGELOG section carrying ${entryCount} entries`}`
-    + '; test/e2e exempt and documented)');
+    + '; packages/connect and test/e2e exempt and documented)');
