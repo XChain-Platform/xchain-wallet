@@ -1,6 +1,7 @@
 {
     "name": "XChain Wallet",
     "short_name": "XChain",
+    "id": "/",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",

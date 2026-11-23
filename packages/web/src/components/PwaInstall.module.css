@@ -1,0 +1,5 @@
+/* Keep the wrapper flexible so a long translation cannot widen the scrolling
+   body. The shell notice host owns the gap before Home's first card. */
+.banner {
+    min-width: 0;
+}

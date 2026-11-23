@@ -38,6 +38,7 @@ import { visibleWalletMenu, walletLockAction } from '../walletMenu.js';
 import { TIER_RAIL_MIN_PX } from '../styles/breakpoints.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/walletMenu.js';
+import '../../i18n/locales/en/pwaInstall.js';
 
 const MENU_SEARCH_GROUPS = [
     'Suggested',
@@ -105,6 +106,7 @@ function orderMenuSearchResults(results, commands, query = '') {
  *   onOpenPopup?: () => void,
  *   onOpenSidebar?: () => void,
  *   onOpenFullScreen?: () => void,
+ *   onInstall?: () => void | Promise<void>,
  * }} [props.menu]
  *        onOpenPopup, onOpenSidebar and onOpenFullScreen are the extension's
  *        view switches; each shows as a header button only when the shell
@@ -445,6 +447,7 @@ export function CommandPalette({
             />
         </span>
     ) : null);
+    const installButton = viewButton(menu?.onInstall, t('pwaInstall.installApp'), Icon.DownloadIcon, 'data-wallet-menu-install');
     const popupButton = viewButton(menu?.onOpenPopup, t('walletMenu.openPopup'), Icon.PopupWindowIcon, 'data-wallet-menu-popup');
     const sidebarButton = viewButton(menu?.onOpenSidebar, t('walletMenu.openSidebar'), Icon.SidebarIcon, 'data-wallet-menu-sidebar');
     const fullScreenButton = viewButton(menu?.onOpenFullScreen, t('walletMenu.openFullScreen'), Icon.MaximizeIcon, 'data-wallet-menu-full-screen');
@@ -475,6 +478,7 @@ export function CommandPalette({
                     <header className={styles.menuHeader}>
                         {searchControl}
                         <div className={styles.menuActions}>
+                            {installButton}
                             {popupButton}
                             {sidebarButton}
                             {fullScreenButton}

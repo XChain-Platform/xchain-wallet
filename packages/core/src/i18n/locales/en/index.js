@@ -111,6 +111,7 @@ import pending from './pending.js';
 import preflightCopy from './preflightCopy.js';
 import projectRoster from './projectRoster.js';
 import publishFile from './publishFile.js';
+import pwaInstall from './pwaInstall.js';
 import receive from './receive.js';
 import renameAccount from './renameAccount.js';
 import renameWallet from './renameWallet.js';
@@ -196,6 +197,7 @@ export const en = {
     ...preflightCopy,
     ...projectRoster,
     ...publishFile,
+    ...pwaInstall,
     ...receive,
     ...renameAccount,
     ...renameWallet,
