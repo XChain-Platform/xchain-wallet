@@ -7,6 +7,12 @@ import SwiftUI
 #endif
 
 enum ReceivePresentation {
+    static let emptyKey = ReceivePages.emptyKey
+
+    static func pages(_ receive: [SnapshotReceive]?) -> [SnapshotReceive] {
+        ReceivePages.pages(receive)
+    }
+
     static func groupedAddress(_ address: String) -> String {
         let compact = address.filter { !$0.isWhitespace }
         return stride(from: 0, to: compact.count, by: 4).map { offset in
@@ -14,6 +20,10 @@ enum ReceivePresentation {
             let end = compact.index(start, offsetBy: min(4, compact.distance(from: start, to: compact.endIndex)))
             return String(compact[start..<end])
         }.joined(separator: " ")
+    }
+
+    static func modules(for entry: SnapshotReceive) -> [Bool]? {
+        QRModules.unpack(size: entry.qr.size, bits: entry.qr.bits)
     }
 
     static func chainIconName(for chainId: String) -> String {
@@ -29,11 +39,11 @@ enum ReceivePresentation {
 #if os(watchOS)
 struct ReceiveScreen: View {
     let receive: [SnapshotReceive]?
-    var pages: [SnapshotReceive] { ReceivePages.pages(receive) }
+    var pages: [SnapshotReceive] { ReceivePresentation.pages(receive) }
 
     var body: some View {
         if pages.isEmpty {
-            Text(LocalizedStringKey(ReceivePages.emptyKey)).multilineTextAlignment(.center)
+            Text(LocalizedStringKey(ReceivePresentation.emptyKey)).multilineTextAlignment(.center)
         } else {
             TabView {
                 ForEach(pages, id: \.chainId) { ReceivePage(entry: $0) }
@@ -45,7 +55,7 @@ struct ReceiveScreen: View {
 
 struct ReceivePage: View {
     let entry: SnapshotReceive
-    var modules: [Bool]? { QRModules.unpack(size: entry.qr.size, bits: entry.qr.bits) }
+    var modules: [Bool]? { ReceivePresentation.modules(for: entry) }
 
     var body: some View {
         VStack(spacing: 5) {

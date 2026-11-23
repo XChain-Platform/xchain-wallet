@@ -6,20 +6,20 @@ import XCTest
 
 final class ReceiveScreenTests: XCTestCase {
     func testNoAddressUsesTheEmptyState() {
-        let screen = ReceiveScreen(receive: nil)
+        let pages = ReceivePresentation.pages(nil)
 
-        XCTAssertTrue(screen.pages.isEmpty)
-        XCTAssertEqual(ReceivePages.noticeKey(screen.pages), "w6.empty")
+        XCTAssertTrue(pages.isEmpty)
+        XCTAssertEqual(ReceivePresentation.emptyKey, "w6.empty")
     }
 
     func testEachChainGetsOnePageInSnapshotOrder() {
         let bitcoin = entry(chainId: "bitcoin-mainnet", address: "bc1prawaddress", bits: "oA==")
         let litecoin = entry(chainId: "litecoin-mainnet", address: "ltc1rawaddress", bits: "UA==")
         let duplicate = entry(chainId: "bitcoin-mainnet", address: "laterduplicate", bits: "AA==")
-        let screen = ReceiveScreen(receive: [bitcoin, litecoin, duplicate])
+        let pages = ReceivePresentation.pages([bitcoin, litecoin, duplicate])
 
-        XCTAssertEqual(screen.pages.map(\.chainId), ["bitcoin-mainnet", "litecoin-mainnet"])
-        XCTAssertEqual(screen.pages.map(\.address), ["bc1prawaddress", "ltc1rawaddress"])
+        XCTAssertEqual(pages.map(\.chainId), ["bitcoin-mainnet", "litecoin-mainnet"])
+        XCTAssertEqual(pages.map(\.address), ["bc1prawaddress", "ltc1rawaddress"])
     }
 
     func testGroupsRawAndAlreadyGroupedAddresses() {
@@ -40,16 +40,16 @@ final class ReceiveScreenTests: XCTestCase {
         XCTAssertEqual(ReceivePresentation.chainIconName(for: "unknown-mainnet"), "link")
     }
 
-    func testPageDecodesTheQrMatrix() {
-        let page = ReceivePage(entry: entry(chainId: "bitcoin", address: "bc1praw", bits: "oA=="))
+    func testDecodesTheQrMatrix() {
+        let entry = entry(chainId: "bitcoin", address: "bc1praw", bits: "oA==")
 
-        XCTAssertEqual(page.modules, [true, false, true, false])
+        XCTAssertEqual(ReceivePresentation.modules(for: entry), [true, false, true, false])
     }
 
-    func testPageRejectsAnInvalidQrMatrix() {
-        let page = ReceivePage(entry: entry(chainId: "bitcoin", address: "bc1praw", bits: ""))
+    func testRejectsAnInvalidQrMatrix() {
+        let entry = entry(chainId: "bitcoin", address: "bc1praw", bits: "")
 
-        XCTAssertNil(page.modules)
+        XCTAssertNil(ReceivePresentation.modules(for: entry))
     }
 
     private func entry(chainId: String, address: String, bits: String) -> SnapshotReceive {
