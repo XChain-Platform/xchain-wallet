@@ -145,6 +145,16 @@ function makeFixture() {
     const uiTestScript = join(root, 'scripts/add-uitest-target.rb');
     const project = join(root, 'ios/App/App.xcodeproj');
     mkdirSync(join(root, 'scripts'), { recursive: true });
+    for (const path of [
+        'App/watch',
+        'App/notify',
+        'App/activity',
+        'App/fold',
+        'AppTests/Native',
+        'AppUITests/Native',
+    ]) {
+        mkdirSync(join(root, 'ios/App', path), { recursive: true });
+    }
     cpSync(source, script);
     cpSync(uiTestSource, uiTestScript);
 
