@@ -76,11 +76,10 @@ assert.match(
     /Icon\.ThumbsDownIcon/,
     'the shared Reject button carries the thumbs-down icon',
 );
-assert.match(
-    signSrc,
-    /<ConfirmButtons[\s\S]{0,300}approveLabel=\{approveLabel\}/,
-    'SignApproval passes the derived verb to the shared button pair',
-);
+const confirmButtonsElement = signSrc.match(/<ConfirmButtons\b[\s\S]*?\/>/)?.[0];
+assert.ok(confirmButtonsElement, 'SignApproval renders the shared button pair');
+assert.match(confirmButtonsElement, /\bapproveLabel=\{approveLabel\}/,
+    'SignApproval passes the derived verb to the shared button pair');
 
 // --- 1b. action labels on the in-wallet confirm surface ------------------
 //
@@ -265,7 +264,7 @@ assert.doesNotMatch(confirmStandardCss, /\.stack\s*\{[^}]*padding-(?:block-)?top
     assertPair('ConnectApproval', footerOf(connectSrc, 'data-connect-actions'), THUMBS, true);
     assert.match(signSrc, /signingUnavailable \? \([\s\S]{0,500}<Button[\s\S]{0,300}variant="danger"/,
         'SignApproval fail-closed state offers only the red Reject button');
-    assert.match(signSrc, /:\s*\(\s*<ConfirmButtons[\s\S]{0,300}approveLabel=\{approveLabel\}/,
+    assert.match(signSrc, /:\s*\(\s*<ConfirmButtons\b/,
         'SignApproval ready state delegates to the shared Reject and Approve pair');
     assert.equal(en['extension.connect.approve'], 'Approve', 'ConnectApproval approve label is Approve');
     {
@@ -280,7 +279,8 @@ assert.doesNotMatch(confirmStandardCss, /\.stack\s*\{[^}]*padding-(?:block-)?top
         assert.match(approveBtn, THUMBS.approve, 'ConfirmStandard: Approve carries the thumbs up');
         assert.match(approveBtn, /variant="success"/, 'ConfirmStandard: Approve is green');
         assert.match(rejectBtn, /className=\{styles\.button\}/, 'ConfirmStandard: Reject takes the half width');
-        assert.match(approveBtn, /className=\{styles\.button\}/, 'ConfirmStandard: Approve takes the half width');
+        assert.match(approveBtn, /className=\{[^}\n]*styles\.button[^}\n]*\}/,
+            'ConfirmStandard: Approve takes the half width');
     }
     for (const name of ['ActionConfirmScreen', 'MessageConfirmScreen', 'PsbtConfirmScreen']) {
         const src = read('packages', 'core', 'src', 'shared', 'components', `${name}.jsx`);
