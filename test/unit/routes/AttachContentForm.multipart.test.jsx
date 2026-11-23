@@ -122,6 +122,49 @@ afterEach(() => {
 });
 
 describe('new multipart artwork upload', () => {
+    it('shows and clears each reserved-character field error before blocking review', async () => {
+        const client = clientFor();
+        mount(client);
+        await screen.findByLabelText('Choose file to attach');
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE.address));
+        fireEvent.drop(artworkField(), {
+            dataTransfer: { files: [new File([BYTES], 'art|.txt', { type: 'text/plain' })] },
+        });
+        expect(await screen.findByText("File name can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText(/^Artwork file \(up to /)).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByText('File name, title, and memo cannot contain | or ; characters.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+        await waitFor(() => expect(screen.queryByText("File name can't contain | or ;")).toBeNull());
+        fireEvent.drop(artworkField(), {
+            dataTransfer: { files: [new File([BYTES], 'art.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() => expect(screen.getByLabelText(/^Artwork file \(up to /)).toHaveValue('art.txt'));
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Token | artwork' } });
+        expect(screen.getByText("Title can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: '' } });
+        await waitFor(() => expect(screen.queryByText("Title can't contain | or ;")).toBeNull());
+
+        fireEvent.click(screen.getByRole('button', { name: /^Memo\b/, expanded: false }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Token | memo' } });
+        expect(screen.getByText("Memo can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText('Memo')).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Token | memo still invalid' } });
+        expect(screen.getByText("Memo can't contain | or ;")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
+
+        await waitFor(() => expect(screen.queryByText("Memo can't contain | or ;")).toBeNull());
+        expect(client.fileMultipart).not.toHaveBeenCalled();
+    });
+
     it('retains the link target and uses the complete manifest index for LINK', async () => {
         const client = clientFor();
         mount(client);

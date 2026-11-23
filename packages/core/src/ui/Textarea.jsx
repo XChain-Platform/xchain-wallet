@@ -30,6 +30,7 @@ import '../i18n/locales/en/ui.js';
  * @property {import('react').ReactNode} [help] contextual help shown from the label-row InfoTip.
  * @property {string} [hint]
  * @property {string} [error]
+ * @property {string | number} [errorKey]
  * @property {import('react').ReactNode} [counter] custom counter content shown
  *   in the label-row counter slot instead of the `maxLength` character count.
  * @property {string} [id]
@@ -56,6 +57,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
         help,
         hint,
         error: errorProp,
+        errorKey: errorKeyProp,
         counter: customCounter,
         // A host that shows the count elsewhere (a section header)
         // keeps maxLength's cap without the field's own count.
@@ -90,6 +92,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     // dropped on change; an `error` the caller passes wins.
     const formField = useFormFieldError(id);
     const error = errorProp || formField.error;
+    const errorKey = errorProp ? errorKeyProp : formField.errorKey;
     const requirement = resolveFieldRequirement({
         label,
         optional,
@@ -97,7 +100,9 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
         ariaRequired: externalRequired,
     });
     const [dismissedError, setDismissedError] = useState(null);
-    const visibleError = error && error !== dismissedError ? error : null;
+    const errorIsDismissed = dismissedError !== null && dismissedError.message === error
+        && Object.is(dismissedError.key, errorKey);
+    const visibleError = error && !errorIsDismissed ? error : null;
     const hintId = hint && !visibleError ? `${textareaId}-hint` : undefined;
     const errorId = visibleError ? `${textareaId}-error` : undefined;
     const optionalPillId = requirement.isOptional ? `${textareaId}-optional` : undefined;
@@ -178,7 +183,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
 
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
-        if (error) setDismissedError(error);
+        if (error) setDismissedError({ message: error, key: errorKey });
         formField.clear();
         onChange?.(event);
     };

@@ -49,6 +49,50 @@ function mount(shell) {
 afterEach(cleanup);
 
 describe('PublishFileForm multipart publish', () => {
+    it('shows and clears each reserved-character field error before blocking review', async () => {
+        const shell = messaging();
+        mount(shell);
+        const input = await screen.findByLabelText('File to publish');
+        fireEvent.click(screen.getByRole('button', { name: 'Upload method: Taproot upload' }));
+        fireEvent.click(screen.getAllByRole('option')[1]);
+        fireEvent.change(input, {
+            target: { files: [new File([new Uint8Array(20_000)], 'large|.bin', { type: 'application/octet-stream' })] },
+        });
+        expect(await screen.findByText("File name can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText(/^File \(up to/)).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByText("File name, title, and memo can't contain | or ; characters.")).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
+        expect(screen.queryByRole('button', { name: 'Sign and Publish' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove file' }));
+        await waitFor(() => expect(screen.queryByText("File name can't contain | or ;")).toBeNull());
+        fireEvent.change(input, {
+            target: { files: [new File([new Uint8Array(20_000)], 'large.bin', { type: 'application/octet-stream' })] },
+        });
+        await waitFor(() => expect(screen.getByLabelText(/^File \(up to/)).toHaveValue('large.bin'));
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Quarterly | report' } });
+        expect(screen.getByText("Title can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
+        expect(screen.queryByRole('button', { name: 'Sign and Publish' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: '' } });
+        await waitFor(() => expect(screen.queryByText("Title can't contain | or ;")).toBeNull());
+
+        fireEvent.click(screen.getByRole('button', { name: /^Memo\b/, expanded: false }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Quarterly | memo' } });
+        expect(screen.getByText("Memo can't contain | or ;")).toBeInTheDocument();
+        expect(screen.getByLabelText('Memo')).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Quarterly | memo still invalid' } });
+        expect(screen.getByText("Memo can't contain | or ;")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
+        expect(screen.queryByRole('button', { name: 'Sign and Publish' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
+
+        await waitFor(() => expect(screen.queryByText("Memo can't contain | or ;")).toBeNull());
+        expect(shell.fileMultipart).not.toHaveBeenCalled();
+    });
+
     it('starts the selected lane and finishes on the manifest action index', async () => {
         const shell = messaging();
         mount(shell);

@@ -275,6 +275,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setRefusalCount((n) => n + 1);
         setFormError(message);
     };
+    const fileNameReservedError = /[|;]/.test(fileMeta?.name || '')
+        ? t('publishFile.fileNameBadCharacters')
+        : undefined;
+    const titleReservedError = /[|;]/.test(title)
+        ? t('publishFile.titleBadCharacters')
+        : undefined;
+    const memoReservedError = /[|;]/.test(memo)
+        ? t('publishFile.memoBadCharacters')
+        : undefined;
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -760,6 +769,16 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             refuse('artwork', 'Pick a file first.');
             return;
         }
+        // Keep reserved metadata errors on their fields instead of adding a
+        // second copy in the form's status slot.
+        if (fileNameReservedError || titleReservedError || memoReservedError) {
+            const section = memoReservedError && !fileNameReservedError && !titleReservedError ? 'memo' : 'artwork';
+            setErrorSection(section);
+            setRefusalCount((n) => n + 1);
+            setFormError(null);
+            formSections.setOpen(section, true);
+            return;
+        }
         // G130: the multi-part quote holds the review by refusal, never by a
         // disabled button. With no fee rate the quote can never start, so
         // that reads as failed, not as an endless wait.
@@ -774,11 +793,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
         if (!fileParams.TYPE) {
             refuse('artwork', 'The file content type cannot be empty. Choose the file again.');
-            return;
-        }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            refuse((title && /[|;]/.test(title)) || /[|;]/.test(fileMeta.name) ? 'artwork' : 'memo',
-                'File name, title, and memo cannot contain | or ; characters.');
             return;
         }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
@@ -1463,6 +1477,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Title"
                 optional
                 help={`A short name for the artwork, stored on the chain with the file. Every character here takes room from the file. It cannot contain | or ;.`}
+                error={titleReservedError}
+                errorKey={title}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoComplete="off"
@@ -1477,6 +1493,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 inputLabel="Choose file to attach"
                 accept={ARTWORK_ACCEPT}
                 fileName={fileMeta?.name || ''}
+                error={fileNameReservedError}
+                errorKey={fileMeta?.name}
                 onFile={handleFile}
                 onClear={clearFile}
             />
@@ -1508,6 +1526,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey('memo')}
                 maxLength={MAX_MEMO_LENGTH}
+                error={memoReservedError}
+                errorKey={memo}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
