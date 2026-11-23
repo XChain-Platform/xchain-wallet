@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
 import {
     PROTOCOL_DESTINATIONS_BY_CHAIN_ID,
@@ -18,13 +18,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const SDK_COINS = join(
-    process.cwd(),
-    'node_modules',
-    '.pnpm',
-    '@dankest-llc+xchain-sdk@0.27.0_typescript@5.9.3',
-    'node_modules',
-    '@dankest-llc',
-    'xchain-sdk',
+    dirname(require.resolve('xchain-sdk/package.json')),
     'src',
     'coins',
 );
