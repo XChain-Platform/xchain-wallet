@@ -47,6 +47,44 @@ export function foldMeasurement(fold) {
     };
 }
 
+export function buildMeasuredWidths({
+    device,
+    measuredAt,
+    folds = {},
+    unreachable = {},
+}) {
+    checkKnownStates(folds, 'folds');
+    checkKnownStates(unreachable, 'unreachable');
+
+    const states = {};
+    for (const stateName of DUO_STATES) {
+        const stateFolds = folds[stateName];
+        if (stateFolds !== undefined && !Array.isArray(stateFolds)) {
+            throw new TypeError(`Duo state "${stateName}" folds must be an array`);
+        }
+
+        const hasReading = Array.isArray(stateFolds) && stateFolds.length > 0;
+        const hasReason = Object.hasOwn(unreachable, stateName);
+        if (hasReading && hasReason) {
+            throw new TypeError(`Duo state "${stateName}" has both a reading and a reason`);
+        }
+        if (hasReason) {
+            const reason = unreachable[stateName];
+            if (typeof reason !== 'string' || reason.trim() === '') {
+                throw new TypeError(`Duo state "${stateName}" has a blank reason`);
+            }
+            states[stateName] = { unreachable: reason.trim() };
+            continue;
+        }
+        if (!hasReading) {
+            throw new TypeError(`Duo state "${stateName}" has neither a reading nor a reason`);
+        }
+        states[stateName] = foldMeasurement(stateFolds.at(-1));
+    }
+
+    return { device, measuredAt, states };
+}
+
 export function checkMeasuredWidths(value) {
     if (!isObject(value)) return ['fixture must be an object'];
 
@@ -144,6 +182,14 @@ function isFold(fold) {
 
 function isObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function checkKnownStates(states, mapName) {
+    for (const stateName of Object.keys(states)) {
+        if (!DUO_STATES.includes(stateName)) {
+            throw new TypeError(`Unknown Duo state "${stateName}" in ${mapName}`);
+        }
+    }
 }
 
 function sameKeys(actual, expected) {
