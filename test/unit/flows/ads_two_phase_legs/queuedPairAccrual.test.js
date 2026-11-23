@@ -194,11 +194,11 @@ describe('a queued pair whose reveal is refused after the drain lands its commit
         expect(w.ads().reserved).toBeUndefined();
     });
 
-    it('releases the payout a refused chunk-lane reveal would have carried', async () => {
+    it('settles the claim when a chunk-lane reveal is refused after its commit lands', async () => {
         const w = wallet();
         await queuePair(w, CHUNK);
         await drain(w, revealRefused(PERMANENT));
-        expect(w.ads()).toMatchObject({ queued: '30.05', donated: '0', donationCount: 0 });
+        expect(w.ads()).toMatchObject({ queued: '0.05', donated: '30', donationCount: 1 });
         expect(w.ads().reserved).toBeUndefined();
     });
 
