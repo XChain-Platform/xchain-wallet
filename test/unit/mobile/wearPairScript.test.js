@@ -23,6 +23,7 @@ const androidTest = readFileSync(
 );
 const fixtureRoot = join(root, 'tmp');
 const fixtures = [];
+const javaFixtures = [];
 
 afterEach(async () => {
     for (const fixture of fixtures.splice(0)) {
@@ -36,6 +37,9 @@ afterEach(async () => {
         )).toBe(true);
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
         rmSync(fixture.root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    }
+    for (const fixture of javaFixtures.splice(0)) {
+        rmSync(fixture, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     }
 });
 
@@ -105,17 +109,133 @@ describe('wear-pair.sh', () => {
         expect(result.stderr).toContain(message);
     });
 
-    it('rejects broad process termination and proves the Android capability predicate', () => {
+    it('rejects broad process termination', () => {
         expect(scriptSource).not.toMatch(/pkill|killall|adb kill-server/);
-        for (const value of [
-            'getConnectedNodes()',
-            'node.isNearby()',
-            'getCapability(',
-            'CapabilityClient.FILTER_REACHABLE',
-            '"xchain_wear"',
-        ]) expect(androidTest).toContain(value);
+    });
+
+    it('executes the Android capability predicate against connected node states', () => {
+        const fixture = makeJavaFixture();
+        const javaHome = process.env.JAVA_HOME || '/opt/homebrew/opt/openjdk@21';
+        const javac = join(javaHome, 'bin/javac');
+        const java = join(javaHome, 'bin/java');
+        const compile = spawnSync(javac, ['-d', fixture.classes, ...fixture.sources], {
+            encoding: 'utf8',
+            timeout: 10_000,
+        });
+
+        expect(compile.status, compile.stderr).toBe(0);
+        const execute = spawnSync(java, ['-cp', fixture.classes, 'WatchPairedHarness'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+        });
+        expect(execute.status, execute.stderr).toBe(0);
+        expect(execute.stdout.trim()).toBe('capability predicate scenarios passed');
     });
 });
+
+function makeJavaFixture() {
+    mkdirSync(fixtureRoot, { recursive: true });
+    const root = mkdtempSync(join(fixtureRoot, 'watch-paired-java-'));
+    javaFixtures.push(root);
+    const classes = join(root, 'classes');
+    const sources = [];
+    mkdirSync(classes, { recursive: true });
+    const source = (name, contents) => {
+        const path = join(root, 'src', name);
+        put(path, contents);
+        sources.push(path);
+    };
+    source('android/content/Context.java', 'package android.content; public class Context {}');
+    source('androidx/test/ext/junit/runners/AndroidJUnit4.java',
+        'package androidx.test.ext.junit.runners; public class AndroidJUnit4 {}');
+    source('androidx/test/platform/app/InstrumentationRegistry.java', `package androidx.test.platform.app;
+import android.content.Context;
+public final class InstrumentationRegistry {
+  public static Instrumentation getInstrumentation() { return new Instrumentation(); }
+  public static final class Instrumentation { public Context getTargetContext() { return new Context(); } }
+}`);
+    source('org/junit/Test.java', 'package org.junit; public @interface Test {}');
+    source('org/junit/runner/RunWith.java',
+        'package org.junit.runner; public @interface RunWith { Class<?> value(); }');
+    source('org/junit/Assert.java', `package org.junit;
+public final class Assert {
+  public static void assertTrue(String message, boolean value) {
+    if (!value) throw new AssertionError(message);
+  }
+}`);
+    source('com/google/android/gms/tasks/Task.java', `package com.google.android.gms.tasks;
+public final class Task<T> {
+  private final T value;
+  public Task(T value) { this.value = value; }
+  public T value() { return value; }
+}`);
+    source('com/google/android/gms/tasks/Tasks.java', `package com.google.android.gms.tasks;
+import java.util.concurrent.TimeUnit;
+public final class Tasks {
+  public static <T> T await(Task<T> task, long timeout, TimeUnit unit) { return task.value(); }
+}`);
+    source('com/google/android/gms/wearable/Node.java', `package com.google.android.gms.wearable;
+public final class Node {
+  private final String id; private final boolean nearby;
+  public Node(String id, boolean nearby) { this.id = id; this.nearby = nearby; }
+  public String getId() { return id; }
+  public boolean isNearby() { return nearby; }
+}`);
+    source('com/google/android/gms/wearable/CapabilityClient.java', `package com.google.android.gms.wearable;
+import com.google.android.gms.tasks.Task;
+public final class CapabilityClient {
+  public static final int FILTER_REACHABLE = 1;
+  public Task<CapabilityInfo> getCapability(String name, int filter) {
+    if (!"xchain_wear".equals(name) || filter != FILTER_REACHABLE) return new Task<>(new CapabilityInfo(java.util.Set.of()));
+    return new Task<>(new CapabilityInfo(Wearable.capable));
+  }
+}`);
+    source('com/google/android/gms/wearable/CapabilityInfo.java', `package com.google.android.gms.wearable;
+import java.util.Set;
+public final class CapabilityInfo {
+  private final Set<Node> nodes;
+  public CapabilityInfo(Set<Node> nodes) { this.nodes = nodes; }
+  public Set<Node> getNodes() { return nodes; }
+}`);
+    source('com/google/android/gms/wearable/NodeClient.java', `package com.google.android.gms.wearable;
+import com.google.android.gms.tasks.Task; import java.util.List;
+public final class NodeClient { public Task<List<Node>> getConnectedNodes() { return new Task<>(Wearable.connected); } }
+`);
+    source('com/google/android/gms/wearable/Wearable.java', `package com.google.android.gms.wearable;
+import android.content.Context; import java.util.List; import java.util.Set;
+public final class Wearable {
+  static List<Node> connected = List.of(); static Set<Node> capable = Set.of();
+  public static void configure(List<Node> nodes, Set<Node> capabilityNodes) { connected = nodes; capable = capabilityNodes; }
+  public static NodeClient getNodeClient(Context context) { return new NodeClient(); }
+  public static CapabilityClient getCapabilityClient(Context context) { return new CapabilityClient(); }
+}`);
+    source('io/xchain/wallet/android/watch/WatchPairedTest.java', androidTest);
+    source('WatchPairedHarness.java', `import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.Wearable;
+import io.xchain.wallet.android.watch.WatchPairedTest;
+import java.util.List; import java.util.Set;
+public final class WatchPairedHarness {
+  public static void main(String[] args) throws Exception {
+    verify(true, List.of(new Node("watch", true)), Set.of(new Node("watch", false)));
+    verify(false, List.of(new Node("watch", false)), Set.of(new Node("watch", false)));
+    verify(false, List.of(new Node("watch", true)), Set.of(new Node("other", false)));
+    verify(false, List.of(), Set.of(new Node("watch", false)));
+    verify(false, List.of(new Node("watch", true)), Set.of());
+    System.out.println("capability predicate scenarios passed");
+  }
+  private static void verify(boolean expected, List<Node> connected, Set<Node> capable) throws Exception {
+    Wearable.configure(connected, capable);
+    boolean passed = true;
+    try {
+      new WatchPairedTest().nearbyConnectedNodeAdvertisesWearCapability();
+    } catch (AssertionError error) {
+      passed = false;
+    }
+    if (passed != expected) throw new AssertionError("unexpected capability predicate result");
+  }
+}`);
+    return { classes, sources };
+}
 
 function makeFixture(options = {}) {
     mkdirSync(fixtureRoot, { recursive: true });
