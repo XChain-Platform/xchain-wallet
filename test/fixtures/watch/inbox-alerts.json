@@ -1,0 +1,182 @@
+[
+  {
+    "id": "notification:tx-confirmed:send-01",
+    "family": "txConfirmations",
+    "kind": "tx-confirmed",
+    "title": "Send confirmed",
+    "body": "Your send is confirmed and now appears in wallet activity.",
+    "at": 1699999970000,
+    "read": false
+  },
+  {
+    "id": "notification:incoming-receipt:receipt-02",
+    "family": "incomingReceipts",
+    "kind": "incoming-receipt",
+    "title": "Payment received",
+    "body": "A payment arrived and is ready to view on your phone.",
+    "at": 1699999700000,
+    "read": true
+  },
+  {
+    "id": "notification:coinpay-required:invoice-03",
+    "family": "incomingReceipts",
+    "kind": "coinpay-required",
+    "title": "Payment alert needs review on your phone so it can continue.",
+    "body": "This notice keeps complete payment context on your phone, where you can review the amount, source, timing, and next step safely before choosing what to do next.",
+    "at": 1699992800000,
+    "read": false
+  },
+  {
+    "id": "notification:coinpay-autopaid:invoice-04",
+    "family": "incomingReceipts",
+    "kind": "coinpay-autopaid",
+    "title": "Automatic payment completed",
+    "body": "Your scheduled payment completed successfully.",
+    "at": 1699989200000,
+    "read": true
+  },
+  {
+    "id": "notification:coinpay-autopay-manual:invoice-05",
+    "family": "incomingReceipts",
+    "kind": "coinpay-autopay-manual",
+    "title": "Payment needs a manual review",
+    "body": "Open the wallet on your phone to review this payment.",
+    "at": 1699985600000,
+    "read": false
+  },
+  {
+    "id": "notification:incoming-pending:pending-06",
+    "family": "incomingPending",
+    "kind": "incoming-pending",
+    "title": "Incoming payment pending",
+    "body": "A payment is pending confirmation.",
+    "at": 1699982000000,
+    "read": true
+  },
+  {
+    "id": "notification:incoming-message:message-07",
+    "family": "messages",
+    "kind": "incoming-message",
+    "title": "New wallet message",
+    "body": "A new message is available in your wallet.",
+    "at": 1699978400000,
+    "read": false
+  },
+  {
+    "id": "notification:governance-poll:poll-08",
+    "family": "governancePolls",
+    "kind": "governance-poll",
+    "title": "Governance poll opened",
+    "body": "A new governance poll is ready for review.",
+    "at": 1699974800000,
+    "read": true
+  },
+  {
+    "id": "notification:deadline:deadline-09",
+    "family": "deadlines",
+    "kind": "deadline",
+    "title": "Deadline approaching",
+    "body": "A wallet action has a deadline later today.",
+    "at": 1699971200000,
+    "read": false
+  },
+  {
+    "id": "notification:deadline-summary:summary-10",
+    "family": "deadlines",
+    "kind": "deadline-summary",
+    "title": "Deadline summary available",
+    "body": "",
+    "at": 1699967600000,
+    "read": true
+  },
+  {
+    "id": "notification:dispenser-escrow:escrow-11",
+    "family": "dispenserEscrow",
+    "kind": "dispenser-escrow",
+    "title": "Dispenser escrow updated",
+    "body": "A dispenser escrow event is ready to review.",
+    "at": 1699964000000,
+    "read": false
+  },
+  {
+    "id": "notification:dispenser-fill:fill-12",
+    "family": "dispenserFills",
+    "kind": "dispenser-fill",
+    "title": "Dispenser order filled",
+    "body": "Your dispenser order received a fill.",
+    "at": 1699960400000,
+    "read": true
+  },
+  {
+    "id": "notification:order-fill:order-13",
+    "family": "orderFills",
+    "kind": "order-fill",
+    "title": "Order filled",
+    "body": "Your open order received a fill.",
+    "at": 1699956800000,
+    "read": false
+  },
+  {
+    "id": "notification:price-alert:price-14",
+    "family": "priceAlerts",
+    "kind": "price-alert",
+    "title": "Price target reached",
+    "body": "A watched asset reached your selected price target.",
+    "at": 1699953200000,
+    "read": true
+  },
+  {
+    "id": "notification:request:review-15",
+    "family": "request",
+    "kind": "request",
+    "title": "Request waiting on phone",
+    "body": "Open the wallet on your phone to review this request.",
+    "at": 1699949600000,
+    "read": false
+  },
+  {
+    "id": "notification:paydue:payment-16",
+    "family": "paydue",
+    "kind": "paydue",
+    "title": "Payment due soon",
+    "body": "Open the wallet on your phone to review the payment.",
+    "at": 1699946000000,
+    "read": true
+  },
+  {
+    "id": "notification:tx-confirmed:send-17",
+    "family": "txConfirmations",
+    "kind": "tx-confirmed",
+    "title": "Another send confirmed",
+    "body": "A second send is confirmed in wallet activity.",
+    "at": 1699942400000,
+    "read": false
+  },
+  {
+    "id": "notification:incoming-receipt:receipt-18",
+    "family": "incomingReceipts",
+    "kind": "incoming-receipt",
+    "title": "Another payment received",
+    "body": "Another payment arrived in your wallet.",
+    "at": 1699938800000,
+    "read": true
+  },
+  {
+    "id": "notification:incoming-message:message-19",
+    "family": "messages",
+    "kind": "incoming-message",
+    "title": "Wallet message reminder",
+    "body": "A wallet message is still available to read.",
+    "at": 1699935200000,
+    "read": false
+  },
+  {
+    "id": "notification:price-alert:price-20",
+    "family": "priceAlerts",
+    "kind": "price-alert",
+    "title": "Earlier price target reached",
+    "body": "An earlier price alert remains in your wallet inbox.",
+    "at": 1699910000000,
+    "read": true
+  }
+]
