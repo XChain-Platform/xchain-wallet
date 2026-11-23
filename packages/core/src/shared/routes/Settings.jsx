@@ -64,8 +64,12 @@ import { readBalanceCache } from '../utils/balanceCache.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/watch.js';
 
 import { NotificationsSection, soundPickerSectionFor } from '../components/settings/NotificationsSection.jsx';
+import { WatchSection } from '../components/settings/WatchSection.jsx';
+import * as WatchAlertsRowsModule from '../components/settings/WatchAlertsRows.jsx';
+import * as WatchStatusRowsModule from '../components/settings/WatchStatusRows.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { ResetPrivacyPage } from '../components/settings/ResetPrivacyPage.jsx';
 import { SettingsInlineRow, SettingsLoadError } from '../components/settings/SettingsInlineRow.jsx';
@@ -89,6 +93,7 @@ import { autoSignOptions } from '../components/settings/DeveloperModeSection.jsx
 import { AUTO_SIGN_LOCALHOST_OPTIONS } from '../../schemas/settings.js';
 import { AUTOLOCK_OPTIONS, autolockOptionLabel } from '../components/settings/SafetySection.jsx';
 import { isNativeShell } from '../nativeShell.js';
+import { useWatchAvailable } from '../hooks/useWatchAvailable.js';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import {
@@ -115,6 +120,19 @@ import cardStyles from '../../ui/Card.module.css';
 const row = (title, terms = '', target = title) => ({ title, terms, target });
 // Sizes the icon in each settings group row; CSS, not user-facing copy.
 const GROUP_ICON_CSS = '[data-settings-group-icon] svg { width: 24px; height: 24px; }';
+
+const WatchAlertsRows = WatchAlertsRowsModule.WatchAlertsRows;
+const WatchStatusRows = WatchStatusRowsModule.WatchStatusRows;
+
+function WatchSettingsPage() {
+    return (
+        <>
+            <WatchSection />
+            {WatchAlertsRows ? <WatchAlertsRows /> : null}
+            {WatchStatusRows ? <WatchStatusRows /> : null}
+        </>
+    );
+}
 
 // Each time Settings opens it takes a fresh list scroll key, so the shell has
 // no saved offset for it and the list starts at its first row. Closing a
@@ -459,6 +477,7 @@ export function Settings({
     const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
 
     const { settings } = useSettings();
+    const watchAvailable = useWatchAvailable();
     const balancesFetchedAt = readBalanceCache(
         activeWallet?.id,
         activeAccount?.id,
@@ -704,6 +723,14 @@ export function Settings({
             },
         },
         {
+            id: 'watch',
+            title: t('watch.title'),
+            keywords: 'watch wearable alerts status sync',
+            kind: 'internal-drill',
+            Component: WatchSettingsPage,
+            visible: watchAvailable,
+        },
+        {
             id: 'connected-sites',
             title: t('settings.connectedSites.connectedSites'),
             description: t('settings.page.reviewDappConnectionsAndControl'),
@@ -760,9 +787,9 @@ export function Settings({
             props: { balancesFetchedAt },
             summary: WALLET_VERSION,
         },
-    ]), [openChildPage, openLogsPage, walletLabel, onOpenWalletPicker, onOpenAccountPicker, onActiveNetworkChange, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, getLocale()]);
+    ]), [openChildPage, openLogsPage, walletLabel, onOpenWalletPicker, onOpenAccountPicker, onActiveNetworkChange, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, watchAvailable, getLocale()]);
 
-    // The eight Settings groups under two headings (2026-11-13), each a page
+    // The Settings groups under two headings (2026-11-13), each a page
     // built from one or more sections: Connected Sites joined Privacy, and
     // Donations joined Network and Fees.
     const settingsGroups = useMemo(() => {
@@ -789,6 +816,7 @@ export function Settings({
             { label: 'Preferences', items: [
                 g('g-appearance', 'Appearance', Icon.PaletteIcon, 'Theme, language, currency, balances', ['appearance', 'display', 'language-region']),
                 g('g-notifications', 'Notifications', Icon.BellIcon, 'Events, sounds, quiet hours, price alerts', ['notifications']),
+                g('g-watch', t('watch.title'), Icon.ClockIcon, 'Settings, alerts, and connection status', ['watch']),
                 g('g-network', 'Network and Fees', Icon.BroadcastIcon, 'Network, fee strategy, donations', ['network', 'network-endpoints', 'fees', 'ads']),
                 g('g-advanced', 'Advanced', Icon.GearIcon, 'Developer mode and tools', ['developer', 'keyboard']),
             ] },
