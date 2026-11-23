@@ -116,15 +116,27 @@ internal class TileRefresher(
     private val now: () -> Long,
     private val schedule: (Long, Runnable) -> Unit,
 ) {
+    private var pending: (() -> Unit)? = null
+
     fun onSnapshot(update: () -> Unit) {
         val at = now()
         val decision = gate.onSnapshot(at, GlanceRules.refreshDelayMs(gate.lastRefreshAtMs(), at))
         when (decision.action()) {
-            GlanceRefreshGate.Action.REFRESH_NOW -> update()
-            GlanceRefreshGate.Action.SCHEDULE -> schedule(decision.delayMs()) {
-                if (gate.onScheduledFire(now())) update()
+            GlanceRefreshGate.Action.REFRESH_NOW -> {
+                pending = null
+                update()
             }
-            GlanceRefreshGate.Action.COALESCED -> Unit
+            GlanceRefreshGate.Action.SCHEDULE -> {
+                pending = update
+                schedule(decision.delayMs()) {
+                    val latest = pending
+                    if (gate.onScheduledFire(now()) && latest != null) {
+                        pending = null
+                        latest()
+                    }
+                }
+            }
+            GlanceRefreshGate.Action.COALESCED -> pending = update
         }
     }
 }

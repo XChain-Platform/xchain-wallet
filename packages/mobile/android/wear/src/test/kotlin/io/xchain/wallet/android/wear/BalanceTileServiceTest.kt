@@ -41,25 +41,25 @@ class BalanceTileServiceTest {
     fun refreshesAtMostOncePerFiveMinutesAndTheLastSnapshotWins() {
         var clock = 1_000L
         val scheduled = mutableListOf<Pair<Long, Runnable>>()
-        var updates = 0
+        val fired = mutableListOf<String>()
         val refresher = TileRefresher(now = { clock }, schedule = { d, r -> scheduled += d to r })
 
-        refresher.onSnapshot { updates++ }
+        refresher.onSnapshot { fired += "first" }
         clock += 10_000
-        refresher.onSnapshot { updates++ }
+        refresher.onSnapshot { fired += "second" }
         clock += 10_000
-        refresher.onSnapshot { updates++ }
+        refresher.onSnapshot { fired += "third" }
 
-        assertEquals(1, updates)
+        assertEquals(listOf("first"), fired)
         assertEquals(listOf(290_000L), scheduled.map { it.first })
 
         clock += 290_000
         scheduled.single().second.run()
-        assertEquals(2, updates)
+        assertEquals(listOf("first", "third"), fired)
 
         clock += 300_000
-        refresher.onSnapshot { updates++ }
-        assertEquals(3, updates)
+        refresher.onSnapshot { fired += "fourth" }
+        assertEquals(listOf("first", "third", "fourth"), fired)
     }
 
     private fun fixture(name: String): Snapshot {
