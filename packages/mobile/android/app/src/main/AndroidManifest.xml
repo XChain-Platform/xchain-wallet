@@ -87,6 +87,17 @@
             </intent-filter>
 
             <!--
+              The web wallet's hand-off host. Its assetlinks.json ships from
+              packages/web/public/.well-known/.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="wallet.xchain.io" android:pathPrefix="/link/" />
+            </intent-filter>
+
+            <!--
               The `xchain:` scheme is INBOUND COMPATIBILITY ONLY (§1). Any app
               can claim it, so a link we publish under it is a link we invite
               a lookalike wallet to answer - the classic fake-restore seed
