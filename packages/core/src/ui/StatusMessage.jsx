@@ -13,6 +13,7 @@ import { ShellNoticesContext } from '../shared/components/noticesRoute.js';
 import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
 import { Button } from './Button.jsx';
 import { AlertCircleIcon, CircleCheckIcon, InfoIcon, RefreshIcon, XIcon } from './icons/index.jsx';
+import { noticeToneProps } from './noticeTone.js';
 import styles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/shell.js';
@@ -94,6 +95,7 @@ const usableAction = (action) => Boolean(action && action.label && typeof action
  *
  * @param {object} props
  * @param {'info' | 'danger' | 'success'} [props.tone]   the Notice Standard tone; wins over `variant`
+ * @param {boolean} [props.caution]                       gives the danger tone warning semantics
  * @param {'status' | 'info' | 'warning' | 'error' | 'success' | 'note' | 'danger' | 'critical'} [props.variant]   older name for the tone, default 'status'
  * @param {string} [props.id]
  * @param {import('react').ReactNode} [props.children]
@@ -129,11 +131,11 @@ const usableAction = (action) => Boolean(action && action.label && typeof action
  * @param {boolean} [props.marksNotice]   marks the outer box as a notice (data-xc-notice) when its live region sits on an inner element, so a placement check measures the box
  * @param {boolean} [props.flush]         no outer margin, for a container whose own gap spaces it (a collapsible section body)
  */
-export function Notice({ tone, variant = 'status', id, children, title, className, details, action, recovery, role: roleOverride, testId, icon, lead, label, busy = false, keepsShellNotice = false, marksNotice = false, flush = false, onDismiss, dismissLabel, ...rest }) {
+export function Notice({ tone, caution = false, variant = 'status', id, children, title, className, details, action, recovery, role: roleOverride, testId, icon, lead, label, busy = false, keepsShellNotice = false, marksNotice = false, flush = false, onDismiss, dismissLabel, ...rest }) {
     // Only data-* attributes pass through to the box (a wrapper's own marker,
     // such as WarningLine's data-warning-line); anything else is ignored.
     const dataProps = Object.fromEntries(Object.entries(rest).filter(([key]) => key.startsWith('data-')));
-    const presentation = noticePresentation(tone || variant);
+    const presentation = noticePresentation(tone || variant, caution);
     const emptyBody = children === null || children === undefined || children === '' || children === false;
     const resolvedTitle = title === null || title === undefined || title === '' || title === false ? lead : title;
     const emptyTitle = resolvedTitle === null || resolvedTitle === undefined || resolvedTitle === '' || resolvedTitle === false;
@@ -206,6 +208,8 @@ const SEVERITY = { success: 0, status: 1, info: 1, note: 1, warning: 2, error: 3
  * @param {object} props
  * @param {ReadonlyArray<{
  *   key: string,
+ *   tone?: string,
+ *   caution?: boolean,
  *   variant?: string,
  *   title?: import('react').ReactNode,
  *   lead?: string,
@@ -221,9 +225,13 @@ const SEVERITY = { success: 0, status: 1, info: 1, note: 1, warning: 2, error: 3
  */
 export function StatusMessageGroup({ entries, testId }) {
     if (!entries || entries.length === 0) return null;
-    const variant = entries.reduce((most, entry) => (
-        (SEVERITY[entry.variant || 'status'] ?? 1) > (SEVERITY[most] ?? 1) ? (entry.variant || 'status') : most
-    ), entries[0].variant || 'status');
+    const severityName = (entry) => (entry.caution ? 'warning' : (entry.tone || entry.variant || 'status'));
+    const winner = entries.reduce((most, entry) => (
+        (SEVERITY[severityName(entry)] ?? 1) > (SEVERITY[severityName(most)] ?? 1) ? entry : most
+    ), entries[0]);
+    const winnerTone = winner.tone
+        ? { tone: winner.tone, caution: winner.caution }
+        : noticeToneProps(winner.variant);
     // A box made only of static notes stays out of the live regions; one
     // holding a note the user must hear at once is announced as an alert.
     let role;
@@ -237,7 +245,7 @@ export function StatusMessageGroup({ entries, testId }) {
         ? entries[0].onDismiss
         : undefined;
     return (
-        <Notice variant={variant} role={role} className={styles.group} keepsShellNotice onDismiss={boxDismiss} testId={testId}>
+        <Notice {...winnerTone} role={role} className={styles.group} keepsShellNotice onDismiss={boxDismiss} testId={testId}>
             {entries.map((entry) => (
                 <div key={entry.key} id={entry.id} className={styles.entry} data-testid={entry.testId}>
                     <div className={styles.entryText}>
@@ -282,6 +290,7 @@ const PRESENTATION = {
  * @param {string} [name]
  * @returns {{ variant: 'info' | 'warning' | 'error' | 'success', tone: 'info' | 'danger' | 'success', className: string }}
  */
-export function noticePresentation(name) {
+export function noticePresentation(name, caution = false) {
+    if (caution && PRESENTATION[name]?.tone === 'danger') return PRESENTATION.warning;
     return PRESENTATION[name] || PRESENTATION.status;
 }
