@@ -32,16 +32,28 @@ import { rawTxid } from '../signers/verifySignedTx.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
-import { releaseAdsReservation } from './ads.js';
+import { releaseAdsReservation, settleAdsReservation } from './ads.js';
 import { bookQueuedCommitLeg, bookQueuedDelivery } from './adsDelivery.js';
 
 // §36: a queued send that carries the automatic donation holds the claim on
-// the queue under its PendingTx id (submitAction). Delivery settles it, and a
-// permanent refusal or a discard lets it go, so the next send may carry the
-// payout. Bookkeeping only: it never changes what this drain returns.
+// the queue under its PendingTx id (submitAction). Delivery or a landed commit
+// settles it; a refusal before any leg lands or a discard lets it go.
+// Bookkeeping only: it never changes what this drain returns.
 async function releaseAdsClaim(vault, pendingTxId) {
     try {
         await releaseAdsReservation({ vault, reservationId: pendingTxId });
+    } catch {
+        // A refused settings write leaves the claim for reconcileAdsReservation.
+    }
+}
+
+// Settle the claim once either leg reached the network, even when a later leg
+// was refused. The queued contribution belongs to the landed transaction.
+async function settleAdsClaim(vault, pendingTxId, record) {
+    const reservationId = typeof record?.adsCommit?.reservationId === 'string' && record.adsCommit.reservationId
+        ? record.adsCommit.reservationId : pendingTxId;
+    try {
+        await settleAdsReservation({ vault, reservationId });
     } catch {
         // A refused settings write leaves the claim for reconcileAdsReservation.
     }
@@ -382,8 +394,11 @@ async function settleDrainFailure(vault, pendingTxId, record, err) {
     await vault.pendingTxs.put(status === 'failed' && record.commitLanded === true
         ? commitLandedRecord(record, msg)
         : { ...record, status, error: msg });
-    // Bytes that can never confirm never pay the donation.
-    if (status === 'failed') await releaseAdsClaim(vault, pendingTxId);
+    // Settle once the commit landed; only a pair refused before either leg landed releases.
+    if (status === 'failed') {
+        if (record.commitLanded === true) await settleAdsClaim(vault, pendingTxId, record);
+        else await releaseAdsClaim(vault, pendingTxId);
+    }
     const refreshed = await vault.pendingTxs.get(pendingTxId);
     return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
 }

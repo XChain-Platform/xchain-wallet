@@ -72,7 +72,9 @@ function quoted(method, parts = 2, fee = 123) {
         quotes: {
             taproot: null,
             standard: null,
-            [method]: { parts, transactions: 1 + (2 * (parts + 1)), fee },
+            [method]: {
+                parts, transactions: 1 + (2 * (parts + 1)), fee, fundingTotal: fee,
+            },
         },
     });
 }

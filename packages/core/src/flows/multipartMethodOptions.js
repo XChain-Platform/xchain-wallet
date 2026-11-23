@@ -10,10 +10,15 @@ function invalidQuote(method) {
     return error;
 }
 
+export function multipartReviewFee(quote) {
+    return quote?.fundingTotal;
+}
+
 function methodSummary(method, quote) {
     if (quote === null) return { summary: null, fee: null };
 
-    const { parts, transactions, fee } = quote;
+    const { parts, transactions } = quote;
+    const fee = multipartReviewFee(quote);
     const partsValid = Number.isInteger(parts)
         && parts >= 2
         && parts <= MULTIPART_FILE_MAX_PARTS;
