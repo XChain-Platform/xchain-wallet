@@ -563,7 +563,7 @@ jobs:
               # broken venue and fails the job. Any other exit is the venue gate
               # giving up its two-hour lock wait while other runs held the venue:
               # that is contention, not a defect in this commit, so it reports
-              # NOT RUN the way an unconfigured venue does (XC-6604).
+              # NOT RUN the way an unconfigured venue does.
               if [ "$gateStatus" = 255 ]; then
                 echo "::error::The regtest venue could not be reached: $(cat "$gateState")"
                 exit 1
