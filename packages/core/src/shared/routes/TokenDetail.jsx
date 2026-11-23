@@ -23,6 +23,7 @@ import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { formatCompactChartValue, Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId, priceHistoryForRange, rangeChangeFor, rangeWindowStart } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
@@ -781,7 +782,7 @@ function TokenDetailContent({
                 history,
             }),
             priceMap: {},
-            seedId: walletId,
+            seedId: isDemo ? DEMO_CHART_SEED : walletId,
             synthesize: isDemo,
             requestRange: detailWalletHistory.requestRange,
         };
