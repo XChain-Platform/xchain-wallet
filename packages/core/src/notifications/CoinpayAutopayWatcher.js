@@ -27,8 +27,9 @@
 // out a ScopedPaySigner bound to the one payment, which signs nothing
 // else. When no signer exists (HW/watch-only wallet, a wallet the
 // session holds no key for, a session that has ended) the engine
-// degrades to the high-urgency manual notification. It never stores
-// or receives a password.
+// degrades to the high-urgency manual notification. A source address
+// that cannot sign is different: its live Payment due row carries the
+// action for as long as the obligation stays open. It never stores a password.
 //
 // Single active payer: exactly one instance holds the vault's payer
 // lease per cycle; the rest stay notify-only. Vaults are per-shell at
@@ -72,6 +73,8 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
+import { announceNotificationsChanged, getDefaultAlertInbox } from '../shared/alertInbox.js';
+import { resolveAutopaySource } from './autopaySource.js';
 
 // Two polls per 10-minute BTC block. The WS trigger below still runs a
 // cycle as soon as a match is announced, and the 2-block depth gate means
@@ -100,6 +103,7 @@ export class CoinpayAutopayWatcher {
      * @param {{ reserve: Function, release: Function }} [deps.reservationLedger]
      * the host-shared ledger; optional so tests / degraded shells run without it
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
+     * @param {(alert: object) => (void | Promise<void>)} [deps.recordAlert]
      * @param {'desktop' | 'extension' | 'web'} deps.shellKind
      * @param {number} [deps.intervalMs]
      * @param {() => number} [deps.now]
@@ -150,7 +154,10 @@ export class CoinpayAutopayWatcher {
         this._getSigner = getSigner;
         this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
-        this._notify = withAlertInbox(notify, { recordAlert, now });
+        this._recordAlert = typeof recordAlert === 'function'
+            ? recordAlert
+            : (alert) => getDefaultAlertInbox().record(alert);
+        this._notify = withAlertInbox(notify, { recordAlert: this._recordAlert, now });
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
@@ -555,23 +562,16 @@ export class CoinpayAutopayWatcher {
         }
         const amountBase = amountBaseValue.toString();
 
-        // Source ref: the consented order's address record (auto-pay
-        // signs with that address's key only and never pulls coin from
-        // siblings - funding comes from the source's own UTXOs).
-        let sourceRecord = null;
-        try {
-            const all = await this._vault.addresses.list();
-            sourceRecord = all.find((a) =>
-                a.address === consent.sourceAddress &&
-                this._chainRegistry.chainIdFor(a.chain, a.network) === chainId) ?? null;
-        } catch { /* handled below */ }
+        // Source ref: the consented order's address record, owned by the
+        // consent's wallet and signable by a software key (auto-pay signs
+        // with that address's key only and never pulls coin from siblings -
+        // funding comes from the source's own UTXOs).
+        const resolved = await resolveAutopaySource({
+            vault: this._vault, chainRegistry: this._chainRegistry, consent, chainId,
+        });
+        const sourceRecord = resolved.record;
         if (!sourceRecord) {
-            await this._notifyOnce(matchIndex, 'source-missing', {
-                kind: 'coinpay-autopay-manual',
-                title: 'Payment needs attention',
-                body: `${baseUnitsToCoinText(amountBase) ?? amountBase} ${tickerFor(this._chainRegistry, chainId)} is due for order #${consent.orderActionIndex}, but its address is no longer in this wallet. Open Payments due.`,
-                data: { chainId, orderMatchActionIndex: matchIndex, reason: 'source-missing', urgency: 'high' },
-            });
+            await this._recordPayDueAttention(chainId, matchIndex, resolved.reason);
             return;
         }
 
@@ -789,6 +789,29 @@ export class CoinpayAutopayWatcher {
         const baseUnits = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
         const amount = baseUnits === null ? null : baseUnitsToCoinText(baseUnits.toString());
         return amount ? `${amount} ${tickerFor(this._chainRegistry, chainId)}` : null;
+    }
+
+    async _recordPayDueAttention(chainId, matchIndex, reason) {
+        const key = `${chainId}:${matchIndex}:${reason}`;
+        if (this._notified.has(key)) return;
+        try {
+            await this._recordAlert({
+                id: `payment-due:${chainId}:${matchIndex}`,
+                type: 'payments',
+                title: 'Payment due',
+                message: '',
+                at: this._now(),
+                read: false,
+                attention: 'autopay-cannot-sign',
+            });
+            announceNotificationsChanged({ refreshCoinpayObligations: true });
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: payment-due attention write failed', e);
+            return;
+        }
+        this._notified.add(key);
+        this._notifiedDirty = true;
+        await this._persistNotified();
     }
 
     async _notifyOnce(matchIndex, reason, payload) {

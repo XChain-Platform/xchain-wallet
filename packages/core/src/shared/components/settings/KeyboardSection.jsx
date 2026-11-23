@@ -38,6 +38,7 @@ import {
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { WarningCard, WarningLine } from '../WarningCard.jsx';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -151,7 +152,9 @@ export function KeyboardSection() {
             else next[capturingId] = binding;
             update({ keyboard: { bindings: next } })
                 .then(() => setStatus({ kind: 'ok', text: `${target.label} is now ${formatBinding(binding, mac)}.` }))
-                .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to save the binding.' }));
+                .catch((err) => setStatus({
+                    kind: 'error', text: userFacingMessage(err, 'Could not save this shortcut. Try again.'),
+                }));
         };
 
         const onKey = (e) => {
@@ -185,14 +188,18 @@ export function KeyboardSection() {
         delete next[id];
         update({ keyboard: { bindings: next } })
             .then(() => setStatus({ kind: 'ok', text: 'Shortcut reset to its default.' }))
-            .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset.' }));
+            .catch((err) => setStatus({
+                kind: 'error', text: userFacingMessage(err, 'Could not reset this shortcut. Try again.'),
+            }));
     };
     const resetAll = () => {
         setCapturingId(null);
         setLeaderLead(null);
         update({ keyboard: { bindings: {} } })
             .then(() => setStatus({ kind: 'ok', text: 'All shortcuts reset to defaults.' }))
-            .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset shortcuts.' }));
+            .catch((err) => setStatus({
+                kind: 'error', text: userFacingMessage(err, 'Could not reset shortcuts. Try again.'),
+            }));
     };
 
     if (loading) return <p style={ROW_LABEL}>{t('common.loading')}</p>;

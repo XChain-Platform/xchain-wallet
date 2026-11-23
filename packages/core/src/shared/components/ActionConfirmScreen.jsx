@@ -155,8 +155,8 @@ function useSourceIdentity(address, chainId, walletId) {
  *   fee, and then labelled as an estimate; without it an unknown fee reads "plus network fee".
  * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   what the
  *   form already holds ({ verb, amount, ticker, chainId, direction, address, recipient,
- *   recipients, totals, networkFee, protocolFee, notice, facts }). `notice` is one fact the
- *   form no longer shows as a standing warning, a plain line under the facts card; `facts`
+ *   recipients, totals, networkFee, protocolFee, notice, facts }). `notice` is information the
+ *   form no longer shows as a standing warning, a neutral notice under the facts card; `facts`
  *   ({ label, value }[]) are rows only the form knows, added to the facts card. Without a
  *   summary the sentence comes from the decoded action, or the action's name.
  */

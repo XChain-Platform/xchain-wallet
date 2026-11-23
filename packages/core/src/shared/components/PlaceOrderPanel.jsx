@@ -366,13 +366,12 @@ export function PlaceOrderPanel({
         chainId, tick: tick2, skip: tick2.toUpperCase() === coinTicker,
     });
 
-    // PC-16: the GIVE side is the chain's native coin - the (only) shape
-    // that settles via CoinPay and can arm auto-pay. Buy gives tick2,
+    // The GIVE side is the chain's native coin, the only shape that settles
+    // via CoinPay and can arm auto pay. Buy gives tick2,
     // sell gives tick1.
     const giveIsNative = Boolean(coinTicker) &&
         (side === 'buy' ? tick2 : tick1).toUpperCase() === coinTicker;
-    // Software signers only: HW and watch-only can never sign unattended,
-    // so they stay notify-only (checkbox hidden, copy explains).
+    // Device and remote signers stay off because they cannot sign unattended.
     const { isWatcherMode } = useWalletMode();
     const signsUnattended = !isWatcherMode && !isHwSource(fromAddress);
     const autopayEligible = giveIsNative && signsUnattended;
@@ -886,7 +885,6 @@ export function PlaceOrderPanel({
                 ) : result?.autopayArmed === false ? (
                     <StatusMessage variant="error">
                         {t('components.placeOrderPanel.theOrderWasPlacedBut')}
-                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}
                         {t('components.placeOrderPanel.matchesWillNeedManualPayment')}
                     </StatusMessage>
                 ) : null}
@@ -1080,14 +1078,21 @@ export function PlaceOrderPanel({
             borderRadius: 'var(--xc-card-radius)',
             fontSize: '0.75rem',
         }}>
-            {signsUnattended ? (
+            <Switch
+                label={t('components.placeOrderPanel.enableCoinpayAutoPay')}
+                help={`${coinpaySettles} ${t('components.placeOrderPanel.helpAutopay')}`}
+                checked={autopayArm}
+                disabled={!signsUnattended}
+                onChange={(e) => setAutopayEnabled(e.target.checked)}
+            />
+            {!signsUnattended ? (
+                <StatusMessage variant="info" role="note">
+                    {isWatcherMode
+                        ? t('components.placeOrderPanel.autoPayIsUnavailableIn')
+                        : t('components.placeOrderPanel.autoPayIsUnavailableFor')}
+                </StatusMessage>
+            ) : (
                 <>
-                    <Switch
-                        label={t('components.placeOrderPanel.enableCoinpayAutoPay')}
-                        help={`${coinpaySettles} ${t('components.placeOrderPanel.helpAutopay')}`}
-                        checked={autopayEnabled}
-                        onChange={(e) => setAutopayEnabled(e.target.checked)}
-                    />
                     {autopayEnabled ? null : (
                         <p style={{ margin: '0 0 var(--xc-space-1)', color: 'var(--xc-text-muted)' }}>
                             {t('components.placeOrderPanel.autoPayOffLine')}
@@ -1120,15 +1125,6 @@ export function PlaceOrderPanel({
                             {t('components.placeOrderPanel.evenIfTheServiceThat')}
                         </p>
                     ) : null}
-                </>
-            ) : (
-                <>
-                    <p style={{ margin: 0, color: 'var(--xc-text-muted)' }}>{coinpaySettles}</p>
-                    <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
-                        {isWatcherMode
-                            ? t('components.placeOrderPanel.autoPayIsUnavailableIn')
-                            : t('components.placeOrderPanel.autoPayIsUnavailableFor')}
-                    </p>
                 </>
             )}
         </div>

@@ -150,12 +150,11 @@
     white-space: nowrap;
 }
 
-/* --- plain lines and the signed message --- */
+/* --- notice text and the signed message --- */
 
 .note {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .messageBox {

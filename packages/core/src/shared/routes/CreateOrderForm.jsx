@@ -234,9 +234,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         skip: getType !== 'token' || getOwnership || !getTick.trim(),
     });
 
-    // PC-16 auto-pay: only a native-coin GIVE settles via COINPay and can
-    // arm auto-pay; HW / watch-only can never sign unattended, so they stay
-    // notify-only (switch hidden, copy explains).
+    // Only a native-coin GIVE settles via COINPay and can arm auto pay.
+    // Device and remote signers stay off because they cannot sign unattended.
     const [autopayEnabled, setAutopayEnabled] = useState(true);
     const [exposure, setExposure] = useState(/** @type {any | null} */ (null));
     const giveIsNative = giveType === 'coin';
@@ -962,7 +961,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         const unix = localInputToUnix(expInput.trim());
         termsParts.push(expInput.trim() && unix ? `Expires ${formatLocalDateTime(unix)}` : 'Custom expiry');
     }
-    if (autopayEligible) termsParts.push(autopayEnabled ? 'Auto pay on' : 'Auto pay off');
+    if (giveIsNative) termsParts.push(autopayArm ? 'Auto pay on' : 'Auto pay off');
     // The standard's summaries join their parts with ", ".
     const termsSummary = joinSummary(...termsParts);
     const listsParts = [];
@@ -1146,14 +1145,22 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             help="How long the order stays open for matching. When it expires, what is still escrowed returns to you."
                             expiresHelp="The order is valid until this time. Set by the Expiration choice, or pick a time to expire at a specific time."
                         />
-                        {autopayEligible ? (
+                        {giveIsNative ? (
                             <>
                                 <Switch
                                     label={<strong>Auto pay</strong>}
                                     help="We watch for matches on this order and pay each one automatically."
-                                    checked={autopayEnabled}
+                                    checked={autopayArm}
+                                    disabled={!autopayEligible}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
                                 />
+                                {!autopayEligible ? (
+                                    <StatusMessage variant="info" role="note">
+                                        {isWatcherMode
+                                            ? t('components.placeOrderPanel.autoPayIsUnavailableIn')
+                                            : t('components.placeOrderPanel.autoPayIsUnavailableFor')}
+                                    </StatusMessage>
+                                ) : null}
                                 <MobileAutopayNotice />
                                 {/* Notes sit in the shared warning card, never as loose paragraphs.
                                     G120: a static note with the field, there whether the
@@ -1167,14 +1174,6 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                                     </WarningCard>
                                 ) : null}
                             </>
-                        ) : giveIsNative ? (
-                            <WarningCard>
-                                <WarningLine>
-                                    {isWatcherMode
-                                        ? 'Wallets that sign on another phone or a hardware wallet cannot use auto pay; you will be notified to pay any match manually.'
-                                        : 'Hardware wallets cannot use auto pay; you will be notified to pay any match manually.'}
-                                </WarningLine>
-                            </WarningCard>
                         ) : null}
         </>
     );

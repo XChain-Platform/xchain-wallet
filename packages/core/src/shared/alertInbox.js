@@ -6,6 +6,19 @@
 const DEFAULT_KEY = 'xchain.alertInbox.v1';
 const DEFAULT_LIMIT = 500;
 const TYPES = new Set(['price', 'activity', 'payments', 'messages', 'security', 'wallet']);
+const ATTENTION = new Set(['autopay-cannot-sign']);
+
+export const NOTIFICATIONS_CHANGED_EVENT = 'xc:notifications-changed';
+
+/** Tells notification consumers to re-read state that changed. */
+export function announceNotificationsChanged({ refreshCoinpayObligations = false } = {}) {
+    try {
+        const event = refreshCoinpayObligations && typeof CustomEvent === 'function'
+            ? new CustomEvent(NOTIFICATIONS_CHANGED_EVENT, { detail: { refreshCoinpayObligations: true } })
+            : new Event(NOTIFICATIONS_CHANGED_EVENT);
+        globalThis.dispatchEvent?.(event);
+    } catch { /* no window */ }
+}
 
 function normalizeAlert(value) {
     if (!value || typeof value !== 'object' || typeof value.id !== 'string' || !value.id) return null;
@@ -20,6 +33,7 @@ function normalizeAlert(value) {
         message: value.message,
         at,
         read: value.read === true,
+        ...(ATTENTION.has(value.attention) ? { attention: value.attention } : {}),
         ...(value.action ? { action: value.action } : {}),
     };
 }

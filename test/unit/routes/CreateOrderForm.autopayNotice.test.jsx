@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
     phase: 'idle',
     messaging: {},
     confirmProps: null,
+    sourceId: 'seed-address',
 }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
@@ -33,22 +34,22 @@ vi.mock('../../../packages/core/src/shared/hooks/useWalletMode.js', () => ({
 
 vi.mock('../../../packages/core/src/shared/hooks/useActionForm.js', () => ({
     useActionForm: () => {
-        const fromAddress = {
-            id: 'address-1',
-            address: 'mSourceAddress',
-            publicKey: '02abcd',
-            derivationPath: "m/84'/1'/0'/0/0",
-            signerId: 'signer-1',
-            source: 'hd',
-        };
+        const addresses = [{
+            id: 'seed-address', address: 'mSourceAddress', publicKey: '02abcd',
+            derivationPath: "m/84'/1'/0'/0/0", signerId: 'seed-signer', source: 'hd',
+        }, {
+            id: 'hardware-address', address: 'mHardwareAddress', publicKey: '03abcd',
+            derivationPath: "m/84'/1'/0'/0/1", signerId: 'ledger-signer', source: 'ledger',
+        }];
+        const fromAddress = addresses.find((address) => address.id === state.sourceId);
         return {
-            addressesByChain: { 'bitcoin-regtest': [fromAddress] },
+            addressesByChain: { 'bitcoin-regtest': addresses },
             loadError: null,
             chainId: 'bitcoin-regtest',
             setChainId: vi.fn(),
             chainsWithAddresses: ['bitcoin-regtest'],
             fromAddress,
-            setFromAddressId: vi.fn(),
+            setFromAddressId: (id) => { state.sourceId = id; },
             descriptor: {
                 id: 'bitcoin-regtest',
                 coin: 'bitcoin',
@@ -57,13 +58,22 @@ vi.mock('../../../packages/core/src/shared/hooks/useActionForm.js', () => ({
                 ticker: 'BTC',
             },
             signerReady: true,
-            isHwSource: false,
+            isHwSource: fromAddress.source === 'ledger',
             hwStatus: 'available',
             onHwStatusChange: vi.fn(),
             buildFrom: () => fromAddress,
             submit: vi.fn(),
         };
     },
+}));
+
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => (
+        <div>
+            <button type="button" onClick={() => onPick({ id: 'hardware-address' })}>Pick Hardware Address</button>
+            <button type="button" onClick={() => onPick({ id: 'seed-address' })}>Pick Seed Address</button>
+        </div>
+    ),
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
@@ -98,6 +108,7 @@ vi.mock('../../../packages/core/src/shared/components/ActionConfirmScreen.jsx', 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 
 const NOTICE = 'Auto pay runs inside this wallet: a match is paid while the wallet is open, even when it\'s locked.';
+const HARDWARE_NOTICE = "Auto pay can't be used with a hardware wallet address. Each payment needs you to connect your device and approve it.";
 
 function form() {
     return <CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />;
@@ -111,6 +122,7 @@ async function renderWithNativeGive() {
     fireEvent.click(screen.getByRole('button', { name: 'Flip give and get' }));
     // The auto-pay switch sits in the optional Order Terms section, closed at first.
     fireEvent.click(screen.getByRole('button', { name: /Order Terms/ }));
+    expect(screen.getByRole('switch', { name: 'Auto pay' })).toBeEnabled();
     expect(screen.getByRole('switch', { name: 'Auto pay' })).toBeChecked();
     return utils;
 }
@@ -125,6 +137,7 @@ beforeEach(() => {
     state.shell = 'web';
     state.phase = 'idle';
     state.confirmProps = null;
+    state.sourceId = 'seed-address';
     state.messaging = {
         getSettings: vi.fn(async () => ({ preflightPrivacy: 'report' })),
         getAutopayExposure: vi.fn(async () => ({ total: 0 })),
@@ -138,6 +151,28 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateOrderForm auto-pay notice', () => {
+    it('updates Auto pay when the paying address changes between seed and hardware custody', async () => {
+        await renderWithNativeGive();
+        expect(screen.queryByText(HARDWARE_NOTICE)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick Hardware Address' }));
+
+        let autoPay = screen.getByRole('switch', { name: 'Auto pay' });
+        expect(autoPay).toBeDisabled();
+        expect(autoPay).not.toBeChecked();
+        expect(autoPay.closest('label').nextElementSibling).toHaveTextContent(HARDWARE_NOTICE);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick Seed Address' }));
+
+        autoPay = screen.getByRole('switch', { name: 'Auto pay' });
+        expect(autoPay).toBeEnabled();
+        expect(autoPay).toBeChecked();
+        expect(screen.queryByText(HARDWARE_NOTICE)).toBeNull();
+    });
+
     it('puts no acknowledgement checkbox on the form', async () => {
         await renderWithNativeGive();
         expect(screen.queryByRole('checkbox', { name: /I understand/ })).toBeNull();

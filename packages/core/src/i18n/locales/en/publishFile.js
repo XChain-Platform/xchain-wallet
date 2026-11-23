@@ -63,6 +63,7 @@ const messages = {
     'publishFile.details.size': 'Size',
     'publishFile.details.bytes': '{bytes}',
     'publishFile.multipartFallback': "The multi-part upload couldn't continue. Try again or use Unfinished uploads.",
+    'publishFile.multipartStopped': "The multi-part upload couldn't continue.",
 };
 
 addEnglish(messages);

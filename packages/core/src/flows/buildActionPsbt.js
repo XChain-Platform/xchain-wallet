@@ -40,6 +40,7 @@ import { capRbfToDescriptor } from './rbfCap.js';
 import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 import { withDefaultFeePerKb } from './feeEstimate.js';
+import { assertActionDataAllowedOnChain } from '../registry/actions.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
@@ -127,6 +128,16 @@ export async function buildActionPsbt(opts) {
             `buildActionPsbt: SDK encoder not initialized for "${opts.chainId}"; call sdkRegistry.initActive([chainId]) first`,
         );
     }
+
+    // The air-gapped lane refuses what the signing lane refuses, so no unsigned
+    // PSBT exists for an action the indexer rejects on this chain.
+    assertActionDataAllowedOnChain({
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: opts.actionData,
+        who: 'buildActionPsbt',
+    });
 
     const createResult = sdk.actions.createAction(opts.actionData);
 

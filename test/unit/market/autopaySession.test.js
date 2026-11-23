@@ -89,6 +89,8 @@ function makeVault({ consents = [consentRow()] } = {}) {
             put: vi.fn(async (r) => { leaseStore.set(r.id, r); }),
         },
         pendingTxs: { list: vi.fn(async () => []) },
+        // The payer is a derived address of wallet w1's account, so the
+        // watcher's source resolution finds it owned and software-signable.
         addresses: {
             list: vi.fn(async () => [{
                 id: 'addr-id-1',
@@ -97,8 +99,12 @@ function makeVault({ consents = [consentRow()] } = {}) {
                 address: 'addr-payer',
                 publicKey: '02ab',
                 derivationPath: "m/84'/1'/0'/0/0",
+                source: 'hd',
+                accountId: 'acct-w1',
             }]),
         },
+        accounts: { get: vi.fn(async (id) => (id === 'acct-w1' ? { id, walletId: 'w1' } : null)) },
+        wallets: { get: vi.fn(async (id) => (id === 'w1' ? { id, importedKeys: [] } : null)) },
         settings: { get: vi.fn(async () => ({ notifications: { incomingReceipts: true } })) },
         close: vi.fn(),
     };

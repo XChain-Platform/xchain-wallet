@@ -28,6 +28,7 @@
 
 import { t } from '../../i18n/index.js';
 import { hasWalletEncoderCopy } from '../../sdk/encoderErrorCode.js';
+import { ENCODER_CATCH_ALL_REASON } from '../../sdk/encoderCatchAll.js';
 
 // A leading `identifier:` or `some.namespaced-identifier:` segment, including
 // kebab-case producer names such as `multisig-envelope:`. The lowercase first
@@ -144,8 +145,8 @@ export function protocolRefusalReason(err) {
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
     // A refusal the wallet already words itself (no spendable coins, a lagging
     // balance tracker, a fee under the relay floor) keeps that sentence too.
-    if (!reason || isInternalRpcFailure(e, reason) || COIN_SELECTION_SHORTFALL.test(reason)
-        || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)
+    if (!reason || isInternalRpcFailure(e, reason) || ENCODER_CATCH_ALL_REASON.test(reason)
+        || COIN_SELECTION_SHORTFALL.test(reason) || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)
         || hasWalletEncoderCopy(err)) {
         return null;
     }

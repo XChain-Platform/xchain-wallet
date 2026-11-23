@@ -52,6 +52,7 @@
 import { submitAction } from './submitAction.js';
 import { composeActionForConfirm } from './composeActionForConfirm.js';
 import { prebuiltPsbtFromComposed } from './prebuiltPsbtFromComposed.js';
+import { TamperDetectedError } from './confirmChecks.js';
 import { normalizeSource } from './sendToken.js';
 import { createPendingDeploy } from '../schemas/pendingDeploy.js';
 import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
@@ -62,6 +63,13 @@ async function submitComposedLeg(composed, submitOpts) {
     let signingStarted = false;
     const reportProgress = submitOpts.onProgress;
     try {
+        // The compose is what tamper-checked these bytes; a result that does not
+        // say so is never signed, and the throw below still releases its hold.
+        if (composed?.tamperVerified !== true) {
+            throw new TamperDetectedError(
+                'The action encoded in the transaction does not match what you approved.',
+                { reason: 'compose-unverified' });
+        }
         return await submitAction({
             ...submitOpts,
             onProgress: (phase, data) => {
@@ -72,7 +80,7 @@ async function submitComposedLeg(composed, submitOpts) {
     } catch (err) {
         // Unlock can fail before submitAction reaches the catch that marks a refusal.
         if (err?.refusedBeforeSigning === true || !signingStarted) {
-            try { await composed.releaseEncoderInputs?.(); } catch { /* the reservation expires */ }
+            try { await composed?.releaseEncoderInputs?.(); } catch { /* the reservation expires */ }
         }
         throw err;
     }
@@ -791,8 +799,8 @@ export async function deployChunkedRun(opts) {
                 }
             },
             onBroadcastFailure: opts.onBroadcastFailure,
-            // Check each leg's PSBT against this action before signing: the user
-            // approved a summary of the run before any leg's bytes existed.
+            // Read only when no prebuilt PSBT rides along (the atomic build path);
+            // with one, the compose above and its tamperVerified gate are the check.
             verifyBuiltTx: true,
         });
     };

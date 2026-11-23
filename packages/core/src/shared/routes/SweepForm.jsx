@@ -393,7 +393,7 @@ export function SweepForm({
         } catch (err) {
             setScanError(err?.name === 'InvalidPasswordError' || err?.name === 'WrongPasswordError'
                 ? 'Incorrect password.'
-                : (err?.message || 'Key recovery scan failed.'));
+                : 'Could not recover unlock keys. Check your connection and try again.');
         } finally {
             setScanning(false);
         }

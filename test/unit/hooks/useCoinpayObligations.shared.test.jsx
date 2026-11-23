@@ -31,6 +31,7 @@ const { messaging } = vi.hoisted(() => ({
     messaging: {
         getAddressesByChain: vi.fn(),
         getCoinpayObligationsForAddress: vi.fn(),
+        listAlertInbox: vi.fn(),
     },
 }));
 
@@ -40,6 +41,8 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 
 const { CoinpayObligationsProvider, useCoinpayObligations, useSharedCoinpayObligations, COINPAY_BADGE_POLL_MS } = await import(
     '../../../packages/core/src/shared/hooks/useCoinpayObligations.js');
+const { announceNotificationsChanged } = await import(
+    '../../../packages/core/src/shared/alertInbox.js');
 
 const CHAIN = 'litecoin-regtest';
 const ADDRS = ['mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi', 'mg8Jz5776UdyiYcBb9Z873NTozEiADRW5H'];
@@ -79,6 +82,7 @@ beforeEach(() => {
         .mockResolvedValue({ [CHAIN]: ADDRS.map((address) => ({ address })) });
     messaging.getCoinpayObligationsForAddress.mockReset()
         .mockImplementation(({ address }) => Promise.resolve(pendingRow(address)));
+    messaging.listAlertInbox.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => { vi.useRealTimers(); });
@@ -146,6 +150,41 @@ describe('useSharedCoinpayObligations', () => {
         expect(screen.getByTestId('second')).toHaveTextContent('2');
         expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1);
         expect(reads()).toBe(ADDRS.length);
+    });
+
+    it('refreshes a cached row as soon as the watcher records signing attention', async () => {
+        const { result } = renderHook(() => useCoinpayObligations('attention-wallet', 'a1', { pollMs: POLL_MS }));
+        await waitFor(() => expect(result.current.obligations).toHaveLength(2));
+        expect(result.current.obligations.every((row) => row.attention === undefined)).toBe(true);
+
+        messaging.listAlertInbox.mockResolvedValue([{
+            id: `payment-due:${CHAIN}:77`,
+            attention: 'autopay-cannot-sign',
+        }]);
+        act(() => announceNotificationsChanged({ refreshCoinpayObligations: true }));
+
+        await waitFor(() => expect(result.current.obligations.every(
+            (row) => row.attention === 'autopay-cannot-sign',
+        )).toBe(true));
+        expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1);
+        expect(messaging.listAlertInbox).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-reads attention when Payments Due mounts around a cached explorer result', async () => {
+        const first = renderHook(() => useCoinpayObligations('cached-attention-wallet', 'a1', { pollMs: POLL_MS }));
+        await waitFor(() => expect(first.result.current.obligations).toHaveLength(2));
+        first.unmount();
+        messaging.listAlertInbox.mockResolvedValue([{
+            id: `payment-due:${CHAIN}:77`,
+            attention: 'autopay-cannot-sign',
+        }]);
+
+        const second = renderHook(() => useCoinpayObligations('cached-attention-wallet', 'a1', { pollMs: POLL_MS }));
+        await waitFor(() => expect(second.result.current.obligations.every(
+            (row) => row.attention === 'autopay-cannot-sign',
+        )).toBe(true));
+        expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1);
+        expect(messaging.listAlertInbox).toHaveBeenCalledTimes(2);
     });
 
     it('never returns rows from the previous wallet while the next wallet scan is pending', async () => {

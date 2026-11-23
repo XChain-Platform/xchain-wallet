@@ -223,7 +223,7 @@ export function AlertsRoute({ onBack, walletId, accountId = null, alerts: wallet
                                     {rows.map((alert) => {
                                         const TypeIcon = TYPE_ICON[alert.type] || WalletAlertIcon;
                                         return (
-                                            <li key={alert.id} className={`${styles.row} ${alert.read ? styles.read : styles.unread}`}>
+                                            <li key={alert.id} className={`${styles.row} ${alert.read ? styles.read : styles.unread} ${alert.attention === 'autopay-cannot-sign' ? styles.attention : ''}`}>
                                                 <Button variant="rowAction" icon={null} className={styles.rowButton} onClick={() => openAlert(alert)} aria-label={alert.action?.label || alert.title}>
                                                     <span className={styles.rowGrid}>
                                                         <span className={`${styles.iconTile} ${TYPE_ICON_CLASS[alert.type] || ''}`}><TypeIcon /></span>
@@ -234,7 +234,7 @@ export function AlertsRoute({ onBack, walletId, accountId = null, alerts: wallet
                                                         <span className={styles.copy}>
                                                             <span className={`${styles.typeLabel} ${TYPE_LABEL_CLASS[alert.type] || ''}`} data-alert-line="label"><Highlight text={rowLabel(alert)} query={normalizedQuery} /></span>
                                                             <span className={styles.title} data-alert-line="title"><Highlight text={alert.title} query={normalizedQuery} /></span>
-                                                            <span className={styles.message} data-alert-line="message"><Highlight text={alert.message} query={normalizedQuery} /></span>
+                                                            <span className={styles.message} data-alert-line="message"><Highlight text={alert.attention === 'autopay-cannot-sign' ? t('alerts.paymentDue.autoPayCannotSign') : alert.message} query={normalizedQuery} /></span>
                                                         </span>
                                                         <span className={styles.meta}>
                                                             <time dateTime={new Date(alert.at).toISOString()}>{new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(alert.at)}</time>

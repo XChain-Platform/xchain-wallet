@@ -27,6 +27,7 @@ const messages = {
     'alerts.filterType': 'Notification type',
     'alerts.filterTypeHelp': 'Shows only the notifications you tick: unread ones, or one or more kinds such as payments or security.',
     'alerts.matches': '{count} notifications match',
+    'alerts.paymentDue.autoPayCannotSign': "Auto Pay can't sign this address. Tap to pay.",
     'alerts.type.all': 'All types',
     'alerts.type.payments': 'Payments',
     'alerts.type.messages': 'Messages',
@@ -35,4 +36,5 @@ const messages = {
 
 addEnglish(messages);
 
+export const alertsAutopayCannotSign = messages['alerts.paymentDue.autoPayCannotSign'];
 export default messages;

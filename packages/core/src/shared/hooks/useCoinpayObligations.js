@@ -25,6 +25,7 @@ import {
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation, extractObligationRows, isPendingForPayer } from '../../market/obligationStatus.js';
+import { NOTIFICATIONS_CHANGED_EVENT } from '../alertInbox.js';
 
 // Home and the app shell mount this hook, so the error-copy tables load only
 // when a sweep actually fails instead of riding in the startup bundle.
@@ -41,6 +42,31 @@ export const COINPAY_BADGE_POLL_MS = DEFAULT_POLL_MS;
 // completed result also hydrates later mounts without another explorer sweep
 // inside their documented poll interval.
 const readsByMessaging = new WeakMap();
+
+async function readCoinpayAttentionIds(messaging, walletId) {
+    if (typeof messaging?.listAlertInbox !== 'function') return null;
+    try {
+        const alerts = await messaging.listAlertInbox({ walletId });
+        return new Set((Array.isArray(alerts) ? alerts : [])
+            .filter((alert) => alert?.attention === 'autopay-cannot-sign')
+            .map((alert) => alert.id));
+    } catch {
+        return null;
+    }
+}
+
+async function refreshCachedAttention({ messaging, walletId, result }) {
+    const attentionIds = await readCoinpayAttentionIds(messaging, walletId);
+    if (!attentionIds || !result) return result;
+    return {
+        ...result,
+        obligations: result.obligations.map((row) => (
+            attentionIds.has(`payment-due:${row.chainId}:${row.orderMatchActionIndex}`)
+                ? { ...row, attention: 'autopay-cannot-sign' }
+                : row
+        )),
+    };
+}
 
 function sharedCoinpayRead({ messaging, walletId, accountId, pollMs, force = false }) {
     if ((typeof messaging !== 'object' || messaging === null) && typeof messaging !== 'function') {
@@ -60,7 +86,9 @@ function sharedCoinpayRead({ messaging, walletId, accountId, pollMs, force = fal
     if (read.inFlight) return read.inFlight;
     const now = Date.now();
     const age = read.lastStartedAt === null ? Infinity : now - read.lastStartedAt;
-    if (!force && age >= 0 && age < pollMs) return Promise.resolve(read.result);
+    if (!force && age >= 0 && age < pollMs) {
+        return refreshCachedAttention({ messaging, walletId, result: read.result });
+    }
 
     read.lastStartedAt = now;
     const inFlight = scanCoinpayObligations({ messaging, walletId, accountId })
@@ -92,6 +120,7 @@ function sharedCoinpayRead({ messaging, walletId, accountId, pollMs, force = fal
  *   payeeAddress: string,
  *   coinAmount: unknown,
  *   expiration: unknown,
+ *   attention?: 'autopay-cannot-sign',
  * }} PendingObligation
  */
 
@@ -127,6 +156,8 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
     if (results.length > 0 && results.every((result) => result.failed)) {
         throw results[0].error || new Error('Failed to scan for payments due.');
     }
+    // A failed emphasis read must not hide payments that are still owed.
+    const attentionIds = await readCoinpayAttentionIds(messaging, walletId) ?? new Set();
     const found = [];
     // An explorer page that overlaps, or one address held twice, lists a match
     // twice; the queue shows each match once.
@@ -144,6 +175,9 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
                 payeeAddress: row.payee_address || row.payeeAddress || '',
                 coinAmount: row.coin_amount ?? row.coinAmount,
                 expiration: row.expiration,
+                ...(attentionIds.has(`payment-due:${r.chainId}:${row.action_index ?? row.actionIndex}`)
+                    ? { attention: 'autopay-cannot-sign' }
+                    : {}),
             });
         }
     }
@@ -265,6 +299,10 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         if (typeof document !== 'undefined') {
             document.addEventListener('visibilitychange', onVisible);
         }
+        const onNotificationsChanged = (event) => {
+            if (event?.detail?.refreshCoinpayObligations === true) run();
+        };
+        globalThis.addEventListener?.(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
         return () => {
             cancelled = true;
             if (runRef.current === run) runRef.current = null;
@@ -272,6 +310,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
             if (typeof document !== 'undefined') {
                 document.removeEventListener('visibilitychange', onVisible);
             }
+            globalThis.removeEventListener?.(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
         };
     }, [walletId, accountId, identity, messaging, pollMs, offline]);
 

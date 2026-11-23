@@ -19,7 +19,7 @@
 //      file's), then the action in one short centred sentence;
 //   4. one facts card holding every detail: the labelled address first, then
 //      the action's own rows, signing wallet, network and each fee;
-//   5. the short warning (a title plus one line) after the details;
+//   5. a form's neutral note, then the short warning after the details;
 // then whatever the signer needs (the verbatim message, the PSBT's inputs and
 // outputs, the password or device). Reject and Approve are docked in Screen's
 // footer, half the width each, 8px between and around them, always in full
@@ -347,7 +347,7 @@ export function ConfirmDecisionFooter({
  * @param {import('react').ReactNode} [props.afterAddress]   the requesting site, after the sentence
  * @param {import('../utils/confirmStandardModel.js').ConfirmFact[]} [props.facts]
  * @param {boolean} [props.preserveFactOrder]             facts already include the address and network in their required order
- * @param {string} [props.note]                         a fact the form moved off its page, one plain line
+ * @param {string} [props.information]                  a form's informational note, wrapped in a neutral notice
  * @param {string} [props.messageText]                  the signed message, verbatim
  * @param {import('react').ReactNode} [props.children]  what the signer needs: the PSBT panel, the password, the device
  * @param {boolean} [props.checking]                    the network check is still running (when no status is passed)
@@ -360,10 +360,10 @@ export function ConfirmStandard({
     status = null, statusRef, top = null, mark = null, icon = 'check', name = '', sentence, address = null, chainName = '',
     actionCode = '',
     addressIsSource = false, addressLabel = '', afterAddress = null,
-    facts = [], preserveFactOrder = false, note = '', messageText, children = null,
+    facts = [], preserveFactOrder = false, information = '', messageText, children = null,
     checking = false, warning = null, acknowledged, onAcknowledge, label,
 }) {
-    const noteText = String(note || '').trim();
+    const noteText = String(information || '').trim();
     const nameText = String(name || '').trim();
     const unknownCode = String(actionCode || '').trim().toUpperCase();
     const actionFacts = unknownCode ? [{
@@ -396,7 +396,11 @@ export function ConfirmStandard({
             <p className={styles.sentence} data-testid="confirm-sentence">{sentence}</p>
             {afterAddress}
             <ConfirmFacts facts={shownFacts} preserveOrder={preserveFactOrder} />
-            {noteText ? <p className={styles.note} data-testid="confirm-summary-notice">{noteText}</p> : null}
+            {noteText ? (
+                <Notice tone="info" role="note" flush testId="confirm-summary-notice" className={styles.note}>
+                    {noteText}
+                </Notice>
+            ) : null}
             {messageText !== undefined ? (
                 <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
                     <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>

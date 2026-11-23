@@ -80,6 +80,12 @@ export function assertBuiltActionMatchesIntent({
     if (envelopePair && !(encoded.revealPsbt && encoded.envelope)) {
         throw new TamperDetectedError(MISMATCH, { reason: 'envelope-incomplete' });
     }
+    // A reveal pair under any label but TAPROOT is an answer this lane cannot
+    // verify: the content checks follow the label, so the pair would go out
+    // checked as a carrier it is not.
+    if (!bareNativePayment && envelopePair && encoded.encoding !== 'TAPROOT') {
+        throw new TamperDetectedError(MISMATCH, { reason: 'envelope-label-mismatch' });
+    }
     const envelope = envelopePair ? encoded.envelope : null;
     const expectedCustom = [
         ...(chunk ? [] : requested),

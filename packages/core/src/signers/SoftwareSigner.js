@@ -962,7 +962,20 @@ function assertSameSigningSource(signingPaths, method) {
     for (const sp of signingPaths) assertEntryShape(sp, method);
 }
 
+const SIGHASH_ALL = 1;
+
+// The SDK signs every input under its default SIGHASH_ALL and takes no
+// per-input override, so a different requested type is refused rather than
+// answered with a signature of another type, matching the hardware signers.
 function assertEntryShape(entry, method) {
+    if (entry.sighashType !== undefined && entry.sighashType !== null
+        && entry.sighashType !== SIGHASH_ALL) {
+        throw new Error(
+            `SoftwareSigner.${method}: cannot sign under sighashType ${entry.sighashType} `
+            + `(input ${entry.inputIndex}); this signer supports only the default SIGHASH_ALL `
+            + `(${SIGHASH_ALL}). Re-request the signature without a sighash override.`,
+        );
+    }
     const hasPath = typeof entry.path === 'string' && entry.path.length > 0;
     const hasAddressId = typeof entry.addressId === 'string' && entry.addressId.length > 0;
     if (hasPath === hasAddressId) {

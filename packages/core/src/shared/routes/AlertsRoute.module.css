@@ -118,6 +118,15 @@
     border-block-end: 0;
 }
 
+.attention {
+    border-inline-start: 3px solid var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, var(--xc-surface));
+}
+
+.read.attention {
+    opacity: 1;
+}
+
 /* Button wraps its children in one label span, so the three columns live on an
    inner grid and the label span stretches across the whole row. */
 .rowButton {

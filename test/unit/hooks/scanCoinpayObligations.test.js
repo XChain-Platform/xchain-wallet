@@ -77,6 +77,33 @@ describe('hooks/scanCoinpayObligations', () => {
         expect(out.obligations).toHaveLength(0);
     });
 
+    it('marks only an owed payment whose watcher recorded a signing refusal', async () => {
+        const messaging = messagingWith({
+            byChain: { 'btc-regtest': [{ address: A1 }] },
+            obligations: {
+                [`btc-regtest:${A1}`]: [
+                    row({ action_index: '900001' }),
+                    row({ action_index: '900002' }),
+                    row({ action_index: '900003', coinpay_status: 'fulfilled' }),
+                ],
+            },
+        });
+        messaging.listAlertInbox = async () => [{
+            id: 'payment-due:btc-regtest:900002',
+            attention: 'autopay-cannot-sign',
+        }, {
+            id: 'payment-due:btc-regtest:900003',
+            attention: 'autopay-cannot-sign',
+        }];
+
+        const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
+        expect(out.obligations).toEqual([
+            expect.objectContaining({ orderMatchActionIndex: '900001' }),
+            expect.objectContaining({ orderMatchActionIndex: '900002', attention: 'autopay-cannot-sign' }),
+        ]);
+        expect(out.obligations[0]).not.toHaveProperty('attention');
+    });
+
     it('tolerates enveloped responses and isolates per-address failures', async () => {
         const messaging = messagingWith({
             byChain: {

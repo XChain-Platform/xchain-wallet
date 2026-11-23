@@ -13,6 +13,7 @@ import {
     ChainBadge, EmptyState, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { alertsAutopayCannotSign } from '../../i18n/locales/en/alerts.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
@@ -387,7 +388,9 @@ function DueRow({ row, side, onPay }) {
     let leading = null;
     if (side) leading = <PairIcons chainId={row.chainId} first={side.tick} second={coinTick} />;
     else if (descriptor) leading = <ChainBadge descriptor={descriptor} size="sm" showName={false} />;
-    const named = [typeof title === 'string' ? title : 'Buying', pay, time ? `${time} left` : null]
+    const cannotSign = row.attention === 'autopay-cannot-sign';
+    const attentionCopy = cannotSign ? alertsAutopayCannotSign : null;
+    const named = [typeof title === 'string' ? title : 'Buying', pay, attentionCopy, time ? `${time} left` : null]
         .filter(Boolean).join(', ');
     return (
         <ListRow
@@ -399,9 +402,16 @@ function DueRow({ row, side, onPay }) {
             })}
             aria-label={named}
             chevron
+            className={cannotSign ? styles.attentionRow : undefined}
+            data-autopay-cannot-sign={cannotSign ? '' : undefined}
             leading={leading}
             title={title}
-            subtitle={<span className={styles.rowDetail}>{pay}</span>}
+            subtitle={(
+                <span className={styles.rowDetail}>
+                    <span>{pay}</span>
+                    {attentionCopy ? <span className={styles.attentionCopy}>{attentionCopy}</span> : null}
+                </span>
+            )}
             trailing={<DueRing row={row} side={side} />}
             trailingClassName={styles.ringSlot}
         />

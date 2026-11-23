@@ -748,14 +748,6 @@ export function ConfirmActionModal({
         ...sentFact,
         ...composedFacts,
         ...formFacts,
-        ...(variant === 'action' && String(summary?.notice || '').trim()
-            ? [{
-                key: 'notice',
-                label: t('confirmStandard.facts'),
-                value: String(summary.notice).trim(),
-                testId: 'confirm-summary-notice',
-            }]
-            : []),
         // #40: the page names the spender. When the one address line shows
         // something else (a send's recipient), the source is a From row, so
         // each address still shows once. A caller's PSBT lists its inputs,
@@ -872,6 +864,7 @@ export function ConfirmActionModal({
                 )}
                 facts={messageFacts || facts}
                 preserveFactOrder={variant === 'message'}
+                information={variant === 'action' ? summary?.notice : ''}
                 messageText={variant === 'message' ? messageText : undefined}
                 warning={warning}
             >

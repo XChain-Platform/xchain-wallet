@@ -75,14 +75,15 @@ function matchRow(over = {}) {
 function makeVault({ consents = [consentRow()], lease = null, pendingTxs = [], addresses } = {}) {
     const autopayStore = new Map(consents.map((r) => [r.id, r]));
     const leaseStore = new Map(lease ? [[lease.id, lease]] : []);
-    const addressRows = addresses ?? [{
+    // Fixture rows are derived addresses of wallet w1's account unless a row says otherwise.
+    const addressRows = (addresses ?? [{
         id: 'addr-id-1',
         chain: 'bitcoin',
         network: 'regtest',
         address: 'addr-payer',
         publicKey: '02ab',
         derivationPath: "m/84'/1'/0'/0/0",
-    }];
+    }]).map((row) => ({ source: 'hd', accountId: 'acct-w1', ...row }));
     return {
         autopayStore,
         leaseStore,
@@ -97,6 +98,8 @@ function makeVault({ consents = [consentRow()], lease = null, pendingTxs = [], a
         },
         pendingTxs: { list: vi.fn(async () => pendingTxs) },
         addresses: { list: vi.fn(async () => addressRows) },
+        accounts: { get: vi.fn(async (id) => (id === 'acct-w1' ? { id, walletId: 'w1' } : null)) },
+        wallets: { get: vi.fn(async (id) => (id === 'w1' ? { id, importedKeys: [] } : null)) },
     };
 }
 
@@ -122,6 +125,7 @@ function makeWatcher(over = {}) {
     const { registry } = over.sdkRegistryPair ?? makeSdkRegistry();
     const ledger = over.ledger ?? { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
     const notify = vi.fn(async () => {});
+    const recordAlert = over.recordAlert ?? vi.fn(async () => {});
     const settings = over.settings ?? { notifications: { incomingReceipts: true } };
     const signer = over.signer === undefined ? { id: 'signer-1' } : over.signer;
     const coinpayAction = over.coinpayAction ?? vi.fn(async ({ onProgress }) => {
@@ -136,6 +140,7 @@ function makeWatcher(over = {}) {
         getSettings: vi.fn(async () => settings),
         reservationLedger: ledger,
         notify,
+        recordAlert,
         shellKind: over.shellKind ?? 'web',
         intervalMs: 60_000,
         now: () => over.now ?? NOW,
@@ -145,7 +150,7 @@ function makeWatcher(over = {}) {
         saveNotified: over.saveNotified,
         logger: over.logger,
     });
-    return { watcher, vault, ledger, notify, coinpayAction, settings };
+    return { watcher, vault, ledger, notify, recordAlert, coinpayAction, settings };
 }
 
 describe('happy path', () => {
@@ -412,14 +417,24 @@ describe('signing fallbacks', () => {
         expect(watcher.statusSnapshot()).toMatchObject({ payer: true, armed: 1, unsignable: ['w1'] });
     });
 
-    it('source address no longer in the vault: manual notification, no payment', async () => {
+    it('source address no longer in the vault: marks its Payment due row without a toast', async () => {
         const vault = makeVault({ addresses: [] });
-        const { watcher, notify, coinpayAction } = makeWatcher({ vault });
+        const { watcher, notify, recordAlert, coinpayAction } = makeWatcher({ vault });
+        const dispatchEvent = vi.fn();
+        vi.stubGlobal('dispatchEvent', dispatchEvent);
         await watcher.pollOnce();
+        const changeEvent = dispatchEvent.mock.calls[0]?.[0];
+        vi.unstubAllGlobals();
         expect(coinpayAction).not.toHaveBeenCalled();
-        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({ reason: 'source-missing' }),
+        expect(notify).not.toHaveBeenCalled();
+        expect(recordAlert).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'payment-due:bitcoin-regtest:900',
+            attention: 'autopay-cannot-sign',
         }));
+        expect(changeEvent).toMatchObject({
+            type: 'xc:notifications-changed',
+            detail: { refreshCoinpayObligations: true },
+        });
     });
 
     it('gates CoinPay status notifications on incoming receipts and honors a live toggle change', async () => {

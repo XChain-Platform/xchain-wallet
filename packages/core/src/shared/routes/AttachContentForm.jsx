@@ -1138,7 +1138,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         resumeReason={multipartPanel.resumeReason}
                         error={multipartPanel.error}
                         listError={multipartPanel.listError}
-                        fallbackMessage="The multi-part upload could not continue."
+                        fallbackMessage={t('publishFile.multipartStopped')}
                     />
                     {multipartLink.checking ? (
                         <p className={styles.hint}>Verifying that every file part is complete before the link review.</p>
@@ -1470,7 +1470,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 // The page status already names a failed issuer check or form error;
                 // a resume-list failure under it would stack a second page message.
                 listError={formError || issuerEligibility.error ? null : multipartPanel.listError}
-                fallbackMessage="The multi-part upload could not continue."
+                fallbackMessage={t('publishFile.multipartStopped')}
             />
             {/* Title comes before the artwork file. */}
             <Input

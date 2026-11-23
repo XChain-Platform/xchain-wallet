@@ -14,6 +14,7 @@ import { formatNativeBaseUnits } from '../registry/coinTicker.js';
 import { nativeFeeTickerFor } from '../registry/nativeFee.js';
 import { receiveMultisigAddress } from './multisigAddress.js';
 import { startMultisigSigningSession } from './multisigSigning.js';
+import { utxoListOf } from './txInclusionProbe.js';
 import {
     buildUnsignedMultisigSpend,
     multisigSighash,
@@ -100,12 +101,16 @@ function feeFor(rate, vsize) {
     return (numerator * BigInt(vsize) + scale - 1n) / scale;
 }
 
+// A reply that is not a UTXO list is "could not read", never "no coins". Only the
+// integer-satoshi fields are accepted: `amount` is the same value in whole coins
+// and must never be read as satoshis.
 function normalizedUtxos(result) {
-    const rows = Array.isArray(result) ? result : Array.isArray(result?.utxos) ? result.utxos : [];
+    const rows = utxoListOf(result);
+    if (rows === null) throw new Error('startMultisigSend: the UTXO read did not return a coin list');
     return rows.map((row) => ({
         txid: String(row.txid || row.tx_hash || row.txHash || ''),
         vout: Number(row.vout ?? row.tx_pos ?? row.outputIndex),
-        value: exactPositiveSats(row.value ?? row.satoshis ?? row.amount, 'UTXO value'),
+        value: exactPositiveSats(row.value ?? row.satoshis, 'UTXO value'),
         scriptPubKeyHex: String(row.scriptPubKeyHex || row.script || row.scriptPubKey || '').toLowerCase(),
     }));
 }

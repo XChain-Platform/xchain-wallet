@@ -306,6 +306,34 @@ describe('encoderErrorMessage', () => {
         expect(copy).not.toContain('Internal encoder error');
     });
 
+    it('gives the encoder catch-all the same copy with or without the RPC details', () => {
+        const raw = 'Encoder RPC error: Internal encoder error';
+        const full = sdkEncoderError('ENCODER_RPC_ERROR', raw, {
+            rpcError: { code: -32603, message: 'Internal encoder error', data: null },
+        });
+        const stripped = acrossBoundary(full);
+        const withCode = Object.assign(acrossBoundary(full), { code: 'ENCODER_RPC_ERROR' });
+        const expected = encoderErrorMessage(stripped, {});
+        expect(expected).toMatch(/could not be built/i);
+        for (const wire of [full, stripped, withCode]) {
+            expect(encoderErrorMessage(wire, {})).toBe(expected);
+            const submit = submitFailureMessage(wire, { verb: 'sweep' });
+            expect(submit).toMatch(/could not be built/i);
+            expect(submit).not.toContain('Internal encoder error');
+            expect(submit).not.toMatch(/try again in a moment/i);
+        }
+    });
+
+    it('keeps retry copy for the HTTP-500 internal error with or without the RPC details', () => {
+        const full = sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: Internal error', {
+            rpcError: { code: -32603, message: 'Internal error', data: null },
+        });
+        for (const wire of [full, acrossBoundary(full), Object.assign(acrossBoundary(full), { code: 'ENCODER_RPC_ERROR' })]) {
+            expect(encoderErrorMessage(wire, {})).toMatch(/Try again in a moment/);
+            expect(submitFailureMessage(wire, { verb: 'sweep' })).toMatch(/transaction service could not complete/i);
+        }
+    });
+
     it('maps JSON-RPC server failures to temporary copy while preserving real protocol refusals', () => {
         const failures = [
             sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: Internal error: upstream node timed out', {
