@@ -53,6 +53,8 @@ import { isWithinQuietHours } from './quietHours.js';
 import { taggedLogger } from './taggedLogger.js';
 import { withAlertInbox } from './notificationInbox.js';
 import { composeRequestAlert } from './requestAlert.js';
+import { wantsPayDueAlert } from './payDueAlert.js';
+import { watchRequestFrom } from '../watch/buildWatchRequest.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
@@ -188,6 +190,11 @@ export class NotificationService {
         getPendingTxids,
         onTxConfirmed,
         onMempoolSeen,
+        lookupCoinpayConsent,
+        buildCoinpayReview,
+        openCoinpay,
+        setPayDueRequest,
+        newRequestId,
         now,
         logger,
     } = {}) {
@@ -204,6 +211,15 @@ export class NotificationService {
         this._getPendingTxids = typeof getPendingTxids === 'function' ? getPendingTxids : null;
         this._onTxConfirmed = typeof onTxConfirmed === 'function' ? onTxConfirmed : null;
         this._onMempoolSeen = typeof onMempoolSeen === 'function' ? onMempoolSeen : null;
+        this._lookupCoinpayConsent = typeof lookupCoinpayConsent === 'function' ? lookupCoinpayConsent : null;
+        this._buildCoinpayReview = typeof buildCoinpayReview === 'function' ? buildCoinpayReview : null;
+        this._openCoinpay = typeof openCoinpay === 'function' ? openCoinpay : null;
+        this._setPayDueRequest = typeof setPayDueRequest === 'function'
+            ? setPayDueRequest
+            : (request) => import('../watch/watchHost.js')
+                .then(({ setPendingRequest }) => setPendingRequest(request))
+                .catch((e) => this._log.warn('NotificationService: watch request publish failed', e));
+        this._newRequestId = typeof newRequestId === 'function' ? newRequestId : undefined;
         this._now = typeof now === 'function' ? now : () => Date.now();
         this._log = taggedLogger(logger, 'notify');
 
@@ -295,6 +311,38 @@ export class NotificationService {
             id: request.id,
             category: request.kind,
             actions: [{ id: 'openOnPhone', title: openOnPhoneTitle }],
+        });
+    }
+
+    async composeCoinpayReview(payload, context = {}) {
+        const role = context.role ?? 'neutral';
+        let hasAutopayConsent;
+        if (payload?.kind === 'coinpay-required' && role === 'payer' && this._lookupCoinpayConsent) {
+            try {
+                hasAutopayConsent = await this._lookupCoinpayConsent(context);
+            } catch (e) {
+                this._log.warn('NotificationService: CoinPay consent lookup failed', e);
+            }
+        }
+        if (!wantsPayDueAlert({ kind: payload?.kind, role, hasAutopayConsent })) return false;
+        if (!this._buildCoinpayReview || !this._openCoinpay) return false;
+
+        let review;
+        try {
+            review = await this._buildCoinpayReview(payload, context);
+        } catch (e) {
+            this._log.warn('NotificationService: CoinPay review build failed', e);
+            return false;
+        }
+        const request = watchRequestFrom({ ...review, kind: 'paydue' }, {
+            ...(this._newRequestId ? { newId: this._newRequestId } : {}),
+        });
+        if (!request) return false;
+        this._setPayDueRequest(request);
+        return this.postRequestAlert(request, {
+            labels: { paydue: 'Payment due' },
+            openOnPhoneTitle: 'Open on phone',
+            route: () => this._openCoinpay(review.route),
         });
     }
 
@@ -557,6 +605,7 @@ export class NotificationService {
 
         /** @type {{ kind: string, title: string, body: string } | null} */
         let plan = null;
+        let coinpayContext = null;
 
         switch (msg.type) {
             case 'MEMPOOL_ACTION': {
@@ -631,7 +680,9 @@ export class NotificationService {
                 // event reaches both the payer and the payee address, so each
                 // side is told its own part; an event naming neither stays neutral.
                 if (flags.incomingReceipts) {
-                    switch (coinpayRole(data, addr.address)) {
+                    const role = coinpayRole(data, addr.address);
+                    coinpayContext = { role, event: data, chainId: addr.chainId, address: addr.address };
+                    switch (role) {
                         case 'payer':
                             plan = { kind: 'coinpay-required', title: 'Payment due for a matched order', body: `One of your orders on ${addr.label} was matched. Send the coin payment before the payment window closes, or the match expires.` };
                             break;
@@ -697,6 +748,9 @@ export class NotificationService {
         } catch (e) {
             this._log.error('NotificationService: notify adapter threw', e);
             delivered = false;
+        }
+        if (coinpayContext) {
+            await this.composeCoinpayReview({ ...plan, data }, coinpayContext);
         }
         // A false return lets an adapter report that permission or host state
         // refused every visible delivery surface.
