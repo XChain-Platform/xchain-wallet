@@ -59,7 +59,8 @@ function mirrorCore24DesktopFiles(computed, stageDirs) {
  * Compose with electron-builder's callback so programmatic callers keep their behavior.
  */
 function installSnapcraftDesktopCompatibility(context) {
-    const snapTarget = context.targets.find((target) => target.name === 'snap');
+    // Packaging runs that build no snap (AppImage, deb, test harnesses) may pass no target list.
+    const snapTarget = (context.targets || []).find((target) => target.name === 'snap');
     if (!snapTarget) return;
 
     const options = context.packager.packagerOptions;
