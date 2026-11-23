@@ -45,6 +45,30 @@ struct NotifyPostArgsCheck {
             "paydue family",
             parseReplacing("family", with: "paydue", in: validValues)?.family == "paydue"
         )
+        check("alert family",
+            parseReplacing("family", with: "alert", in: validValues)?.family == "alert"
+        )
+
+        let adapterFallback = NotifyPostArgs.parse([
+            "id": "alert-1",
+            "title": "Alert",
+            "family": "alert",
+            "sound": NSNull(),
+            "category": "alert",
+            "threadId": "alert",
+            "actions": [Any](),
+        ])
+        check("adapter fallback",
+            adapterFallback == NotifyPostArgs(
+                id: "alert-1",
+                title: "Alert",
+                body: "",
+                family: "alert",
+                sound: .systemDefault,
+                category: "alert",
+                threadId: "alert"
+            )
+        )
 
         for category in ["request", "paydue", "alert"] {
             check(
