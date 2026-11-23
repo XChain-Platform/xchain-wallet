@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onRoot
@@ -62,10 +63,19 @@ class TokenDetailScreenTest {
     }
 
     @Test
+    fun showsPriceLineWhenChartHasPoints() {
+        activity.setContent {
+            TokenDetailScreen(display(chart = DetailChart(listOf(1.0, 2.0, 1.5), up = true)), null, "Open on phone", null) {}
+        }
+
+        compose.onNodeWithTag("price-line").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun openOnPhoneInvokesTheAction() {
         var opened = 0
         activity.setContent {
-            TokenDetailScreen(display(chart = DetailChart(listOf(1.0, 2.0, 1.5), up = true)), null, "Open on phone", null) { opened++ }
+            TokenDetailScreen(display(), null, "Open on phone", null) { opened++ }
         }
 
         repeat(3) { compose.onRoot().performTouchInput { swipeUp() } }

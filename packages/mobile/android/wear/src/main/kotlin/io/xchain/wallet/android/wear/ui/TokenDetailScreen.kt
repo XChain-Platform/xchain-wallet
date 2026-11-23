@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
@@ -83,7 +84,7 @@ internal fun TokenDetailScreen(
             Text(if (showValue) display.valueText else display.amountText, Modifier.clickable { showValue = !showValue })
         }
         display.changeText?.let { item { Text(it) } }
-        display.chart?.let { item { PriceLine(it, Modifier.fillMaxWidth().height(48.dp)) } }
+        display.chart?.let { item { PriceLine(it, Modifier.fillMaxWidth().height(48.dp).testTag("price-line")) } }
         display.priceSourceText?.let { item { Text(it) } }
         noticeText?.let { item { Text(it) } }
         items(display.facts.size) { Text("${display.facts[it].label}: ${display.facts[it].value}") }
