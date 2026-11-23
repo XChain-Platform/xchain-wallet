@@ -1,0 +1,29 @@
+[
+    {
+        "chainId": "bitcoin-mainnet",
+        "label": "Bitcoin",
+        "address": "bc1p 0xlx vlhe mja6 c4dq v22u apct qupf hlxm 9h8z 3k2e 72q4 k9hc z7vq h2y7 hd",
+        "qr": {
+            "size": 45,
+            "bits": "/hgUTkv8EjINhJBuvoMSdLt1g/esNdutWfzrrsFflHwhB/qqqqqv4BsvG5kAvjUvwXPnJPMWmGdIl1hPOr0TrDA3O9eiGvImAE5JriuONgvypre4UJg6v7VdzqjpYyRSTg7qsM7h+PrpGcyjkuizzfX6b/gg+XRhJEWMTmrJKlXrzx+TH5kdX9/fxy/AzJnWugFj91hKCj0rn9m97u8v9pxUvFiPU0sGF0qit6PTlTmMFTpsQ3rBwiGVptH2MCHC7yKPGXjy3I3Rftmowfsk+IBFHH+Ef/nFanLqkFEhF1sduoWPoR+F16XS8GXusnNIL80EH9K3es/oZ051OQA="
+        }
+    },
+    {
+        "chainId": "litecoin-mainnet",
+        "label": "Litecoin",
+        "address": "ltc1 qg82 k2jg m0cj q3sv c9aw 09rf qccl 0fl4 a6t8 qdx",
+        "qr": {
+            "size": 37,
+            "bits": "/jqp4/wS5YSQbr7vQrt1pPeV26uZNi7BXtcdB/qqqq/gFjP1AL4DIvPiCc4oaKCYCRYX8s0dIjS1jJ5+TGstpAhftTrjLZf80nFaxIry8O756mo1qvoXR3O2XmScbJQ16wb3X/aCH5awdH0dQMaQN7Uz9/5rvOlIIN6QFZ9iLX8lKOnFrvoAbmmEY/gXMKrwXo7jEbqFgv/t1AnqdG6h6JRXBPY4N5/tVS5bgA=="
+        }
+    },
+    {
+        "chainId": "dogecoin-mainnet",
+        "label": "Dogecoin",
+        "address": "DH5y aieq oZN3 6fDV ciNy RueR GvGL R3mr 7L",
+        "qr": {
+            "size": 37,
+            "bits": "/vuYc/wTOr4QbpL5qLt17EHV2659Aa7BVmxlB/qqqq/gHXK3AIunmJfIp2GXxD+kzMWBOQ+7flvzCGljcIuaHeC9pyTKC5qdV3UejDIHMATE6cUE/qv8WCJIy0tuarmtc7ao8K1qG2y8RM8SYZdW/3+YljcEA7nMCcdcVagpF70bfWlgdPqAeMPcR/uNBioQQN5FFbqeMo+90pTpmW6PI9rJBNCJI2/v3zNjgA=="
+        }
+    }
+]
