@@ -90,7 +90,6 @@ import {
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
-import { attachSiteRequestHandler } from './siteRequest.js';
 import { createTrezorBridge } from './trezorBridgeWindow.js';
 import { attachUpdater, desktopInstallChannel } from './updater.js';
 import { retainUpdaterEvent } from './updaterState/retainUpdaterEvent.js';
@@ -1468,21 +1467,6 @@ void runMainTask(async () => {
     // main-process MessageHost. `action.*.hw` handlers consult the
     // same process-wide `signerBridge` registry this listener feeds.
     attachSignerBridgeListener({ ipcMain, isTrustedSender });
-    attachSiteRequestHandler({
-        ipcMain,
-        isTrustedSender,
-        dependencies: async () => {
-            const settings = runtime?.vault
-                ? await flowsLib.getSettings(runtime.vault)
-                : null;
-            return {
-                openExternal: shell.openExternal,
-                fetchImpl: globalThis.fetch,
-                developerMode: settings?.developerMode === true,
-                tor: settings?.privacy?.torRouting === true,
-            };
-        },
-    });
 
     // §24.6 / G057: install the application menu (File → New Window)
     // before opening the primary window so the accelerator is live the
