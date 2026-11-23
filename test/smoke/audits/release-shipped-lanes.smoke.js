@@ -71,6 +71,7 @@ const DESKTOP = [
 ];
 
 const ANDROID_AAB = `xchain-wallet-android-v${V}.aab`;
+const WEAR_AAB = `xchain-wallet-wear-v${V}.aab`;
 const ANDROID_APK = `xchain-wallet-v${V}.apk`;
 
 const work = mkdtempSync(join(tmpdir(), 'xc999-lanes-'));
@@ -134,7 +135,7 @@ function gate(dir, lanesPath = lanesFile, expectedPath = expected, cwd = undefin
 // expected-artifacts.txt must be claimed here too, or the fixture fails
 // the same claimed-by-no-lane check the real file would.
 const BASE = [
-    'android   NOT-SHIPPED  store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
+    'android   NOT-SHIPPED  store-only  xchain-wallet-android-v*.aab xchain-wallet-wear-v*.aab xchain-wallet-v*[0-9].apk',
     'ios       NOT-SHIPPED  store-only  xchain-wallet-ios-v*.ipa',
     'mas       NOT-SHIPPED  store-only  *-mas.pkg',
     'msstore   NOT-SHIPPED  store-only  *-appx.appx',
@@ -173,8 +174,9 @@ try {
         const r = gate(stage(), withAndroid('SHIPPED'));
         check('once android is SHIPPED, a release with no Android artifact fails',
             !r.ok, r.out);
-        check('...and it names BOTH halves of the pair',
+        check('...and it names the phone AAB, Wear AAB, and direct APK',
             /xchain-wallet-android-v\*\.aab/.test(r.out)
+            && /xchain-wallet-wear-v\*\.aab/.test(r.out)
             && /xchain-wallet-v\*\[0-9\]\.apk/.test(r.out), r.out);
         check('...as a lane regression, not as an undeclared artifact',
             /LANE-REGRESSION/.test(r.out), r.out);
@@ -183,8 +185,8 @@ try {
     // 3. The same release with the pair staged passes, so the gate is
     //    demanding the artifacts and not merely rejecting the word.
     {
-        const r = gate(stage([ANDROID_AAB, ANDROID_APK]), withAndroid('SHIPPED'));
-        check('a SHIPPED android lane with both artifacts staged passes',
+        const r = gate(stage([ANDROID_AAB, WEAR_AAB, ANDROID_APK]), withAndroid('SHIPPED'));
+        check('a SHIPPED android lane with all three artifacts staged passes',
             r.ok && /shipped-lane gate ok/.test(r.out), r.out);
     }
 
@@ -251,9 +253,10 @@ try {
     {
         const decoyDir = mkdtempSync(join(work, 'decoy-'));
         writeFileSync(join(decoyDir, ANDROID_AAB), 'decoy\n');
+        writeFileSync(join(decoyDir, WEAR_AAB), 'decoy\n');
         writeFileSync(join(decoyDir, ANDROID_APK), 'decoy\n');
         writeFileSync(join(decoyDir, 'decoy.snap'), 'decoy\n');
-        const r = gate(stage([ANDROID_AAB, ANDROID_APK]), withAndroid('SHIPPED'),
+        const r = gate(stage([ANDROID_AAB, WEAR_AAB, ANDROID_APK]), withAndroid('SHIPPED'),
             expected, decoyDir);
         check('decoy files in the working directory do not break a correct release',
             r.ok && /shipped-lane gate ok/.test(r.out), r.out);
@@ -280,8 +283,9 @@ try {
         // The APK glob is ANCHORED (`*[0-9].apk`) so it cannot also swallow
         // the full-feature APK, which is a different profile; see
         // expected-artifacts.txt for the measurement behind the anchor.
-        check('the committed android row exists and declares both globs',
+        check('the committed android row exists and declares all three globs',
             !!row && /xchain-wallet-android-v\*\.aab/.test(row)
+            && /xchain-wallet-wear-v\*\.aab/.test(row)
             && /xchain-wallet-v\*\[0-9\]\.apk/.test(row), row ?? '<no android row>');
 
         // The pair-agreement check (every optional artifact is claimed by
@@ -330,6 +334,7 @@ try {
         const completeWithoutWindows = [
             ...DESKTOP.filter((name) => !/\.exe$|-win\.zip$/.test(name)),
             ANDROID_AAB,
+            WEAR_AAB,
             ANDROID_APK,
             `xchain-wallet-v${V}-full.apk`,
         ];

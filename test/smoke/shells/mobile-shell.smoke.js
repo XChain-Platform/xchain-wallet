@@ -1426,8 +1426,8 @@ const shippedLanes = readFileSync(
 );
 assert.match(
     shippedLanes,
-    /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
-    'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
+    /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-wear-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
+    'shipped-lanes.txt declares the android lane with the phone AAB, Wear AAB, and direct APK',
 );
 // The feed column is asserted, not merely tolerated. Play is its
 // own update channel, so this lane carries no electron-updater pointer and

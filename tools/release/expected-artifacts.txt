@@ -264,6 +264,9 @@ required  *.deb                             default  x64,arm64 none
 #          publicly. Hashed into the manifest anyway: the manifest is the
 #          record of what was submitted, since Play re-signs and serves
 #          device-split APKs that cannot be verified against it at all.
+#   wear   store-bound, signed by the same K9 key as the phone AAB because
+#          the Data Layer requires both apps to have the same signature.
+#          Uploaded to Play with the phone app and NEVER hosted publicly.
 #   .apk   the DIRECT download, signed by K10, hosted on
 #          downloads.xchain.io. This is the only verifiable Android
 #          artifact, and the one users check by hand
@@ -282,6 +285,7 @@ required  *.deb                             default  x64,arm64 none
 # Store version carries exactly one build, so a per-arch pair is two
 # candidates for one slot rather than something the store can serve.
 optional  xchain-wallet-android-v*.aab      store    -         deferred-android
+optional  xchain-wallet-wear-v*.aab         store    -         deferred-android
 optional  xchain-wallet-v*[0-9].apk         store    -         deferred-android
 #
 # THE SECOND DIRECT APK: same tag, `default` profile, K10 signature, and it

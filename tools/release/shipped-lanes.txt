@@ -61,10 +61,11 @@
 # CSP, sourcemaps, and the signed profile stamp, and the compile-out mechanism
 # remains available if a later reviewed decision names a surface to hide.
 
-# Android. The pair is ONE build: the ceremony signs the AAB with
-# K9 and derives the universal APK from that same bundle with K10, so a
-# release carrying one and not the other means the ceremony was
-# interrupted, never that only one lane was intended. They flip together.
+# Android. The phone pair and Wear AAB are ONE build: the ceremony signs both
+# AABs with K9 and derives the universal APK from the phone bundle with K10.
+# A release carrying only part of that set means the ceremony was interrupted,
+# never that only one artifact was intended. The Wear AAB is store-bound and
+# never hosted, and the direct-APK lane gets no watch build.
 #
 # SHIPPED in v0.336.0, published 2026-08-06 to
 # downloads.xchain.io/wallet/android/xchain-wallet-v0.336.0.apk and attested
@@ -87,7 +88,7 @@
 # also swallowed the full-feature APK below, silently labelling it `store`.
 # This row must keep spelling the glob exactly as that file does, because a
 # glob here that no row there declares is a hard failure by design.
-android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk
+android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-wear-v*.aab xchain-wallet-v*[0-9].apk
 
 # The second direct APK (operator answer 2026-08-07): the same tag
 # built at the `default` profile and signed by K10, for the audience that

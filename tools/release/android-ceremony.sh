@@ -281,6 +281,7 @@ ARTIFACT_VERSION="$(node "$MOBILE_DIR/scripts/version.js" "$TAG" --artifact)"
 echo "==> $TAG -> versionCode $VERSION_CODE, versionName $VERSION_NAME, artifacts v$ARTIFACT_VERSION"
 
 AAB_NAME="xchain-wallet-android-v${ARTIFACT_VERSION}.aab"
+WEAR_AAB_NAME="xchain-wallet-wear-v${ARTIFACT_VERSION}.aab"
 APK_NAME="xchain-wallet-v${ARTIFACT_VERSION}.apk"
 
 # ---------------------------------------------------------------------
@@ -322,12 +323,15 @@ if ! ( cd "$ANDROID_DIR" && ./gradlew --no-daemon clean bundleRelease ); then
 fi
 
 RAW_AAB="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
+RAW_WEAR_AAB="$ANDROID_DIR/wear/build/outputs/bundle/release/wear-release.aab"
 [ -f "$RAW_AAB" ] || die "gradle did not produce $RAW_AAB"
+[ -f "$RAW_WEAR_AAB" ] || die "gradle did not produce $RAW_WEAR_AAB"
 
 mkdir -p "$OUTPUT_DIR"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 cp "$RAW_AAB" "$WORK_DIR/$AAB_NAME"
+cp "$RAW_WEAR_AAB" "$WORK_DIR/$WEAR_AAB_NAME"
 
 # ---------------------------------------------------------------------
 # 1b. Verify what is actually inside the bundle, BEFORE any key touches it
@@ -360,25 +364,38 @@ echo "==> verifying the built bundle's manifest (§5, §7)"
 verify_bundle_manifest "$WORK_DIR/$AAB_NAME" "$WORK_DIR/merged-manifest.xml" \
     || die "the built bundle does not match what §5 and §7 pin; nothing was signed"
 
+echo "==> verifying the built Wear bundle's manifest"
+java -jar "$BUNDLETOOL" dump manifest --bundle="$WORK_DIR/$WEAR_AAB_NAME" \
+    > "$WORK_DIR/wear-merged-manifest.xml" \
+    || die "bundletool could not dump the Wear manifest; nothing was signed"
+node "$REPO_ROOT/tools/release/verify-wear-manifest.mjs" \
+    "$WORK_DIR/wear-merged-manifest.xml" \
+    || die "the built Wear bundle does not match the pinned manifest; nothing was signed"
+
 # ---------------------------------------------------------------------
 # 2. Sign the AAB with K9 (Play upload key)
 # ---------------------------------------------------------------------
 
-if [ -n "${XCHAIN_K9_PASSFILE:-}" ]; then
-    echo "==> signing the AAB with K9 (password read from its 0600 file)"
-    jarsigner -verbose:summary \
-        -sigalg SHA256withRSA -digestalg SHA-256 \
-        -keystore "$XCHAIN_K9_KEYSTORE" \
-        -storepass:file "$XCHAIN_K9_PASSFILE" \
-        "$WORK_DIR/$AAB_NAME" "$XCHAIN_K9_ALIAS"
-else
-    echo "==> signing the AAB with K9 (you will be prompted for the keystore password)"
-    jarsigner -verbose:summary \
-        -sigalg SHA256withRSA -digestalg SHA-256 \
-        -keystore "$XCHAIN_K9_KEYSTORE" \
-        "$WORK_DIR/$AAB_NAME" "$XCHAIN_K9_ALIAS"
-fi
-jarsigner -verify "$WORK_DIR/$AAB_NAME" >/dev/null || die "K9 signature did not verify"
+sign_with_k9() {
+    local artifact="$1"
+    if [ -n "${XCHAIN_K9_PASSFILE:-}" ]; then
+        echo "==> signing $(basename "$artifact") with K9 (password read from its 0600 file)"
+        jarsigner -verbose:summary \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore "$XCHAIN_K9_KEYSTORE" \
+            -storepass:file "$XCHAIN_K9_PASSFILE" \
+            "$artifact" "$XCHAIN_K9_ALIAS"
+    else
+        echo "==> signing $(basename "$artifact") with K9 (you will be prompted for the keystore password)"
+        jarsigner -verbose:summary \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore "$XCHAIN_K9_KEYSTORE" \
+            "$artifact" "$XCHAIN_K9_ALIAS"
+    fi
+    jarsigner -verify "$artifact" >/dev/null || die "K9 signature did not verify for $artifact"
+}
+sign_with_k9 "$WORK_DIR/$AAB_NAME"
+sign_with_k9 "$WORK_DIR/$WEAR_AAB_NAME"
 
 # ---------------------------------------------------------------------
 # 3. Derive the universal APK FROM THAT SAME AAB, then sign with K10
@@ -479,6 +496,7 @@ fi
 # do-not-publish note, so a failure between the two steps cannot leave
 # unmarked signed bytes on disk.
 mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
+mv "$WORK_DIR/$WEAR_AAB_NAME" "$OUTPUT_DIR/$WEAR_AAB_NAME"
 mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
 
 # ---------------------------------------------------------------------
