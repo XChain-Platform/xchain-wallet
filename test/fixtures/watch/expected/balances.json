@@ -359,6 +359,59 @@
           "key": "state.moreOnPhone"
         }
       ],
+      "a11y": [
+        "Token 01, $1.00",
+        "Token 02, $2.00",
+        "Token 03, $3.00",
+        "Token 04, $4.00",
+        "Token 05, $5.00",
+        "Token 06, $6.00",
+        "Token 07, $7.00",
+        "Token 08, $8.00",
+        "Token 09, $9.00",
+        "Token 10, $10.00",
+        "Token 11, $11.00",
+        "Token 12, $12.00",
+        "Token 13, $13.00",
+        "Token 14, $14.00",
+        "Token 15, $15.00",
+        "Token 16, $16.00",
+        "Token 17, $17.00",
+        "Token 18, $18.00",
+        "Token 19, $19.00",
+        "Token 20, $20.00",
+        "Token 21, $21.00",
+        "Token 22, $22.00",
+        "Token 23, $23.00",
+        "Token 24, $24.00",
+        "Token 25, $25.00",
+        "Token 26, $26.00",
+        "Token 27, $27.00",
+        "Token 28, $28.00",
+        "Token 29, $29.00",
+        "Token 30, $30.00",
+        "Token 31, $31.00",
+        "Token 32, $32.00",
+        "Token 33, $33.00",
+        "Token 34, $34.00",
+        "Token 35, $35.00",
+        "Token 36, $36.00",
+        "Token 37, $37.00",
+        "Token 38, $38.00",
+        "Token 39, $39.00",
+        "Token 40, $40.00",
+        "Token 41, $41.00",
+        "Token 42, $42.00",
+        "Token 43, $43.00",
+        "Token 44, $44.00",
+        "Token 45, $45.00",
+        "Token 46, $46.00",
+        "Token 47, $47.00",
+        "Token 48, $48.00",
+        "Token 49, $49.00",
+        "Token 50, $50.00",
+        "More on phone"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -721,6 +774,59 @@
           "key": "state.moreOnPhone"
         }
       ],
+      "a11y": [
+        "Token 01, 1 T01",
+        "Token 02, 2 T02",
+        "Token 03, 3 T03",
+        "Token 04, 4 T04",
+        "Token 05, 5 T05",
+        "Token 06, 6 T06",
+        "Token 07, 7 T07",
+        "Token 08, 8 T08",
+        "Token 09, 9 T09",
+        "Token 10, 10 T10",
+        "Token 11, 11 T11",
+        "Token 12, 12 T12",
+        "Token 13, 13 T13",
+        "Token 14, 14 T14",
+        "Token 15, 15 T15",
+        "Token 16, 16 T16",
+        "Token 17, 17 T17",
+        "Token 18, 18 T18",
+        "Token 19, 19 T19",
+        "Token 20, 20 T20",
+        "Token 21, 21 T21",
+        "Token 22, 22 T22",
+        "Token 23, 23 T23",
+        "Token 24, 24 T24",
+        "Token 25, 25 T25",
+        "Token 26, 26 T26",
+        "Token 27, 27 T27",
+        "Token 28, 28 T28",
+        "Token 29, 29 T29",
+        "Token 30, 30 T30",
+        "Token 31, 31 T31",
+        "Token 32, 32 T32",
+        "Token 33, 33 T33",
+        "Token 34, 34 T34",
+        "Token 35, 35 T35",
+        "Token 36, 36 T36",
+        "Token 37, 37 T37",
+        "Token 38, 38 T38",
+        "Token 39, 39 T39",
+        "Token 40, 40 T40",
+        "Token 41, 41 T41",
+        "Token 42, 42 T42",
+        "Token 43, 43 T43",
+        "Token 44, 44 T44",
+        "Token 45, 45 T45",
+        "Token 46, 46 T46",
+        "Token 47, 47 T47",
+        "Token 48, 48 T48",
+        "Token 49, 49 T49",
+        "Token 50, 50 T50",
+        "More on phone"
+      ],
       "banners": [],
       "ageLine": "state.age"
     }
@@ -753,6 +859,9 @@
           "key": "w1.empty"
         }
       ],
+      "a11y": [
+        "No balances yet"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -764,6 +873,9 @@
         {
           "key": "w1.empty"
         }
+      ],
+      "a11y": [
+        "No balances yet"
       ],
       "banners": [],
       "ageLine": "state.age"
@@ -783,6 +895,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Bitcoin, Amount hidden"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -798,6 +913,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Bitcoin, Amount hidden"
       ],
       "banners": [],
       "ageLine": "state.age"
@@ -817,6 +935,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Bitcoin, $20,000.00"
+      ],
       "banners": [
         "state.locked"
       ],
@@ -834,6 +955,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Bitcoin, 0.50 BTC"
       ],
       "banners": [
         "state.locked"
@@ -855,6 +979,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Extremely long asset name NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN, $123,456,789.12"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -870,6 +997,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Extremely long asset name NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN, 123,456,789.12345678 LONG"
       ],
       "banners": [],
       "ageLine": "state.age"
@@ -1232,6 +1362,58 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Token 01, $1.00",
+        "Token 02, $2.00",
+        "Token 03, $3.00",
+        "Token 04, $4.00",
+        "Token 05, $5.00",
+        "Token 06, $6.00",
+        "Token 07, $7.00",
+        "Token 08, $8.00",
+        "Token 09, $9.00",
+        "Token 10, $10.00",
+        "Token 11, $11.00",
+        "Token 12, $12.00",
+        "Token 13, $13.00",
+        "Token 14, $14.00",
+        "Token 15, $15.00",
+        "Token 16, $16.00",
+        "Token 17, $17.00",
+        "Token 18, $18.00",
+        "Token 19, $19.00",
+        "Token 20, $20.00",
+        "Token 21, $21.00",
+        "Token 22, $22.00",
+        "Token 23, $23.00",
+        "Token 24, $24.00",
+        "Token 25, $25.00",
+        "Token 26, $26.00",
+        "Token 27, $27.00",
+        "Token 28, $28.00",
+        "Token 29, $29.00",
+        "Token 30, $30.00",
+        "Token 31, $31.00",
+        "Token 32, $32.00",
+        "Token 33, $33.00",
+        "Token 34, $34.00",
+        "Token 35, $35.00",
+        "Token 36, $36.00",
+        "Token 37, $37.00",
+        "Token 38, $38.00",
+        "Token 39, $39.00",
+        "Token 40, $40.00",
+        "Token 41, $41.00",
+        "Token 42, $42.00",
+        "Token 43, $43.00",
+        "Token 44, $44.00",
+        "Token 45, $45.00",
+        "Token 46, $46.00",
+        "Token 47, $47.00",
+        "Token 48, $48.00",
+        "Token 49, $49.00",
+        "Token 50, $50.00"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -1591,6 +1773,58 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Token 01, 1 T01",
+        "Token 02, 2 T02",
+        "Token 03, 3 T03",
+        "Token 04, 4 T04",
+        "Token 05, 5 T05",
+        "Token 06, 6 T06",
+        "Token 07, 7 T07",
+        "Token 08, 8 T08",
+        "Token 09, 9 T09",
+        "Token 10, 10 T10",
+        "Token 11, 11 T11",
+        "Token 12, 12 T12",
+        "Token 13, 13 T13",
+        "Token 14, 14 T14",
+        "Token 15, 15 T15",
+        "Token 16, 16 T16",
+        "Token 17, 17 T17",
+        "Token 18, 18 T18",
+        "Token 19, 19 T19",
+        "Token 20, 20 T20",
+        "Token 21, 21 T21",
+        "Token 22, 22 T22",
+        "Token 23, 23 T23",
+        "Token 24, 24 T24",
+        "Token 25, 25 T25",
+        "Token 26, 26 T26",
+        "Token 27, 27 T27",
+        "Token 28, 28 T28",
+        "Token 29, 29 T29",
+        "Token 30, 30 T30",
+        "Token 31, 31 T31",
+        "Token 32, 32 T32",
+        "Token 33, 33 T33",
+        "Token 34, 34 T34",
+        "Token 35, 35 T35",
+        "Token 36, 36 T36",
+        "Token 37, 37 T37",
+        "Token 38, 38 T38",
+        "Token 39, 39 T39",
+        "Token 40, 40 T40",
+        "Token 41, 41 T41",
+        "Token 42, 42 T42",
+        "Token 43, 43 T43",
+        "Token 44, 44 T44",
+        "Token 45, 45 T45",
+        "Token 46, 46 T46",
+        "Token 47, 47 T47",
+        "Token 48, 48 T48",
+        "Token 49, 49 T49",
+        "Token 50, 50 T50"
+      ],
       "banners": [],
       "ageLine": "state.age"
     }
@@ -1609,6 +1843,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Bitcoin, $20,000.00"
+      ],
       "banners": [],
       "ageLine": "state.ageAmber"
     },
@@ -1624,6 +1861,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Bitcoin, 0.50 BTC"
       ],
       "banners": [],
       "ageLine": "state.ageAmber"
@@ -1643,6 +1883,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Bitcoin, $20,000.00"
+      ],
       "banners": [
         "state.stale24h"
       ],
@@ -1660,6 +1903,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Bitcoin, 0.50 BTC"
       ],
       "banners": [
         "state.stale24h"
@@ -1681,6 +1927,9 @@
           "secondary": null
         }
       ],
+      "a11y": [
+        "Bitcoin, 0.50 BTC"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -1696,6 +1945,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Bitcoin, 0.50 BTC"
       ],
       "banners": [],
       "ageLine": "state.age"
@@ -1717,6 +1969,9 @@
           }
         }
       ],
+      "a11y": [
+        "Pepe Cash, No price yet, 1,000 PEPECASH"
+      ],
       "banners": [],
       "ageLine": "state.age"
     },
@@ -1732,6 +1987,9 @@
           },
           "secondary": null
         }
+      ],
+      "a11y": [
+        "Pepe Cash, 1,000 PEPECASH"
       ],
       "banners": [],
       "ageLine": "state.age"
