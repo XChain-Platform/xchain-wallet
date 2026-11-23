@@ -39,6 +39,7 @@
 //   8. index.ts re-exports the new symbols + types.
 
 import { strict as assert } from 'node:assert';
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +67,56 @@ const {
     createCallbackStore,
     createTestDappServer,
 } = await import('../../../packages/test-dapp/server.js');
+
+async function executeServedModuleGraph(entryUrl) {
+    const entry = JSON.stringify(entryUrl);
+    const evaluator = `
+        import { SourceTextModule } from 'node:vm';
+
+        const entryUrl = new URL(${entry});
+        const modules = new Map();
+
+        async function load(url) {
+            if (modules.has(url)) return modules.get(url);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(\`\${url} returned HTTP \${response.status}\`);
+            if (!/^text\\/javascript(?:;|$)/.test(response.headers.get('content-type') ?? '')) {
+                throw new Error(\`\${url} was not served as JavaScript\`);
+            }
+            const module = new SourceTextModule(await response.text(), { identifier: url });
+            modules.set(url, module);
+            return module;
+        }
+
+        const root = await load(entryUrl.href);
+        await root.link(async (specifier, referencingModule) => {
+            const dependency = new URL(specifier, referencingModule.identifier);
+            if (dependency.origin !== entryUrl.origin) {
+                throw new Error(\`cross-origin module import: \${dependency.href}\`);
+            }
+            return load(dependency.href);
+        });
+        await root.evaluate();
+        process.stdout.write(JSON.stringify(Array.from(modules.keys()).sort()));
+    `;
+    const child = spawn(process.execPath, [
+        '--no-warnings',
+        '--experimental-vm-modules',
+        '--input-type=module',
+        '--eval',
+        evaluator,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    const code = await new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', resolve);
+    });
+    assert.equal(code, 0, Buffer.concat(stderr).toString('utf8'));
+    return JSON.parse(Buffer.concat(stdout).toString('utf8'));
+}
 
 // --- 1. Mock provider options ------------------------------------------
 
@@ -287,9 +338,18 @@ try {
     assert.match(rootResponse.headers.get('content-type'), /^text\/html/);
     assert.match(await rootResponse.text(), /XChain test dApp/);
 
-    const moduleResponse = await fetch(`${base}/connect/client.js`);
-    assert.equal(moduleResponse.status, 200);
-    assert.match(await moduleResponse.text(), /export function createClient/);
+    const servedModules = await executeServedModuleGraph(`${base}/connect/client.js`);
+    assert.deepEqual(servedModules.map((url) => new URL(url).pathname), [
+        '/connect/chooserPick.js',
+        '/connect/client.js',
+        '/connect/pendingStore.js',
+        '/connect/qr.js',
+        '/connect/request.js',
+        '/connect/transportPick.js',
+    ]);
+
+    const traversalResponse = await fetch(`${base}/connect/%252e%252e/server.js`);
+    assert.equal(traversalResponse.status, 404);
 
     const nonceResponse = await post('/nonce', { mode: 'same-device' });
     assert.equal(nonceResponse.status, 201);
@@ -365,5 +425,5 @@ try {
 }
 
 console.log(
-    'OK: test-dapp error scenarios, browser page, callback receiver, claim match, replay refusal, and callback-only no-result rule',
+    'OK: test-dapp error scenarios, served module graph execution, callback receiver, claim match, replay refusal, and callback-only no-result rule',
 );

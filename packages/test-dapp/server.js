@@ -103,8 +103,22 @@ function fileForPath(pathname, publicDirectory, connectDirectory) {
     if (pathname === '/' || pathname === '/index.html') {
         return join(publicDirectory, 'index.html');
     }
-    const match = /^\/connect\/([A-Za-z][A-Za-z0-9.-]*\.js)$/.exec(pathname);
-    return match ? join(connectDirectory, match[1]) : null;
+    if (!pathname.startsWith('/connect/')) return null;
+    let relativePath;
+    try {
+        relativePath = decodeURIComponent(pathname.slice('/connect/'.length));
+    } catch {
+        return null;
+    }
+    const segments = relativePath.split('/');
+    if (!relativePath.endsWith('.js') || segments.some((segment) => (
+        !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment)
+        || segment === '.'
+        || segment === '..'
+    ))) {
+        return null;
+    }
+    return join(connectDirectory, ...segments);
 }
 
 async function sendFile(response, pathname, publicDirectory, connectDirectory) {
