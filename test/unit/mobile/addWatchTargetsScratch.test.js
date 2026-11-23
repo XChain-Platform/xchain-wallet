@@ -78,9 +78,11 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb scratch pro
 
         expect(projectText).toMatch(/objectVersion = 77;/);
         expect(projectText).toMatch(/preferredProjectObjectVersion = 77;/);
-        expect(projectText.match(/isa = PBXFileSystemSynchronizedRootGroup;/g)).toHaveLength(2);
+        expect(projectText.match(/isa = PBXFileSystemSynchronizedRootGroup;/g)).toHaveLength(4);
         expect(projectText).toMatch(/path = WatchApp;/);
         expect(projectText).toMatch(/path = WatchAppTests;/);
+        expect(projectText).toMatch(/path = WatchShared;/);
+        expect(projectText).toMatch(/path = WatchWidgets;/);
         expect(existsSync(join(fixture.project, 'xcshareddata/xcschemes/WatchApp.xcscheme'))).toBe(true);
 
         const second = runScript(fixture);

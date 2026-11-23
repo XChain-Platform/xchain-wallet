@@ -71,6 +71,13 @@ const watchScheme = readFileSync(
 );
 const watchAppSource = readFileSync(join(ios, 'App', 'WatchApp', 'XChainWatchApp.swift'), 'utf8');
 const watchTestsSource = readFileSync(join(ios, 'App', 'WatchAppTests', 'SmokeTests.swift'), 'utf8');
+const watchSharedSource = readFileSync(join(ios, 'App', 'WatchShared', 'WatchShared.swift'), 'utf8');
+const watchWidgetsSource = readFileSync(join(ios, 'App', 'WatchWidgets', 'WatchWidgetsBundle.swift'), 'utf8');
+const watchAppEntitlements = readFileSync(join(ios, 'App', 'WatchApp', 'WatchApp.entitlements'), 'utf8');
+const watchWidgetsEntitlements = readFileSync(
+    join(ios, 'App', 'WatchWidgets', 'WatchWidgets.entitlements'),
+    'utf8',
+);
 const watchTestScript = readFileSync(join(mobile, 'scripts', 'watch-test.sh'), 'utf8');
 
 /* A deliberately small plist reader. Hand-rolled rather than pulled from npm
@@ -98,14 +105,40 @@ assert.match(pbxproj, /objectVersion = 77;/, 'synchronized groups require object
 assert.match(pbxproj, /preferredProjectObjectVersion = 77;/);
 assert.match(pbxproj, /path = WatchApp;/, 'missing synchronized WatchApp source group');
 assert.match(pbxproj, /path = WatchAppTests;/, 'missing synchronized WatchAppTests source group');
+assert.match(pbxproj, /path = WatchShared;/, 'missing synchronized shared watch source group');
+assert.match(pbxproj, /path = WatchWidgets;/, 'missing synchronized widget source group');
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch;/);
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.tests;/);
+assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.widgets;/);
+assert.match(pbxproj, /INFOPLIST_FILE = "\$\(DERIVED_FILE_DIR\)\/WatchWidgets-Info\.plist";/);
+assert.match(pbxproj, /NSExtensionPointIdentifier.*com\.apple\.widgetkit-extension/);
+assert.doesNotMatch(pbxproj, /INFOPLIST_KEY_NSExtensionPointIdentifier/);
 assert.match(pbxproj, /INFOPLIST_KEY_WKCompanionAppBundleIdentifier = io\.xchain\.wallet\.ios;/);
 assert.match(pbxproj, /INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;/);
+assert.match(pbxproj, /CODE_SIGN_ENTITLEMENTS = WatchApp\/WatchApp\.entitlements;/);
+assert.match(pbxproj, /CODE_SIGN_ENTITLEMENTS = WatchWidgets\/WatchWidgets\.entitlements;/);
+assert.match(pbxproj, /Embed App Extensions[\s\S]*?dstSubfolderSpec = 13;/);
+assert.match(
+    pbxproj,
+    /Embed Watch Content[\s\S]*?dstPath = "\$\(CONTENTS_FOLDER_PATH\)\/Watch";[\s\S]*?dstSubfolderSpec = 16;/,
+);
 assert.match(watchScheme, /BlueprintName = "WatchApp"/);
 assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
 assert.match(watchAppSource, /@main[\s\S]*Open XChain Wallet on your phone/);
 assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
+assert.match(watchSharedSource, /enum WatchShared/);
+assert.match(watchWidgetsSource, /@main[\s\S]*struct WatchWidgetsBundle: WidgetBundle/);
+for (const watchEntitlements of [watchAppEntitlements, watchWidgetsEntitlements]) {
+    assert.deepEqual(
+        plistValue(watchEntitlements, 'com.apple.security.application-groups'),
+        ['group.io.xchain.wallet.ios.watch'],
+    );
+}
+assert.equal(
+    plistValue(entitlements, 'com.apple.security.application-groups'),
+    undefined,
+    'the watch app group must never be granted to the phone app',
+);
 assert.match(watchTestScript, /simctl list pairs -j/);
 assert.match(watchTestScript, /simctl list devices -j/);
 assert.match(watchTestScript, /-destination "id=\$destination"/);
