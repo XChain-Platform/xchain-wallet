@@ -144,9 +144,15 @@ describe('style guide primitive coverage', () => {
 
     it('gives every newly audited primitive guidance, JSX, and a live example', () => {
         const files = [
+            'AddressTextSection.jsx',
+            'AnimatedQrFramesSection.jsx',
+            'ChainBadgeSection.jsx',
             'ChoicePrimitivesSection.jsx',
-            'DisplayPrimitivesSection.jsx',
-            'QrPrimitivesSection.jsx',
+            'CopyButtonSection.jsx',
+            'InfoTipSection.jsx',
+            'MultisigBadgeSection.jsx',
+            'QrScannerSection.jsx',
+            'VerifiedBadgeSection.jsx',
         ].map((file) => fs.readFileSync(
             path.join(root, 'packages/web/src/style-guide/sections', file),
             'utf8',
@@ -184,15 +190,15 @@ describe('style guide primitive coverage', () => {
         const choices = sectionSource('ChoicePrimitivesSection.jsx', 'AddressComboboxSection');
         expect(choices).toContain('<AddressComboboxExample size="lg" />');
 
-        const display = fs.readFileSync(
-            path.join(sectionRoot, 'DisplayPrimitivesSection.jsx'),
-            'utf8',
-        );
-        expect(display).toContain('showName={false}');
-        expect(display).toContain('showNetworkKind={false}');
-        expect(display).toContain('scheme="p2sh-multisig" size="sm"');
-        expect(display).toContain('status="pending" size="md"');
-        expect(display).toContain('placement="bottom"');
+        const chainBadge = sectionSource('ChainBadgeSection.jsx', 'ChainBadgeSection');
+        expect(chainBadge).toContain('showName={false}');
+        expect(chainBadge).toContain('showNetworkKind={false}');
+        expect(sectionSource('MultisigBadgeSection.jsx', 'MultisigBadgeSection'))
+            .toContain('scheme="p2sh-multisig" size="sm"');
+        expect(sectionSource('VerifiedBadgeSection.jsx', 'VerifiedBadgeSection'))
+            .toContain('status="pending" size="md"');
+        expect(sectionSource('InfoTipSection.jsx', 'InfoTipSection'))
+            .toContain('placement="bottom"');
 
         const network = sectionSource('NetworkFieldSection.jsx', 'NetworkFieldSection');
         expect(network).toMatch(
