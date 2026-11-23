@@ -13,15 +13,19 @@ final class AlertDetailScreenTests: XCTestCase {
         let item = try alerts()[2]
         let screen = AlertDetailScreen(item: item, now: now, onOpenOnPhone: {})
 
-        XCTAssertEqual(screen.familySymbol, AlertFamilyIcon.symbol(family: item.family))
-        XCTAssertEqual(screen.item?.title, "Payment alert needs review on your phone so it can continue.")
-        XCTAssertEqual(
-            screen.detailBody,
+        let content = renderedContent(in: screen.body)
+        let time = RelativeTimeText.fill(NSLocalizedString("w3.timeHours", comment: ""), n: 2)
+
+        XCTAssertTrue(content.strings.contains(screen.familySymbol))
+        XCTAssertTrue(content.strings.contains(
+            "Payment alert needs review on your phone so it can continue."
+        ))
+        XCTAssertTrue(content.strings.contains(
             "This notice keeps complete payment context on your phone, where you can review the amount, source, timing, and next step safely before choosing what to do next."
-        )
-        XCTAssertEqual(screen.alertTime?.key, "w3.timeHours")
-        XCTAssertEqual(screen.alertTime?.n, 2)
-        XCTAssertNil(screen.request)
+        ))
+        XCTAssertTrue(content.strings.contains(time))
+        XCTAssertTrue(content.strings.contains("w4.openOnPhone"))
+        XCTAssertTrue(content.strings.contains("iphone"))
         XCTAssertNotNil(render(screen, width: 176, height: 208))
     }
 
@@ -32,7 +36,12 @@ final class AlertDetailScreenTests: XCTestCase {
         )
         let screen = AlertDetailScreen(item: item, now: now, onOpenOnPhone: {})
 
-        XCTAssertNil(screen.detailBody)
+        let content = renderedContent(in: screen.body)
+        let time = RelativeTimeText.fill(NSLocalizedString("w3.timeMinutes", comment: ""), n: 0)
+
+        XCTAssertTrue(content.strings.contains("A complete alert title"))
+        XCTAssertTrue(content.strings.contains(time))
+        XCTAssertFalse(content.strings.contains(" \n "))
         XCTAssertNotNil(render(screen, width: 205, height: 251))
     }
 
@@ -40,11 +49,16 @@ final class AlertDetailScreenTests: XCTestCase {
         let request = try requestFixture("request-paydue")
         let screen = AlertDetailScreen(request: request, now: now, onOpenOnPhone: {})
 
-        XCTAssertEqual(screen.familySymbol, AlertFamilyIcon.symbol(family: request.kind.rawValue))
-        XCTAssertFalse(screen.requestExpired)
-        XCTAssertEqual(screen.request?.sentence, "Payment is due for this request.")
-        XCTAssertEqual(screen.request?.amountText, "125.00 USDC")
-        XCTAssertEqual(screen.request?.expiresAt, 4_102_444_800_000)
+        let content = renderedContent(in: screen.body)
+        let expiry = Date(timeIntervalSince1970: 4_102_444_800)
+
+        XCTAssertTrue(content.strings.contains(screen.familySymbol))
+        XCTAssertTrue(content.strings.contains("Payment is due for this request."))
+        XCTAssertTrue(content.strings.contains("w4.requestAmount"))
+        XCTAssertTrue(content.strings.contains("125.00 USDC"))
+        XCTAssertTrue(content.strings.contains("w4.requestExpiry"))
+        XCTAssertTrue(content.dates.contains(expiry))
+        XCTAssertTrue(content.strings.contains("w4.openOnPhone"))
         XCTAssertNotNil(render(screen, width: 176, height: 208))
     }
 
@@ -55,7 +69,10 @@ final class AlertDetailScreenTests: XCTestCase {
             onOpenOnPhone: { openCount += 1 }
         )
 
-        XCTAssertTrue(screen.requestExpired)
+        let content = renderedContent(in: screen.body)
+
+        XCTAssertTrue(content.strings.contains("w4.requestExpired"))
+        XCTAssertFalse(content.strings.contains("w4.requestExpiry"))
         screen.onOpenOnPhone()
         XCTAssertEqual(openCount, 1)
         XCTAssertNotNil(render(screen, width: 205, height: 251))
@@ -81,5 +98,35 @@ final class AlertDetailScreenTests: XCTestCase {
         let renderer = ImageRenderer(content: view.frame(width: width, height: height))
         renderer.scale = 2
         return renderer.cgImage
+    }
+
+    private func renderedContent(in value: Any) -> (strings: Set<String>, dates: Set<Date>) {
+        var strings = Set<String>()
+        var dates = Set<Date>()
+        var visited = Set<ObjectIdentifier>()
+
+        func visit(_ value: Any, depth: Int) {
+            guard depth < 40 else { return }
+            if let string = value as? String {
+                strings.insert(string)
+                return
+            }
+            if let date = value as? Date {
+                dates.insert(date)
+                return
+            }
+
+            let mirror = Mirror(reflecting: value)
+            if mirror.displayStyle == .class {
+                let identifier = ObjectIdentifier(value as AnyObject)
+                guard visited.insert(identifier).inserted else { return }
+            }
+            for child in mirror.children {
+                visit(child.value, depth: depth + 1)
+            }
+        }
+
+        visit(value, depth: 0)
+        return (strings, dates)
     }
 }
