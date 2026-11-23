@@ -182,11 +182,17 @@ function checkPatch(version, ourMajor, newest, time, nowMs, problems, missing) {
     }
 }
 
-function checkMajors(ourMajor, latestMajor, tags, time, nowMs, problems, missing) {
-    const newerMajors = Object.keys(tags).map((tag) => /^(\d+)-x-y$/.exec(tag))
-        .filter(Boolean).map((match) => Number(match[1]))
-        .filter((major) => major > ourMajor && major <= latestMajor).sort((a, b) => a - b);
-    for (const major of newerMajors) {
+// Every major from ours up to `latest` is clocked, taken from the integer
+// range rather than from `<N>-x-y` channel tags: a sparse document that drops
+// a tag must surface that major as late or as missing evidence, never skip it.
+// The range is bounded because any major older than the support window
+// already fails as `unsupported`, so a malformed huge `latest` cannot spin.
+const MAX_CLOCKED_MAJORS = 32;
+
+function checkMajors(ourMajor, latestMajor, time, nowMs, problems, missing) {
+    if (!Number.isInteger(ourMajor) || !Number.isInteger(latestMajor)) return;
+    const first = Math.max(ourMajor + 1, latestMajor - MAX_CLOCKED_MAJORS + 1);
+    for (let major = first; major <= latestMajor; major += 1) {
         const firstStable = `${major}.0.0`;
         const released = time[firstStable] ?? null;
         const releasedMs = msOf(released);
@@ -245,7 +251,7 @@ export function assess(version, packument) {
         missing.push(`_now has unparseable timestamp ${JSON.stringify(packument._now)}`);
     }
     checkPatch(version, ourMajor, newestOnOurMajor, time, nowMs, problems, missing);
-    checkMajors(ourMajor, latestMajor, tags, time, nowMs, problems, missing);
+    checkMajors(ourMajor, latestMajor, time, nowMs, problems, missing);
     const oldestSupported = checkSupport(ourMajor, latestMajor, problems);
     const warnings = new Set(['about-to-be-unsupported', 'patch-pending']);
     const detected = problems.some((problem) => !warnings.has(problem.kind));

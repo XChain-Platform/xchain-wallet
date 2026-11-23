@@ -14,8 +14,12 @@
 // input), so every "spend my balance" form picks exactly one funding address.
 // To keep that choice consistent with Home and Send, these helpers prefer the
 // chain's active (operating) address and fall back to the newest HD external
-// address. Owner-gated actions (mint, dividend, transfer-ownership, etc.) do
-// NOT use these: they must source from the token's owner address instead.
+// address, or the newest hardware-device external address when the wallet
+// holds no HD one. Owner-gated actions (mint, dividend, transfer-ownership,
+// etc.) do NOT use these: they must source from the token's owner address
+// instead.
+
+import { isDeviceAddressSource } from '../schemas/constants.js';
 
 export const WATCH_ONLY_SIGNING_MESSAGE = 'This address has no key in this wallet, so it cannot sign.';
 
@@ -94,11 +98,27 @@ export function externalIndexOf(derivationPath) {
  * @returns {string | null} the chosen address id, or null when none qualifies
  */
 export function newestHdExternalId(addresses) {
-    const hd = (addresses || [])
+    return newestExternalIdWhere(addresses, (source) => source === 'hd');
+}
+
+/**
+ * Newest HD external address, else the newest hardware-device external
+ * address. The host's own default (flows/activeAddress.js) also falls back to
+ * a device address, so a device-only wallet gets a source here too.
+ *
+ * @param {Array<{ id: string, source?: string, derivationPath?: string }>} addresses
+ * @returns {string | null} the chosen address id, or null when none qualifies
+ */
+export function newestDerivedExternalId(addresses) {
+    return newestHdExternalId(addresses) ?? newestExternalIdWhere(addresses, isDeviceAddressSource);
+}
+
+function newestExternalIdWhere(addresses, sourceMatches) {
+    const candidates = (addresses || [])
         .map((a) => ({ a, index: externalIndexOf(a.derivationPath) }))
-        .filter(({ a, index }) => a.source === 'hd' && index !== null);
-    if (hd.length === 0) return null;
-    const sorted = [...hd].sort((x, y) => y.index - x.index);
+        .filter(({ a, index }) => sourceMatches(a.source) && index !== null);
+    if (candidates.length === 0) return null;
+    const sorted = [...candidates].sort((x, y) => y.index - x.index);
     return sorted[0].a.id;
 }
 
@@ -123,7 +143,8 @@ export function activeSourceId(addresses, activeEntry) {
 
 /**
  * Preferred funding/source address id for a chain: the active address when
- * resolvable, otherwise the newest HD external address. Mirrors Send's
+ * resolvable, otherwise the newest HD external address, otherwise the newest
+ * hardware-device external address. Mirrors Send's
  * resolution so every spend-from-balance action defaults to the same address.
  *
  * @param {Array<{ id: string, address: string, source?: string, derivationPath?: string }>} addresses
@@ -135,5 +156,5 @@ export function preferredSourceId(addresses, activeEntry) {
         .filter((address) => address?.source !== 'watch-only');
     // A watcher-mode wallet holds only watch-only addresses; keep them selectable.
     const pool = signingAddresses.length ? signingAddresses : (addresses || []);
-    return activeSourceId(pool, activeEntry) || newestHdExternalId(pool);
+    return activeSourceId(pool, activeEntry) || newestDerivedExternalId(pool);
 }

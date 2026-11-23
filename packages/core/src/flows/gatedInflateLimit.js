@@ -8,14 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { declaresDeflateRaw, fileCompressionFieldOf } from './payloadCompression.js';
+import {
+    declaresDeflateRaw,
+    extractFileSubcommand,
+    fileCompressionFieldOf,
+} from './payloadCompression.js';
 import { GATED_MULTIPART_MAX_BYTES } from './fileSizeLimits.js';
 
 const ACTION_STRING_KEYS = ['tx_data', 'action_string', 'actionString', 'raw_action'];
 
 function fileVersionOf(candidate) {
     if (typeof candidate !== 'string' || candidate.length === 0) return '';
-    const parts = candidate.split('|');
+    const parts = extractFileSubcommand(candidate).split('|');
     return String(parts[0]).toUpperCase() === 'FILE' ? String(parts[1]) : '';
 }
 

@@ -51,6 +51,7 @@ function makeVault(settings = { activeNetwork: 'regtest', blockedOrigins: [] }) 
             list: async () => [SITE],
             findBy: async (field, value) => (SITE[field] === value ? [SITE] : []),
             put: async (site) => site,
+            update: async (id, decide) => decide(SITE.id === id ? SITE : null) != null,
         },
         accounts: {
             list: async () => [{ id: 'acct-1', name: 'Primary', walletId: 'wallet-1' }],

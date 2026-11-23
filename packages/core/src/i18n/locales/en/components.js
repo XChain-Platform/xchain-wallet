@@ -232,6 +232,10 @@ const messages = {
     'components.gatedFileViewer.thePublishedFileType': 'The published file type (',
     'components.gatedFileViewer.doesnTMatchTheActual': ") doesn't match the actual content (",
     'components.gatedFileViewer.treatThisFileWithCaution': '). Treat this file with caution.',
+    'components.gatedFileViewer.storedFormNotDecompressed':
+        "This file couldn't be decompressed. What you see and download is its stored, still-compressed form, not the original file.",
+    'components.gatedFileViewer.storedFormOverLimit':
+        "This file expands past the safe decompression limit, so it wasn't decompressed. What you see and download is its stored, still-compressed form, not the original file.",
     'components.gatedFileViewer.close': 'Close',
     'components.gatedFileViewer.download': 'Download',
     'components.watcherResultPanel.unsignedTransactionReadyForSigning':
@@ -290,6 +294,8 @@ const messages = {
         'We couldn’t estimate this transaction’s effect (preview unavailable).',
     'components.balanceChanges.sideEffects': 'Side effects',
     'components.balanceChanges.unknown': 'unknown',
+    'components.balanceChanges.unknownDebit': '− unknown',
+    'components.outcomeDetailLayout.positionCount': '{count, plural, one {# position} other {# positions}}',
     'components.balanceChanges.balanceUnknown': 'Balance unknown',
     'components.balanceChanges.fiatUnavailable': 'Fiat unavailable ({fiatCurrency})',
     'components.tradeHistoryPanel.tradeHistory': 'Trade history',

@@ -18,7 +18,9 @@
 // Caching:
 //   - keys cached by (address, keyHash) so unlocking one pack member
 //     instantly unlocks every sibling sharing the same key.
-//   - plaintexts cached by (address, actionIndex) for the session.
+//   - plaintexts cached by (chainId, address, keyHash, actionIndex) for
+//     the session, together with the inflate outcome, because the same
+//     action index names a different file on every chain.
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { isDeviceAddressSource } from '../schemas/constants.js';
@@ -44,10 +46,14 @@ import {
 import { sha256 } from '@noble/hashes/sha2';
 
 const KEY_CACHE = /** @type {Map<string, Buffer>} */ (new Map());
-const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
+/** @typedef {{ bytes: Uint8Array, storedForm: boolean, inflateError: string | null }} GatedPlaintext */
+const PT_CACHE  = /** @type {Map<string, GatedPlaintext>} */ (new Map());
 
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
-function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
+function ptKey(chainId, address, keyHash, actionIndex) {
+    if (!chainId) throw new Error('gated plaintext cache: chainId is required');
+    return JSON.stringify([chainId, address, String(keyHash).toLowerCase(), String(actionIndex)]);
+}
 
 function multipartDetailOf(action) {
     const records = Array.isArray(action?.data) ? action.data : [action?.data ?? action];
@@ -100,6 +106,40 @@ async function readGatedCiphertext(sdk, actionIndex) {
     err.status = result.status;
     throw err;
 }
+
+// Inflate AFTER decrypt (spec §5.4): gated payloads are compressed before
+// encryption, and the serving layer holds no key, so this is the only place
+// the original bytes can be recovered. Fail-closed: an invalid stream or a
+// tripped ratio guard yields the decrypted bytes as stored form, never
+// partial output and never a throw, and the stored-form flag and error code
+// travel with the bytes so a failed inflation is never shown as the file.
+async function decryptAndInflate(sdk, actionIndex, key, compression) {
+    const { bytes: ciphertext, action } = await readGatedCiphertext(sdk, actionIndex);
+    // GCM auth tag mismatch surfaces as a typed SDK error.
+    const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+    const inflate = await resolveGatedInflate({
+        sdk, actionIndex, declared: compression, action,
+    });
+    const result = await inflateGatedPlaintext(decrypted, inflate.declared, inflate.options);
+    return /** @type {GatedPlaintext} */ ({
+        bytes: Buffer.from(result.bytes),
+        storedForm: result.storedForm === true,
+        inflateError: result.error ?? null,
+    });
+}
+
+function unlockResponse(address, chainId, actionIndex, entry) {
+    return {
+        address,
+        chainId,
+        actionIndex: String(actionIndex),
+        plaintextBase64: Buffer.from(entry.bytes).toString('base64'),
+        byteLength: entry.bytes.length,
+        storedForm: entry.storedForm,
+        inflateError: entry.inflateError,
+    };
+}
+
 function sha256Hex(buf) {
     // Copy into the ambient Uint8Array class before hashing: @noble/hashes
     // type-checks its input against it, and a Buffer is not a subclass of
@@ -189,23 +229,33 @@ export async function scanGatedKeyHandoffs({ sdk, address, wif, opts }) {
  * cache when populated), AES-256-GCM-decrypts. Verifies the key matches
  * the file's KEY_HASH before decrypting.
  *
+ * Returns the bytes together with the inflate outcome: `storedForm` is
+ * true when a declared compression could not be undone, and the bytes
+ * are then the decrypted stored form, not the original file. Anything
+ * shown to a user takes this variant so it can say so.
+ *
  * @param {{
  *   sdk: import('xchain-sdk').XChainSDK,
  *   address: string,
  *   wif: string,
+ *   chainId: string,
  *   actionIndex: number | string,
  *   keyHash: string,
  * }} params
- * @returns {Promise<Uint8Array>} decrypted plaintext bytes
+ * @returns {Promise<{ plaintext: Uint8Array, storedForm: boolean, inflateError: string | null }>}
  */
-export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash, compression = null }) {
+export async function unlockGatedFileWithStatus({
+    sdk, address, wif, chainId, actionIndex, keyHash, compression = null,
+}) {
     if (!sdk) throw new Error('unlockGatedFile: sdk is required');
     if (!address) throw new Error('unlockGatedFile: address is required');
+    if (!chainId) throw new Error('unlockGatedFile: chainId is required');
     if (!actionIndex) throw new Error('unlockGatedFile: actionIndex is required');
     if (!keyHash) throw new Error('unlockGatedFile: keyHash is required');
 
-    const cachedPlaintext = PT_CACHE.get(ptKey(address, actionIndex));
-    if (cachedPlaintext) return cachedPlaintext;
+    const cacheKey = ptKey(chainId, address, keyHash, actionIndex);
+    const cached = PT_CACHE.get(cacheKey);
+    if (cached) return statusOf(cached);
 
     // Resolve the key: cache first, fallback to a MESSAGE scan.
     let key = KEY_CACHE.get(keyKey(address, keyHash));
@@ -220,26 +270,26 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
         throw err;
     }
 
-    // Fetch the ciphertext bytes from the explorer.
-    const { bytes: ciphertext, action } = await readGatedCiphertext(sdk, actionIndex);
+    const entry = await decryptAndInflate(sdk, actionIndex, key, compression);
+    // Cache the FINAL bytes and their outcome so a repeat unlock neither
+    // re-inflates nor re-probes, and still reports a stored-form result.
+    PT_CACHE.set(cacheKey, entry);
+    return statusOf(entry);
+}
 
-    // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
-    const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
+function statusOf(entry) {
+    return { plaintext: entry.bytes, storedForm: entry.storedForm, inflateError: entry.inflateError };
+}
 
-    // Inflate AFTER decrypt (spec §5.4). Gated payloads are compressed
-    // before encryption, so this is the only place the original bytes can be
-    // recovered: the serving layer holds no key and never inflates ciphertext.
-    // Fail-closed: an invalid stream or a tripped ratio guard yields the
-    // decrypted bytes as stored-form, never partial output and never a throw.
-    const inflate = await resolveGatedInflate({
-        sdk, actionIndex, declared: compression, action,
-    });
-    const result = await inflateGatedPlaintext(decrypted, inflate.declared, inflate.options);
-    const plaintext = Buffer.from(result.bytes);
-
-    // Cache the FINAL bytes so a repeat unlock neither re-inflates nor re-probes.
-    PT_CACHE.set(ptKey(address, actionIndex), plaintext);
-    return plaintext;
+/**
+ * Bytes-only form of {@link unlockGatedFileWithStatus}, for callers that
+ * do not present the result to a user.
+ *
+ * @param {Parameters<typeof unlockGatedFileWithStatus>[0]} params
+ * @returns {Promise<Uint8Array>} decrypted plaintext bytes
+ */
+export async function unlockGatedFile(params) {
+    return (await unlockGatedFileWithStatus(params)).plaintext;
 }
 
 /**
@@ -252,12 +302,14 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash,
  *   sdk: import('xchain-sdk').XChainSDK,
  *   address: string,
  *   wif: string,
+ *   chainId: string,
  *   keyHash: string,
  *   fileEntries: Array<{ actionIndex: number | string }>,
  * }} params
- * @returns {Promise<Array<{ actionIndex: string, plaintext: Uint8Array }>>}
+ * @returns {Promise<Array<{ actionIndex: string, plaintext: Uint8Array,
+ *                          storedForm: boolean, inflateError: string | null }>>}
  */
-export async function unlockGatedPack({ sdk, address, wif, keyHash, fileEntries }) {
+export async function unlockGatedPack({ sdk, address, wif, chainId, keyHash, fileEntries }) {
     if (!Array.isArray(fileEntries) || fileEntries.length === 0)
         return [];
     // Warm the cache once so per-file unlock skips the MESSAGE scan.
@@ -267,12 +319,12 @@ export async function unlockGatedPack({ sdk, address, wif, keyHash, fileEntries 
     }
     const out = [];
     for (const entry of fileEntries) {
-        const plaintext = await unlockGatedFile({
-            sdk, address, wif,
+        const status = await unlockGatedFileWithStatus({
+            sdk, address, wif, chainId,
             actionIndex: entry.actionIndex,
             keyHash,
         });
-        out.push({ actionIndex: String(entry.actionIndex), plaintext });
+        out.push({ actionIndex: String(entry.actionIndex), ...status });
     }
     return out;
 }
@@ -331,7 +383,10 @@ export function buildKeyHandoffPayload({ sdk, keysByHash }) {
  *   gateTicker?: string,   enables the vault key cache (read + write-back)
  *   chainId?: string,      required alongside gateTicker for the vault path
  * }} params
- * @returns {Promise<{ address: string | null, chainId: string, actionIndex: string, plaintextBase64: string, byteLength: number }>}
+ * @returns {Promise<{ address: string | null, chainId: string, actionIndex: string, plaintextBase64: string, byteLength: number,
+ *                     storedForm: boolean, inflateError: string | null }>}
+ *   storedForm true means the declared compression could not be undone
+ *   and plaintextBase64 holds the stored bytes, with inflateError naming why.
  */
 export async function unlockGatedFileForAddress({
     vault,
@@ -362,6 +417,8 @@ export async function unlockGatedFileForAddress({
                 actionIndex: String(actionIndex),
                 plaintextBase64: demo.plaintextBase64,
                 byteLength: demo.byteLength,
+                storedForm: false,
+                inflateError: null,
             };
         }
     }
@@ -381,30 +438,13 @@ export async function unlockGatedFileForAddress({
             const key = Buffer.from(row.keyHex, 'hex');
             const sdk = sdkRegistry.get(chainId);
             if (sdk.gatedFile.verifyKey(key, keyHashLower)) {
-                const cacheAddr = `vault:${walletId}`;
-                let plaintext = PT_CACHE.get(ptKey(cacheAddr, actionIndex));
-                if (!plaintext) {
-                    const { bytes: ciphertext, action } = await readGatedCiphertext(
-                        sdk, actionIndex,
-                    );
-                    const decrypted = sdk.gatedFile.decryptFileBytes(ciphertext, key);
-                    // Inflate-after-decrypt, same rule as unlockGatedFile (§5.4).
-                    const inflate = await resolveGatedInflate({
-                        sdk, actionIndex, declared: compression, action,
-                    });
-                    const inflatedResult = await inflateGatedPlaintext(
-                        decrypted, inflate.declared, inflate.options,
-                    );
-                    plaintext = Buffer.from(inflatedResult.bytes);
-                    PT_CACHE.set(ptKey(cacheAddr, actionIndex), plaintext);
+                const cacheKey = ptKey(chainId, `vault:${walletId}`, keyHashLower, actionIndex);
+                let entry = PT_CACHE.get(cacheKey);
+                if (!entry) {
+                    entry = await decryptAndInflate(sdk, actionIndex, key, compression);
+                    PT_CACHE.set(cacheKey, entry);
                 }
-                return {
-                    address: null,
-                    chainId,
-                    actionIndex: String(actionIndex),
-                    plaintextBase64: Buffer.from(plaintext).toString('base64'),
-                    byteLength: plaintext.length,
-                };
+                return unlockResponse(null, chainId, actionIndex, entry);
             }
         }
     }
@@ -421,10 +461,11 @@ export async function unlockGatedFileForAddress({
     });
 
     const sdk = sdkRegistry.get(addrChainId);
-    const plaintext = await unlockGatedFile({
+    const status = await unlockGatedFileWithStatus({
         sdk,
         address,
         wif,
+        chainId: addrChainId,
         actionIndex,
         keyHash,
     });
@@ -458,13 +499,9 @@ export async function unlockGatedFileForAddress({
         }
     }
 
-    return {
-        address,
-        chainId: addrChainId,
-        actionIndex: String(actionIndex),
-        plaintextBase64: Buffer.from(plaintext).toString('base64'),
-        byteLength: plaintext.length,
-    };
+    return unlockResponse(address, addrChainId, actionIndex, {
+        bytes: status.plaintext, storedForm: status.storedForm, inflateError: status.inflateError,
+    });
 }
 
 /**

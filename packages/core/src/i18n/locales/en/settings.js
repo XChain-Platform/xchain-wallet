@@ -699,6 +699,8 @@ const messages = {
     'settings.connectedSites.disconnectSite': 'Disconnect site',
     'settings.connectedSites.disconnectedToast': 'Disconnected {name}',
     'settings.connectedSites.undo': 'Undo',
+    'settings.connectedSites.undoBlocked': "Couldn't reconnect this site because it's blocked. Unblock it before reconnecting.",
+    'settings.connectedSites.undoFailed': "Couldn't reconnect this site. Try again.",
     'settings.connectedSites.blockTitle': 'Block {origin}?',
     'settings.connectedSites.blockMessage': 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
     'settings.connectedSites.blockSite': 'Block site',

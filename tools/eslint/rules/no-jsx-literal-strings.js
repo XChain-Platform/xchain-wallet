@@ -46,7 +46,7 @@
 //     clearLabel, inputLabel, chooseLabel, pickLabel, viewLabel, winnerLabel,
 //     chartRegionLabel, tabsLabel, infoLabel, infoAria, pill, tag, notice,
 //     noneOption, walletName, targetName, fileLabel, getNote, valueText,
-//     statusText, subLeft, subRight, badgeTitle (the USER_FACING_ATTRS set below
+//     statusText, subLeft, subRight, badgeTitle, signed, aside, counter (the USER_FACING_ATTRS set below
 //     is the authority; keep this list in step with it). The names from `heading` on are component props
 //     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
@@ -439,6 +439,16 @@ const USER_FACING_ATTRS = new Set([
     'subLeft',
     'subRight',
     'badgeTitle',
+    // Copy a component renders verbatim: BalanceChanges' ChangeLine renders
+    // `signed`, OutcomeDetailLayout renders `aside` beside the result title,
+    // and Input, Textarea and TradeHeader render `counter`. No call site under
+    // packages/*/src passes a technical value through them: the other
+    // `counter` sites use t() or a template whose only static text is ' / ',
+    // and PollDetail's `aside` is a runtime value. OrderDetailBody's
+    // `counter={`for ...`}` is reported and stays until that screen migrates.
+    'signed',
+    'aside',
+    'counter',
 ]);
 
 // Props whose copy only ever arrives inside an inline object, and whose name

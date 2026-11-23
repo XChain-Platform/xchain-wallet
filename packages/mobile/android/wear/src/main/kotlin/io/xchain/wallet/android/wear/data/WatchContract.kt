@@ -16,6 +16,42 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 @Serializable
+data class Snapshot(
+    val v: Int,
+    @Serializable(with = StrictLongSerializer::class)
+    val builtAt: Long,
+    @Serializable(with = StrictLongSerializer::class)
+    val balancesAt: Long,
+    @Serializable(with = StrictLongSerializer::class)
+    val pricesAt: Long,
+    val session: String,
+    val network: SnapshotNetwork,
+    val fiatCode: String,
+    val hidden: Boolean,
+    val unitDefault: String,
+    val walletName: String,
+    val totals: SnapshotTotals,
+    val rows: List<SnapshotRow>,
+    val capped: Boolean,
+    val receive: List<SnapshotReceive>,
+    val inbox: List<SnapshotInboxItem>,
+    val request: Request,
+    val settings: SnapshotSettings,
+)
+
+@Serializable
+data class SnapshotNetwork(
+    val kind: String,
+    val isTest: Boolean,
+)
+
+@Serializable
+data class SnapshotTotals(
+    val fiatText: String,
+    val unitsText: String,
+)
+
+@Serializable
 data class SnapshotRow(
     val id: String,
     val chainId: String,

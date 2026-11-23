@@ -229,6 +229,32 @@ export async function armProvisionalAutoLock(readSettings, now) {
 }
 
 /**
+ * Fail closed on an unlock whose provisional record storage refused: the
+ * record then lives only in this worker's memory, and a restarted worker that
+ * finds no record never locks the session key it still holds. A refused or
+ * failed arm runs `onRefused` (the lock the foreground arm route takes) and
+ * resolves false so the caller does not publish unlocked. Never rejects.
+ *
+ * @param {() => Promise<{ saved: boolean }>} arm
+ * @param {() => Promise<void>} onRefused
+ * @param {{ error: (...args: unknown[]) => void }} [logger]
+ * @returns {Promise<boolean>} true when storage took the record
+ */
+export async function armedOrLocked(arm, onRefused, logger = console) {
+    try {
+        if ((await arm())?.saved === true) return true;
+    } catch (err) {
+        logger.error('[xchain] provisional auto-lock record could not be saved:', err);
+    }
+    try {
+        await onRefused();
+    } catch (err) {
+        logger.error('[xchain] lock after a refused auto-lock record failed:', err);
+    }
+    return false;
+}
+
+/**
  * Record UI activity (a message from the trusted extension UI). Only touches
  * `lastActivity`; leaves armed/idleMs untouched. No-ops when unarmed so a
  * disarmed session doesn't accumulate writes.

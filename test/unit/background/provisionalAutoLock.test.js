@@ -13,12 +13,13 @@
 // popup that closes mid-unlock, or waits on a screen that never reaches the
 // unlocked state, left a session no alarm could ever lock.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     applyAutoLockSignal,
     armProvisionalAutoLock,
+    armedOrLocked,
     clearAutoLockState,
     readAutoLockState,
     shouldAutoLock,
@@ -121,5 +122,67 @@ describe('unlock wiring', () => {
         expect(ensure).toBeGreaterThan(-1);
         expect(arm).toBeGreaterThan(ensure);
         expect(publish).toBeGreaterThan(arm);
+    });
+});
+
+describe('unlock path on a refused provisional record', () => {
+    beforeEach(() => { installSessionArea(); });
+
+    const quietLogger = () => ({ error: vi.fn() });
+
+    it('reports the record held and never locks when storage takes it', async () => {
+        const onRefused = vi.fn(async () => {});
+        const held = await armedOrLocked(() => armProvisionalAutoLock(() => ({ autolockMinutes: 5 }), 1_000), onRefused);
+
+        expect(held).toBe(true);
+        expect(onRefused).not.toHaveBeenCalled();
+        expect(await readAutoLockState()).toMatchObject({ armed: true, idleMs: 5 * MINUTE });
+    });
+
+    it('locks once and withholds unlocked when storage refuses the record', async () => {
+        globalThis.chrome.storage.session.set = async () => { throw new Error('quota'); };
+        const onRefused = vi.fn(async () => {});
+
+        const held = await armedOrLocked(() => armProvisionalAutoLock(() => ({ autolockMinutes: 5 }), 1_000), onRefused);
+
+        expect(held).toBe(false);
+        expect(onRefused).toHaveBeenCalledOnce();
+    });
+
+    it('a refused record is gone after a worker restart, which is why the unlock locks', async () => {
+        globalThis.chrome.storage.session.set = async () => { throw new Error('quota'); };
+        await armProvisionalAutoLock(() => ({ autolockMinutes: 1 }), 9_000);
+        vi.resetModules();
+        const restarted = await import('../../../packages/extension/src/background/autoLockState.js');
+
+        expect(await restarted.readAutoLockState()).toBeNull();
+    });
+
+    it('locks when the arm itself rejects, and logs it', async () => {
+        const onRefused = vi.fn(async () => {});
+        const logger = quietLogger();
+
+        const held = await armedOrLocked(async () => { throw new Error('boom'); }, onRefused, logger);
+
+        expect(held).toBe(false);
+        expect(onRefused).toHaveBeenCalledOnce();
+        expect(logger.error).toHaveBeenCalledOnce();
+    });
+
+    it('still resolves when the lock after a refusal throws', async () => {
+        const logger = quietLogger();
+        const held = await armedOrLocked(async () => ({ saved: false }), async () => { throw new Error('lock'); }, logger);
+
+        expect(held).toBe(false);
+        expect(logger.error).toHaveBeenCalledOnce();
+    });
+
+    it('background.js gates the unlocked publish on a held record', () => {
+        const source = readFileSync(join(__dirname, '../../../packages/extension/src/background.js'), 'utf8');
+        const unlocked = source.slice(source.indexOf('onUnlocked: () => {'), source.indexOf('startLabelSyncRestore:'));
+        expect(unlocked).toContain('armedOrLocked(');
+        expect(unlocked).toContain('lockAfterRefusedAutoLockArm,');
+        expect(unlocked).toContain("if (built && armed) await surfaceStateEvents.publish('session', { state: 'unlocked' });");
+        expect(source).toContain('onAutoLockArmRefused: lockAfterRefusedAutoLockArm,');
     });
 });

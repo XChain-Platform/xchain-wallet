@@ -136,7 +136,7 @@ describe('connected-site revocation', () => {
         }));
         expect(undo).toEqual(expect.objectContaining({
             ok: false,
-            error: expect.objectContaining({ message: 'sites.restore: origin is blocked' }),
+            error: expect.objectContaining({ message: 'sites.restore: origin is blocked', code: 'BLOCKED_BY_USER' }),
         }));
         expect(harness.records).toEqual([]);
         expect(harness.bridgeEvents.disconnect).toHaveBeenCalledWith(

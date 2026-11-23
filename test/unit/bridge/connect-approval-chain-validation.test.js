@@ -35,6 +35,12 @@ function fakeVault({ customChains = [] } = {}) {
         connectedSites: {
             findBy: async (field, value) => [...sites.values()].filter((site) => site[field] === value),
             put: async (site) => { sites.set(site.id, site); return site; },
+            update: async (id, decide) => {
+                const next = decide(sites.get(id) ?? null);
+                if (next == null) return false;
+                sites.set(next.id, next);
+                return true;
+            },
             delete: async (id) => { sites.delete(id); },
         },
     };

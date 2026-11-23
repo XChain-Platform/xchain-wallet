@@ -980,7 +980,8 @@ async function storedRecordForSigning(req, vault) {
             // Owned by no wallet, so no wallet may sign for it: returning it is what refuses it.
             matches.push(a);
         } else {
-            importedIds ??= await importedAddressIdsFor(vault, walletId);
+            // Strict: an unreadable wallet must refuse, not drop the record and skip the source check.
+            importedIds ??= await importedAddressIdsForStrict(vault, walletId);
             if (importedIds.has(a.id)) matches.push(a);
         }
     }
@@ -1766,26 +1767,63 @@ export function createBackgroundHost(deps) {
         }
     }
 
-    // The coins the signed transactions waiting in the broadcast queue spend, in
-    // every wallet's queue: a dApp request names no wallet, and a coin belongs
-    // to one queue at most. `exceptTxid` leaves out a queued copy of the very
-    // transaction being sent.
+    // Read the durable half directly because restoring a record first requires
+    // decrypting its wallet. Admission still has to hold its inputs when that
+    // wallet is unreadable. A table read failure refuses the claim rather than
+    // treating an unknown inventory as empty.
+    async function durableQueuedRecords() {
+        const findBy = hostDeps.vault?.pendingTxs?.findBy;
+        // Lightweight vault adapters without a PendingTx collection cannot
+        // contain durable queued records. A present collection that refuses a
+        // read is different and must fail closed below.
+        if (typeof findBy !== 'function') return [];
+        try {
+            const queued = await findBy.call(hostDeps.vault.pendingTxs, 'status', 'queued');
+            const broadcasting = await findBy.call(hostDeps.vault.pendingTxs, 'status', 'broadcasting');
+            return [
+                ...(Array.isArray(queued) ? queued : []),
+                ...(Array.isArray(broadcasting) ? broadcasting : []),
+            ];
+        } catch (cause) {
+            throw Object.assign(new Error('Queued transactions could not be checked. Try again.'), {
+                name: 'QueuedSendCheckFailedError',
+                cause,
+            });
+        }
+    }
+
+    function durableRecordChainId(record) {
+        return hostDeps.chainRegistry?.chainIdFor?.(record?.chain, record?.network) ?? '';
+    }
+
+    // The coins waiting in either the live queue or durable queued records, for
+    // every wallet. `exceptTxid` leaves out the queued copy of the transaction
+    // being sent.
     async function queuedOutpoints(chainId, exceptTxid = '') {
         await ensureQueueLoaded();
         const except = String(exceptTxid || '').toLowerCase();
-        return [...queueStore.queues.values()]
+        const live = [...queueStore.queues.values()]
             .flatMap((entries) => (Array.isArray(entries) ? entries : []))
             .filter((entry) => entry?.chainId === chainId)
             .filter((entry) => !except || txidOfRaw(entry?.signedTxHex) !== except)
             .flatMap((entry) => rawTxOutpoints(entry?.signedTxHex));
+        const durable = (await durableQueuedRecords())
+            .filter((record) => durableRecordChainId(record) === chainId)
+            .filter((record) => !except || txidOfRaw(record?.txHex) !== except)
+            .flatMap((record) => rawTxOutpoints(record?.txHex));
+        return [...live, ...durable];
     }
 
     async function queuedNames(chainId) {
         await ensureQueueLoaded();
-        return [...queueStore.queues.values()]
+        const live = [...queueStore.queues.values()]
             .flatMap((entries) => (Array.isArray(entries) ? entries : []))
             .filter((entry) => entry?.chainId === chainId)
             .flatMap((entry) => (Array.isArray(entry?.soldNames) ? entry.soldNames : []));
+        const durable = (await durableQueuedRecords())
+            .filter((record) => durableRecordChainId(record) === chainId)
+            .flatMap((record) => soldNames(record?.params));
+        return [...live, ...durable];
     }
 
     // The id of signed transaction bytes, '' for bytes that do not parse.
@@ -3211,7 +3249,8 @@ export function createBackgroundHost(deps) {
         }
         const settings = await vault.settings.get().catch(() => null);
         if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
-            throw new Error('sites.restore: origin is blocked');
+            // The code lets the Undo toast explain the refusal without reading this message.
+            throw Object.assign(new Error('sites.restore: origin is blocked'), { code: 'BLOCKED_BY_USER' });
         }
         // The site may have reconnected after the disconnect. Its new grant is
         // the one the user last chose, and a second record for the origin would
@@ -4360,7 +4399,7 @@ export function createBackgroundHost(deps) {
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
     // callers (e.g. PsbtSignForm, future RBF replace lanes) can park a
     // signed hex on the queue without going through the action.* path.
-    host.register('broadcast.queue.enqueue', async (req, { sdkRegistry }) => {
+    host.register('broadcast.queue.enqueue', async (req, { vault, chainRegistry, sdkRegistry }) => {
         await ensureQueueLoaded();
         const walletId = req?.walletId;
         const chainId = req?.chainId;
@@ -4383,6 +4422,9 @@ export function createBackgroundHost(deps) {
             txHex: signedTxHex,
             signerId: 'broadcast.queue.enqueue',
         });
+        // The bytes name their own txid; the caller's is only a fallback.
+        const txid = txidOfRaw(signedTxHex) || (typeof req?.txid === 'string' && req.txid ? req.txid : '');
+        let adsCommit = await enqueuedAdsVerdict(vault, chainRegistry, { chainId, txid });
         // Asked after the verify await and in the same turn as the push: a
         // wallet removed while that call was in flight, or one a stale window
         // still names, must not get its signed bytes written under an id no
@@ -4390,12 +4432,18 @@ export function createBackgroundHost(deps) {
         if (isWalletRemoved(walletId)) {
             throw new Error('broadcast.queue.enqueue: the wallet was removed');
         }
+        // A live entry already holding these bytes keeps the booking it has: the
+        // push would merge this verdict onto it and turn a claim it settles into
+        // a plain accrual.
+        if (getQueue(walletId).some((e) => e.chainId === chainId
+            && ((txid && e.txid === txid) || e.signedTxHex === signedTxHex))) adsCommit = null;
         const stored = pushQueueEntry(walletId, {
             chainId,
             signedTxHex,
             summary: req?.summary,
             signedAt: req?.signedAt,
-            txid: req?.txid,
+            ...(txid ? { txid } : {}),
+            ...(adsCommit ? { adsCommit } : {}),
         });
         // This lane names no PendingTx, so the blob is its only durable copy:
         // reply after the write settles, saying whether it landed (a caller
@@ -4709,6 +4757,31 @@ export function createBackgroundHost(deps) {
             return true;
         }
     }
+    // The accrue-only verdict for bytes parked through the explicit enqueue
+    // route, keyed by txid so a repeat of the same bytes books once. A live
+    // PendingTx with this txid means a wallet flow produced the bytes and owns
+    // their booking. Unlike ownsSignedTxAds this route has no record of its
+    // own, so an unreadable store yields no verdict: a missed step is cheaper
+    // than one counted twice.
+    async function enqueuedAdsVerdict(vault, chainRegistry, { chainId, txid }) {
+        if (!txid || typeof vault?.pendingTxs?.findBy !== 'function') return null;
+        let counted = false;
+        try {
+            counted = flows.isAdsCountedSend({ settings: await vault.settings.get(), descriptor: chainRegistry?.get?.(chainId) });
+        } catch { /* unreadable settings count nothing */ }
+        // Keep this as the final await before the caller's synchronous live-entry
+        // check and push. An owner created during the settings read must win.
+        try {
+            const held = await vault.pendingTxs.findBy('txid', txid);
+            if (!Array.isArray(held) || held.some((record) => record && record.status !== 'failed')) return null;
+        } catch {
+            return null;
+        }
+        return {
+            chainId, donationIncluded: false, donatedFiat: null, currency: null,
+            mainnet: counted, reservationId: null, bookingKey: txid,
+        };
+    }
     // Write a patch to a PendingTx this route stamped, owing it through the journal when the vault refuses.
     async function settleOrJournalPatch(vault, walletId, pendingTxId, patch) {
         if (await settleQueuedPendingTx(vault, { pendingTxId }, patch) === 'unreachable') {
@@ -4757,6 +4830,17 @@ export function createBackgroundHost(deps) {
                 'broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e),
             ),
         });
+    }
+    // Book the landed commit of a queued two-phase pair as its own transaction,
+    // as the live send books it, and return the entry carrying the verdict its
+    // reveal books: accrue-only once the commit settled the payout.
+    async function bookCommitLegAds(vault, chainRegistry, entry) {
+        const { adsCommit } = await flows.bookQueuedCommitLeg({
+            vault, chainRegistry, pendingTxId: entry.pendingTxId ?? null, adsCommit: entry.adsCommit ?? null,
+            stampBooking: notifications.stampPendingTxAdsBooking,
+            onError: (e) => console.warn('broadcast.queue: ADS commit leg failed', e && e.message ? String(e.message) : String(e)),
+        });
+        return adsCommit ? { ...entry, adsCommit } : entry;
     }
     // Let a queued entry's claim go: its bytes were refused for good or
     // discarded, so they never pay the donation.
@@ -4813,11 +4897,6 @@ export function createBackgroundHost(deps) {
         };
         const cur = q.findIndex((e) => e.id === entry.id);
         if (cur >= 0) q[cur] = advanced;
-        recordOwedSettlement(walletId, advanced, 'reveal', {
-            txid: advanced.txid ?? null,
-            commitTxid: entry.txid ?? null,
-        }, { persist: false });
-        const checkpointSaved = await persistQueueAndSettlements();
         const patch = {
             status: 'broadcasting',
             txHex: reveal.txHex,
@@ -4825,7 +4904,18 @@ export function createBackgroundHost(deps) {
             commitLanded: true,
             commitTxid: entry.txid ?? null,
             error: null,
+            // The verdict the reveal books, so an entry rebuilt from this record
+            // does not settle a payout its landed commit already settled.
+            ...(advanced.adsCommit ? { adsCommit: advanced.adsCommit } : {}),
         };
+        recordOwedSettlement(walletId, advanced, 'reveal', {
+            txid: advanced.txid ?? null,
+            commitTxid: entry.txid ?? null,
+        }, { persist: false });
+        // The reveal replay rebuilds bytes and phase fields from the record, so the
+        // journal keeps only the downgraded verdict and never signed bytes.
+        if (advanced.adsCommit) recordOwedSettlement(walletId, advanced, 'patch', { adsCommit: advanced.adsCommit }, { persist: false });
+        const checkpointSaved = await persistQueueAndSettlements();
         const settlement = await settleQueuedPendingTx(vault, advanced, patch);
         if (settlement !== 'unreachable') {
             await flushOwedSettlements(vault);
@@ -5011,7 +5101,7 @@ export function createBackgroundHost(deps) {
                     await ownSpends.hold(entry.chainId, queuedSpend, queuedSpendTxid, {
                         names: entry.soldNames,
                     });
-                    entry = await advanceToReveal(vault, walletId, q, entry, reveal);
+                    entry = await advanceToReveal(vault, walletId, q, await bookCommitLegAds(vault, chainRegistry, entry), reveal);
                     try {
                         flows.assertSigningAllowed();
                     } catch (freezeErr) {
@@ -5193,8 +5283,9 @@ export function createBackgroundHost(deps) {
                     try {
                         await flows.discardQueuedBroadcast({ vault, pendingTxId });
                     } catch (_e) {
-                        // The vault refused the delete, and the queue half is about to
-                        // go, so the journal is the route back to the record.
+                        // The vault refused the delete, or another drain or discard
+                        // holds the record (busy), and the queue half is about to go,
+                        // so the journal is the route back to the record.
                         recordOwedSettlement(req?.walletId, pendingTxId, 'discard');
                     }
                 }

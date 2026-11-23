@@ -255,13 +255,14 @@ export function registerBridgeHandlers(host, opts = {}) {
             // record and make this connect earn a real prompt.
             if (existing.autoApproved === true && !autoConnect) {
                 await deps.vault.connectedSites.delete(existing.id);
-            } else {
-                await touchLastUsed(deps.vault, existing);
+            } else if (await touchLastUsed(deps.vault, existing)) {
                 return connectSuccess(
                     await accountRecordsFor(deps.vault, existing.permissions.accounts),
                     existing.permissions,
                 );
             }
+            // A grant revoked before its stamp landed is no grant: this
+            // connect earns a prompt like any other.
         }
 
         // A second tab of this origin waits on the first connect and then
@@ -363,17 +364,20 @@ export function registerBridgeHandlers(host, opts = {}) {
             // empty grant (also reached when every selected id above was
             // dropped as unknown) to the primary account, which is exactly what
             // resolveAutoApproveScope already does on the auto-approve path and for
-            // the same reason. Left empty when the vault has no accounts: there is
-            // nothing to grant, and the read handlers return empty sets anyway.
+            // the same reason. With no account to narrow to, the stored wildcard
+            // would cover every account created later, so a vault with nothing to
+            // grant is refused. A vault of imported keys alone has no account and
+            // reaches its keys only through the wildcard, so it still connects.
             if (permissions.accounts.length === 0) {
                 const [primaryAccount] = vaultAccounts;
                 if (primaryAccount) permissions.accounts = [primaryAccount.id];
+                else if (!(await vaultHoldsImportedKey(deps.vault))) throw new UserRejectedError('connect');
             }
             // A grant another connect stores for this origin while the prompt
             // is open wins, so the origin keeps exactly one record.
+            // One revoked before its stamp landed leaves this approval to store.
             const stored = await findConnectedSite(deps.vault, origin);
-            if (stored) {
-                await touchLastUsed(deps.vault, stored);
+            if (stored && await touchLastUsed(deps.vault, stored)) {
                 return connectSuccess(
                     await accountRecordsFor(deps.vault, stored.permissions.accounts),
                     stored.permissions,
@@ -968,6 +972,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const chainId = chosen.chainId;
         const addr = await findAddressByString(deps.vault, decision.address, chainId, deps.chainRegistry);
         if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
+        assertSoftwareSignable(addr);
         // Sign with the chosen address's own wallet; the window defaults walletId to the first one.
         const walletId = await walletIdForAddress(deps.vault, decision.address);
         const { signature } = await signSignInChallengeFlow({
@@ -1148,12 +1153,12 @@ async function executeSignAction(req, deps, ctx) {
         // the approved action returns a valid success, so a signer or broadcast
         // failure cannot silently authorize the next attempt.
         if (!preDecision && !fromCache && decision.savePermanent) {
-            await updateSitePermissions(deps.vault, site, {
+            await updateSitePermissions(deps.vault, site, (held) => ({
                 canSignAction: {
-                    ...site.permissions.canSignAction,
+                    ...held.canSignAction,
                     [actionName]: 'always',
                 },
-            }, { events });
+            }), { events });
         }
         // The password cache follows the same commit point. A failed unlock
         // must prompt again rather than replaying a known-bad credential.
@@ -1209,6 +1214,7 @@ async function executeSignAction(req, deps, ctx) {
     // ahead of USER_REJECTED and break the batch gate order pinned by
     // test/unit/bridge/parallel.test.js.
     fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
+    assertSoftwareSignable(fromSource);
     // Trusted like trackPendingTx: signed bytes whose broadcast failed
     // transiently join the host's queue beside their 'queued' PendingTx, so
     // they stay listable and discardable and their coins stay held.
@@ -1722,11 +1728,21 @@ async function findConnectedSite(vault, origin) {
     return sites[0] ?? null;
 }
 
+// An unreadable wallet store reads as holding none, so the caller refuses.
+async function vaultHoldsImportedKey(vault) {
+    try {
+        const wallets = await vault.wallets.list();
+        return wallets.some((w) => Array.isArray(w?.importedKeys) && w.importedKeys.length > 0);
+    } catch {
+        return false;
+    }
+}
+
 async function requireSite(vault, req) {
     assertOrigin(req);
     const site = await findConnectedSite(vault, req.origin);
     if (!site) throw bridgeError('NOT_CONNECTED', req.origin);
-    await touchLastUsed(vault, site);
+    if (!(await touchLastUsed(vault, site))) throw bridgeError('NOT_CONNECTED', req.origin);
     return site;
 }
 
@@ -1747,11 +1763,15 @@ async function requireCurrentReadSite(deps, req, siteId) {
     return site;
 }
 
+// A write from a stale snapshot would re-insert a grant a revocation queued
+// ahead of it had deleted, so the stamp lands only on the record still held
+// when the write runs. Resolves false when that record is gone.
 async function touchLastUsed(vault, site) {
-    await vault.connectedSites.put({
-        ...site,
-        lastUsedAt: new Date().toISOString(),
-    });
+    return vault.connectedSites.update(site.id, (current) => (
+        current && current.origin === site.origin
+            ? { ...current, lastUsedAt: new Date().toISOString() }
+            : null
+    ));
 }
 
 // The co-signer owns the allowed-value policy; the bridge only refuses a value
@@ -1872,17 +1892,29 @@ async function siteHasAddress(vault, site, chainId, address, chainRegistry) {
     );
 }
 
+// Widens the grant still held when the write runs, never a stale snapshot: a
+// revoked grant stays revoked and the widening is dropped. `patch` may be a
+// function of the held permissions. Resolves false when nothing was written.
 async function updateSitePermissions(vault, site, patch, eventCtx) {
-    const next = {
-        ...site,
-        permissions: { ...site.permissions, ...patch },
-        lastUsedAt: new Date().toISOString(),
-    };
-    await vault.connectedSites.put(next);
+    let prev = null;
+    let next = null;
+    let applied = null;
+    const written = await vault.connectedSites.update(site.id, (current) => {
+        if (!current || current.origin !== site.origin) return null;
+        prev = current.permissions;
+        applied = typeof patch === 'function' ? patch(current.permissions) : patch;
+        next = {
+            ...current,
+            permissions: { ...current.permissions, ...applied },
+            lastUsedAt: new Date().toISOString(),
+        };
+        return next;
+    });
+    if (!written) return false;
     if (eventCtx?.events) {
         let payload;
-        const accountsChanged = patch.accounts !== undefined
-            && sortedKey(site.permissions.accounts) !== sortedKey(next.permissions.accounts);
+        const accountsChanged = applied.accounts !== undefined
+            && sortedKey(prev.accounts) !== sortedKey(next.permissions.accounts);
         if (accountsChanged) {
             const allAccounts = await vault.accounts.list();
             const ids = new Set(next.permissions.accounts ?? []);
@@ -1894,11 +1926,12 @@ async function updateSitePermissions(vault, site, patch, eventCtx) {
         await emitPermissionDiff({
             events: eventCtx.events,
             origin: site.origin,
-            prevPermissions: site.permissions,
+            prevPermissions: prev,
             nextPermissions: next.permissions,
             accountsChangedPayload: payload,
         });
     }
+    return true;
 }
 
 function sortedKey(list) {
@@ -1906,20 +1939,43 @@ function sortedKey(list) {
     return [...new Set(list)].sort().join(',');
 }
 
-async function walletIdForAddress(vault, addressOrId) {
+// A record with no source predates the tag and was always a software key.
+function isSoftwareAddressSource(source) {
+    return source === undefined || source === 'hd' || source === 'imported-wif';
+}
+
+// Every bridge route signs with the key the typed password unlocks. A device
+// address keeps its key on the device and a watch-only address has none, so
+// signing either at its stored path would put a seed-derived signature under
+// an address the seed does not hold. Checked where each route loads the stored
+// record, after the approval or a localhost auto-sign recall, and the refusal
+// names no source: getAddresses publishes none, so a page learns only that the
+// bridge cannot sign for this address.
+function assertSoftwareSignable(addr) {
+    if (isSoftwareAddressSource(addr?.source)) return;
+    throw bridgeError(
+        'ADDRESS_NOT_SIGNABLE',
+        `${addr?.address ?? ''} cannot be signed here; the bridge signs only with this wallet's own keys`,
+    );
+}
+
+export async function walletIdForAddress(vault, addressOrId) {
     if (!addressOrId) return undefined;
     const all = await vault.addresses.list();
     const match = all.find((a) => a.id === addressOrId || a.address === addressOrId);
     if (!match) return undefined;
-    const softwareSource = match.source === undefined
-        || match.source === 'hd' || match.source === 'imported-wif';
+    // A device address's signerId names its SignerRecord, never a wallet, so
+    // only its account says which wallet holds it.
+    if (!isSoftwareAddressSource(match.source)) {
+        if (!match.accountId) return undefined;
+        return (await vault.accounts.get(match.accountId))?.walletId;
+    }
     // A software address's signerId is its wallet id, but an add-mode restore
     // re-mints the wallet id and leaves signerId naming the source device's
     // wallet. Trust it only when that wallet is in this vault; otherwise the
     // account (or the importing wallet) still names the owner.
     let wallets = null;
     if (match.signerId) {
-        if (!softwareSource) return match.signerId;
         wallets = await vault.wallets.list();
         if (wallets.some((w) => w.id === match.signerId)) return match.signerId;
     }
@@ -2034,6 +2090,7 @@ async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
         if (accountIds.size > 0 && !(addr.accountId && accountIds.has(addr.accountId))) {
             throw bridgeError('ADDRESS_NOT_PERMITTED', entry.address ?? entry.derivationPath ?? '');
         }
+        assertSoftwareSignable(addr);
         return { entry, addr };
     });
     const walletIds = new Set((await Promise.all(
@@ -2071,6 +2128,7 @@ function validCoSignOutcome(outcome) {
 async function invokeSignMessage(deps, req) {
     const addr = await findAddressByString(deps.vault, req.address, req.chainId, deps.chainRegistry);
     if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', req.address);
+    assertSoftwareSignable(addr);
     return signMessageFlow({
         vault: deps.vault,
         walletId: req.walletId,

@@ -324,8 +324,8 @@ import { classifyEntryStatusWithoutMempool } from '../utils/historyFilter.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { PENDING_POLL_INTERVAL_MS } from '../../flows/balances.js';
 import {
-    externalIndexOf,
     hasAnyAddress,
+    newestDerivedExternalId,
     signingAddressesByChain,
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
@@ -1800,24 +1800,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // from-address half is skipped.
         if (pickedSourceChain !== chainId) {
             // Prefer the chain's active (operating) address; fall back to the
-            // newest HD external address when no active address is resolvable.
+            // newest HD external address, then the newest hardware-device one,
+            // when no active address is resolvable.
             const activeId = activeByChain[chainId]?.id;
             if (activeId && all.some((a) => a.id === activeId)) {
                 setFromAddressId(activeId);
             } else {
-                const addrs = all.filter(
-                    (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-                );
-                if (addrs.length > 0) {
-                    const sorted = [...addrs].sort((a, b) => {
-                        const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                        const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                        return bi - ai;
-                    });
-                    setFromAddressId(sorted[0].id);
-                } else {
-                    setFromAddressId(null);
-                }
+                setFromAddressId(newestDerivedExternalId(all));
             }
         }
         // Default the tick to the native coin only when the field is

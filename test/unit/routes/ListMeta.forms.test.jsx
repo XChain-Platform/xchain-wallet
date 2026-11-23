@@ -152,8 +152,8 @@ describe('wallet list metadata forms', () => {
             target: { value: '🙂'.repeat(128) },
         });
 
-        expect(screen.getByText('64 / 64 bytes')).toBeTruthy();
-        expect(screen.getByText('512 / 512 bytes')).toBeTruthy();
+        expect(screen.getByText('64 / 64')).toBeTruthy();
+        expect(screen.getByText('512 / 512')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
 
         await waitFor(() => expect(confirmRun).toHaveBeenCalledTimes(1));
@@ -254,7 +254,7 @@ describe('wallet list metadata forms', () => {
         const descriptionBox = screen.getByLabelText('Description');
         expect(descriptionBox.tagName).toBe('TEXTAREA');
         expect(descriptionBox).toHaveAttribute('rows', '1');
-        const nameCounter = screen.getByText('0 / 64 bytes', { exact: false });
+        const nameCounter = screen.getByText('0 / 64', { exact: false });
         expect(nameCounter.parentElement).toContainElement(screen.getByText('Name'));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'x' } });
         fireEvent.click(screen.getByRole('button', { name: 'Clear Name' }));
