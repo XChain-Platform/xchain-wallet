@@ -39,7 +39,7 @@ public class WearTransportTest {
         FakeBackend backend = new FakeBackend("nearby");
         WearTransport transport = new WearTransport(backend);
 
-        transport.send(WearPaths.SNAPSHOT, new byte[100001]);
+        transport.send(WearPaths.SNAPSHOT, new byte[100 * 1024 + 1]);
 
         assertEquals(Collections.singletonList("channel:/xc/snapshot"), backend.liveSends);
     }
