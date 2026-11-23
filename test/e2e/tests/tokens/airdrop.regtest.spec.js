@@ -733,7 +733,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText(`total ~${AMOUNT * recipients.length} ${TICK}`);
 
             await payProtocolFeeInCoin(main);
-            await main.getByRole('button', { name: 'Review recipients' }).click();
+            await main.getByRole('button', { name: 'Review Recipients', exact: true }).click();
         });
 
         await test.step('sign leg 1: the LIST that names the recipients', async () => {
@@ -996,7 +996,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForHolderCount(page, MEMB_TICK, /1 token · ~2 holders right now/);
 
             await payProtocolFeeInCoin(main);
-            await main.getByRole('button', { name: 'Review recipients' }).click();
+            await main.getByRole('button', { name: 'Review Recipients', exact: true }).click();
             const review = listReview(page);
             await expect(review, 'Review recipients did not open the list review')
                 .toBeVisible({ timeout: 30_000 });
@@ -1195,7 +1195,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await payProtocolFeeInCoin(main);
             // 'existing' skips the LIST leg entirely, so the submit button is
             // labelled for the airdrop rather than for a recipient review.
-            await main.getByRole('button', { name: 'Review airdrop' }).click();
+            await main.getByRole('button', { name: 'Review Airdrop', exact: true }).click();
             await expect(airdropReview(page), 'the existing-list mode did not open the airdrop review')
                 .toBeVisible({ timeout: 30_000 });
             expect(await listReview(page).count(),

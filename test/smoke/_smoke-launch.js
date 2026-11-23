@@ -29,9 +29,6 @@ export const RAW_SOURCE_SMOKES = new Set([
     'ui/ads-onboarding-notice.smoke.js',
     'ui/blocklist-wildcards.smoke.js',
     'ui/demo-disclosure-on-home.smoke.js',
-    // Sweeps package source for copy-suffixed attributes holding a literal; the
-    // swap would turn every attr={t('k')} into attr="English" and flag it.
-    'ui/eslint-no-jsx-literal-strings.smoke.js',
     'ui/fee-selector.smoke.js',
     'ui/input-capslock-warning.smoke.js',
     // Audits queued result copy keys before combining them with the English dictionary.

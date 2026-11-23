@@ -93,6 +93,7 @@ export async function previewMultipartQuotes({
                 parts: quote.parts,
                 transactions: quote.transactions,
                 fee: quote.fee,
+                fundingTotal: quote.fundingTotal,
             };
         }
     }

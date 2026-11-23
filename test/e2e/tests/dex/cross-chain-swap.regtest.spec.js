@@ -71,6 +71,7 @@
 import { createWallet, expect, openFromSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 import {
+    approveConfirm,
     explorerJson,
     fundAddress,
     mintXchain,
@@ -269,9 +270,9 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('review names both chains, then sign', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Offer swap', exact: true }).click();
+            await main.getByRole('button', { name: 'Create Cross-Chain Swap', exact: true }).click();
 
-            await expect(main, 'the Offer swap button did not reach the review stage')
+            await expect(main, 'the Create Cross-Chain Swap button did not reach the review stage')
                 .toContainText(/Offer to give/, { timeout: 30_000 });
             await expect(main).toContainText(
                 new RegExp(`Offer to give ${GIVE_AMOUNT} ${TICK} in exchange for ${GET_AMOUNT} ${TICK}`));
@@ -291,7 +292,7 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             if (await password.count() > 0 && await password.isVisible()) {
                 await password.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign Cross-Chain Swap' }).click();
+            await approveConfirm(page);
         });
 
         let txid;
