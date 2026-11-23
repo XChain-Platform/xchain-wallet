@@ -4,6 +4,6 @@
    block by the gutter less 2px and the end edge by the same less 2px (see
    Screen.module.css .header). */
 .bleed {
-    margin-block-start: calc(-1 * (var(--xc-page-gutter) - 2px));
-    margin-inline: calc(-1 * var(--xc-page-gutter)) calc(-1 * (var(--xc-page-gutter) - 2px));
+    margin-block-start: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
+    margin-inline: calc(-1 * var(--xc-space-2)) calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
 }
