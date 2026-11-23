@@ -5,13 +5,22 @@ import Foundation
 
 struct OpenOnPhone {
     private let send: ([String: Any]) -> Void
+    private let makeActivity: (OpenOnPhoneIntent) -> NSUserActivity?
 
     init(send: @escaping ([String: Any]) -> Void) {
+        self.init(send: send, makeActivity: Self.userActivity)
+    }
+
+    init(
+        send: @escaping ([String: Any]) -> Void,
+        makeActivity: @escaping (OpenOnPhoneIntent) -> NSUserActivity?
+    ) {
         self.send = send
+        self.makeActivity = makeActivity
     }
 
     func callAsFunction(_ intent: OpenOnPhoneIntent) {
-        guard let activity = Self.userActivity(for: intent),
+        guard let activity = makeActivity(intent),
               let message = PhoneIntentMessage.message(kind: "openOnPhone", value: intent) else {
             return
         }

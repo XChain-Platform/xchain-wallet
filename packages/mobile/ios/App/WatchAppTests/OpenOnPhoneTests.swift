@@ -4,6 +4,14 @@
 import XCTest
 @testable import WatchApp
 
+private final class RecordingUserActivity: NSUserActivity {
+    private(set) var didBecomeCurrent = false
+
+    override func becomeCurrent() {
+        didBecomeCurrent = true
+    }
+}
+
 final class OpenOnPhoneTests: XCTestCase {
     func testAdvertisesViewActivityWithRoute() throws {
         let intent = OpenOnPhoneIntent(route: "/asset/xcp")
@@ -16,11 +24,16 @@ final class OpenOnPhoneTests: XCTestCase {
 
     func testSendsOpenOnPhoneIntent() throws {
         let intent = OpenOnPhoneIntent(route: "/request/123")
+        let activity = RecordingUserActivity(activityType: ViewActivity.activityType)
         var sent: [[String: Any]] = []
-        let openOnPhone = OpenOnPhone { sent.append($0) }
+        let openOnPhone = OpenOnPhone(
+            send: { sent.append($0) },
+            makeActivity: { _ in activity }
+        )
 
         openOnPhone(intent)
 
+        XCTAssertTrue(activity.didBecomeCurrent)
         let message = try XCTUnwrap(sent.first)
         XCTAssertEqual(sent.count, 1)
         XCTAssertEqual(message["kind"] as? String, "openOnPhone")
