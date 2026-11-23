@@ -1,8 +1,7 @@
 {
-    "name": "@xchain-wallet/bridge-spec",
-    "version": "0.343.1",
-    "license": "AGPL-3.0-or-later",
-    "private": true,
+    "name": "@dankest-llc/xchain-connect",
+    "version": "1.0.0",
+    "license": "MIT",
     "description": "TypeScript type definitions and reference client for the window.xchain dApp bridge",
     "main": "./src/runtime.js",
     "types": "./src/index.ts",

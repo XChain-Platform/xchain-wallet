@@ -48,6 +48,8 @@ import { holdAutoLock } from './autoLockGuard.js';
 import { isHwSignBack } from '../../signers/hardwareSession.js';
 import { clearArmedChoices, disarmAdvanced } from '../components/formStandard/advancedOptions.js';
 import { randomUUID } from '../../util/uuid.js';
+import { watchRequestFrom } from '../../watch/buildWatchRequest.js';
+import { clearPendingRequest, setPendingRequest } from '../../watch/watchHost.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -118,6 +120,26 @@ export function watchRequestTransition(previousPhase, nextPhase) {
     return null;
 }
 
+function requestFromComposed(composed) {
+    const details = Array.isArray(composed?.decoded?.details) ? composed.decoded.details : [];
+    const detail = (label) => String(details.find((row) => label.test(String(row?.label || '')))?.value ?? '').trim();
+    const amount = detail(/^(amount|quantity)$/i);
+    const token = detail(/^token$/i);
+    const amountText = amount && token && !amount.toUpperCase().endsWith(` ${token.toUpperCase()}`)
+        ? `${amount} ${token}`
+        : amount;
+    const decodedVerb = String(composed?.decoded?.summary || '').trim().split(/\s+/)[0];
+    const action = String(decodedVerb || composed?.action || 'transaction')
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replace(/^./, (letter) => letter.toUpperCase());
+    return watchRequestFrom({
+        kind: 'request',
+        sentence: `Confirm this ${action} request on your phone.`,
+        amountText,
+    });
+}
+
 /**
  * Is a confirmation running in this window, from its compose through its
  * terminal state? A shell that would remount the open screen for an
@@ -174,6 +196,8 @@ export function useConfirmAction() {
     const releasedEncoderInputsRef = useRef(new Set());
     const rejectingRef = useRef(false);
     const mountedRef = useRef(true);
+    const previousPhaseRef = useRef(/** @type {ConfirmPhase} */ ('idle'));
+    const watchRequestRef = useRef(null);
     // Once Approve is pressed the PSBT may be signed or broadcast, so the
     // encoder reservation must stay held whatever happens to this component.
     const approvalBeganRef = useRef(false);
@@ -197,10 +221,27 @@ export function useConfirmAction() {
     // read, so the page shipped without the legacy stage's From row.
     const [source, setSource] = useState(null);
 
+    const withdrawWatchRequest = useCallback(() => {
+        if (watchRequestRef.current) clearPendingRequest(watchRequestRef.current.id);
+    }, []);
+
+    useEffect(() => {
+        const transition = watchRequestTransition(previousPhaseRef.current, phase);
+        previousPhaseRef.current = phase;
+        if (transition === 'publish') {
+            const request = watchRequestRef.current || requestFromComposed(composedRef.current);
+            watchRequestRef.current = request;
+            if (request) setPendingRequest(request);
+        } else if (transition === 'withdraw') {
+            withdrawWatchRequest();
+        }
+    }, [phase, withdrawWatchRequest]);
+
     const teardown = useCallback(() => {
         // The submit that armed a form's Advanced choices has ended, so no
         // later action on the page composes with them.
         disarmAdvanced();
+        withdrawWatchRequest();
         endActiveConfirm({ approved: approvalBeganRef.current, left: !mountedRef.current });
         if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
         // Release any reservation this instance registered.
@@ -208,7 +249,7 @@ export function useConfirmAction() {
         if (o && o.reservationLedger && o.reservationId) {
             Promise.resolve(o.reservationLedger.release(o.reservationId)).catch(() => {});
         }
-    }, []);
+    }, [withdrawWatchRequest]);
 
     const settleResolve = useCallback((value) => {
         const r = resolveRef.current;
@@ -302,6 +343,7 @@ export function useConfirmAction() {
         abortRef.current = controller;
         optsRef.current = { ...args, reservationId: null };
         composedRef.current = null;
+        watchRequestRef.current = null;
         approvalBeganRef.current = false;
         setSource(args.source ?? null);
         setError(null);

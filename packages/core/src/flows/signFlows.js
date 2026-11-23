@@ -27,7 +27,7 @@ import { assertNoDeceptiveCharacters, assertNoHiddenControls } from './signRiskC
 import {
     parseSignInChallenge,
     SIGN_IN_CHALLENGE_PREFIX,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 
 export { SIGN_IN_CHALLENGE_PREFIX };
 

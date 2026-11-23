@@ -22,7 +22,7 @@ const SOURCE = fileURLToPath(new URL('./generate-appendix.js', import.meta.url))
 function fixture() {
     const root = mkdtempSync(path.join(tmpdir(), 'glossary-appendix-test-'));
     const toolDir = path.join(root, 'tools', 'glossary');
-    const bridgeDir = path.join(root, 'packages', 'bridge-spec', 'src');
+    const bridgeDir = path.join(root, 'packages', 'connect', 'src');
     const schemaDir = path.join(root, 'packages', 'core', 'src', 'schemas');
     const glossary = path.join(root, 'docs', 'glossary.md');
     mkdirSync(toolDir, { recursive: true });

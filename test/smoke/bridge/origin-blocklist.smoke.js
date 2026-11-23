@@ -167,7 +167,7 @@ assert.ok(/normalizeBlocklistEntry\(trimmed\)/.test(sectionSrc),
     'manual-block form refuses an entry the blocklist normalizer rejects');
 
 // 9. Spec union + docs.
-const specSrc = read('packages/bridge-spec/src/index.ts');
+const specSrc = read('packages/connect/src/index.ts');
 assert.ok(/\|\s*'BLOCKED_BY_USER'/.test(specSrc),
     'BridgeErrorCode union includes BLOCKED_BY_USER');
 

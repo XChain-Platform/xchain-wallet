@@ -32,10 +32,13 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb', () => {
         const firstProject = readFileSync(projectFile);
         const facts = projectFacts(fixture.project);
         const app = facts.targets.find((target) => target.name === 'WatchApp');
+        const phone = facts.targets.find((target) => target.name === 'App');
+        const widgets = facts.targets.find((target) => target.name === 'WatchWidgets');
         const tests = facts.targets.find((target) => target.name === 'WatchAppTests');
 
         expect(app.productType).toBe('com.apple.product-type.application');
         expectSettings(app, {
+            CODE_SIGN_ENTITLEMENTS: 'WatchApp/WatchApp.entitlements',
             GENERATE_INFOPLIST_FILE: 'YES',
             INFOPLIST_KEY_CFBundleDisplayName: 'XChain',
             INFOPLIST_KEY_WKApplication: 'YES',
@@ -45,6 +48,39 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb', () => {
             PRODUCT_BUNDLE_IDENTIFIER: 'io.xchain.wallet.ios.watch',
             WATCHOS_DEPLOYMENT_TARGET: '10.0',
         });
+        expect(app.dependencies).toEqual(['WatchWidgets']);
+        expect(app.groups).toEqual(['WatchApp', 'WatchShared']);
+        expect(app.copyPhases).toEqual([{
+            name: 'Embed App Extensions',
+            destination: '13',
+            path: '',
+            products: ['WatchWidgets.appex'],
+        }]);
+        expect(widgets.productType).toBe('com.apple.product-type.app-extension');
+        expect(widgets.dependencies).toEqual([]);
+        expect(widgets.groups).toEqual(['WatchShared', 'WatchWidgets']);
+        expectSettings(widgets, {
+            APPLICATION_EXTENSION_API_ONLY: 'YES',
+            CODE_SIGN_ENTITLEMENTS: 'WatchWidgets/WatchWidgets.entitlements',
+            GENERATE_INFOPLIST_FILE: 'NO',
+            INFOPLIST_FILE: '$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist',
+            PRODUCT_BUNDLE_IDENTIFIER: 'io.xchain.wallet.ios.watch.widgets',
+            SKIP_INSTALL: 'YES',
+            WATCHOS_DEPLOYMENT_TARGET: '10.0',
+        });
+        expect(widgets.scripts).toEqual([{
+            name: 'Generate WatchWidgets Info',
+            outputs: ['$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist'],
+            script: expect.stringContaining('NSExtensionPointIdentifier'),
+        }]);
+        expect(buildWidgetInfo(fixture)).toBe('com.apple.widgetkit-extension');
+        expect(phone.dependencies).toEqual(['WatchApp']);
+        expect(phone.copyPhases).toEqual([{
+            name: 'Embed Watch Content',
+            destination: '16',
+            path: '$(CONTENTS_FOLDER_PATH)/Watch',
+            products: ['WatchApp.app'],
+        }]);
         expect(tests.productType).toBe('com.apple.product-type.bundle.unit-test');
         expect(tests.dependencies).toEqual(['WatchApp']);
         expectSettings(tests, {
@@ -52,7 +88,7 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb', () => {
             TEST_HOST: '$(BUILT_PRODUCTS_DIR)/WatchApp.app/WatchApp',
             WATCHOS_DEPLOYMENT_TARGET: '10.0',
         });
-        expect(facts.groups).toEqual(['WatchApp', 'WatchAppTests']);
+        expect(facts.groups).toEqual(['WatchApp', 'WatchAppTests', 'WatchShared', 'WatchWidgets']);
         expect(firstProject.toString()).toMatch(/objectVersion = 77;/);
         expect(firstProject.toString()).toMatch(/preferredProjectObjectVersion = 77;/);
         expect(existsSync(join(fixture.project, 'xcshareddata/xcschemes/WatchApp.xcscheme'))).toBe(true);
@@ -87,10 +123,38 @@ function makeFixture() {
     const create = spawnSync('/usr/bin/ruby', ['-rxcodeproj', '-e', `
 project = Xcodeproj::Project.new(ARGV.fetch(0))
 project.main_group.new_file('Version.xcconfig')
+project.new_target(:application, 'App', :ios, '16.0')
 project.save
 `, project], { encoding: 'utf8' });
     expect(create.status, create.stderr).toBe(0);
+    writeFileSync(join(root, 'ios/App/Version.xcconfig'), [
+        'MARKETING_VERSION = 1.0.0',
+        'CURRENT_PROJECT_VERSION = 1',
+        '',
+    ].join('\n'));
     return { root, script, project };
+}
+
+function buildWidgetInfo(fixture) {
+    const build = join(fixture.root, 'build');
+    const obj = join(fixture.root, 'obj');
+    const cache = join(fixture.root, 'cache');
+    for (const path of [build, obj, cache]) mkdirSync(path, { recursive: true });
+    const result = spawnSync('/usr/bin/xcodebuild', [
+        'build', '-project', fixture.project, '-target', 'WatchWidgets',
+        '-configuration', 'Debug', '-sdk', 'watchsimulator',
+        `SYMROOT=${build}`, `OBJROOT=${obj}`,
+        `CLANG_MODULE_CACHE_PATH=${cache}`, `MODULE_CACHE_DIR=${cache}`,
+        `SHARED_PRECOMPS_DIR=${cache}`, `SDK_STAT_CACHE_DIR=${cache}`,
+        'CODE_SIGNING_ALLOWED=NO',
+    ], { encoding: 'utf8', env: { ...process.env, CCHROOT: cache } });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    const plist = join(build, 'Debug-watchsimulator/WatchWidgets.appex/Info.plist');
+    const point = spawnSync('/usr/libexec/PlistBuddy', [
+        '-c', 'Print :NSExtension:NSExtensionPointIdentifier', plist,
+    ], { encoding: 'utf8' });
+    expect(point.status, point.stderr).toBe(0);
+    return point.stdout.trim();
 }
 
 function run(fixture, overrides = {}) {
@@ -112,6 +176,18 @@ targets = project.targets.map do |target|
       { base: configuration.base_configuration_reference&.path, settings: configuration.build_settings }
     end,
     dependencies: target.dependencies.map { |dependency| dependency.target&.name }.compact,
+    groups: target.file_system_synchronized_groups.map(&:path).sort,
+    copyPhases: target.copy_files_build_phases.map do |phase|
+      {
+        name: phase.name,
+        destination: phase.dst_subfolder_spec,
+        path: phase.dst_path,
+        products: phase.files_references.map(&:path).sort,
+      }
+    end,
+    scripts: target.shell_script_build_phases.map do |phase|
+      { name: phase.name, outputs: phase.output_paths, script: phase.shell_script }
+    end,
   }
 end
 group_class = Xcodeproj::Project::Object::PBXFileSystemSynchronizedRootGroup

@@ -1,45 +1,16 @@
 // Copyright © 2025–2026 Dankest, LLC
 // Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// This file is part of XChain Platform. Licensed under the GNU Affero
-// General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available -
-// contact legal@dankest.llc.
+// SPDX-License-Identifier: MIT
 
-// THE RUNTIME HALF OF THE BRIDGE SPEC, IN PLAIN JS.
-//
-// Everything else in this package is types, which erase at build time and
-// therefore cost a consumer nothing. These nine values do not erase, and
-// one consumer loads them WITHOUT A BUNDLER: the desktop shell's Electron
-// MAIN process imports `@xchain-wallet/extension/src/bridge/handlers.js`
-// straight out of app.asar, and that file imports this package.
-//
-// While the package's only entry point was `src/index.ts`, that path ended
-// in a hard crash on startup:
-//
-//   ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING: Stripping types is
-//   currently unsupported for files under node_modules, for
-//   ".../node_modules/@xchain-wallet/bridge-spec/src/index.ts"
-//
-// Node will strip types from a first-party file but never from one inside
-// node_modules, and a packed workspace package IS inside node_modules. The
-// web and extension shells never saw it because Vite transpiles the .ts at
-// bundle time.
-//
-// So the runtime values live here, in a file every consumer can load, and
-// `index.ts` re-exports them so the public entry point is unchanged.
-// package.json points `main` here and `types` at index.ts. The alternative
-// was adding a build step to this package, which would have made every
-// shell's build depend on bridge-spec being compiled first - including the
-// reproducible-build container, whose build.sh deliberately builds only the
-// desktop renderer. A file with no type annotations needs no build at all.
+// Runtime values stay in plain JavaScript because the desktop main process
+// loads this package unbundled from node_modules, where Node does not strip
+// TypeScript. index.ts re-exports them for the typed public entry point.
 
 // Semver for the bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
-// Maintained by hand. It deliberately does not track package.json, which
-// follows the wallet release train. Update the supported list with changes.
+// Maintained by hand. It deliberately does not track the package release
+// version. Update the supported list with protocol changes.
 export const BRIDGE_SPEC_VERSION = '0.1.0';
 
 // Cluster F FOLLOWUP 3 - version negotiation. Versions a wallet

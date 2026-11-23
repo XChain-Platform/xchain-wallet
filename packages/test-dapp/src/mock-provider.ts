@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Mock XChainProvider for exercising @xchain-wallet/bridge-spec without a
+// Mock XChainProvider for exercising @dankest-llc/xchain-connect without a
 // real wallet. Useful for:
 //
 //   - dApp integration tests that don't want to spin up the extension
@@ -43,7 +43,7 @@ import {
     type BridgeEventMap,
     type BridgeEvent,
     type SitePermissions,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 import { approvedCoSign, signingPathsError } from './mock-signing.js';
 
 export interface MockProviderOptions {

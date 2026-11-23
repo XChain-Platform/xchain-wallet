@@ -7,7 +7,7 @@
         "types": [],
         "baseUrl": ".",
         "paths": {
-            "@xchain-wallet/bridge-spec": ["../bridge-spec/src/index.ts"]
+            "@dankest-llc/xchain-connect": ["../connect/src/index.ts"]
         }
     },
     "include": ["src/**/*.ts"],

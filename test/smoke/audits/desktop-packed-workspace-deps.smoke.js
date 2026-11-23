@@ -138,13 +138,8 @@ while (queue.length) {
     seen.add(file);
 
     for (const spec of specifiersIn(file)) {
-        // BARE WORKSPACE SPECIFIERS COUNT TOO, and missing one of those is the
-        // third instance this found: `@xchain-wallet/extension` imports
-        // `@xchain-wallet/bridge-spec`, which NEITHER extension nor core
-        // declares, so nothing put it in the asar and the packaged app died on
-        // it once the two relative-path defects above were fixed. A walk that
-        // followed only relative imports would have handed that back one
-        // 20-minute container build at a time.
+        // Bare workspace specifiers count because the packer includes only
+        // declared dependencies, including @dankest-llc/xchain-connect.
         if (!spec.startsWith('.')) {
             const owner = [...workspaceByName.keys()]
                 .filter((n) => spec === n || spec.startsWith(`${n}/`))

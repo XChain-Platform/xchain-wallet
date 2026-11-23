@@ -20,7 +20,7 @@
 // https://docs.xchain.io/components/wallet/glossary. The canonical sources
 // stay here, so this generator reaches across the two checkouts.
 //
-//   - BridgeErrorCode union   ← packages/bridge-spec/src/index.ts
+//   - BridgeErrorCode union   ← packages/connect/src/index.ts
 //   - ConnectedSite permission keys ← packages/core/src/schemas/connectedSite.js
 //
 // The fenced markers below are recognised verbatim. The script (a)
@@ -57,7 +57,7 @@ const GLOSSARY_PATH = process.env.GLOSSARY_PATH
     || DOCS_ROOT_GLOSSARY_PATH
     || DEFAULT_GLOSSARY_PATH;
 const BRIDGE_SPEC_PATH = join(
-    wsRoot, 'packages', 'bridge-spec', 'src', 'index.ts',
+    wsRoot, 'packages', 'connect', 'src', 'index.ts',
 );
 const CONNECTED_SITE_PATH = join(
     wsRoot, 'packages', 'core', 'src', 'schemas', 'connectedSite.js',
@@ -76,7 +76,7 @@ function extractBridgeErrorCodes(src) {
     const re = /export type BridgeErrorCode\s*=\s*([\s\S]*?);/m;
     const match = re.exec(src);
     if (!match) {
-        throw new Error('BridgeErrorCode union not found in bridge-spec/src/index.ts');
+        throw new Error('BridgeErrorCode union not found in connect/src/index.ts');
     }
     const body = match[1];
     return [...body.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
@@ -120,7 +120,7 @@ function buildAppendix() {
     lines.push('`node tools/glossary/generate-appendix.js` to refresh from source.');
     lines.push('Sources:');
     lines.push('');
-    lines.push('- `packages/bridge-spec/src/index.ts`: `BridgeErrorCode` union');
+    lines.push('- `packages/connect/src/index.ts`: `BridgeErrorCode` union');
     lines.push('- `packages/core/src/schemas/connectedSite.js`: `SitePermissions` keys');
     lines.push('');
     lines.push('### Bridge error codes');

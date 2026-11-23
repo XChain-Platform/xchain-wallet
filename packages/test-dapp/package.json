@@ -10,7 +10,7 @@
         "typecheck": "tsc --noEmit -p ."
     },
     "dependencies": {
-        "@xchain-wallet/bridge-spec": "workspace:*"
+        "@dankest-llc/xchain-connect": "workspace:*"
     },
     "devDependencies": {
         "typescript": "5.9.3"

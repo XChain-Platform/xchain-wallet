@@ -1,14 +1,9 @@
 // Copyright © 2025–2026 Dankest, LLC
 // Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// This file is part of XChain Platform. Licensed under the GNU Affero
-// General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available -
-// contact legal@dankest.llc.
+// SPDX-License-Identifier: MIT
 
-// @xchain-wallet/bridge-spec
+// @dankest-llc/xchain-connect
 //
 // Type definitions and reference helpers for the window.xchain dApp bridge.
 // Full API surface defined in SPEC.md §43.
@@ -24,7 +19,7 @@
 // Semver for the bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
 // Maintained by hand in runtime.js. It deliberately does not track the
-// package.json version, which follows the wallet release train.
+// package release version.
 // The RUNTIME values of this spec live in ./runtime.js and are re-exported
 // here, so this stays the single public entry point. They are plain JS
 // because the desktop MAIN process loads this package out of app.asar with

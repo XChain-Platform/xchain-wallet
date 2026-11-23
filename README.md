@@ -38,7 +38,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 - **Chain-registry sync:** the web, extension, and desktop shells fetch the hub's signed chain list at startup, verify it against a pinned key, and add new or updated chains automatically without touching any chain you added yourself
 - **Wallet menu and keyboard shortcuts:** the header menu button and Cmd/Ctrl+K open one menu that lists every wallet destination in outlined groups and filters it with a fuzzy search over pages, actions, and contacts; a starter set of global shortcuts (lock, send, settings, help) plus single-key navigation, with a shortcut-help screen, in the web, extension, and desktop shells
 - **Governance-poll notifications:** the wallet flags a new VOTE poll for a token you hold, calling out binding polls explicitly (toggle in Settings, all three desktop-class shells)
-- **dApp bridge (`window.xchain`):** typed bridge spec at `@xchain-wallet/bridge-spec`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
+- **dApp bridge (`window.xchain`):** typed bridge spec at `@dankest-llc/xchain-connect`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
 - **Air-gapped PSBT signing:** BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
 - **Sign message / verify signature:** sign arbitrary text with any address (BIP322-compatible) and verify counterparty signatures; output is copyable; gated behind password re-entry in the sensitive-action flow
 - **Sign-screen safety rails:** plain-English action decoder shows `to` / `amount` / `asset` as you typed them, even if the encoder fabricates output; multi-step approval requires explicit user confirmation; per-action expectation summaries
@@ -157,7 +157,7 @@ xchain-wallet/
 │   ├── mobile/                  Capacitor mobile shell (Android shipped, iOS pending App Store release); wraps the web build
 │   ├── signers-ledger/          LedgerSigner vendor implementation, extracted from core
 │   ├── signers-trezor/          TrezorSigner vendor implementation, extracted from core
-│   ├── bridge-spec/             window.xchain TypeScript type definitions
+│   ├── connect/                 window.xchain integration package
 │   └── test-dapp/               reference dApp exercising the bridge
 ├── tools/
 │   ├── build-reproduce/         reproducible-build helper scripts
@@ -173,7 +173,7 @@ xchain-wallet/
 └── README.md                    this file
 ```
 
-All packages ship at the **same version**. Every shell's About screen surfaces its own `package.json.version` so users can confirm the extension, web, and desktop builds came from the same codebase.
+Wallet application packages ship at the **same version**; `packages/connect` is independently versioned. Every shell's About screen surfaces its own `package.json.version` so users can confirm the extension, web, and desktop builds came from the same codebase.
 
 The wallet's prose documentation (architecture, dApp bridge, glossary, threat model, dependency review, reproducible builds, privacy, and the per-store release runbooks) is not in this repo. It lives in the [xchain-documentation](https://github.com/XChain-Platform/xchain-documentation) repo under `components/wallet/` and is published at [https://docs.xchain.io/components/wallet/](https://docs.xchain.io/components/wallet/). Tooling and tests here that read those documents resolve them from a sibling `xchain-documentation` checkout and skip when it is absent.
 
@@ -239,13 +239,15 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 
 ## Versioning
 
-Every package under `packages/` **ships at the same version number** as the root. The root `package.json` version is the single source of truth; each sub-package's `package.json` tracks it in lockstep, and so does `packages/extension/manifest.json`, which is the copy the Chrome Web Store reads. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
+Every shipping wallet package under `packages/` **ships at the same version number** as the root. The root `package.json` version is the single source of truth; each wallet sub-package's `package.json` tracks it in lockstep, and so does `packages/extension/manifest.json`, which is the copy the Chrome Web Store reads. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
+
+**`packages/connect` is exempt.** It is a separately published integration package with its own semantic version, currently 1.0.0.
 
 **`test/e2e` is exempt.** It is a private test harness that is never published or installed by a user, so its version identifies nothing and tracking the root would be ceremony. It carries its own version deliberately.
 
-The membership rule is "everything under `packages/`" rather than a list of names, because a list is what let this drift in the first place: six packages sat a patch version behind the root while this paragraph claimed otherwise, and nothing noticed. `test/smoke/audits/version-lockstep.smoke.js` now enforces it, and a newly added package is in scope the moment it exists.
+The membership rule is "everything under `packages/` except the documented connect package" rather than a list of wallet package names. `test/smoke/audits/version-lockstep.smoke.js` enforces it, and a newly added wallet package is in scope the moment it exists.
 
-**The prose copies count too.** A bump touches the root and every `packages/*/package.json`, `packages/extension/manifest.json`, `packages/core/src/buildInfo.js`, this README (the version badge at the top and the `current version` line under Status) and `CHANGELOG.md`, which gets a section for the new version. The same smoke holds all of them, because a bump that lands in the manifests and stops short of the prose leaves the two statements a human reads first claiming the previous release. A signed `v0.335.0` tag was once cut against a tree where no file declared 0.335.0 at all, and only `release.yml`'s tag-versus-`package.json` gate caught it. A prerelease version (`-beta.N`, `-respin.N`) needs no changelog section: it rides the release it is a prerelease of.
+**The prose copies count too.** A wallet version bump touches the root and every lockstep package manifest, `packages/extension/manifest.json`, `packages/core/src/buildInfo.js`, this README (the version badge at the top and the `current version` line under Status) and `CHANGELOG.md`, which gets a section for the new version. The same smoke holds all of them, because a bump that lands in the manifests and stops short of the prose leaves the two statements a human reads first claiming the previous release. A signed `v0.335.0` tag was once cut against a tree where no file declared 0.335.0 at all, and only `release.yml`'s tag-versus-`package.json` gate caught it. A prerelease version (`-beta.N`, `-respin.N`) needs no changelog section: it rides the release it is a prerelease of.
 
 **And the changelog section has to say something.** A `## [X.Y.Z]` heading with nothing under it used to satisfy every check here, so a release could be tagged with its contents undocumented at the one moment that becomes permanent. The section now needs at least one entry, enforced by the same smoke.
 

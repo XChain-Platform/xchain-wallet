@@ -74,7 +74,7 @@ describe('workspaceAlias', () => {
     });
 
     it('covers the non-core workspace packages too', () => {
-        expect(rel(resolveVia('@xchain-wallet/bridge-spec'))).toMatch(/^packages\/bridge-spec\//);
+        expect(rel(resolveVia('@dankest-llc/xchain-connect'))).toMatch(/^packages\/connect\//);
         expect(rel(resolveVia('@xchain-wallet/signers-trezor'))).toMatch(/^packages\/signers-trezor\//);
     });
 
@@ -106,7 +106,7 @@ describe('workspaceAlias', () => {
         // subpath export and the generator skips it, that import quietly
         // falls back to node_modules and the pinning has a hole.
         const holes = [];
-        for (const dir of ['core', 'extension', 'web', 'bridge-spec', 'signers-ledger', 'signers-trezor']) {
+        for (const dir of ['core', 'extension', 'web', 'connect', 'signers-ledger', 'signers-trezor']) {
             const manifest = `${repoRoot}packages/${dir}/package.json`;
             if (!existsSync(manifest)) continue;
             const pkg = JSON.parse(readFileSync(manifest, 'utf8'));

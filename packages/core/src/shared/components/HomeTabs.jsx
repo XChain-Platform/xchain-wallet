@@ -53,6 +53,7 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { publishHomeState } from '../../watch/watchHost.js';
 import {
     useNativeFiatRates,
     useTokenFiatRates,
@@ -170,6 +171,8 @@ function compareBalanceNames(a, b) {
     if (byName !== 0) return byName;
     return `${a.chainId || ''}:${a.tick || ''}`.localeCompare(`${b.chainId || ''}:${b.tick || ''}`);
 }
+
+const NO_PRICES = Object.freeze({});
 
 export function watchPublishRows(allRows, hiddenKeys, automaticHiddenKeys) {
     return allRows.filter((row) => {
@@ -387,7 +390,7 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
         [allRows, isDemo],
     );
     const nativeChainKey = nativeChainIds.join(',');
-    const [nativePriceMap, setNativePriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    const [nativePriceMap, setNativePriceMap] = useState(/** @type {Record<string, any>} */ (NO_PRICES));
     const [nativePricesLoading, setNativePricesLoading] = useState(false);
     const [nativePricesError, setNativePricesError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
@@ -398,7 +401,7 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
             return undefined;
         }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
-            setNativePriceMap({});
+            setNativePriceMap(NO_PRICES);
             setNativePricesLoading(false);
             setNativePricesError(null);
             return undefined;
@@ -412,11 +415,11 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
             fiatCurrency,
         }).then((result) => {
             if (cancelled) return;
-            setNativePriceMap(result?.disabled ? {} : (result?.prices || {}));
+            setNativePriceMap(result?.disabled ? NO_PRICES : (result?.prices || {}));
             setNativePricesLoading(false);
         }).catch((err) => {
             if (cancelled) return;
-            setNativePriceMap({});
+            setNativePriceMap(NO_PRICES);
             setNativePricesLoading(false);
             setNativePricesError(readFailureMessage(err, 'load portfolio price history'));
         });
@@ -480,6 +483,21 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
             : new Set(),
         [settings?.hideUnknownTokens, settings?.watchedTokens, allRows, pinnedKeys, ownedTokens],
     );
+    const publishRows = useMemo(
+        () => watchPublishRows(allRows, hiddenKeys, automaticHiddenKeys),
+        [allRows, hiddenKeys, automaticHiddenKeys],
+    );
+    useEffect(() => {
+        publishHomeState({
+            walletId,
+            accountId,
+            rows: publishRows,
+            pinnedKeys,
+            hideSmallBalances,
+            balancesFetchedAt,
+            nativePriceMap,
+        });
+    }, [walletId, accountId, publishRows, pinnedKeys, hideSmallBalances, balancesFetchedAt, nativePriceMap]);
     const portfolioRows = useMemo(
         () => filteredRows.filter((row) => {
             const key = `${row.chainId}:${row.tick}`;

@@ -17,7 +17,7 @@ import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 import { MessageHost } from '../../../packages/extension/src/background/MessageHost.js';
 import { registerBridgeHandlers } from '../../../packages/extension/src/bridge/handlers.js';
-import { parseSignInChallenge } from '../../../packages/bridge-spec/src/runtime.js';
+import { parseSignInChallenge } from '../../../packages/connect/src/runtime.js';
 
 const require = createRequire(import.meta.url);
 const { XChainSDK } = require('xchain-sdk');

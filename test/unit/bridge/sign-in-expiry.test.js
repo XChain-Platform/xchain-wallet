@@ -29,7 +29,7 @@ const { MessageHost } =
 const { registerBridgeHandlers } =
     await import('../../../packages/extension/src/bridge/handlers.js');
 const { SIGN_IN_DEFAULT_EXPIRY_MS, parseSignInChallenge } =
-    await import('@xchain-wallet/bridge-spec');
+    await import('@dankest-llc/xchain-connect');
 
 const ORIGIN = 'https://dapp.example';
 const CHAIN = 'bitcoin-regtest';

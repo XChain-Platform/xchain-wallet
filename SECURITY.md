@@ -57,7 +57,7 @@ If we cannot meet a timeline, we will tell you why and propose a new one. We wil
 
 ### In scope
 
-- All packages under `packages/` in this repository: `core`, `extension`, `web`, `desktop`, `bridge-spec`, `test-dapp`.
+- All packages under `packages/` in this repository: `core`, `extension`, `web`, `desktop`, `connect`, `test-dapp`.
 - The dApp bridge surface (`window.xchain` / extension content script).
 - Vault encryption, key derivation (Argon2id), and at-rest storage (`chrome.storage.local`, IndexedDB, Electron `userData`).
 - Hardware-signer transports (Trezor, Ledger) as integrated by this wallet.

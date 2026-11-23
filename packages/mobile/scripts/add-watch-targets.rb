@@ -39,6 +39,54 @@ def add_synchronized_group(project, target, path)
   target.file_system_synchronized_groups << group unless target.file_system_synchronized_groups.include?(group)
 end
 
+def dependency_named?(host, name)
+  host.dependencies.any? do |dependency|
+    dependency.name == name || dependency.target&.name == name || dependency.target_proxy&.remote_info == name
+  end
+end
+
+def add_target_dependency(host, target)
+  return unless host && target
+  host.add_dependency(target) unless dependency_named?(host, target.name)
+end
+
+def embed_target(host, embedded, name, destination, path = '')
+  return unless host && embedded
+  phase = host.copy_files_build_phases.find { |candidate| candidate.name == name } ||
+    host.new_copy_files_build_phase(name)
+  phase.dst_subfolder_spec = destination
+  phase.dst_path = path
+  product = embedded.product_reference
+  product_name = product&.path
+  unless product_name.nil? || phase.files_references.any? { |reference| reference.path == product_name }
+    build_file = phase.add_file_reference(product)
+    build_file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+  end
+  add_target_dependency(host, embedded)
+end
+
+def add_widget_info(target)
+  target.build_configurations.each do |configuration|
+    configuration.build_settings.delete('INFOPLIST_KEY_CFBundleDisplayName')
+    configuration.build_settings.delete('INFOPLIST_KEY_NSExtensionPointIdentifier')
+  end
+  phase = target.shell_script_build_phases.find { |candidate| candidate.name == 'Generate WatchWidgets Info' } ||
+    target.new_shell_script_build_phase('Generate WatchWidgets Info')
+  phase.output_paths = ['$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist']
+  phase.shell_script = <<~'SH'
+    /usr/bin/plutil -create xml1 "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleDisplayName -string XChain "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleExecutable -string '$(EXECUTABLE_NAME)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleIdentifier -string '$(PRODUCT_BUNDLE_IDENTIFIER)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleInfoDictionaryVersion -string 6.0 "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleName -string '$(PRODUCT_NAME)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundlePackageType -string '$(PRODUCT_BUNDLE_PACKAGE_TYPE)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleShortVersionString -string '$(MARKETING_VERSION)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert CFBundleVersion -string '$(CURRENT_PROJECT_VERSION)' "$SCRIPT_OUTPUT_FILE_0"
+    /usr/bin/plutil -insert NSExtension -xml '<dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>' "$SCRIPT_OUTPUT_FILE_0"
+  SH
+end
+
 watch_app = target_named(project, 'WatchApp', :application)
 apply_settings(watch_app, {
   'GENERATE_INFOPLIST_FILE' => 'YES',
@@ -47,6 +95,7 @@ apply_settings(watch_app, {
   'INFOPLIST_KEY_WKCompanionAppBundleIdentifier' => 'io.xchain.wallet.ios',
   'INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp' => 'NO',
   'INFOPLIST_KEY_WKWatchOnly' => 'NO',
+  'CODE_SIGN_ENTITLEMENTS' => 'WatchApp/WatchApp.entitlements',
   'PRODUCT_BUNDLE_IDENTIFIER' => 'io.xchain.wallet.ios.watch',
   'PRODUCT_NAME' => '$(TARGET_NAME)',
   'SDKROOT' => 'watchos',
@@ -55,6 +104,26 @@ apply_settings(watch_app, {
   'WATCHOS_DEPLOYMENT_TARGET' => '10.0',
 }, version_config)
 add_synchronized_group(project, watch_app, 'WatchApp')
+add_synchronized_group(project, watch_app, 'WatchShared')
+
+watch_widgets = target_named(project, 'WatchWidgets', :app_extension)
+apply_settings(watch_widgets, {
+  'APPLICATION_EXTENSION_API_ONLY' => 'YES',
+  'CODE_SIGN_ENTITLEMENTS' => 'WatchWidgets/WatchWidgets.entitlements',
+  'GENERATE_INFOPLIST_FILE' => 'NO',
+  'INFOPLIST_FILE' => '$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist',
+  'PRODUCT_BUNDLE_IDENTIFIER' => 'io.xchain.wallet.ios.watch.widgets',
+  'PRODUCT_NAME' => '$(TARGET_NAME)',
+  'SDKROOT' => 'watchos',
+  'SKIP_INSTALL' => 'YES',
+  'SWIFT_VERSION' => '5.0',
+  'TARGETED_DEVICE_FAMILY' => '4',
+  'WATCHOS_DEPLOYMENT_TARGET' => '10.0',
+}, version_config)
+add_synchronized_group(project, watch_widgets, 'WatchWidgets')
+add_synchronized_group(project, watch_widgets, 'WatchShared')
+add_widget_info(watch_widgets)
+embed_target(watch_app, watch_widgets, 'Embed App Extensions', '13')
 
 watch_tests = target_named(project, 'WatchAppTests', :unit_test_bundle)
 apply_settings(watch_tests, {
@@ -69,7 +138,11 @@ apply_settings(watch_tests, {
   'WATCHOS_DEPLOYMENT_TARGET' => '10.0',
 }, version_config)
 add_synchronized_group(project, watch_tests, 'WatchAppTests')
-watch_tests.add_dependency(watch_app) unless watch_tests.dependencies.any? { |dependency| dependency.target == watch_app }
+add_target_dependency(watch_tests, watch_app)
+
+phone_app = project.targets.find { |target| target.name == 'App' }
+abort('add-watch-targets: no App target') unless phone_app
+embed_target(phone_app, watch_app, 'Embed Watch Content', '16', '$(CONTENTS_FOLDER_PATH)/Watch')
 
 project.instance_variable_set(:@object_version, '77')
 project.root_object.preferred_project_object_version = '77'
@@ -80,4 +153,4 @@ scheme.add_build_target(watch_app)
 scheme.add_test_target(watch_tests)
 scheme.set_launch_target(watch_app)
 scheme.save_as(project_path, 'WatchApp', true)
-puts 'add-watch-targets: WatchApp and WatchAppTests ready'
+puts 'add-watch-targets: WatchApp, WatchWidgets, and WatchAppTests ready'

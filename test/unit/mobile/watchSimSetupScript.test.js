@@ -181,17 +181,25 @@ describe('watch-sim-setup.sh', () => {
         expect(result.stderr).toContain('pair: missing XC iPhone 17 + XC Watch 41mm');
     });
 
-    it('checks noisy Android manager output without exiting on SIGPIPE', () => {
-        const fixture = makeFixture({
-            managerTrailingLines: 5000,
-            watchRuntime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-2',
-        });
-        const result = run(fixture, ['--check']);
+    it('repairs without SIGPIPE when the manager fills the pipe', () => {
+        expect(source).not.toMatch(/(?<!\|)\|(?!\|)\s*"\$avdmanager"/);
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            const fixture = makeFixture({
+                smallProfile: false,
+                largeProfile: false,
+                managerTrailingLines: 20000,
+            });
+            const result = run(fixture);
 
-        expect(result.status).toBe(1);
-        expect(result.status).not.toBe(141);
-        expect(result.stderr).toContain('device: XC Watch 41mm must use');
-        expect(result.stderr).toContain('device: XC Watch 49mm must use');
+            expect(result.status).toBe(0);
+            const commands = readFileSync(fixture.log, 'utf8');
+            expect(commands).toContain(
+                'avdmanager create avd --force --name xc-wear-small-round',
+            );
+            expect(commands).toContain(
+                'avdmanager create avd --force --name xc-wear-large-round',
+            );
+        }
     });
 
     it.each([

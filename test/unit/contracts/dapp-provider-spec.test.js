@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
-import specSource from '../../../packages/bridge-spec/src/index.ts?raw';
+import specSource from '../../../packages/connect/src/index.ts?raw';
 import { MockXChainProvider } from '../../../packages/test-dapp/src/mock-provider.ts';
 
 function interfaceBody(name) {
