@@ -56,17 +56,19 @@ struct ReceiveScreen: View {
 struct ReceivePage: View {
     let entry: SnapshotReceive
     var modules: [Bool]? { ReceivePresentation.modules(for: entry) }
+    var iconName: String { ReceivePresentation.chainIconName(for: entry.chainId) }
+    var addressText: String { ReceivePresentation.groupedAddress(entry.address) }
 
     var body: some View {
         VStack(spacing: 5) {
-            Label(entry.label, systemImage: ReceivePresentation.chainIconName(for: entry.chainId))
+            Label(entry.label, systemImage: iconName)
                 .font(.headline)
             if let modules {
                 ReceiveQRMatrix(size: entry.qr.size, modules: modules)
                     .frame(width: 112, height: 112)
                     .accessibilityHidden(true)
             }
-            Text(ReceivePresentation.groupedAddress(entry.address))
+            Text(addressText)
                 .font(.caption2.monospaced())
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
@@ -76,7 +78,7 @@ struct ReceivePage: View {
     }
 }
 
-private struct ReceiveQRMatrix: View {
+struct ReceiveQRMatrix: View {
     let size: Int
     let modules: [Bool]
 
