@@ -90,4 +90,5 @@ dependencies {
     testImplementation "junit:junit:$wearJunitVersion"
     androidTestImplementation "androidx.test:runner:$wearTestRunnerVersion"
     androidTestImplementation "androidx.test.ext:junit:$wearAndroidxJunitVersion"
+    androidTestImplementation "androidx.compose.ui:ui-test-junit4:$wearComposeUiVersion"
 }
