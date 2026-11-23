@@ -15,6 +15,7 @@ import { useBackHandler } from './backStack.js';
 import { InFilterPanel } from './filterPanelSlot.js';
 import { fieldHelpName } from './fieldRequirement.js';
 import { useFormFieldError } from './formErrors.js';
+import { useOutsidePress } from './useOutsidePress.js';
 // Ahead of the select's own sheet, so the shared button base loads first and
 // the trigger's rules follow it; see Chip.jsx for why this is not `composes`.
 import buttonStyles from './Button.module.css';
@@ -171,16 +172,7 @@ export function IconSelectControl({
     }, []);
     useBackHandler(open ? () => closeSelect(true) : undefined);
 
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            closeSelect(true);
-        };
-        window.addEventListener('mousedown', onClick);
-        return () => window.removeEventListener('mousedown', onClick);
-    }, [closeSelect, open]);
+    useOutsidePress([triggerRef, popoverRef], () => closeSelect(true), { enabled: open });
 
     const selected = options.find((o) => o.value === value) || null;
 
