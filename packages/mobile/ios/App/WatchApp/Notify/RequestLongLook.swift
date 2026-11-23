@@ -52,12 +52,8 @@ struct RequestLongLookOpenOnPhoneAction: View {
     let openOnPhone: () -> Void
 
     var body: some View {
-        Button(action: send) {
+        Button(action: openOnPhone) {
             Label(LocalizedStringKey(titleKey), systemImage: "iphone")
         }
-    }
-
-    func send() {
-        openOnPhone()
     }
 }

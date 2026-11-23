@@ -34,7 +34,8 @@ final class RequestLongLookTests: XCTestCase {
         XCTAssertNil(expiredView.presentation(at: Date(timeIntervalSince1970: 946_684_800)))
     }
 
-    func testOpenOnPhoneButtonFiresForRequestAndPaydue() throws {
+    @MainActor
+    func testRenderedOpenOnPhoneButtonFiresForRequestAndPaydue() throws {
         let directory = try XCTUnwrap(WatchFixtureFiles.directory())
 
         for name in ["request-confirm", "request-paydue"] {
@@ -48,8 +49,20 @@ final class RequestLongLookTests: XCTestCase {
                 titleKey: content.openOnPhoneKey,
                 openOnPhone: view.openOnPhone
             )
+            let button = action.body
+            let buttonType = String(reflecting: type(of: button))
+            XCTAssertTrue(buttonType.contains("SwiftUI.Button<"), buttonType)
+            let installedAction = try XCTUnwrap(
+                Mirror(reflecting: button).children.first { $0.label == "action" }?.value,
+                "Rendered view has no button action for \(name)"
+            )
+            let trigger = try XCTUnwrap(
+                Mirror(reflecting: installedAction).children
+                    .first { $0.label == "closure" }?.value as? @MainActor () -> Void,
+                "Rendered button has no trigger closure for \(name)"
+            )
 
-            action.send()
+            trigger()
 
             XCTAssertEqual(openedIds, [fixture.id], name)
             XCTAssertEqual(content.openOnPhoneKey, "n2.openOnPhone", name)
