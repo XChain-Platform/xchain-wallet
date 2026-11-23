@@ -49,6 +49,7 @@ import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
+import { NewerWalletNeeded, SiteRequestApproval } from '@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { t } from '../../core/src/i18n/index.js';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
@@ -406,6 +407,7 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
+    const [siteRequest, setSiteRequest] = useState(/** @type {Record<string, unknown> | null} */ (null));
     // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
@@ -728,6 +730,7 @@ function AppInner() {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setSiteRequest(null);
         setMultisigInitialLink(null);
     }
 
@@ -1230,6 +1233,7 @@ function AppInner() {
             }
             if (route.contractRef) setContractRef(route.contractRef);
             if (route.executePrefill) setExecutePrefill(route.executePrefill);
+            if (route.view === 'site-request-approval') setSiteRequest(route.request);
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             setUnlockedView(route.view);
         },
@@ -1328,6 +1332,17 @@ function AppInner() {
                 onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
             });
             const routeNode = (() => {
+            if (unlockedView === 'site-request-approval' && siteRequest) {
+                return (
+                    <SiteRequestApproval
+                        request={siteRequest}
+                        onReject={() => { setSiteRequest(null); goBack(); }}
+                    />
+                );
+            }
+            if (unlockedView === 'newer-wallet-needed') {
+                return <NewerWalletNeeded onBack={goBack} />;
+            }
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send

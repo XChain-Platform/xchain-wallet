@@ -148,6 +148,10 @@ const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVar
 // An unknown view renders inside the route outlet's Suspense like every other
 // route, so its EmptyState and ListPage styles stay out of the startup CSS.
 const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
+const NewerWalletNeeded = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'NewerWalletNeeded');
+const SiteRequestApproval = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'SiteRequestApproval');
+const loadLinkHandoff = import.meta.glob('./routes/LinkHandoff.jsx')['./routes/LinkHandoff.jsx'];
+const LinkHandoff = loadLinkHandoff ? lazyRoute(loadLinkHandoff, 'LinkHandoff') : null;
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
 const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AccountPicker.jsx'), 'AccountPicker');
@@ -308,6 +312,13 @@ const loadPaletteBalanceRows = async (messagingClient, walletId, accountId) => {
 
 export function App() {
     const variantState = useActiveVariant();
+    if (LinkHandoff && typeof window !== 'undefined' && /^\/link(?:\/|$)/.test(window.location.pathname)) {
+        return (
+            <Suspense fallback={<Loading />}>
+                <LinkHandoff />
+            </Suspense>
+        );
+    }
     const { variant, source } = variantState;
     const shell = shellForVariant(variant);
     // Pick the page-level wrapper. Four cases:
@@ -806,6 +817,7 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
+    const [siteRequest, setSiteRequest] = useState(/** @type {Record<string, unknown> | null} */ (null));
     // The launch guard keeps a URI authoritative through both unlock and the
     // later per-wallet last-view restore.
     const launchRouteState = useRef(createLaunchRouteState());
@@ -894,6 +906,7 @@ function AppInner() {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setSiteRequest(null);
         setMultisigInitialLink(null);
         setGlobalScannerOpen(false);
         launchRouteState.current.clear();
@@ -953,6 +966,7 @@ function AppInner() {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
             }
+            if (route.view === 'site-request-approval') setSiteRequest(route.request);
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             // The launch guard holds a locked-session link through unlock and the
             // later last-view restore. A link that arrives while a native shell
@@ -1445,6 +1459,17 @@ function AppInner() {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
+            if (unlockedView === 'site-request-approval' && siteRequest) {
+                return (
+                    <SiteRequestApproval
+                        request={siteRequest}
+                        onReject={() => { setSiteRequest(null); goBack(); }}
+                    />
+                );
+            }
+            if (unlockedView === 'newer-wallet-needed') {
+                return <NewerWalletNeeded onBack={goBack} />;
+            }
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
                     <AlertsRoute
