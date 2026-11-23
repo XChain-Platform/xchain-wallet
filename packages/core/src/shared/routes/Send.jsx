@@ -2813,6 +2813,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // unavailable; then its amount is unknown, not zero.
     const sourceHalfUnavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
         && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
+    const sourcePendingUnknown = isNativeSend && !sourceHalfUnavailable
+        && previewBalances.sdkShape?.native?.pendingUnknown === true;
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || sourceHalfUnavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
@@ -4849,6 +4851,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             />
             {maxNote ? (
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
+            {sourcePendingUnknown && !previewBalances.loading && !previewBalances.error ? (
+                <p className={styles.balanceHint} role="status" data-testid="send-pending-unknown">
+                    {t('send.balance.pendingUnknown')}
+                </p>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already put the same sentence in the error map,

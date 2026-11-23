@@ -44,6 +44,7 @@ import {
     confirmHeadline,
     confirmStatus,
     confirmWarning,
+    composedRecipients,
     decodedFacts,
     feeFacts,
     recipientFacts,
@@ -657,7 +658,8 @@ export function ConfirmActionModal({
         });
         // The protocol fee as the screen knows it: the XCHAIN lane from the
         // pre-flight quote, the native lane from the composed output, else
-        // the form's own figure; a known-free action has no row.
+        // the form's own positive figure. Only the confirmation data can show
+        // an action is free, so a form's zero never hides the unknown row.
         const formProtocolFee = summary?.protocolFee?.amount ? summary.protocolFee : null;
         const protocolLabel = t('execute.protocolFee');
         if (protocolFee) {
@@ -671,7 +673,7 @@ export function ConfirmActionModal({
                 ? (typeof formatNativeFee === 'function' ? formatNativeFee(formProtocolFee.amount) : null)
                 : (typeof formatProtocolFee === 'function' ? formatProtocolFee(formProtocolFee.amount) : null);
             fees.push({ key: 'protocol', label: protocolLabel, amount: String(formProtocolFee.amount), ticker: tick, fiat });
-        } else if (protocolFeeUnavailable && !formProtocolFee) {
+        } else if (protocolFeeUnavailable) {
             fees.push({ key: 'protocol', label: protocolLabel, amount: null, ticker: 'XCHAIN' });
         }
         if (oracleFee) {
@@ -697,7 +699,11 @@ export function ConfirmActionModal({
     // --- the one facts card: the action's rows, who signs, the network and each fee ---
     // There is no Total block (G127 revised 2026-11-16): the sentence says
     // what the action moves and each fee is its own row with its fiat value.
-    const recipients = Array.isArray(form?.recipients) ? form.recipients.filter((row) => row && row.to) : [];
+    const formRecipients = Array.isArray(form?.recipients) ? form.recipients.filter((row) => row && row.to) : [];
+    // A multi-send's per-asset rows come from the legs the host decoded out of
+    // the composed bytes. The form's rows only stand in without a full decode.
+    const composedLegs = variant === 'action' && head.kind === 'multiSend' ? composedRecipients(decoded) : null;
+    const recipients = composedLegs || formRecipients;
     const feeLabels = new Set(fees.map((fee) => fee.label));
     // A caller's PSBT shows its decoded action in its own panel
     // (PsbtIntentPanel), so only the action variant draws the decode here.

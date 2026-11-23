@@ -263,6 +263,7 @@ export {
     RbfInvalidEntryError,
 } from './rbfReplace.js';
 export { planRbfReplacement, RbfPlanError } from './rbfPlan.js';
+export { configureReleaseFeedSource } from './releaseFeedSource.js';
 export {
     getFiatRate,
     refreshFiatRates,

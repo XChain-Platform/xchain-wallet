@@ -686,7 +686,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     const title = KIND_TITLE[kind] ?? 'Approve Request';
     const showSavePermanent =
-        kind === 'signAction' ||
+        (kind === 'signAction' && !payload?.payload?.alreadyGranted) ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
 
     // Approve / Reject, thumbs up and thumbs down, matching the in-wallet confirm

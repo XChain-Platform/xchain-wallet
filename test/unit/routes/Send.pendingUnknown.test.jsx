@@ -1,8 +1,9 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A coin balance read without the `pendingUnknown` marker shows the available
-// amount and no pending-unknown caveat under the amount field.
+// A coin balance read while the tracker's mempool view was still converging
+// carries `pendingUnknown`. Send keeps the available amount and adds one
+// caveat under the amount field; a read without the marker shows no caveat.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -47,6 +48,12 @@ function mount(native) {
 afterEach(() => cleanup());
 
 describe('Send available amount while the pending side is unknown', () => {
+    it('keeps the available amount and adds the caveat', async () => {
+        mount({ tick: 'BTC', quantity: '100000000', divisibility: 8, pendingUnknown: true });
+        expect(await screen.findByText(/1 BTC available/, {}, { timeout: 10_000 })).toBeInTheDocument();
+        expect(screen.getByTestId('send-pending-unknown')).toHaveTextContent('still catching up on unconfirmed transactions');
+    });
+
     it('shows no caveat when the read carries no marker', async () => {
         mount({ tick: 'BTC', quantity: '100000000', divisibility: 8 });
         expect(await screen.findByText(/1 BTC available/, {}, { timeout: 10_000 })).toBeInTheDocument();

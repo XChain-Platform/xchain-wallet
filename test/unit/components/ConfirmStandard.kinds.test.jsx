@@ -79,6 +79,18 @@ function decodedFor(kind) {
     return { summary, details: details.map(([label, value]) => ({ label, value })), warnings: [] };
 }
 
+// The decode of a multi-send whose composed legs are exactly these recipients.
+function decodedLegs(recipients) {
+    return {
+        summary: `Send to ${recipients.length} recipients`,
+        details: recipients.map((row, index) => ({
+            label: `Recipient ${index + 1}`,
+            value: `${row.amount} ${row.tick} to ${row.to}`,
+        })),
+        warnings: [],
+    };
+}
+
 function props(kind, overrides = {}) {
     const [action] = KINDS[kind];
     return {
@@ -240,7 +252,7 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['3000 PEPE'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 3,000 PEPE to 75 recipients');
         const rows = container.querySelectorAll('[data-testid="confirm-asset-summary"]');
         expect(rows).toHaveLength(1);
@@ -265,7 +277,7 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['52 PEPE', '75 DANK', '9 WOW'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 3 assets to 6 recipients');
         const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
         expect(rows.map((row) => row.previousElementSibling.querySelector('[data-testid="confirm-asset-label"]').textContent))
@@ -288,10 +300,11 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['500 PEPE', '500 DANK'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 2 assets to 1,000 recipients');
         expect(container.querySelectorAll('[data-testid="confirm-asset-summary"]')).toHaveLength(2);
         expect(container.querySelectorAll('[data-testid="confirm-recipient"]')).toHaveLength(0);
+        expect([...container.querySelectorAll('dt')].some((row) => /^Recipient \d+$/.test(row.textContent))).toBe(false);
         expect(container.textContent).not.toContain('recipient-999');
     });
 
@@ -307,12 +320,40 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['9007199254741000 PEPE', '0.3 DANK'],
         };
-        const { container } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
         expect(rows.map((row) => row.textContent)).toEqual([
             '9,007,199,254,741,000 to 1 recipient',
             '0.3 to 2 recipients',
         ]);
+    });
+
+    it('draws a multi-send from the legs the host decoded when the form holds others', () => {
+        const form = props('multiSend').summary;
+        const composedLegs = [
+            { to: ADDR, tick: 'PEPE', amount: '5' },
+            { to: FROM, tick: 'PEPE', amount: '7' },
+            { to: 'bc1qthird', tick: 'DANK', amount: '2' },
+        ];
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', {
+            summary: form, decoded: decodedLegs(composedLegs),
+        })} />);
+        expect(getByTestId('confirm-sentence').textContent).toBe('Send 2 assets to 3 recipients');
+        const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
+        expect(rows.map((row) => row.textContent)).toEqual(['12 to 2 recipients', '2 to 1 recipient']);
+        expect([...container.querySelectorAll('dt')].some((row) => /^Recipient \d+$/.test(row.textContent))).toBe(false);
+        expect(container.textContent).not.toContain('bc1qthird');
+        expect(container.textContent).not.toContain('30 XCHAIN');
+    });
+
+    it('keeps the per-asset rows alone when the form and the decode name the same legs', () => {
+        const recipients = [{ to: ADDR, tick: 'PEPE', amount: '5' }, { to: FROM, tick: 'PEPE', amount: '7' }];
+        const { container } = render(<ConfirmActionModal {...props('multiSend', {
+            summary: { ...props('multiSend').summary, recipients, totals: ['12 PEPE'] },
+            decoded: decodedLegs(recipients),
+        })} />);
+        expect(container.querySelectorAll('[data-testid="confirm-asset-summary"]')).toHaveLength(1);
+        expect(container.textContent).not.toContain('Recipient 1');
     });
 
     it('signs a message with the same body and no status claim either way', () => {
@@ -476,7 +517,7 @@ describe('Confirm Standard, list transfer', () => {
     it('puts the list name on its own line over "Transfer list to the new owner" and the new owner, never the From address', () => {
         const { container, getByTestId, queryByTestId } = render(<ConfirmActionModal {...props('listTransfer', {
             decoded: null,
-            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'] },
+            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'], protocolFeeKnownFree: true },
             networkFee: { amount: '0.000015', ticker: 'BTC', estimate: true },
             summary: transferSummary(),
         })} />);
@@ -502,6 +543,16 @@ describe('Confirm Standard, list transfer', () => {
         expect(getByTestId('confirm-fee-network').textContent).toBe('0.000015 BTC');
         expect(container.querySelector('[data-testid^="confirm-total"]')).toBeNull();
         expect(container.textContent).not.toMatch(/protocol fee/i);
+    });
+
+    it('names the protocol fee as not known when the transfer quote gave no free answer', () => {
+        const { getByTestId } = render(<ConfirmActionModal {...props('listTransfer', {
+            decoded: null,
+            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'] },
+            networkFee: { amount: '0.000015', ticker: 'BTC', estimate: true },
+            summary: transferSummary(),
+        })} />);
+        expect(getByTestId('confirm-fee-protocol').textContent).toBe('Not known yet');
     });
 
     it('says "this list" without a name and never repeats List or shows the id as a name', () => {

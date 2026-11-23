@@ -193,6 +193,30 @@ describe('confirm screen protocol-fee disclosure', () => {
             expect(unknownProtocolFeeNamed()).toBe(false);
         });
 
+        it('keeps the unknown row when only the form says the fee is zero', () => {
+            render(<ConfirmActionModal {...noQuote('LIST')}
+                summary={{ protocolFee: { amount: '0', ticker: 'XCHAIN' } }} />);
+            expect(unknownProtocolFeeNamed()).toBe(true);
+        });
+
+        it('keeps the unknown row when the form leaves its fee amount empty', () => {
+            render(<ConfirmActionModal {...noQuote('ISSUE')}
+                summary={{ protocolFee: { amount: '', ticker: 'XCHAIN' } }} />);
+            expect(unknownProtocolFeeNamed()).toBe(true);
+        });
+
+        it('shows no protocol row when the compose quote is known free, whatever the form says', () => {
+            render(<ConfirmActionModal {...noQuote('LIST', { protocolFeeKnownFree: true })}
+                summary={{ protocolFee: { amount: '0', ticker: 'XCHAIN' } }} />);
+            expect(screen.queryByTestId('confirm-fee-protocol')).toBeNull();
+        });
+
+        it('falls back to the form\'s positive figure when the compose quote is missing', () => {
+            render(<ConfirmActionModal {...noQuote('ISSUE')}
+                summary={{ protocolFee: { amount: '0.25', ticker: 'XCHAIN' } }} />);
+            expect(screen.getByTestId('confirm-fee-protocol').textContent).toMatch(/0\.25 XCHAIN/);
+        });
+
         it.each(['ORDER', 'ORDER_MATCH', 'DEPLOY_CHUNK'])('names it for %s', (action) => {
             render(<ConfirmActionModal {...noQuote(action)} />);
             expect(unknownProtocolFeeNamed()).toBe(true);

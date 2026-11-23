@@ -382,6 +382,32 @@ function recipientsOf(summary) {
     return Array.isArray(summary?.recipients) ? summary.recipients.filter((row) => row && row.to) : [];
 }
 
+// A decoded multi-send leg reads "<amount> <tick> to <destination>", then an
+// optional quoted memo.
+const DECODED_LEG = /^(\S+) (\S+) to (\S+)(?: \(memo: "[\s\S]*"\))?$/;
+
+/**
+ * The recipient legs the host decoded from the composed bytes, read back from
+ * the decode's "Recipient N" rows. Null unless there are at least two rows and
+ * every one reads as a full leg, so a half-read set is never shown as the
+ * composed truth.
+ *
+ * @param {{ details?: Array<{label?: string, value?: unknown}> } | null | undefined} decoded
+ * @returns {Array<{ to: string, tick: string, amount: string }> | null}
+ */
+export function composedRecipients(decoded) {
+    const rows = (Array.isArray(decoded?.details) ? decoded.details : [])
+        .filter((detail) => /^recipient \d+$/i.test(String(detail?.label || '').trim()));
+    if (rows.length < 2) return null;
+    const legs = [];
+    for (const row of rows) {
+        const leg = DECODED_LEG.exec(String(row?.value ?? '').trim());
+        if (!leg || leg[1] === '?' || leg[2] === '?') return null;
+        legs.push({ amount: leg[1], tick: leg[2].toUpperCase(), to: leg[3] });
+    }
+    return legs;
+}
+
 /**
  * The page's top model: the kind, icon, sentence and address for the first fact.
  *
@@ -398,7 +424,11 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     const form = summary || {};
     const kind = confirmKindFor({ variant, actionName, decoded, summary: form });
     const spec = CONFIRM_KINDS[kind];
-    const recipients = recipientsOf(form);
+    // A multi-send's sentence and counts come from the legs the host decoded
+    // from the composed bytes; the form's rows and totals only stand in when
+    // the decode carries none.
+    const composed = kind === 'multiSend' ? composedRecipients(decoded) : null;
+    const recipients = composed || recipientsOf(form);
     const decodedRecipient = bareValue((Array.isArray(decoded?.details) ? decoded.details : [])
         .find((detail) => ADDRESS_LABEL.test(String(detail?.label || '')))?.value);
     const source = form.address || sourceAddress || null;
@@ -406,7 +436,7 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     if (spec.address === 'recipient') address = form.recipient || decodedRecipient || source;
     else if (spec.address === 'recipientOnly') address = form.recipient || decodedRecipient || null;
     else if (spec.address === 'source') address = source;
-    const ctx = { decoded, summary: form, recipients };
+    const ctx = { decoded, summary: composed ? { ...form, totals: [] } : form, recipients };
     const fromKind = spec.sentence ? spec.sentence(ctx) : null;
     const fromDecoder = plainSentence(decoded?.summary, { chainName, address });
     // With no decode at all, the form's own words: verb, amount, what it
@@ -508,7 +538,7 @@ export function lockChips(value) {
  *
  * @param {{ decoded?: any, sentence: string, name?: string, address?: string|null, recipientsShown?: boolean, kind?: string|null, summary?: any }} args
  *   name: the name line above the sentence, never repeated as a row;
- *   recipientsShown: the form's own recipient rows are on the card, so the
+ *   recipientsShown: the per-asset recipient rows are on the card, so the
  *   decoder's "Recipient N" rows would say each one twice; kind: a
  *   CONFIRM_KINDS key whose decodedFact keeps the card short
  * @returns {ConfirmFact[]}
@@ -539,7 +569,9 @@ export function decodedFacts({ decoded, sentence, name = '', address = null, rec
             facts.push({ key: `decoded-${index}`, label: t('confirmStandard.fact.locks'), value, chips: lockChips(value), testId: 'confirm-locks' });
             return;
         }
-        if (recipientsShown && /^recipient \d+$/i.test(label)) return;
+        // Keep multi-send confirms bounded by assets even if a malformed leg
+        // prevents the decoded aggregate from replacing the form fallback.
+        if ((kind === 'multiSend' || recipientsShown) && /^recipient \d+$/i.test(label)) return;
         if (pick) {
             const kept = pick({ label, value, summary: summary || {} });
             if (kept) facts.push({ key: `decoded-${index}`, label: kept.label, value: kept.value, address: Boolean(kept.address) });

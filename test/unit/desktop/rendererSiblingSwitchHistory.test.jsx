@@ -25,6 +25,7 @@ vi.mock('@xchain-wallet/core/shared/hooks/useConfirmAction.js', async (importOri
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({ installShellErrorCapture: vi.fn() }));
 vi.mock('../../../packages/desktop/renderer/fiatRateSource.js', () => ({ installDesktopFiatRateSource: vi.fn() }));
+vi.mock('../../../packages/desktop/renderer/releaseFeedSource.js', () => ({ installDesktopReleaseFeedSource: vi.fn() }));
 vi.mock('@xchain-wallet/core/shared/shellCapabilities.js', () => ({ setShellCapabilities: vi.fn() }));
 vi.mock('../../../packages/desktop/renderer/DesktopUpdateBanner.jsx', () => ({ DesktopUpdateBanner: () => null }));
 vi.mock('@xchain-wallet/core/shared/PrivacyBlurGate.jsx', () => ({ PrivacyBlurGate: () => null }));

@@ -108,6 +108,7 @@ import {
     waitForLabelSyncRestoreTask,
 } from './labelSyncRestoreTasks.js';
 import { createAddressDiscoveryTask } from './addressDiscoveryTask.js';
+import { createReleaseFeedHandler } from './releaseFeedFetch.js';
 
 const {
     importedAddressIdsFor,
@@ -7336,6 +7337,10 @@ export function createBackgroundHost(deps) {
             clearTimeout(timeoutId);
         }
     });
+
+    // The About panel's release feed for a page that may not fetch it. No
+    // request field is read; the handler fetches its one fixed address.
+    host.register('updates.releaseFeed', createReleaseFeedHandler());
 
     host.register('prices.native', async (req, { vault }) => {
         try {

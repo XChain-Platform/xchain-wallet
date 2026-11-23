@@ -19,6 +19,7 @@ import { createRoot } from 'react-dom/client';
 import { flows, registry } from '@xchain-wallet/core';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { installDesktopFiatRateSource } from './fiatRateSource.js';
+import { installDesktopReleaseFeedSource } from './releaseFeedSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -52,6 +53,7 @@ try {
 } catch { /* never block app boot */ }
 
 installDesktopFiatRateSource();
+installDesktopReleaseFeedSource();
 
 // Screens that show key material turn this window's capture protection on.
 installDesktopScreenGuard();

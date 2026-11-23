@@ -135,6 +135,8 @@ const messages = {
     'send.token.hint': "Choose the coin or token to send. The network's own coin is selected by default.",
     'send.balance.unavailable': 'Balance unavailable ({error})',
     'send.balance.unknown': 'Balance unavailable',
+    'send.balance.pendingUnknown':
+        'The balance service is still catching up on unconfirmed transactions, so part of this amount may already be spent.',
     'send.balance.available': '{amount} {ticker} available',
     'send.destroy.balanceShort':
         'This address holds {balance} {tick} now, less than the {amount} {tick} this destroy burns. Nothing was signed. Review the amount and try again.',

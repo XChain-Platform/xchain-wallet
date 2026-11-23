@@ -8,6 +8,7 @@ const boot = vi.hoisted(() => ({
     createRoot: vi.fn(),
     installErrorCapture: vi.fn(),
     installFiatRateSource: vi.fn(),
+    installReleaseFeedSource: vi.fn(),
     setShellCapabilities: vi.fn(),
 }));
 
@@ -26,6 +27,9 @@ vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
 }));
 vi.mock('../../../packages/desktop/renderer/fiatRateSource.js', () => ({
     installDesktopFiatRateSource: boot.installFiatRateSource,
+}));
+vi.mock('../../../packages/desktop/renderer/releaseFeedSource.js', () => ({
+    installDesktopReleaseFeedSource: boot.installReleaseFeedSource,
 }));
 vi.mock('../../../packages/desktop/renderer/App.jsx', () => ({ App: () => null }));
 // The freeze bridge talks to main over IPC; these tests are about the
