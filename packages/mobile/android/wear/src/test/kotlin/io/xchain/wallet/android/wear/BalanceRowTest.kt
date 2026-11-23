@@ -5,10 +5,11 @@ package io.xchain.wallet.android.wear
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.DpRect
 import io.xchain.wallet.android.wear.ui.BalanceRow
@@ -66,7 +67,7 @@ class BalanceRowTest {
         val primaryBounds = bounds(primary)
         val secondaryBounds = secondary?.let(::bounds)
         if (secondary == null) {
-            compose.onNodeWithText(fiat).assertDoesNotExist()
+            compose.onAllNodesWithText(fiat).assertCountEquals(0)
         }
         if (stacked) {
             assertTrue(nameBounds.bottom <= primaryBounds.top)
