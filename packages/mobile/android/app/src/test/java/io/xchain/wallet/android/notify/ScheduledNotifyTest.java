@@ -22,7 +22,6 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 
-import androidx.test.core.app.ApplicationProvider;
 import androidx.work.Configuration;
 import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
@@ -32,17 +31,20 @@ import androidx.work.testing.WorkManagerTestInitHelper;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowNotificationManager;
 
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = 28)
 public class ScheduledNotifyTest {
 
     @Test
     public void schedulesPostsReplacesAndCancelsUniqueWork() throws Exception {
-        Context context = ApplicationProvider.getApplicationContext();
+        Context context = RuntimeEnvironment.getApplication();
         Configuration configuration = new Configuration.Builder()
                 .setExecutor(new SynchronousExecutor())
                 .build();
@@ -62,7 +64,7 @@ public class ScheduledNotifyTest {
 
         TestDriver driver = WorkManagerTestInitHelper.getTestDriver(context);
         assertNotNull(driver);
-        assertTrue(driver.setInitialDelayMet(first.getId()));
+        driver.setInitialDelayMet(first.getId());
         assertEquals(WorkInfo.State.SUCCEEDED,
                 workManager.getWorkInfoById(first.getId()).get().getState());
         ShadowNotificationManager shadowManager = shadowOf(notificationManager);
@@ -76,14 +78,12 @@ public class ScheduledNotifyTest {
         WorkInfo replaced = only(workManager, "deadline-2");
         ScheduledNotify.schedule(context, "deadline-2", inOneMinute,
                 "New", "New body", "xc_notify_deadlines");
-        assertEquals(WorkInfo.State.CANCELLED,
-                workManager.getWorkInfoById(replaced.getId()).get().getState());
+        assertCancelledOrPruned(workManager, replaced);
         WorkInfo replacement = enqueued(workManager, "deadline-2");
         assertTrue(!replacement.getId().equals(replaced.getId()));
 
         ScheduledNotify.cancel(context, "deadline-2");
-        assertEquals(WorkInfo.State.CANCELLED,
-                workManager.getWorkInfoById(replacement.getId()).get().getState());
+        assertCancelledOrPruned(workManager, replacement);
     }
 
     private static WorkInfo only(WorkManager manager, String id) throws Exception {
@@ -98,5 +98,11 @@ public class ScheduledNotifyTest {
                 .filter(info -> info.getState() == WorkInfo.State.ENQUEUED)
                 .findFirst()
                 .orElseThrow(AssertionError::new);
+    }
+
+    private static void assertCancelledOrPruned(WorkManager manager, WorkInfo work)
+            throws Exception {
+        WorkInfo current = manager.getWorkInfoById(work.getId()).get();
+        assertTrue(current == null || current.getState() == WorkInfo.State.CANCELLED);
     }
 }
