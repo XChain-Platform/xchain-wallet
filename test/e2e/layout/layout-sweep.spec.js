@@ -35,78 +35,78 @@ test('layout gutter assertion contract', () => {
         first: { kind, left: gutter, rightGap: gutter, topGap },
     });
     expect(layoutSweepFailures([
-        { label: 'scaled', vw: 411, layout: layout(12), rootFontPx: 24, expectedRootFontPx: 24 },
-        { label: 'lost scale', vw: 411, layout: layout(12), rootFontPx: 16, expectedRootFontPx: 24 },
-        { label: 'unread', vw: 411, layout: layout(12), expectedRootFontPx: 20.8 },
+        { label: 'scaled', vw: 411, layout: layout(8), rootFontPx: 24, expectedRootFontPx: 24 },
+        { label: 'lost scale', vw: 411, layout: layout(8), rootFontPx: 16, expectedRootFontPx: 24 },
+        { label: 'unread', vw: 411, layout: layout(8), expectedRootFontPx: 20.8 },
     ])).toEqual([
         'lost scale: root font size 16px, expected 24px',
         'unread: root font size unread, expected 20.8px',
     ]);
-    // The tiered page gutter: 12px below 640px, 16px from 640px, 24px from 900px.
+    // The ruled page gutter is 8px at every width.
     expect(layoutSweepFailures([
-        { label: 'compact', vw: 639, layout: layout(12) },
-        { label: 'rail', vw: 834, layout: layout(16) },
-        { label: 'full', vw: 1280, layout: layout(24) },
+        { label: 'compact', vw: 639, layout: layout(8) },
+        { label: 'rail', vw: 834, layout: layout(8) },
+        { label: 'full', vw: 1280, layout: layout(8) },
     ])).toEqual([]);
     expect(layoutSweepFailures([
-        { label: 'compact gutter on rail', vw: 834, layout: layout(12) },
+        { label: 'narrow gutter', vw: 834, layout: layout(6) },
     ])).toEqual([
-        'compact gutter on rail: content left 12px, expected 16px',
-        'compact gutter on rail: content right gap 12px, expected at least 16px',
-        'compact gutter on rail: header left 12px, expected 16px',
-        'compact gutter on rail: header right gap 12px, expected 16px',
-        'compact gutter on rail: first content left 12px, expected 16px',
-        'compact gutter on rail: first content right gap 12px, expected at least 16px',
+        'narrow gutter: content left 6px, expected 8px',
+        'narrow gutter: content right gap 6px, expected at least 8px',
+        'narrow gutter: header left 6px, expected 8px',
+        'narrow gutter: header right gap 6px, expected 8px',
+        'narrow gutter: first content left 6px, expected 8px',
+        'narrow gutter: first content right gap 6px, expected at least 8px',
     ]);
     // A wide step that centres its column passes; one pushed off-centre does not.
-    const column = (left, rightGap, gutter = 16) => ({
+    const column = (left, rightGap, gutter = 8) => ({
         contentLeft: gutter, contentRightGap: gutter, headerLeft: null, headerRightGap: null, first: { kind: 'list', left, rightGap, topGap: 12 },
     });
     expect(layoutSweepFailures([
         { label: 'centred', vw: 834, layout: column(177, 177) },
         { label: 'off centre', vw: 834, layout: column(177, 60) },
-        { label: 'narrow centred', vw: 411, layout: column(40, 40, 12) },
+        { label: 'narrow centred', vw: 411, layout: column(40, 40) },
     ])).toEqual([
-        'off centre: first content left 177px, expected 16px',
-        'narrow centred: first content left 40px, expected 12px',
+        'off centre: first content left 177px, expected 8px',
+        'narrow centred: first content left 40px, expected 8px',
     ]);
     expect(layoutSweepFailures([
         {
             label: 'activity',
             vw: 768,
             layout: {
-                contentLeft: 16,
-                contentRightGap: 13,
-                headerLeft: 22,
-                headerRightGap: 11,
-                first: { kind: 'list', left: 13, rightGap: 12, topGap: 12 },
+                contentLeft: 8,
+                contentRightGap: 5,
+                headerLeft: 14,
+                headerRightGap: 3,
+                first: { kind: 'list', left: 5, rightGap: 4, topGap: 12 },
             },
         },
         {
             label: 'send',
             vw: 768,
             layout: {
-                contentLeft: 16,
-                contentRightGap: 16,
-                headerLeft: 16,
-                headerRightGap: 16,
+                contentLeft: 8,
+                contentRightGap: 8,
+                headerLeft: 8,
+                headerRightGap: 8,
                 first: { kind: 'form', left: 104, rightGap: 104, topGap: 16 },
             },
         },
     ])).toEqual([
-        'activity: content right gap 13px, expected at least 16px',
-        'activity: header left 22px, expected 16px',
-        'activity: header right gap 11px, expected 16px',
-        'activity: first content left 13px, expected 16px',
-        'activity: first content right gap 12px, expected at least 16px',
+        'activity: content right gap 5px, expected at least 8px',
+        'activity: header left 14px, expected 8px',
+        'activity: header right gap 3px, expected 8px',
+        'activity: first content left 5px, expected 8px',
+        'activity: first content right gap 4px, expected at least 8px',
         'form top gaps [16] do not match list top gaps [12]',
     ]);
 });
 
-test('in-page expected gutter matches pageGutterForWidth at each tier boundary', async ({ page }) => {
+test('in-page expected gutter matches pageGutterForWidth at former tier boundaries', async ({ page }) => {
     // measureInPage runs in the page and carries its own copy of the gutter
-    // tiers; this keeps that copy and pageGutterForWidth in step.
-    expect([639, 640, 899, 900].map(pageGutterForWidth)).toEqual([12, 16, 16, 24]);
+    // value; this keeps that copy and pageGutterForWidth in step.
+    expect([639, 640, 899, 900].map(pageGutterForWidth)).toEqual([8, 8, 8, 8]);
     await page.setContent(`
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>html, body { margin: 0; overflow: hidden; }</style>
@@ -122,12 +122,12 @@ test('in-page expected gutter matches pageGutterForWidth at each tier boundary',
 
 test('top gaps compare form and list only inside one shell', () => {
     const layout = (kind, topGap, tier) => ({
-        contentLeft: 16,
-        contentRightGap: 16,
-        headerLeft: 16,
-        headerRightGap: 16,
+        contentLeft: 8,
+        contentRightGap: 8,
+        headerLeft: 8,
+        headerRightGap: 8,
         tier,
-        first: { kind, left: 16, rightGap: 16, topGap },
+        first: { kind, left: 8, rightGap: 8, topGap },
     });
     // Onboarding sits outside the sidebar layout, which adds its own top gap.
     expect(layoutSweepFailures([
@@ -141,7 +141,7 @@ test('top gaps compare form and list only inside one shell', () => {
 });
 
 test('layout findings key the scrolled-away header and short content apart from the gutter contract', () => {
-    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, headerRightGap: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
+    const layout = { contentLeft: 8, contentRightGap: 8, headerLeft: 8, headerRightGap: 8, first: { kind: 'list', left: 8, rightGap: 8, topGap: 12 } };
     const screens = [
         {
             label: 'history',
@@ -161,7 +161,7 @@ test('layout findings key the scrolled-away header and short content apart from 
 });
 
 test('a list that runs under the scrollbar is a content edge finding', () => {
-    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, headerRightGap: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
+    const layout = { contentLeft: 8, contentRightGap: 8, headerLeft: 8, headerRightGap: 8, first: { kind: 'list', left: 8, rightGap: 8, topGap: 12 } };
     const screens = [{
         label: 'contacts', vw: 360, layout, narrow: [{ el: 'ul.list', w: 360, usable: 336, short: -24, offset: 0, under: 24 }],
     }];

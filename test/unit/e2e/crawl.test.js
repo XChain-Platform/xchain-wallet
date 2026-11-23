@@ -90,7 +90,7 @@ describe('click crawler form and screen helpers', () => {
             unreachable: [],
             xScrollers: [],
             yScrollers: [],
-            layout: { expectedGutter: 12 },
+            layout: { expectedGutter: 8 },
             narrow: [],
             overlaps: [],
         };
