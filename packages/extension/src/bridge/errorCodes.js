@@ -31,7 +31,7 @@
 // `bridge: <INTERNAL_CODE> (detail)`), so a developer reading a log still sees
 // which of the two CHAIN_* refusals fired.
 
-import { isBridgeErrorCode } from '@xchain-wallet/bridge-spec';
+import { isBridgeErrorCode } from '@dankest-llc/xchain-connect';
 
 /**
  * The thirteen codes bridge handlers emit that the published union does not

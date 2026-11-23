@@ -34,7 +34,7 @@ const ORIGIN = 'https://agent.example';
 const CHAIN = 'bitcoin-regtest';
 const SIGNATURE = { index: 0, publicNonce: 'aa', sig: 'bb', msg: 'cc' };
 
-const specSource = readFileSync(join(process.cwd(), 'packages/bridge-spec/src/index.ts'), 'utf8');
+const specSource = readFileSync(join(process.cwd(), 'packages/connect/src/index.ts'), 'utf8');
 
 function specFields(name) {
     const match = specSource.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`));

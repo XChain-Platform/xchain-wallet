@@ -24,7 +24,7 @@ xchain-wallet/                  pnpm monorepo (workspace root)
 │   ├── web/                    Vite SPA shell
 │   ├── extension/              Chrome MV3 shell (popup + full-screen + service worker)
 │   ├── desktop/                Electron shell (main + renderer)
-│   ├── bridge-spec/            window.xchain TS type definitions
+│   ├── connect/                window.xchain integration package
 │   └── test-dapp/              reference dApp exercising the bridge
 ├── test/                       cross-package test runners (smoke entry + e2e)
 ├── tools/build-reproduce/      reproducible-build helpers
@@ -34,7 +34,7 @@ xchain-wallet/                  pnpm monorepo (workspace root)
 └── package.json                workspace root; version = single source of truth
 ```
 
-All packages ship at the **same version number**. See "Versioning" below.
+Wallet application packages ship at the **same version number**. The public connect package has its own semantic version. See "Versioning" below.
 
 ---
 
@@ -135,7 +135,7 @@ Smokes pin specific call shapes (e.g. `messaging.importMnemonic({ password, mnem
 
 ## Versioning
 
-The root and every package under `packages/` **ship at the same version number**; a package is in scope the moment it exists. The lockstep set also covers `packages/extension/manifest.json` (`version` and `version_name`), `WALLET_VERSION` in `packages/core/src/buildInfo.js`, the README's version badge and Status line, and a `CHANGELOG.md` section for the version. See [README.md#versioning](README.md#versioning).
+The root and every package under `packages/` except `packages/connect` **ship at the same version number**; a wallet package is in scope the moment it exists. Connect is a public integration package with independent semantic versioning. The lockstep set also covers `packages/extension/manifest.json` (`version` and `version_name`), `WALLET_VERSION` in `packages/core/src/buildInfo.js`, the README's version badge and Status line, and a `CHANGELOG.md` section for the version. See [README.md#versioning](README.md#versioning).
 
 When you ship a change worth a version bump, write the `## [Unreleased]` entries first, then:
 
@@ -195,7 +195,7 @@ Fork the repository, branch off `develop`, and open your pull request against `d
 
 ## Coding style
 
-- **JS + JSDoc** throughout. No TypeScript files; types live in `.d.ts` for the bridge-spec package only.
+- **JS + JSDoc** throughout. The connect package publishes its TypeScript types from source.
 - **No ESLint configured globally.** Each package may run its own lint; the root `pnpm lint` runs whatever exists.
 - **Comments are rare on purpose.** Don't comment what well-named code already says. Do comment a *why* that isn't obvious: a hidden invariant, a workaround for a bug with a ticket reference, a constraint that would surprise the next reader.
 - **No emojis** in code or docs unless the user / spec asks for one.

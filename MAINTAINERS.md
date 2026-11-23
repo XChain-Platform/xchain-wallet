@@ -30,7 +30,7 @@ to expect review from as the team grows.
 | Core flows | J-Dog | `packages/core/src/flows`, state, messaging |
 | Schemas | J-Dog | `packages/core/src/schemas`, migrations, versioned data |
 | Signers | J-Dog | `packages/core/src/signers`, `packages/signers-trezor`, `packages/signers-ledger` |
-| Bridge | J-Dog | `window.xchain` provider + `packages/bridge-spec` |
+| Bridge | J-Dog | `window.xchain` provider + `packages/connect` |
 | Extension shell | J-Dog | `packages/extension` (MV3 popup, full-screen, service worker) |
 | Web shell | J-Dog | `packages/web` (Vite SPA) |
 | Desktop shell | J-Dog | `packages/desktop` (Electron main, preload, renderer) |

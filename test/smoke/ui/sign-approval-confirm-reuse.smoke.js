@@ -33,7 +33,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const signPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx');
 const approvalMsgPath = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'messaging.js');
-const bridgeSpecDir = join(wsRoot, 'packages', 'bridge-spec');
+const bridgeSpecDir = join(wsRoot, 'packages', 'connect');
 
 const signSrc = readFileSync(signPath, 'utf8');
 const msgSrc = readFileSync(approvalMsgPath, 'utf8');

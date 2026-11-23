@@ -54,7 +54,7 @@ import {
     formatSignInChallenge,
     generateNonce,
     isBridgeVersionSupported,
-} from '@xchain-wallet/bridge-spec';
+} from '@dankest-llc/xchain-connect';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 import { bridgeErrorCodeFor, bridgeErrorResult } from './errorCodes.js';

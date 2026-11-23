@@ -8,30 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The bridge answers in the envelope bridge-spec publishes.
-//
-// The handlers used to forward whatever the core flow returned. That made the
-// bridge's real contract "whatever core returns today" while its PUBLISHED
-// contract (packages/bridge-spec/src/index.ts) said something else, and the
-// gap was invisible to a source scan because both sides were internally
-// consistent. Three separate breaks:
-//
-//   - No `ok` flag on any result, so `if (!conn.ok)` - the first branch in
-//     bridge-spec's own worked example - was `if (!undefined)`, i.e. always
-//     taken, on every SUCCESSFUL connect.
-//   - connect returned account-id STRINGS where ConnectSuccess declares
-//     `Account[]`, and omitted `permissions` entirely.
-//   - Failures carried twelve codes the published BridgeErrorCode union does
-//     not contain, and the transport dropped `code` anyway, so a dApp could
-//     only regex the human-readable message.
-//
-// The five read methods are the reason this could not be fixed by wrapping the
-// page shim: bridge-spec declares them as bare arrays, so a blanket envelope
-// would have broken the half that was correct.
+// The bridge answers in the envelopes packages/connect publishes. Successes
+// carry the declared fields, failures preserve public error codes, and read
+// methods keep their declared bare-array results.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import handlersSource from '../../../packages/extension/src/bridge/handlers.js?raw';
-import specSource from '../../../packages/bridge-spec/src/index.ts?raw';
+import specSource from '../../../packages/connect/src/index.ts?raw';
 import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
 
 const flowMocks = vi.hoisted(() => ({
@@ -54,7 +37,7 @@ const { MessageHost, serializeError, hydrateEnvelopeError } =
 const { registerBridgeHandlers } =
     await import('../../../packages/extension/src/bridge/handlers.js');
 const { BRIDGE_ERROR_CODES, isBridgeErrorCode } =
-    await import('@xchain-wallet/bridge-spec');
+    await import('@dankest-llc/xchain-connect');
 const { INTERNAL_TO_BRIDGE_ERROR_CODE, toBridgeErrorCode, bridgeErrorCodeFor } =
     await import('../../../packages/extension/src/bridge/errorCodes.js');
 

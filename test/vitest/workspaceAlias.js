@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Pins every `@xchain-wallet/*` bare specifier to the package source in
-// THIS checkout, instead of letting it resolve through
-// `node_modules/@xchain-wallet/*`.
+// Pins wallet workspace bare specifiers to the package source in THIS
+// checkout instead of letting them resolve through node_modules.
 //
 // Why this matters for the gate: those links are pnpm's, not
 // git's. Nothing in the repo describes them, so a `pnpm install` run from
@@ -75,7 +74,9 @@ export function workspaceAlias(repoRoot) {
         if (!existsSync(manifest)) continue;
 
         const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
-        if (!pkg.name?.startsWith('@xchain-wallet/')) continue;
+        const isWalletPackage = pkg.name?.startsWith('@xchain-wallet/');
+        const isConnectPackage = pkg.name === '@dankest-llc/xchain-connect';
+        if (!isWalletPackage && !isConnectPackage) continue;
 
         const exports = pkg.exports ?? { '.': pkg.main ?? './src/index.js' };
         for (const [subpath, target] of Object.entries(exports)) {

@@ -143,7 +143,7 @@ for (const method of noThrottleMethods) {
 }
 
 // 6. THROTTLED listed in bridge-spec union and docs error table.
-const specSrc = read('packages/bridge-spec/src/index.ts');
+const specSrc = read('packages/connect/src/index.ts');
 assert.ok(/\|\s*'THROTTLED'/.test(specSrc),
     'BridgeErrorCode union includes THROTTLED');
 assert.ok(/retryAfterMs\?: number/.test(specSrc),

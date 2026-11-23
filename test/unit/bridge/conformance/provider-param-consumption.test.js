@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const bridgeSpecSource = readFileSync(
-    join(process.cwd(), 'packages/bridge-spec/src/index.ts'),
+    join(process.cwd(), 'packages/connect/src/index.ts'),
     'utf8',
 );
 const handlersSource = readFileSync(
