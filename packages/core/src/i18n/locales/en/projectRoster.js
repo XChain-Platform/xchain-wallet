@@ -22,7 +22,7 @@ const messages = {
     'projectRoster.listName': 'List name',
     'projectRoster.listNameHelp': 'Shown with {tick}\'s project tokens in wallets and explorers, for example "{tick} game items". Stored on the chain with the list.',
     'projectRoster.descriptionHelp': 'A short note about what these tokens are and how they belong to the project. Stored on the chain with the list.',
-    'projectRoster.byteCount': '{used} / {max} bytes',
+    'projectRoster.byteCount': '{used} / {max}',
     'projectRoster.metaUnsupported': 'This network doesn\'t take a list name or description yet, so the list is saved with its tokens only.',
     'projectRoster.tokensHelp': 'Tokens on {tick}\'s list show an "Official" badge in explorers and wallets. Put one token per line, or add one from the token picker.',
     'projectRoster.addToken': 'Add Token',

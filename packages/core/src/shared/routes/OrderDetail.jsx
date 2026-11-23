@@ -36,6 +36,7 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
+import { MobileAutopayNotice } from '../components/MobileAutopayNotice.jsx';
 import {
     deriveStatus,
     detailText,
@@ -322,12 +323,15 @@ export function OrderDetail({
             explorerUrl={explorerUrl}
             // The auto-pay switch moved here from My Orders; it heads Details as a setting row.
             setting={autopay && isNativeGive(item.row) ? (
-                <Switch
-                    label={`Auto-pay ${autopay.autopay === true ? 'on' : 'off (notify-only)'}`}
-                    help="On, this wallet sends the coin payment for a match on this order before its payment window closes. Off, it only notifies you so you can pay by hand."
-                    checked={autopay.autopay === true}
-                    onChange={() => toggleAutopay(autopay)}
-                />
+                <>
+                    <Switch
+                        label={`Auto-pay ${autopay.autopay === true ? 'on' : 'off (notify-only)'}`}
+                        help="On, this wallet sends the coin payment for a match on this order before its payment window closes. Off, it only notifies you so you can pay by hand."
+                        checked={autopay.autopay === true}
+                        onChange={() => toggleAutopay(autopay)}
+                    />
+                    <MobileAutopayNotice />
+                </>
             ) : null}
         />
     );

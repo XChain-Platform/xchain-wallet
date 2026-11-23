@@ -130,6 +130,9 @@ export function ConnectedSitesSection({
     const [blocked, setBlocked] = useState(/** @type {string[]} */ ([]));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // A refused action on an otherwise usable page: shown above the content,
+    // never in place of it, and cleared when the visitor moves to another view.
+    const [actionError, setActionError] = useState(/** @type {string | null} */ (null));
     const [view, setView] = useState(() => viewForSearchTarget(searchTarget));
     // The drill-in shown over the list: a site, a blocked entry, or the
     // Block Site form. Null is the list itself.
@@ -206,7 +209,12 @@ export function ConnectedSitesSection({
                             await messaging.restoreConnectedSite({ site: snapshot });
                             await reload();
                         } catch (err) {
-                            setError(err instanceof Error ? err.message : String(err));
+                            // A failed reconnect leaves the page usable: the list
+                            // still reads true, so the refusal is a notice at the top
+                            // of the page (operator ruling 2026-11-22), not a page state.
+                            setActionError(t(err?.code === 'BLOCKED_BY_USER'
+                                ? 'settings.connectedSites.undoBlocked'
+                                : 'settings.connectedSites.undoFailed'));
                         }
                     },
                 });
@@ -342,6 +350,8 @@ export function ConnectedSitesSection({
         />
     );
 
+    useEffect(() => { setActionError(null); }, [page, view]);
+
     let body;
     if (loading || loadedFrom.current !== messaging) {
         body = <Status text={t('common.loading')} />;
@@ -420,6 +430,7 @@ export function ConnectedSitesSection({
             scrollKey={page ? page.kind : `list-${view}`}
             restoreScroll={!page}
         >
+            {actionError ? <Status text={actionError} tone="error" /> : null}
             {body}
             {confirmDialog.request ? (
                 <ConfirmModal

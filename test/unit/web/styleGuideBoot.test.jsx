@@ -5,10 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boot = vi.hoisted(() => ({
     createRoot: vi.fn(),
+    installSampleFiatSource: vi.fn(),
     render: vi.fn(),
 }));
 
 vi.mock('react-dom/client', () => ({ createRoot: boot.createRoot }));
+vi.mock('../../../packages/web/src/devFiatSource.js', () => ({
+    installSampleFiatSource: boot.installSampleFiatSource,
+}));
 vi.mock('../../../packages/web/src/style-guide/StyleGuidePage.jsx', () => ({
     StyleGuidePage: () => null,
 }));
@@ -20,6 +24,7 @@ async function runBoot() {
 beforeEach(() => {
     vi.resetModules();
     boot.createRoot.mockReset().mockReturnValue({ render: boot.render });
+    boot.installSampleFiatSource.mockReset();
     boot.render.mockReset();
     document.body.innerHTML = '';
 });
@@ -31,12 +36,18 @@ describe('style guide boot', () => {
 
         await runBoot();
 
+        expect(boot.installSampleFiatSource).toHaveBeenCalledWith({
+            bitcoin: 65000,
+            litecoin: 80,
+            dogecoin: 0.1,
+        });
         expect(boot.createRoot).toHaveBeenCalledWith(container);
         expect(boot.render).toHaveBeenCalledTimes(1);
     });
 
     it('does nothing when opened outside the style-guide HTML shell', async () => {
         await runBoot();
+        expect(boot.installSampleFiatSource).toHaveBeenCalledTimes(1);
         expect(boot.createRoot).not.toHaveBeenCalled();
         expect(boot.render).not.toHaveBeenCalled();
     });

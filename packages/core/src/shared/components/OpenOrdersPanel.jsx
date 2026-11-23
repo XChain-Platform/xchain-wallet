@@ -27,6 +27,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { ResultScreen } from './ResultScreen.jsx';
+import { MobileAutopayNotice } from './MobileAutopayNotice.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -538,6 +539,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2, status, query
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}
                                             />
+                                            <MobileAutopayNotice />
                                         </div>
                                     );
                                 })()}

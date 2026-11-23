@@ -12,6 +12,7 @@ import { useCallback, useContext, useEffect, useId, useRef } from 'react';
 import { StatusMessage } from './StatusMessage.jsx';
 import { FormNotices } from './formNoticeSlot.js';
 import { NoticeList } from './NoticeList.jsx';
+import { noticeToneProps } from './noticeTone.js';
 
 /**
  * A StatusMessage written in the middle of a form body that is shown first in
@@ -44,6 +45,7 @@ import { NoticeList } from './NoticeList.jsx';
  */
 export function FormNotice({ tone, variant: variantProp = 'warning', role, lead, title, testId, lines, bullets = false, children, onDismiss }) {
     const variant = tone || variantProp;
+    const toneProps = noticeToneProps(variant);
     const notices = useContext(FormNotices);
     const id = useId();
     // The slot holds the entry by value, so the dismiss handler is read through
@@ -64,13 +66,13 @@ export function FormNotice({ tone, variant: variantProp = 'warning', role, lead,
     const shownTitle = typeof title === 'string' && title !== '' ? title : shownLead;
     useEffect(() => {
         if (!notices) return undefined;
-        notices.report(id, text ? { text, variant, role, title: shownTitle, testId, lines: multiline ? text.split('\n') : undefined, bullets: multiline && bullets ? true : undefined, onDismiss: dismissible ? dismiss : undefined } : null);
+        notices.report(id, text ? { text, variant, ...toneProps, role, title: shownTitle, testId, lines: multiline ? text.split('\n') : undefined, bullets: multiline && bullets ? true : undefined, onDismiss: dismissible ? dismiss : undefined } : null);
         return () => notices.report(id, null);
-    }, [notices, id, text, variant, role, shownTitle, testId, multiline, bullets, dismissible, dismiss]);
+    }, [notices, id, text, variant, toneProps, role, shownTitle, testId, multiline, bullets, dismissible, dismiss]);
     if (list ? list.length === 0 : !children) return null;
     if (notices && text) return null;
     return (
-        <StatusMessage variant={variant} role={role} title={shownTitle} testId={testId} onDismiss={dismissible ? dismiss : undefined}>
+        <StatusMessage {...toneProps} role={role} title={shownTitle} testId={testId} onDismiss={dismissible ? dismiss : undefined}>
             {list ? <NoticeLines lines={list} bullets={bullets} /> : children}
         </StatusMessage>
     );

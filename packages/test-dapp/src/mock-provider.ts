@@ -398,7 +398,7 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async parallel(
-        actions: SignActionParams[],
+        actions: readonly SignActionParams<unknown>[],
     ): Promise<SignActionResult[]> {
         if (!Array.isArray(actions) || actions.length === 0) {
             throw codedError('INVALID_PARAMS', 'parallel requires a non-empty actions array');

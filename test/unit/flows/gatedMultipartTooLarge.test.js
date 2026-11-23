@@ -72,7 +72,7 @@ describe('gated multipart unlock bound', () => {
             },
         };
         await expect(unlockGatedFile({
-            sdk, address: 'holder', wif: 'wif', actionIndex: '42', keyHash: KEY_HASH,
+            sdk, address: 'holder', wif: 'wif', chainId: 'btc-regtest', actionIndex: '42', keyHash: KEY_HASH,
         })).rejects.toMatchObject({
             code: 'GATED_FILE_TOO_LARGE',
             totalBytes: GATED_MAX_BYTES + 29,

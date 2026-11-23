@@ -93,7 +93,7 @@ function syncEntryToCommitLandedRecord(entry, record) {
  * these bytes hold, which their broadcast settles and their discard releases.
  *
  * @param {unknown} verdict
- * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string, bookingKey?: string } | null}
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string, bookingKey?: string, encoding?: string } | null}
  */
 export function cleanAdsCommit(verdict) {
     if (!verdict || typeof verdict !== 'object') return null;
@@ -107,6 +107,7 @@ export function cleanAdsCommit(verdict) {
         ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
         ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
         ...(typeof v.bookingKey === 'string' && v.bookingKey ? { bookingKey: v.bookingKey } : {}),
+        ...(typeof v.encoding === 'string' && v.encoding ? { encoding: v.encoding } : {}),
     };
 }
 
@@ -130,21 +131,24 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // its own, and `getQueue` hands the routes the live array they splice, so
     // the array identity has to survive the merge.
     //
-    // No per-entry tombstone is needed to stop the merge resurrecting a removed
-    // entry. A merge runs while `queueStore.loaded` is false, which happens in
-    // two windows. Before the first load latches, the map holds nothing but
+    // A merge runs while `queueStore.loaded` is false, which happens in two
+    // windows. Before the first load latches, the map holds nothing but
     // entries `pushQueueEntry` added, whose saves persistQueue declined.
     // After a web lease reload whose read failed, the map also holds what this
     // store saved before it went dormant, and another writer may have removed
-    // some of it since. `queueStore.persisted` tells the two apart: it records
-    // what the key held at the last save that resolved or read adopted into live
-    // state, so a live entry it names that the snapshot lacks was removed and is
-    // dropped, and one it does not name never reached storage and stays. Before
-    // the first load the record is empty, so that window keeps every live entry.
+    // some of it since. `queueStore.persisted` records what the key held at the
+    // last save that resolved or read adopted into live state, and it settles
+    // both directions without a per-entry tombstone. A live entry it names that
+    // the snapshot lacks was removed by the other writer and is dropped; one it
+    // does not name never reached storage and stays. A snapshot entry it names
+    // that the live array lacks was removed here (a Discard or retirement whose
+    // save was refused) and is not folded back, and the load's write-back then
+    // drops it from the blob. Before the first load the record is empty, so
+    // that window keeps every live entry and restores every stored one.
     //
-    // The one removal that can run in that window is `pruneWalletFromQueue`,
-    // so it records the walletId in `queueStore.prunedWallets`; the merge skips
-    // those wallets, and the load's write-back drops them from the blob.
+    // A whole wallet goes with its array, which leaves nothing to compare, so
+    // `pruneWalletFromQueue` records the walletId in `queueStore.prunedWallets`;
+    // the merge skips those wallets, and the load's write-back drops them.
     //
     // One exception: `restoreQueueFromVault` also runs in that window, and it
     // rebuilds a PendingTx the blob may already hold under a different entry
@@ -155,7 +159,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // a retirement whose persistQueue write was refused leaves the entry in the
     // blob, and the next boot merges it back in. `reconcileRestoredEntries`
     // below is what judges those entries against the durable half.
+    // Resolves true when a stored entry removed here was left out, so the
+    // caller writes the blob back without it.
     function mergeQueueSnapshot(snapshot, known) {
+        let droppedRemoved = false;
         // Drop in place what the key held before this read and no longer does.
         for (const [walletId, live] of queuedBroadcasts.entries()) {
             const named = known?.get(walletId);
@@ -184,17 +191,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             for (const entry of live) {
                 for (const pendingTxId of pendingTxIdsOf(entry)) byPendingTx.set(pendingTxId, entry);
             }
+            const named = known?.get(walletId);
             const missing = [];
             for (const e of restorable) {
                 if (held.has(e.id)) continue;
                 const twin = e.pendingTxId ? byPendingTx.get(e.pendingTxId) : null;
                 if (twin) adoptSnapshotVerdict(twin, e);
+                else if (named?.has(e.id)) droppedRemoved = true;
                 else missing.push(e);
             }
             // Persisted entries were signed before anything this process
             // queued, so they go in front to keep the list oldest-first.
             if (missing.length > 0) live.unshift(...missing);
         }
+        return droppedRemoved;
     }
     // Copy the blob copy's ADS verdict, fee-bump link and retry backoff onto a
     // vault-rebuilt twin of the same bytes. A rebuild carries no verdict or
@@ -307,7 +317,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 // one was in flight had its own persist refused, so the
                 // write-back below is its only route to storage.
                 const owedAtMerge = heldOwed || queueStore.owed.length > 0;
-                mergeQueueSnapshot(snapshot, knownQueues);
+                // An entry removed here while writes were refused is still in
+                // the blob, so the write-back below has to run to drop it, even
+                // when the removal left this process holding nothing.
+                const replayedRemoval = mergeQueueSnapshot(snapshot, knownQueues);
                 mergeOwedSettlements(persistedOwed, knownOwed);
                 queueStore.loaded = true;
                 queueStore.storage.adoptRead?.();
@@ -322,7 +335,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 // it and the loss of signed bytes is total. Awaited inside the
                 // single-flight promise so a save a later mutation issues
                 // cannot be overtaken by this one.
-                if (heldEntries || replayedPrune) await persistQueue();
+                if (heldEntries || replayedPrune || replayedRemoval) await persistQueue();
                 // The journal half needs no read check of its own here. Both
                 // halves ride one storage key, and a `loadSettlements` that
                 // threw returned above before `loaded` latched, so reaching
@@ -503,6 +516,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                     // discard reads the commit-landed state it recorded.
                     if (owed.patch) verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
                     if (verdict !== 'unreachable') {
+                        // A record another drain or discard holds rejects as busy,
+                        // so an overlapping flush keeps it: only a discard that
+                        // finished, or found nothing left to discard, retires it.
                         try {
                             await discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
                             verdict = 'settled';
@@ -1044,7 +1060,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * stamped 'queued' (`pendingTxId`) and the ADS verdict the signed bytes
      * carry (`adsCommit`); both ride on the stored record so the broadcast
      * and discard routes can settle the durable half and book the donation
-     * once the bytes actually land. Renderer enqueues carry neither.
+     * once the bytes actually land. Renderer enqueues name no PendingTx and
+     * carry an accrue-only verdict keyed by their txid.
      *
      * @param {string} walletId
      * `resumedClaim` marks an entry rebuilt from a record the broadcast route

@@ -38,6 +38,8 @@
 // compatibility decision, not a trust decision. Nothing about a link is
 // treated as authenticated, no matter which shape it arrived in.
 
+import { URI_MAX_LENGTH } from '@xchain-wallet/core/uri/bip21.js';
+
 /** Plugin name registered by XChainLinksPlugin.java. */
 export const LINKS_PLUGIN = 'XChainLinks';
 
@@ -66,7 +68,8 @@ const APP_SCHEMES = ['xchain:', 'bitcoin:', 'litecoin:', 'dogecoin:'];
  * @returns {boolean}
  */
 export function isAcceptableDeepLink(url) {
-    if (typeof url !== 'string' || url.length === 0 || url.length > 4096) return false;
+    // Native intake shares URI_MAX_LENGTH with the URI parser.
+    if (typeof url !== 'string' || url.length === 0 || url.length > URI_MAX_LENGTH) return false;
     const lower = url.toLowerCase();
     if (APP_SCHEMES.some((scheme) => lower.startsWith(scheme))) return true;
     // Parse rather than prefix-match the path: `https://xchain.io.evil.com/`

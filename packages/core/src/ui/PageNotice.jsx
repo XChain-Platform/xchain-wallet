@@ -11,6 +11,7 @@
 import { createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { StatusMessage } from './StatusMessage.jsx';
+import { noticeToneProps } from './noticeTone.js';
 import styles from './FormPage.module.css';
 
 /** The page-level DOM destination for notices raised by nested content. */
@@ -20,14 +21,14 @@ export const PageNoticeHostContext = createContext(/** @type {HTMLElement | null
  * Draw a standard notice at the page notice host when one is available.
  * Outside a hosted page it stays where the caller rendered it.
  */
-export function PageNotice({ text, tone, children, ...props }) {
+export function PageNotice({ text, tone, children, variant: variantProp, ...props }) {
     const host = useContext(PageNoticeHostContext);
     const content = children ?? text;
     if (content === null || content === undefined || content === '') return null;
-    const variant = props.variant
+    const variant = variantProp
         ?? (tone === 'error' || tone === 'warning' || tone === 'success' ? tone : 'status');
     const notice = (
-        <StatusMessage {...props} variant={variant}>
+        <StatusMessage {...props} {...noticeToneProps(variant)}>
             {content}
         </StatusMessage>
     );

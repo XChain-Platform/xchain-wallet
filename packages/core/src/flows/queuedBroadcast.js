@@ -33,7 +33,7 @@ import { assertSigningAllowed } from './panicMode.js';
 import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 import { releaseAdsReservation } from './ads.js';
-import { bookQueuedDelivery } from './adsDelivery.js';
+import { bookQueuedCommitLeg, bookQueuedDelivery } from './adsDelivery.js';
 
 // §36: a queued send that carries the automatic donation holds the claim on
 // the queue under its PendingTx id (submitAction). Delivery settles it, and a
@@ -52,6 +52,9 @@ async function releaseAdsClaim(vault, pendingTxId) {
 // claims its id synchronously before its first await. Cross-context / crash
 // recovery is handled by the persisted 'broadcasting' status transition.
 const inFlightDrains = new Set();
+
+// The code a discard rejects with while another drain or discard holds the record.
+export const QUEUED_BROADCAST_BUSY = 'QUEUED_BROADCAST_BUSY';
 
 export class NoQueuedTxError extends Error {
     constructor(id) {
@@ -279,8 +282,10 @@ export async function drainQueuedBroadcast({
             // marked commit-landed: a crash from here resumes with the reveal
             // alone, and a refused reveal keeps the record 'broadcast' on the
             // commit's txid instead of retiring the commit's spend as 'failed'.
+            // The landed commit is booked as its own transaction first, as the live send books it.
             current = {
                 ...existing,
+                ...(await bookQueuedCommitLeg({ vault, chainRegistry, pendingTxId, adsCommit: existing.adsCommit ?? null })),
                 status: 'broadcasting',
                 error: null,
                 txid: reveal.txid ?? existing.txid,
@@ -389,17 +394,26 @@ async function settleDrainFailure(vault, pendingTxId, record, err) {
  * Removes a record in either status a drain will send: 'queued', or
  * 'broadcasting' left behind by an interrupted claim. A claimed record left in
  * place keeps netting its spend and is rebuilt into the queue on the next boot.
- * A live claim is kept: the operation holding that claim settles it.
+ * A live claim is kept: the operation holding that claim settles it, and this
+ * call rejects with code QUEUED_BROADCAST_BUSY rather than resolving false,
+ * because the holder can still fail and leave the record queued. A caller
+ * keeps or journals its discard on that rejection, as on any other.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
- * @returns {Promise<boolean>}   true if a record left the queue (removed, or kept as commit-landed)
+ * @returns {Promise<boolean>}   true if a record left the queue (removed, or kept as commit-landed);
+ *   false when nothing is left to discard (missing or already terminal)
  */
 export async function discardQueuedBroadcast({ vault, pendingTxId }) {
     if (!vault) throw new Error('discardQueuedBroadcast: vault is required');
     if (typeof pendingTxId !== 'string' || !pendingTxId) {
         throw new Error('discardQueuedBroadcast: pendingTxId is required');
     }
-    if (inFlightDrains.has(pendingTxId)) return false;
+    if (inFlightDrains.has(pendingTxId)) {
+        throw Object.assign(
+            new Error(`discardQueuedBroadcast: PendingTx "${pendingTxId}" is already being broadcast or discarded`),
+            { code: QUEUED_BROADCAST_BUSY },
+        );
+    }
     inFlightDrains.add(pendingTxId);
     try {
         const existing = await vault.pendingTxs.get(pendingTxId);

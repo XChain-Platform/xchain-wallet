@@ -505,7 +505,8 @@ const duoSlugs = captureScript.split('\n')
     .map((name) => name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, ''));
 assert.deepEqual(duoSlugs, ['xc-iphone-duo'],
     'the Duo remains default extra coverage outside the App Store display-type pairing');
-assert.match(captureScript, /for device in "\$\{devices\[@\]\}" "\$\{duo_devices\[@\]\}"; do/,
+// The loop guards each array so an empty list still expands under Bash 3 set -u.
+assert.match(captureScript, /for device in \\\s*\$\{devices\[@\]\+"\$\{devices\[@\]\}"\}\s*\\\s*\$\{duo_devices\[@\]\+"\$\{duo_devices\[@\]\}"\}; do/,
     'the capture loop must run the App Store display devices and the extra Duo device');
 
 // And the reader must survive a repository with no capture at all rather than

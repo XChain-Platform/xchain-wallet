@@ -25,6 +25,7 @@ import {
 import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, joinSummary } from '../components/formStandard/index.js';
 import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import { TokenField } from '../components/TokenField.jsx';
+import { MobileAutopayNotice } from '../components/MobileAutopayNotice.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { divideDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
@@ -1153,6 +1154,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
                                 />
+                                <MobileAutopayNotice />
                                 {/* Notes sit in the shared warning card, never as loose paragraphs.
                                     G120: a static note with the field, there whether the
                                     switch is on or off. */}

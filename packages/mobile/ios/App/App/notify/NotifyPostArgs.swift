@@ -31,6 +31,7 @@ struct NotifyPostArgs: Equatable {
         "priceAlerts",
         "request",
         "paydue",
+        "alert",
     ]
 
     static let soundIds = [

@@ -50,7 +50,8 @@ const run = (xml) => {
     const path = join(directory, 'AndroidManifest.xml');
     writeFileSync(path, xml);
     try {
-        return { ok: true, output: execFileSync('node', [verifier, path], { encoding: 'utf8' }) };
+        return { ok: true, output: execFileSync('node', [verifier, path],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
     } catch (error) {
         return { ok: false, output: `${error.stdout ?? ''}${error.stderr ?? ''}` };
     }

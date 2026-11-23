@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import {
     externalIndexOf,
     newestHdExternalId,
+    newestDerivedExternalId,
     activeSourceId,
     preferredSourceId,
 } from '../../../packages/core/src/shared/addressSelection.js';
@@ -95,5 +96,41 @@ describe('preferredSourceId', () => {
 
     it('matches an active entry by address string too', () => {
         expect(activeSourceId(addrs, { address: 'addr_legacy0' })).toBe('legacy0');
+    });
+
+    it('falls back to the newest device address on a hardware-only wallet', () => {
+        const device = [
+            hd('tz0', "m/84'/0'/0'/0/0", { source: 'trezor' }),
+            hd('tz1', "m/84'/0'/0'/0/1", { source: 'trezor' }),
+        ];
+        expect(preferredSourceId(device, undefined)).toBe('tz1');
+        expect(preferredSourceId(device, { id: 'tz0' })).toBe('tz0');
+    });
+});
+
+describe('newestDerivedExternalId', () => {
+    it('prefers an HD address over a device address with a higher index', () => {
+        expect(newestDerivedExternalId([
+            hd('seed', "m/84'/0'/0'/0/0"),
+            hd('tz', "m/84'/0'/1'/0/9", { source: 'trezor' }),
+        ])).toBe('seed');
+    });
+
+    it.each(['trezor', 'ledger'])('picks the newest %s external address when no HD one exists', (source) => {
+        expect(newestDerivedExternalId([
+            hd('d0', "m/84'/0'/0'/0/0", { source }),
+            hd('d2', "m/84'/0'/0'/0/2", { source }),
+            hd('d1', "m/84'/0'/0'/0/1", { source }),
+        ])).toBe('d2');
+    });
+
+    it('never picks an imported, watch-only or internal device address', () => {
+        expect(newestDerivedExternalId([
+            hd('imported', "m/0'/0/5", { source: 'imported-wif' }),
+            hd('watch', "m/0'/0/6", { source: 'watch-only' }),
+            hd('change', "m/84'/0'/0'/1/3", { source: 'trezor' }),
+        ])).toBeNull();
+        expect(newestDerivedExternalId([])).toBeNull();
+        expect(newestDerivedExternalId(null)).toBeNull();
     });
 });

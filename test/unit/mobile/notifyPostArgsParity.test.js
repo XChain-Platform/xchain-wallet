@@ -27,6 +27,7 @@ describe('NotifyPostArgs manifest parity', () => {
             ...SOUND_FAMILIES.map(({ key }) => key),
             'request',
             'paydue',
+            'alert',
         ]);
     });
 

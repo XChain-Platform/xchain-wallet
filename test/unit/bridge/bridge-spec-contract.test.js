@@ -107,6 +107,12 @@ function makeVault({ sites = [] } = {}) {
             list: async () => [...stored.values()],
             findBy: async (field, value) => [...stored.values()].filter((s) => s[field] === value),
             put: async (s) => { stored.set(s.id, s); return s; },
+            update: async (id, decide) => {
+                const next = decide(stored.get(id) ?? null);
+                if (next == null) return false;
+                stored.set(next.id, next);
+                return true;
+            },
             delete: async (id) => { stored.delete(id); },
         },
     };

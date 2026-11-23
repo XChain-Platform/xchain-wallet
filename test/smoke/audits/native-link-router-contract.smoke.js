@@ -30,9 +30,11 @@ const iosInbox = read('packages/mobile/ios/App/App/links/XChainLinksPlugin.swift
 const webApp = read('packages/web/src/App.jsx');
 
 const origin = /WEB_LINK_ORIGIN\s*=\s*'([^']+)'/.exec(parser)?.[1];
+const walletOrigin = /WALLET_LINK_ORIGIN\s*=\s*'([^']+)'/.exec(parser)?.[1];
 const prefix = /WEB_LINK_PREFIX\s*=\s*'([^']+)'/.exec(parser)?.[1];
-assert.ok(origin && prefix, 'the URI router must state its web origin and path prefix');
+assert.ok(origin && walletOrigin && prefix, 'the URI router must state both web origins and its path prefix');
 const webHost = new URL(origin).host;
+const walletHost = new URL(walletOrigin).host;
 
 const verifiedFilters = [...manifest.matchAll(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g)];
 assert.equal(verifiedFilters.length, 1, 'Android must have one auto-verified App Link filter');
@@ -46,7 +48,11 @@ assert.deepEqual(
 );
 
 const entitlementHosts = [...entitlements.matchAll(/<string>applinks:([^<]+)<\/string>/g)].map((m) => m[1]);
-assert.deepEqual(entitlementHosts, [webHost], 'iOS must associate only the router-owned web host');
+assert.deepEqual(
+    entitlementHosts,
+    [webHost, walletHost],
+    'iOS must associate both router-owned web hosts in router order',
+);
 
 const schemeArray = /<key>CFBundleURLSchemes<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(infoPlist)?.[1];
 assert.ok(schemeArray, 'iOS must declare its inbound custom schemes');

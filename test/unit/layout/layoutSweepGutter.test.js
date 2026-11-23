@@ -7,22 +7,22 @@ import { describe, expect, it } from 'vitest';
 import { layoutSweepFailures } from '../../e2e/layout/sweep.js';
 
 describe('layout sweep gutter checks', () => {
-    it('holds the header right edge to the tier gutter', () => {
+    it('holds the header right edge to the ruled gutter', () => {
         const layout = (headerRightGap) => ({
-            contentLeft: 16,
-            contentRightGap: 16,
-            headerLeft: 16,
+            contentLeft: 8,
+            contentRightGap: 8,
+            headerLeft: 8,
             headerRightGap,
-            first: { kind: 'list', left: 16, rightGap: 16, topGap: 16 },
+            first: { kind: 'list', left: 8, rightGap: 8, topGap: 16 },
         });
 
         expect(layoutSweepFailures([
-            { label: 'aligned', vw: 820, layout: layout(16) },
+            { label: 'aligned', vw: 820, layout: layout(8) },
         ])).toEqual([]);
         expect(layoutSweepFailures([
             { label: 'over scrollbar', vw: 820, layout: layout(6) },
         ])).toEqual([
-            'over scrollbar: header right gap 6px, expected 16px',
+            'over scrollbar: header right gap 6px, expected 8px',
         ]);
     });
 });

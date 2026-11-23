@@ -28,7 +28,7 @@
 //   5. Exactly one exported component (§1 deep-link invariant): a second
 //      exported activity, receiver or service is an entry point into a wallet
 //      that no unlock screen guards.
-//   6. No Firebase/Play-Services wiring (§1, §9: push is a non-goal).
+//   6. No Firebase or FCM wiring (§1, §9: push is a non-goal; play-services-wearable is the one Play Services dependency).
 //   7. Keystores and the generated version file are ignored by git (K9/K10
 //      custody, §4).
 //   8. When both trees exist, the staged webDir is byte-identical to
@@ -286,7 +286,7 @@ for (const component of manifest.matchAll(/<(activity|receiver|provider)\b([\s\S
     );
 }
 
-// --- 6. No Firebase / Play Services -----------------------------------
+// --- 6. No Firebase or FCM --------------------------------------------
 
 const rootGradle = readFileSync(join(android, 'build.gradle'), 'utf8');
 for (const [name, text] of [['app/build.gradle', appGradle], ['build.gradle', rootGradle]]) {

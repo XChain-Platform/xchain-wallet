@@ -62,14 +62,36 @@ export function compressionFieldOf(actionString) {
 }
 
 /**
- * Read COMPRESSION from a complete FILE action string.
+ * Unwrap a BATCH-wrapped FILE to its own sub-command, or return the input
+ * unchanged. A gated FILE is published as BATCH(FILE, MESSAGE), and the
+ * explorer's action detail carries the whole transaction's wire string, so the
+ * FILE fields sit after `BATCH|<VERSION>|` and beside a `;`-separated MESSAGE.
+ * Consensus reads a BATCH by splitting on ';' and then '|', so no valid FILE
+ * field can hold either delimiter, and a BATCH carries at most one FILE. With
+ * no FILE sub-command the input comes back as is, and the FILE checks read ''.
+ *
+ * @param {string} actionString
+ * @returns {string}
+ */
+export function extractFileSubcommand(actionString) {
+    if (typeof actionString !== 'string' || actionString.length === 0) return actionString;
+    const parts = actionString.split('|');
+    if (String(parts[0]).toUpperCase() !== 'BATCH') return actionString;
+    for (const command of parts.slice(2).join('|').split(';')) {
+        if (String(command.split('|')[0]).toUpperCase() === 'FILE') return command;
+    }
+    return actionString;
+}
+
+/**
+ * Read COMPRESSION from a complete FILE action string, bare or inside a BATCH.
  *
  * @param {string} actionString
  * @returns {string} the field verbatim, or ''.
  */
 export function fileCompressionFieldOf(actionString) {
     if (typeof actionString !== 'string' || actionString.length === 0) return '';
-    const parts = actionString.split('|');
+    const parts = extractFileSubcommand(actionString).split('|');
     if (String(parts[0]).toUpperCase() !== 'FILE') return '';
     const version = String(parts[1]);
     const index = version === '0' ? COMPRESSION_FIELD_INDEX

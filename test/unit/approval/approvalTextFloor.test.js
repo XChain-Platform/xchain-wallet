@@ -77,9 +77,9 @@ describe('approval window header reach', () => {
         expect(slot).toMatch(/padding-inline-end:\s*calc\(var\(--xc-page-gutter\) - 2px\)/);
 
         const css = read('packages/core/src/shared/approval/ApprovalHeader.module.css');
-        expect(css).toMatch(/margin-block-start:\s*calc\(-1 \* \(var\(--xc-page-gutter\) - 2px\)\)/);
+        expect(css).toMatch(/margin-block-start:\s*calc\(-1 \* \(var\(--xc-space-2\) - var\(--xc-space-1\) \/ 2\)\)/);
         expect(css).toMatch(
-            /margin-inline:\s*calc\(-1 \* var\(--xc-page-gutter\)\) calc\(-1 \* \(var\(--xc-page-gutter\) - 2px\)\)/,
+            /margin-inline:\s*calc\(-1 \* var\(--xc-space-2\)\) calc\(-1 \* \(var\(--xc-space-2\) - var\(--xc-space-1\) \/ 2\)\)/,
         );
     });
 

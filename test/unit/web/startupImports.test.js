@@ -38,6 +38,14 @@ const styleGuideMainSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/style-guide/main.jsx'),
     'utf8',
 );
+const hostBridgeSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/hostBridge.js'),
+    'utf8',
+);
+const devFiatSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/devFiatSource.js'),
+    'utf8',
+);
 const lockedSource = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/Locked.jsx'),
     'utf8',
@@ -172,6 +180,18 @@ describe('web startup imports', () => {
         expect(marketChartSource).not.toMatch(/import .* from ['"]lightweight-charts['"]/);
         expect(webMainSource).not.toContain('StyleGuidePage');
         expect(styleGuideMainSource).toContain("import { StyleGuidePage } from './StyleGuidePage.jsx';");
+    });
+
+    it('boots the style guide with standalone sample fiat rates', () => {
+        expect(styleGuideMainSource).toContain("from '../devFiatSource.js'");
+        expect(styleGuideMainSource).toContain("from './sampleRates.js'");
+        expect(styleGuideMainSource).toContain('installSampleFiatSource(SAMPLE_RATES);');
+        expect(devFiatSource).not.toMatch(/devFakeBalances|devMockEvents/);
+        expect(hostBridgeSource).toContain("from './devFiatSource.js'");
+        expect(hostBridgeSource).toMatch(
+            /if \(!import\.meta\.env\?\.PROD\) \{\s*installSampleFiatSource\(fakeNativeFiatRates\(\)\);\s*\}/,
+        );
+        expect(hostBridgeSource).not.toContain('configureFiatRateSource');
     });
 
     it('loads the in-page background host through one cached dynamic import', () => {

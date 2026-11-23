@@ -1281,7 +1281,7 @@ export function BetFeedDetail({
             verdict={verdict}
             icon={<Icon.VerifyIcon />}
             title={live ? 'Current split' : 'Final split'}
-            aside={`${betCount} position${betCount === 1 ? '' : 's'}`}
+            aside={t('components.outcomeDetailLayout.positionCount', { count: betCount })}
             rows={splitRows}
             winnerLabel="Winner"
             empty={<EmptyState title="No outcomes recorded" body="Settled market outcomes appear here." titleAs="p" />}

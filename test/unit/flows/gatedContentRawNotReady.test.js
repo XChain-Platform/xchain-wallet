@@ -48,7 +48,7 @@ function makeSdk(rawResult) {
 
 function directUnlock(sdk) {
     return unlockGatedFile({
-        sdk, address: 'holder', wif: 'wif', actionIndex: '41', keyHash: KEY_HASH,
+        sdk, address: 'holder', wif: 'wif', chainId: 'btc-regtest', actionIndex: '41', keyHash: KEY_HASH,
     });
 }
 

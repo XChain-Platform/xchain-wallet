@@ -111,11 +111,11 @@ describe('ListCreateForm screen rules', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'About Name' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('public on-chain name');
-        expect(screen.getByRole('tooltip')).toHaveTextContent('64 UTF-8 bytes');
+        expect(screen.getByRole('tooltip')).toHaveTextContent('up to 64 characters');
         fireEvent.keyDown(document, { key: 'Escape' });
         fireEvent.click(screen.getByRole('button', { name: 'About Description' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('public on-chain description');
-        expect(screen.getByRole('tooltip')).toHaveTextContent('512 UTF-8 bytes');
+        expect(screen.getByRole('tooltip')).toHaveTextContent('up to 512 characters');
     });
 
     it('draws the lone Memo with no label row or tip, its count in the section header', async () => {
