@@ -249,7 +249,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await fieldByLabel(main, 'Payout per unit').fill(PAYOUT_AMOUNT);
             await fieldByLabel(main, 'Callback allowed from block').fill(String(cbBlock));
-            await main.getByRole('button', { name: 'Update Callback Settings', exact: true }).click();
+            await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             await approveConfirm(page, 'the callback settings update');
             const txid = await readDoneTxid(page);

@@ -13,13 +13,25 @@
 // eslint dependency, just static analysis of the rule's own logic.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import {
+    closeSync, existsSync, openSync, readFileSync, readdirSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
+// Read through a descriptor so the English-copy preload cannot rewrite source.
+// This smoke audits literals as written and must not depend on its launcher.
+function readRaw(file) {
+    const descriptor = openSync(file, 'r');
+    try {
+        return readFileSync(descriptor, 'utf8');
+    } finally {
+        closeSync(descriptor);
+    }
+}
+const read = (p) => readRaw(join(root, p));
 
 // ─── Files exist ───────────────────────────────────────────────────
 
@@ -602,7 +614,7 @@ const packageSrcDirs = readdirSync(join(root, 'packages'))
     .map((pkg) => join(root, 'packages', pkg, 'src'))
     .filter((dir) => existsSync(dir));
 const stray = packageSrcDirs.flatMap(sourceFiles)
-    .filter((file) => NOTE_OR_KICKER_ATTR.test(readFileSync(file, 'utf8')));
+    .filter((file) => NOTE_OR_KICKER_ATTR.test(readRaw(file)));
 assert.ok(packageSrcDirs.length > 0, 'the note/kicker walk reaches package sources');
 assert.deepStrictEqual(stray, [], 'no note= or kicker= attribute outside the style guide');
 assert.ok(sourceFiles(join(root, 'packages', 'web', 'src')).length > 0, 'the walk still reads the web package');
@@ -619,7 +631,7 @@ const COPY_SUFFIX_LITERAL_ATTR = /(?:^|\s)([A-Za-z]+(?:Label|Help|Hint|Reason|Pl
 const NON_COPY_SUFFIX_ATTRS = new Set(['enterKeyHint']);
 const unenrolled = new Set();
 for (const file of packageSrcDirs.flatMap(sourceFiles)) {
-    for (const match of readFileSync(file, 'utf8').matchAll(COPY_SUFFIX_LITERAL_ATTR)) {
+    for (const match of readRaw(file).matchAll(COPY_SUFFIX_LITERAL_ATTR)) {
         if (!USER_FACING_ATTRS.has(match[1]) && !NON_COPY_SUFFIX_ATTRS.has(match[1])) unenrolled.add(match[1]);
     }
 }

@@ -82,7 +82,7 @@ describe('multipart quote preview option execution', () => {
         const input = spyInput();
         const planner = vi.fn(async (_bytes, _meta, { carrier }) => multipartPlan(carrier));
         const quoter = vi.fn((plan) => ({
-            parts: plan.totalParts, transactions: 7, fee: 123, outputs: [999],
+            parts: plan.totalParts, transactions: 7, fee: 123, fundingTotal: 999,
         }));
         const result = await previewMultipartQuotes({ ...input, planner, quoter });
         expect(planner).toHaveBeenCalledTimes(2);
@@ -95,13 +95,19 @@ describe('multipart quote preview option execution', () => {
         expect(quoter).toHaveBeenNthCalledWith(1, expect.any(Object), 2, lanes.envelope, sizes);
         expect(quoter).toHaveBeenNthCalledWith(2, expect.any(Object), 2, lanes.standard, sizes);
         expect(quoter).toHaveBeenCalledTimes(2);
-        expect(Object.keys(result.quotes.taproot)).toEqual(['parts', 'transactions', 'fee']);
-        expect(result.quotes.taproot).toEqual({ parts: 2, transactions: 7, fee: 123 });
+        expect(Object.keys(result.quotes.taproot)).toEqual([
+            'parts', 'transactions', 'fee', 'fundingTotal',
+        ]);
+        expect(result.quotes.taproot).toEqual({
+            parts: 2, transactions: 7, fee: 123, fundingTotal: 999,
+        });
     });
 
     it('does not plan or quote an omitted method', async () => {
         const planner = vi.fn(async (_bytes, _meta, { carrier }) => multipartPlan(carrier));
-        const quoter = vi.fn(() => ({ parts: 2, transactions: 7, fee: 123 }));
+        const quoter = vi.fn(() => ({
+            parts: 2, transactions: 7, fee: 123, fundingTotal: 456,
+        }));
         const result = await previewMultipartQuotes({
             ...spyInput({ methods: ['standard'] }), planner, quoter,
         });
@@ -131,10 +137,15 @@ describe('multipart quote preview planner errors', () => {
             if (carrier === 'envelope') throw refusal;
             return multipartPlan(carrier);
         });
-        const quoter = vi.fn(() => ({ parts: 2, transactions: 7, fee: 55 }));
+        const quoter = vi.fn(() => ({
+            parts: 2, transactions: 7, fee: 55, fundingTotal: 66,
+        }));
         const result = await previewMultipartQuotes({ ...spyInput(), planner, quoter });
         expect(result).toEqual({
-            quotes: { taproot: null, standard: { parts: 2, transactions: 7, fee: 55 } },
+            quotes: {
+                taproot: null,
+                standard: { parts: 2, transactions: 7, fee: 55, fundingTotal: 66 },
+            },
             reasons: { taproot: 'CUSTOM_LIMIT', standard: null },
         });
         expect(planner).toHaveBeenCalledTimes(2);
