@@ -60,6 +60,7 @@ function defaultIconFor(children) {
  * @param {boolean} [props.loading]   a request is in flight: the spinner shows and repeat taps are ignored, the colours stay
  * @param {boolean} [props.disabled]  for a control that genuinely cannot apply (a pager's end, a policy lock); it has no look
  *   of its own (G130). Never use it to wait for valid input: keep the button enabled and answer the tap with the form's errors (G129).
+ * @param {boolean} [props.disabledAppearance]   opt-in disabled palette for a blocking pre-flight finding
  * @param {string} [props.className]
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
@@ -74,6 +75,7 @@ export const Button = forwardRef(function Button({
     block = false,
     loading = false,
     disabled = false,
+    disabledAppearance = false,
     type = 'button',
     className,
     onClick,
@@ -110,6 +112,7 @@ export const Button = forwardRef(function Button({
         edgePinnedIcon ? styles.edgePinnedIcon : null,
         block ? styles.block : null,
         loading ? styles.loading : null,
+        disabledAppearance ? styles.disabledAppearance : null,
         className,
     ].filter(Boolean).join(' ');
     return (

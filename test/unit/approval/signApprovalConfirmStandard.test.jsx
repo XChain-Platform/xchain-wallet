@@ -160,10 +160,9 @@ describe('SignApproval Confirm Standard', () => {
         expect(password.compareDocumentPosition(buttons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByTestId('confirm-reject')).toHaveTextContent('Reject');
         expect(screen.getByTestId('confirm-approve')).toHaveTextContent('Approve');
-        // G130: Approve keeps its colour with no password; the tap says why
-        // at the top and marks the password field.
-        expect(screen.getByTestId('confirm-approve')).not.toBeDisabled();
+        // A blocking finding disables Approve before password validation can run.
+        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
         fireEvent.click(screen.getByTestId('confirm-approve'));
-        expect(await screen.findByTestId('confirm-blocked')).toBeInTheDocument();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
     });
 });

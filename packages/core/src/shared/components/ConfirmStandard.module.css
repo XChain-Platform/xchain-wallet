@@ -219,12 +219,8 @@
     min-width: 0;
 }
 
-/* A failed pre-flight cannot be corrected on the confirm page, so its
-   disabled Approve uses the shared control-disabled palette. */
+/* Mark the pre-flight-disabled action without painting a control outside the kit. */
 .button.disabled {
-    background: var(--xc-control-disabled-bg);
-    border-color: var(--xc-control-disabled-border);
-    color: var(--xc-control-disabled-text);
     cursor: not-allowed;
 }
 

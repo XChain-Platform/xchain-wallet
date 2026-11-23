@@ -355,8 +355,14 @@ describe('ParallelComposer confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
 
-        expect(await screen.findByText('Balance of TOKEN (1) does not cover the send total (2).'))
-            .toBeTruthy();
+        await screen.findByText('The checks found a problem with this action.');
+        const status = screen.getByTestId('confirm-status');
+        const bullets = [...status.querySelectorAll('[data-notice-list] > li')];
+        expect(bullets.map((bullet) => bullet.textContent)).toEqual([
+            'The checks found a problem with this action.',
+        ]);
+        expect(status).not.toHaveTextContent('Balance of TOKEN (1) does not cover the send total (2).');
+        expect(status).not.toHaveTextContent("Approve won't send this while it fails.");
         expect(screen.getByTestId('confirm-approve')).toBeDisabled();
         fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(screen.queryByTestId('confirm-blocked')).toBeNull();

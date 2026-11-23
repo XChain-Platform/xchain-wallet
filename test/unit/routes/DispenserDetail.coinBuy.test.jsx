@@ -404,7 +404,13 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
 
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
         fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
-        expect(await screen.findByText(/The network would refuse this action/)).toBeInTheDocument();
+        const status = await screen.findByTestId('confirm-status');
+        const bullets = [...status.querySelectorAll('[data-notice-list] > li')];
+        expect(bullets.map((bullet) => bullet.textContent)).toEqual([
+            'The checks found a problem with this action.',
+        ]);
+        expect(status).not.toHaveTextContent('The network would refuse this action.');
+        expect(status).not.toHaveTextContent("Approve won't send this while it fails.");
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeDisabled();
         fireEvent.click(approve);

@@ -295,6 +295,7 @@ export function ConfirmButtons({
                 icon={<Icon.ThumbsUpIcon />}
                 onClick={onApprove}
                 disabled={approveDisabled}
+                disabledAppearance={approveDisabled}
                 loading={approveLoading}
                 data-testid="confirm-approve"
                 aria-label={approve}
