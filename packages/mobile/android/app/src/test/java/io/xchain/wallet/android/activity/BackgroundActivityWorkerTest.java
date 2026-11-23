@@ -15,6 +15,7 @@ package io.xchain.wallet.android.activity;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Notification;
@@ -38,10 +39,12 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import com.sun.net.httpserver.HttpServer;
-
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
@@ -150,27 +153,39 @@ public class BackgroundActivityWorkerTest {
         AtomicInteger requests = new AtomicInteger();
         AtomicReference<String> method = new AtomicReference<>();
         AtomicReference<String> path = new AtomicReference<>();
+        AtomicReference<Throwable> serverFailure = new AtomicReference<>();
         byte[] response = ("{\"balances\":{\"confirmed\":\"wrong\",\"pending\":\"wrong\"},"
                 + "\"result\":{\"settled\":{\"value\":\"17\"},"
                 + "\"waiting\":{\"value\":\"4\"}}}")
                 .getBytes(StandardCharsets.UTF_8);
-        HttpServer server = HttpServer.create(
-                new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/activity/address-1", exchange -> {
-            requests.incrementAndGet();
-            method.set(exchange.getRequestMethod());
-            path.set(exchange.getRequestURI().toString());
-            exchange.sendResponseHeaders(200, response.length);
-            exchange.getResponseBody().write(response);
-            exchange.close();
+        ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"));
+        Thread serverThread = new Thread(() -> {
+            try (Socket socket = server.accept();
+                    BufferedReader input = new BufferedReader(new InputStreamReader(
+                            socket.getInputStream(), StandardCharsets.US_ASCII));
+                    OutputStream output = socket.getOutputStream()) {
+                String[] requestLine = input.readLine().split(" ");
+                requests.incrementAndGet();
+                method.set(requestLine[0]);
+                path.set(requestLine[1]);
+                for (String line; !(line = input.readLine()).isEmpty(); ) {
+                }
+                output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                        + "Content-Length: " + response.length
+                        + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                output.write(response);
+                output.flush();
+            } catch (Throwable error) {
+                serverFailure.set(error);
+            }
         });
-        server.start();
+        serverThread.start();
 
         try {
             JSONObject configured = config(true, false);
             JSONObject target = configured.getJSONArray("targets").getJSONObject(0);
-            target.put("url", "http://" + server.getAddress().getHostString() + ":"
-                    + server.getAddress().getPort() + "/activity/address-1?view=wallet");
+            target.put("url", "http://127.0.0.1:" + server.getLocalPort()
+                    + "/activity/address-1?view=wallet");
             target.put("confirmedPath", "result.settled.value");
             target.put("pendingPath", "result.waiting.value");
             files.writeConfig(configured.toString());
@@ -188,8 +203,11 @@ public class BackgroundActivityWorkerTest {
             assertEquals(Arrays.asList(4000L), files.runLog());
             assertEquals(0, notifications.getActiveNotifications().length);
         } finally {
-            server.stop(0);
+            server.close();
+            serverThread.join(5000);
         }
+        assertFalse(serverThread.isAlive());
+        assertNull(serverFailure.get());
     }
 
     private static JSONObject config(boolean enabled, boolean baseline) throws Exception {
