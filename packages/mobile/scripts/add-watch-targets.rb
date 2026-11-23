@@ -142,6 +142,18 @@ add_target_dependency(watch_tests, watch_app)
 
 phone_app = project.targets.find { |target| target.name == 'App' }
 abort('add-watch-targets: no App target') unless phone_app
+%w[App/watch App/notify App/activity App/fold].each do |path|
+  add_synchronized_group(project, phone_app, path)
+end
+
+phone_tests = project.targets.find { |target| target.name == 'AppTests' }
+abort('add-watch-targets: no AppTests target') unless phone_tests
+add_synchronized_group(project, phone_tests, 'AppTests/Native')
+
+phone_ui_tests = project.targets.find { |target| target.name == 'AppUITests' }
+abort('add-watch-targets: no AppUITests target') unless phone_ui_tests
+add_synchronized_group(project, phone_ui_tests, 'AppUITests/Native')
+
 embed_target(phone_app, watch_app, 'Embed Watch Content', '16', '$(CONTENTS_FOLDER_PATH)/Watch')
 
 project.instance_variable_set(:@object_version, '77')
