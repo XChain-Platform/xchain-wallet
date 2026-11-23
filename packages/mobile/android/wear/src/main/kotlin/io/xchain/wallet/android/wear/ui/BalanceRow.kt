@@ -74,7 +74,7 @@ private fun AmountCell(primary: String, secondary: String?, modifier: Modifier =
 private fun TokenIcon(tick: String, tickerColor: String, pipColor: Color) {
     val rgb = TokenGlyph.rgb(tickerColor)
     val color = rgb?.let { Color(it[0].toFloat(), it[1].toFloat(), it[2].toFloat()) }
-        ?: MaterialTheme.colorScheme.surfaceVariant
+        ?: MaterialTheme.colorScheme.surfaceContainer
     Box(Modifier.size(28.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
         Text(TokenGlyph.letter(tick), color = MaterialTheme.colorScheme.onSurface)
         Box(
