@@ -37,7 +37,7 @@ final class AlertDetailScreenTests: XCTestCase {
         let screen = AlertDetailScreen(item: item, now: now, onOpenOnPhone: {})
 
         let content = renderedContent(in: screen.body)
-        let time = RelativeTimeText.fill(NSLocalizedString("w3.timeMinutes", comment: ""), n: 0)
+        let time = RelativeTimeText.fill(NSLocalizedString("w3.timeJustNow", comment: ""), n: 0)
 
         XCTAssertTrue(content.strings.contains("A complete alert title"))
         XCTAssertTrue(content.strings.contains(time))
