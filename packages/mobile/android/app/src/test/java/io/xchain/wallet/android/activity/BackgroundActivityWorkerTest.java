@@ -38,9 +38,15 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import com.sun.net.httpserver.HttpServer;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.TIRAMISU)
@@ -137,6 +143,53 @@ public class BackgroundActivityWorkerTest {
         assertEquals(before, files.readConfig());
         assertEquals(Arrays.asList(3000L), files.runLog());
         assertEquals(0, notifications.getActiveNotifications().length);
+    }
+
+    @Test
+    public void productionReaderGetsUrlAndExtractsConfiguredPaths() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        AtomicReference<String> method = new AtomicReference<>();
+        AtomicReference<String> path = new AtomicReference<>();
+        byte[] response = ("{\"balances\":{\"confirmed\":\"wrong\",\"pending\":\"wrong\"},"
+                + "\"result\":{\"settled\":{\"value\":\"17\"},"
+                + "\"waiting\":{\"value\":\"4\"}}}")
+                .getBytes(StandardCharsets.UTF_8);
+        HttpServer server = HttpServer.create(
+                new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/activity/address-1", exchange -> {
+            requests.incrementAndGet();
+            method.set(exchange.getRequestMethod());
+            path.set(exchange.getRequestURI().toString());
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+
+        try {
+            JSONObject configured = config(true, false);
+            JSONObject target = configured.getJSONArray("targets").getJSONObject(0);
+            target.put("url", "http://" + server.getAddress().getHostString() + ":"
+                    + server.getAddress().getPort() + "/activity/address-1?view=wallet");
+            target.put("confirmedPath", "result.settled.value");
+            target.put("pendingPath", "result.waiting.value");
+            files.writeConfig(configured.toString());
+
+            assertTrue(BackgroundActivityWorker.runOnce(context, null, 4000));
+
+            JSONObject stored = new JSONObject(files.readConfig());
+            JSONObject storedTarget = stored.getJSONArray("targets").getJSONObject(0);
+            assertEquals(1, requests.get());
+            assertEquals("GET", method.get());
+            assertEquals("/activity/address-1?view=wallet", path.get());
+            assertEquals("17", storedTarget.getString("confirmed"));
+            assertEquals("4", storedTarget.getString("pending"));
+            assertEquals(4000L, storedTarget.getLong("lastCheckedAt"));
+            assertEquals(Arrays.asList(4000L), files.runLog());
+            assertEquals(0, notifications.getActiveNotifications().length);
+        } finally {
+            server.stop(0);
+        }
     }
 
     private static JSONObject config(boolean enabled, boolean baseline) throws Exception {
