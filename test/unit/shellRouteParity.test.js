@@ -54,6 +54,16 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the extension background announces an unlock to the window whose own create caused it.',
         },
+        'AppInner.pwaInstall': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the web wallet can be added to a home screen, so only it passes the install state to the shell.',
+        },
+        'Settings.pwaInstall': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the web wallet can be added to a home screen, so only its Settings offers the Add to Home Screen row.',
+        },
         'AddressList.networkFilter': {
             shells: ['web'],
             kind: 'intended',
