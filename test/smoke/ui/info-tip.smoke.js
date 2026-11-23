@@ -59,7 +59,7 @@ assert.ok(/role="tooltip"/.test(tipSrc),
 // 4. Esc dismisses; outside click dismisses.
 assert.ok(/event\.key === 'Escape'/.test(tipSrc),
     'InfoTip dismisses on Escape');
-assert.ok(/!wrapRef\.current\.contains\(event\.target\)/.test(tipSrc),
+assert.ok(/useOutsidePress\(\[wrapRef\],[\s\S]*?events:\s*\['pointerdown'\],[\s\S]*?target:\s*'document'/.test(tipSrc),
     'InfoTip dismisses on outside pointer');
 
 // 5. Public re-export from @xchain-wallet/core/ui.
