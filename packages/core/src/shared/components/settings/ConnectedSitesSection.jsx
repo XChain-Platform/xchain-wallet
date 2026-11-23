@@ -55,6 +55,7 @@ import { normalizeBlocklistEntry, parseWildcardPattern } from '../../../flows/bl
 import { SignThrottlePanel } from './SignThrottlePanel.jsx';
 import local from './ConnectedSitesSection.module.css';
 import { neutralizeControlText } from '../../utils/textHardening.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/accountPicker.js';
 import '../../../i18n/locales/en/extension.js';
@@ -72,6 +73,23 @@ const SITE_ORIGIN_STYLE = { overflowWrap: 'anywhere', unicodeBidi: 'isolate' };
 const blockedEntryText = (entry) => neutralizeControlText(entry, { maxLength: 2048 });
 
 const VIEWS = ['allowed', 'blocked', 'options'];
+
+// Keep a plain literal so the key-coverage extractor can resolve the key.
+const SAVE_CHANGE_FAILED_KEY = 'settings.connectedSites.saveChangeFailed';
+
+/**
+ * The copy for a failed Connected Sites read or action. Handler text such as
+ * "sites.load: ..." names internals, so a load shows it only when it is already
+ * user-facing, and a refused local action names the shared save failure.
+ *
+ * @param {unknown} err
+ * @param {'load' | 'disconnect' | 'block' | 'unblock'} action
+ * @returns {string}
+ */
+export function connectedSiteErrorMessage(err, action) {
+    if (action === 'load') return userFacingMessage(err, t('settings.connectedSites.loadFailed'));
+    return t(SAVE_CHANGE_FAILED_KEY);
+}
 
 // A Settings search lands on the part of the page that holds its match:
 // the throttle rows on Options, the blocked-site rows on Blocked. Only
@@ -170,7 +188,7 @@ export function ConnectedSitesSection({
         } catch (err) {
             if (sequence !== loadSequence.current) return;
             loadedFrom.current = messaging;
-            setError(err instanceof Error ? err.message : String(err));
+            setError(connectedSiteErrorMessage(err, 'load'));
         } finally {
             if (sequence === loadSequence.current) setLoading(false);
         }
@@ -196,6 +214,7 @@ export function ConnectedSitesSection({
             danger: true,
         });
         if (!confirmed) return;
+        setActionError(null);
         setPendingAction(`disconnect:${id}`);
         try {
             await messaging.deleteConnectedSite({ id });
@@ -209,18 +228,21 @@ export function ConnectedSitesSection({
                             await messaging.restoreConnectedSite({ site: snapshot });
                             await reload();
                         } catch (err) {
-                            // A failed reconnect leaves the page usable: the list
-                            // still reads true, so the refusal is a notice at the top
-                            // of the page (operator ruling 2026-11-22), not a page state.
+                            // Keep the loaded list usable after a failed reconnect;
+                            // the notice belongs above the page instead of replacing
+                            // content that still reflects the saved wallet state.
                             setActionError(t(err?.code === 'BLOCKED_BY_USER'
                                 ? 'settings.connectedSites.undoBlocked'
-                                : 'settings.connectedSites.undoFailed'));
+                                : SAVE_CHANGE_FAILED_KEY));
                         }
                     },
                 });
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+        } catch {
+            // Keep the loaded list usable after a failed disconnect;
+            // the notice belongs above the page instead of replacing
+            // content that still reflects the saved wallet state.
+            setActionError(connectedSiteErrorMessage(null, 'disconnect'));
         } finally {
             setPendingAction(null);
         }
@@ -235,13 +257,14 @@ export function ConnectedSitesSection({
             danger: true,
         });
         if (!confirmed) return false;
+        setActionError(null);
         setPendingAction(pendingKey);
         try {
             await messaging.blockOrigin({ origin });
             await reload();
             return true;
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+        } catch {
+            setActionError(connectedSiteErrorMessage(null, 'block'));
             return false;
         } finally {
             setPendingAction(null);
@@ -250,12 +273,13 @@ export function ConnectedSitesSection({
 
     const onUnblock = async (origin) => {
         if (pendingAction) return;
+        setActionError(null);
         setPendingAction(`unblock:${origin}`);
         try {
             await messaging.unblockOrigin({ origin });
             await reload();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+        } catch {
+            setActionError(connectedSiteErrorMessage(null, 'unblock'));
         } finally {
             setPendingAction(null);
         }

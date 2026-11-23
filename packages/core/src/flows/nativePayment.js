@@ -20,12 +20,30 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 
+export class NativeAmountPrecisionError extends Error {
+    constructor() {
+        super('Amount can have at most 8 decimal places.');
+        this.name = 'NativeAmountPrecisionError';
+        this.code = 'NATIVE_AMOUNT_PRECISION';
+    }
+}
+
+/** Refuse a native amount that cannot be represented by whole satoshis. */
+export function assertNativeAmountPrecision({ tick, amount, descriptor }) {
+    if (!descriptor?.coin || !tick) return;
+    const nativeTicker = tickerForCoin(descriptor.coin);
+    if (String(tick).trim().toUpperCase() !== nativeTicker) return;
+    const match = /^(?:\d*)(?:\.(\d+))?$/.exec(String(amount).trim());
+    if (match && /[1-9]/.test((match[1] || '').slice(8))) {
+        throw new NativeAmountPrecisionError();
+    }
+}
+
 /**
  * Base-unit (satoshi) integer, as a string, from a plain decimal amount.
- * 8-decimal fixed scale, BigInt-exact (no float round-trip). Mirrors
- * `exactSatsBigIntFromDecimalString` in shared/routes/Send.jsx; reimplemented
- * here so flows/ does not import a route module. Returns null when the input is
- * not a non-negative plain decimal.
+ * 8-decimal fixed scale, BigInt-exact (no float round-trip). Returns null when
+ * the input is not a non-negative plain decimal. Native callers reject any
+ * nonzero precision beyond this scale before invoking it.
  * @param {string | number} raw
  * @returns {string | null}
  */
@@ -95,6 +113,7 @@ export function nativePaymentOutput({ tick, amount, destination, descriptor }) {
     if (!descriptor?.coin || !tick || !destination) return null;
     const nativeTicker = tickerForCoin(descriptor.coin);
     if (String(tick).trim().toUpperCase() !== nativeTicker) return null;
+    assertNativeAmountPrecision({ tick, amount, descriptor });
     const value = satsStringFromDecimal(amount);
     // A native send with a non-positive / unparseable amount is not a payment;
     // let the normal validation path surface it rather than emitting a bad output.

@@ -382,7 +382,7 @@ describe('ConnectedSitesSection settings controls', () => {
         const blockedErr = Object.assign(new Error('sites.restore: origin is blocked'), { code: 'BLOCKED_BY_USER' });
         for (const [refusal, text] of [
             [blockedErr, "Couldn't reconnect this site because it's blocked. Unblock it before reconnecting."],
-            [new Error('sites.restore: site.id is required'), "Couldn't reconnect this site. Try again."],
+            [new Error('sites.restore: site.id is required'), "Couldn't save this change on this device. Try again."],
         ]) {
             toast.show.mockClear();
             let connected = [site];

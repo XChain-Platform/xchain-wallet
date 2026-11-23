@@ -74,6 +74,7 @@ const {
     findCoSignerAccountByAddress,
     filterChainIdsByActiveNetwork,
     unsafeNumericAmount,
+    assertNativeAmountPrecision,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
@@ -1082,7 +1083,7 @@ async function executeSignAction(req, deps, ctx) {
     // the screen it would render is the wrong description of what would be signed.
     assertNoSigningDivergenceParams(params);
     assertSupportedSweepParams(actionName, params);
-    assertSingleSendAmount(actionName, params);
+    assertSingleSendAmount(actionName, params, deps.chainRegistry.get(req.chainId));
     const resolved = ctx.resolved
         ?? await resolveSendValues(req, deps, params, spendFromAddress);
     const { toAddress, sendTick, sendAmount } = resolved;
@@ -1339,7 +1340,7 @@ function spendFromOf(params) {
 // `amount` a human-scale decimal. Picking either silently could sign a
 // magnitude 1e8 off the one the page meant, so the request is refused before
 // any prompt or read.
-function assertSingleSendAmount(actionName, params) {
+function assertSingleSendAmount(actionName, params, descriptor) {
     if (actionName !== 'SEND') return;
     if (isSet(params?.amount) && isSet(params?.amountRaw)) {
         throw bridgeError('INVALID_PARAMS', 'SEND takes amountRaw or amount, not both');
@@ -1351,6 +1352,19 @@ function assertSingleSendAmount(actionName, params) {
                 `SEND ${name} must be a decimal string when it exceeds safe JS number precision`,
             );
         }
+    }
+    try {
+        assertNativeAmountPrecision({
+            tick: params?.asset ?? params?.tick,
+            amount: params?.amount,
+            descriptor,
+        });
+    } catch (error) {
+        if (error?.code !== 'NATIVE_AMOUNT_PRECISION') throw error;
+        throw bridgeError(
+            'INVALID_PARAMS',
+            'SEND amount has more decimal places than the native coin allows',
+        );
     }
 }
 
@@ -1415,7 +1429,7 @@ async function groupedSlot(slotReq, deps, site) {
     await assertAddressPermitted(deps, site, chainId, spendFromAddress);
     assertNoSigningDivergenceParams(params);
     assertSupportedSweepParams(actionName, params);
-    assertSingleSendAmount(actionName, params);
+    assertSingleSendAmount(actionName, params, deps.chainRegistry.get(chainId));
     const resolved = await resolveSendValues(slotReq, deps, params, spendFromAddress);
     const payload = approvalPayload(actionName, {
         params,

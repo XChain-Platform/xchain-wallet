@@ -69,6 +69,14 @@ export {
     summarizeSendLegs,
     totalsByTick,
 } from './sendLegs.js';
+export {
+    NativeAmountPrecisionError,
+    assertNativeAmountPrecision,
+    nativePaymentOutput,
+    isBareNativePayment,
+    withNativePaymentOutput,
+    hasNativePaymentOutput,
+} from './nativePayment.js';
 export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';

@@ -40,11 +40,11 @@ const ADDRS = [
 ];
 const ORACLE_ADDR = { id: 'ao', address: ORACLE, publicKey: '02cc', derivationPath: "m/84'/0'/0'/0/2", source: 'hd' };
 
-function harness(walletMode = 'full', { addresses = ADDRS, active = 'a0', feed = FEED } = {}) {
+function harness(walletMode = 'full', { addresses = ADDRS, active = 'a0', feed = FEED, balanceShape = null } = {}) {
     // The wallet's mode is read from the wallet list, not from settings.
     publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const calls = { compose: [] };
-    const getAddressBalances = vi.fn((chainId, address) => Promise.resolve({
+    const getAddressBalances = vi.fn((chainId, address) => Promise.resolve(balanceShape || {
         tokens: [{
             tick: 'EXAMPLE',
             divisibility: 3,
@@ -329,6 +329,17 @@ describe('Buy a position form rulings', () => {
         fireEvent.change(stake, { target: { value: '1.2345' } });
         expect(utils.getByText('Amount can have at most 3 decimal places.')).toBeTruthy();
         expect(stake).toHaveValue('123.456');
+    });
+
+    it('keeps Max disabled when the token balance read is unavailable', async () => {
+        const balanceShape = {
+            native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+            tokens: [], unavailable: ['tokens'],
+        };
+        const utils = await openMarket('full', { balanceShape });
+        await openPlaceBet(utils);
+        expect(utils.queryByText(/EXAMPLE available/)).toBeNull();
+        expect(utils.getByRole('button', { name: /max available amount/i })).toBeDisabled();
     });
 
     it('keeps the watcher build green with an icon', async () => {

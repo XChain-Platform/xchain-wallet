@@ -139,6 +139,26 @@ describe('bridge.signAction: SEND carrying both amount fields', () => {
         expect(resp.error.message).toContain('INVALID_PARAMS');
         expect(calls.signAction).toHaveLength(0);
     });
+
+    it('refuses sub-satoshi native precision before any prompt', async () => {
+        const { resp, calls } = await drive('bridge.signAction', {
+            chainId: descriptor.id,
+            action: 'SEND',
+            params: sendParams({ amount: '1.000000009' }),
+        });
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toContain('INVALID_PARAMS');
+        expect(calls.signAction).toHaveLength(0);
+    });
+
+    it('still prompts for an exact one-satoshi native amount', async () => {
+        const { calls } = await drive('bridge.signAction', {
+            chainId: descriptor.id,
+            action: 'SEND',
+            params: sendParams({ amount: '0.00000001' }),
+        });
+        expect(calls.signAction).toHaveLength(1);
+    });
 });
 
 describe('bridge.parallel: the grouped modal payload', () => {

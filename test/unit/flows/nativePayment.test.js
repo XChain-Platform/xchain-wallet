@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
     hasNativePaymentOutput,
     isBareNativePayment,
+    NativeAmountPrecisionError,
     nativePaymentOutput,
     withNativePaymentOutput,
 } from '../../../packages/core/src/flows/nativePayment.js';
@@ -30,6 +31,35 @@ describe('nativePayment', () => {
             address: payment.params.DESTINATION,
             value: '1234567890123456789012345678',
         });
+    });
+
+    it('refuses a native amount with nonzero sub-satoshi precision', () => {
+        const overPrecise = {
+            ...payment,
+            params: { ...payment.params, AMOUNT: '1.000000009' },
+        };
+        expect(() => nativePaymentOutput({
+            tick: 'BTC', amount: '1.000000009', destination: 'bc1qrecipient', descriptor,
+        })).toThrow(NativeAmountPrecisionError);
+        expect(() => isBareNativePayment(overPrecise, descriptor)).toThrow(NativeAmountPrecisionError);
+        expect(() => withNativePaymentOutput({
+            actionData: overPrecise, descriptor, encoderOpts: {},
+        })).toThrow(NativeAmountPrecisionError);
+    });
+
+    it('accepts exact satoshis and trailing zeros beyond the native scale', () => {
+        expect(nativePaymentOutput({
+            tick: 'BTC', amount: '0.00000001', destination: 'bc1qrecipient', descriptor,
+        })?.value).toBe('1');
+        expect(nativePaymentOutput({
+            tick: 'BTC', amount: '1.000000000', destination: 'bc1qrecipient', descriptor,
+        })?.value).toBe('100000000');
+    });
+
+    it('does not apply native precision limits to token amounts', () => {
+        expect(nativePaymentOutput({
+            tick: 'XCP', amount: '1.000000009', destination: 'bc1qrecipient', descriptor,
+        })).toBeNull();
     });
 
     it.each([

@@ -225,6 +225,6 @@ describe('background.js routes the host build and status through the backstop', 
         const head = bg.slice(start, bg.indexOf('new storageLib.Vault', start));
         expect(head).toMatch(/const sessionBackend = lockBackstop\.cleanupPending === true\s*\?\s*LOCK_PENDING_SESSION/);
         expect(bg).toMatch(/const LOCK_PENDING_SESSION = Object\.freeze\(\{ load: async \(\) => null \}\);/);
-        expect(bg).toMatch(/isLockPending: \(\) => lockBackstop\.cleanupPending/);
+        expect(bg).toMatch(/isLockPending: \(\) => lockBackstop\.isLockPending\(\),/);
     });
 });

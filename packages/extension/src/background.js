@@ -354,6 +354,10 @@ async function buildHost() {
     if (host) return host;
     const epoch = hostEpoch;
     const pool = signerPool;
+    // The pending flag is fail-closed until its stored marker loads, so the
+    // build waits for it; a lock landing during that wait moves the epoch.
+    await lockBackstop.whenReady?.();
+    if (epoch !== hostEpoch) return null;
     // A key that survived a refused lock is no session: while its clear is
     // pending the build reads nothing, so it never rebuilds the locked host.
     // A lock landing mid-read moves hostEpoch, which the check below catches.
@@ -809,6 +813,11 @@ function noteAutoLockActivity(type) {
 // Lock sequencing (retry record kept across a lock that left a secret behind)
 // lives in walletLock.js so it can be imported and driven by a test; this
 // module registers chrome.* listeners at load and cannot be.
+// The failed-clear marker lives in session storage so it survives eviction.
+const LOCK_CLEANUP_PENDING_SESSION_KEY = 'xchain-wallet:lock-cleanup-pending';
+const lockCleanupPendingBackend = new ChromeSessionBackend({
+    key: LOCK_CLEANUP_PENDING_SESSION_KEY,
+});
 const lockBackstop = createLockBackstop({
     // Built per attempt: a lock that left a secret behind gets retried.
     lockDeps: () => ({
@@ -830,6 +839,16 @@ const lockBackstop = createLockBackstop({
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,
+    pendingStore: {
+        load: async () => {
+            const value = await lockCleanupPendingBackend.load();
+            return value?.[0] === 1;
+        },
+        save: async (pending) => {
+            if (pending) await lockCleanupPendingBackend.save(Uint8Array.of(1));
+            else await lockCleanupPendingBackend.clear();
+        },
+    },
 });
 
 const { lockWalletNow, maybeAutoLock } = lockBackstop;
@@ -873,10 +892,12 @@ attachSessionMetaListener({
     beforeSessionSave: () => sessionSaveFence.beforeSave(),
     onUnlocked: () => {
         lastActivityStampAt = 0;
-        lockBackstop.noteUnlocked();
+        // Rejects when the stale failed-clear marker cannot be reset, which
+        // fails the unlock rather than leave a marker that relocks it later.
+        const pendingReset = lockBackstop.noteUnlocked();
         // Drop the previous unlock's deadline and record one for this unlock
         // before publishing unlocked (a popup that never settles would leave none).
-        return sequenceUnlockedSession({
+        return Promise.resolve(pendingReset).then(() => sequenceUnlockedSession({
             clearAutoLockState,
             continueUnlock: () => ensureHost()
                 .then(() => true, (err) => {
@@ -886,16 +907,23 @@ attachSessionMetaListener({
                 .then(async (built) => {
                     // A refused record would die with this worker while the
                     // session key survives it, so that unlock locks instead.
-                    const armed = await armedOrLocked(
-                        () => armProvisionalAutoLock(() => (vault ? vault.settings.get() : null), Date.now()),
-                        lockAfterRefusedAutoLockArm,
-                    );
+                    let armed;
+                    try {
+                        armed = await armedOrLocked(
+                            () => armProvisionalAutoLock(() => (vault ? vault.settings.get() : null), Date.now()),
+                            lockAfterRefusedAutoLockArm,
+                        );
+                    } finally {
+                        // The record is written or the wallet locked, so the idle
+                        // check stops waiting for this unlock to settle.
+                        lockBackstop.noteUnlockSettled();
+                    }
                     if (built && armed) await surfaceStateEvents.publish('session', { state: 'unlocked' });
                 })
                 .catch((err) => {
                     console.error('[xchain] unlocked session could not be published:', err);
                 }),
-        });
+        }));
     },
     startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
         walletId: opts.walletId,
@@ -904,11 +932,15 @@ attachSessionMetaListener({
     // Keeps the auto-lock record (and tears the host down) per the backstop's
     // rule: a secret that survived the clear leaves the idle alarm the job.
     onLocked: (result) => lockBackstop.onLocked(result),
-    isLockPending: () => lockBackstop.cleanupPending === true,
+    isLockPending: () => lockBackstop.isLockPending(),
     // PC-16 Phase B: the Locked screen's auto pay line and Stop, and the end
     // of locked auto pay before any unlock, create or import opens a vault.
     lockedAutopay,
-    beforeSessionStart: (type) => lockedAutopay.end(type === 'wallet.unlock' ? 'unlock' : 'wallet-switch'),
+    beforeSessionStart: (type) => {
+        // Holds off the orphaned-secret sweep while this session writes its slots.
+        lockBackstop.noteSessionStarting();
+        return lockedAutopay.end(type === 'wallet.unlock' ? 'unlock' : 'wallet-switch');
+    },
     // wallet.hardware.balances keeps the open vault's price-data switch; with
     // no open vault (a fresh install) the defaults apply.
     readSettings: () => (vault ? vault.settings.get() : null),

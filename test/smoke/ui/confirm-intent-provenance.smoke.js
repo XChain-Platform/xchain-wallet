@@ -122,6 +122,16 @@ assert.match(sendConfirmBlock, /recipients: snapshotLegs\.map/,
 assert.ok(!/recipients: sendLegs\.map/.test(sendConfirmBlock),
     'Send confirmation does not rebuild recipient rows from the live draft');
 
+const betSrc = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
+const betConfirmBlock = betSrc.slice(
+    betSrc.indexOf('if (actionConfirm.open) {'),
+    betSrc.indexOf('// The market fixes the network', betSrc.indexOf('if (actionConfirm.open) {')),
+);
+assert.ok(!/String\(amount\)|outcomeLabels\[Number\(outcome\)\]/.test(betConfirmBlock),
+    'Bet confirmation does not rebuild its signed stake or outcome from live form state');
+assert.match(betSrc, /const params = betParams\(\);[\s\S]*params,[\s\S]*onApprove:[\s\S]*params, prebuiltPsbt/,
+    'Bet compose and Approve share one frozen params object');
+
 // --- 4. the dApp approval window describes host-side too -------------
 
 const approval = read('packages', 'core', 'src', 'shared', 'approval', 'SignApproval.jsx');

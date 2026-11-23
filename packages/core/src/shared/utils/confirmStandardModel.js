@@ -255,11 +255,16 @@ export const CONFIRM_KINDS = Object.freeze({
         icon: 'target',
         address: 'source',
         name: ({ decoded }) => (/^open a prediction market\b/i.test(String(decoded?.summary || '')) ? detailOf(decoded, /^market$/i) : ''),
-        sentence: ({ summary }) => {
-            const amount = summary.amount ? formatDisplayAmount(String(summary.amount)) : '';
+        sentence: ({ decoded, summary }) => {
+            const stake = detailOf(decoded, /^stake$/i);
+            const rawOutcome = detailOf(decoded, /^outcome$/i);
+            const annotated = /^(\d+)\s+\("([\s\S]+)"\)$/.exec(rawOutcome);
+            const outcome = annotated
+                ? `${neutralizeControlText(annotated[2], { maxLength: 60 })} (outcome ${annotated[1]})`
+                : rawOutcome ? `outcome ${neutralizeControlText(rawOutcome, { maxLength: 60 })}` : '';
             const tick = String(summary.ticker || '').trim().toUpperCase();
-            const target = neutralizeControlText(String(summary.target || '').trim(), { maxLength: 80 });
-            return amount && tick && target ? `Buy ${amount} ${tick} of ${target}` : null;
+            const figure = [formatDisplayAmount(stake), tick].filter(Boolean).join(' ');
+            return figure && outcome ? `Buy ${figure} of ${outcome}` : null;
         },
     },
     bridge: { icon: 'migrate', address: 'recipient' },

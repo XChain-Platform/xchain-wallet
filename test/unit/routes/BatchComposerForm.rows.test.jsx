@@ -350,6 +350,20 @@ describe('BatchComposerForm rows', () => {
         expect(messaging.buildBatchCommand).not.toHaveBeenCalled();
     });
 
+    it('refuses review when the fresh token balance is unavailable', async () => {
+        const messaging = mount({ getAddressBalances: vi.fn().mockResolvedValue({
+            native: { tick: 'BTC', quantity: '1', divisibility: 8 }, tokens: [], unavailable: ['tokens'],
+        }) });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'SEND');
+        fireEvent.change(screen.getByRole('textbox', { name: 'Params (JSON object)' }), {
+            target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"1","DESTINATION":"alice"}' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
+        expect(within(await screen.findByLabelText('Form errors')).getByText(/Couldn't refresh this address's balances/)).toBeInTheDocument();
+        expect(screen.queryByText(/holds 0 PEPE/)).toBeNull();
+        expect(messaging.buildBatchCommand).not.toHaveBeenCalled();
+    });
+
     it('revalidates unchanged rows on every review and refuses data that has expired', async () => {
         const validateAction = vi.fn()
             .mockResolvedValueOnce({ valid: true, errors: [] })

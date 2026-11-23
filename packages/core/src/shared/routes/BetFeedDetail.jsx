@@ -63,6 +63,7 @@ import {
 import { outcomeLabelsOf, outcomePhrase, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
+import { tickAmountOf } from '../utils/walletBalanceShape.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedDetail.module.css';
 // The blue market hero and the page under it: the outcome page layout the
@@ -465,7 +466,7 @@ export function BetFeedDetail({
                         (entry) => String(entry?.tick || '').trim().toUpperCase() === tick,
                     );
                 const divisibility = Number(rawAsset?.divisibility);
-                setStakeBalance(balance?.unknown ? null : String(balance?.amount ?? '0'));
+                setStakeBalance(tickAmountOf({ balances: sdkShape }, balance));
                 setStakeBalanceDivisibility(
                     Number.isInteger(divisibility) && divisibility >= 0 ? divisibility : null,
                 );
@@ -671,11 +672,12 @@ export function BetFeedDetail({
                 setResult(res);
                 return;
             }
+            const params = betParams();
             const res = await actionConfirm.run({
                 chainId,
                 from,
                 compose: () => messaging.composeBetForConfirm(withAdvancedOptions({
-                    walletId, chainId, from, builder: 'placeBetParams', params: betParams(),
+                    walletId, chainId, from, builder: 'placeBetParams', params,
                     // The fee mode must reach COMPOSE, not just submit: the
                     // FEE_DESTINATION output has to be inside the PSBT the user
                     // approves and the tamper check verifies.
@@ -688,7 +690,7 @@ export function BetFeedDetail({
                 // market once more and stops before the signature.
                 recheckBeforeSign: closedMarketRefusal,
                 onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId, chainId, from, params: betParams(), prebuiltPsbt,
+                    walletId, chainId, from, params, prebuiltPsbt,
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 }),
@@ -807,12 +809,9 @@ export function BetFeedDetail({
     if (actionConfirm.open) {
         // The stake leaves the signer on the chosen outcome.
         const betTick = String(feed?.tick || '').trim().toUpperCase();
-        const betAmount = String(amount).trim();
-        const betOutcome = Array.isArray(outcomeLabels) && outcome != null ? outcomeLabels[Number(outcome)] : null;
         const betSummary = {
             verb: t('components.confirmSummary.verbPlaceBet'),
-            ...(betTick && betAmount ? { amount: betAmount, ticker: betTick } : {}),
-            ...(betOutcome ? { target: neutralizeControlText(betOutcome, { maxLength: 80 }) } : {}),
+            ...(betTick ? { ticker: betTick } : {}),
             direction: 'out',
             chainId,
             address: fromAddress?.address,
@@ -1328,6 +1327,7 @@ export function BetFeedDetail({
                         label="Outcome"
                         help="Pick the result you think will happen. Everyone backing the winning outcome splits the whole pot, minus the oracle's fee."
                         value={outcome === null ? '' : String(outcome)}
+                        disabled={submitting || actionConfirm.composing}
                         onChange={(next) => { setOutcome(Number(next)); setFormError(null); }}
                         options={outcomes.map((label, i) => ({
                             value: String(i),
@@ -1348,6 +1348,7 @@ export function BetFeedDetail({
                         label="Amount"
                         help="How much of this outcome to buy. The amount buys a share of the pot that every later purchase re-divides, and payouts round down. Once confirmed, a position cannot be cancelled or moved to another outcome."
                         amount={amount}
+                        disabled={submitting || actionConfirm.composing}
                         tick={feed.tick || ''}
                         divisibility={stakeDivisibility}
                         onAmountFieldChange={(rawValue) => {
@@ -1383,6 +1384,7 @@ export function BetFeedDetail({
                                     variant="ghost"
                                     className={`${local.portion} ${active ? local.portionActive : ''}`}
                                     aria-pressed={active}
+                                    disabled={submitting || actionConfirm.composing}
                                     onClick={() => pickPortion(percent)}
                                 >
                                     {percent === 100 ? 'Max' : `${percent}%`}
@@ -1703,6 +1705,7 @@ export function BetFeedDetail({
                         revealKey={sectionErrorKey('memo')}
                         maxLength={MAX_MEMO_LENGTH}
                         value={memo}
+                        disabled={submitting || actionConfirm.composing}
                         onChange={(e) => setMemo(e.target.value)}
                     />
             </FormFrame>
