@@ -188,6 +188,7 @@ describe('watch-sim-setup.sh', () => {
             managerTrailingLines: 20000,
         });
 
+        expect(source).not.toMatch(/(?<!\|)\|(?!\|)\s*"\$avdmanager"/);
         for (let attempt = 0; attempt < 5; attempt += 1) {
             expect(run(fixture).status).toBe(0);
         }

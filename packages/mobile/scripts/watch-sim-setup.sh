@@ -113,8 +113,8 @@ avd_valid() {
 
 ensure_avd() {
     local name="$1" device="$2" dp="$3"
-    avd_valid "$name" "$device" "$dp" || printf 'no\n' | "$avdmanager" create avd --force \
-        --name "$name" --package "$image" --device "$device"
+    avd_valid "$name" "$device" "$dp" || "$avdmanager" create avd --force \
+        --name "$name" --package "$image" --device "$device" <<< 'no'
 }
 
 setup() {
