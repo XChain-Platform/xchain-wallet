@@ -139,9 +139,12 @@
 }
 
 /* Avoid combining the host gap with extra spacing on the iOS install hint.
-   Scope the smaller content gap so other notices keep their shared spacing. */
-.notices:has(> [data-ios-install-hint]:last-child) {
-    margin-bottom: var(--xc-space-2);
+   Scope the smaller content gap so other notices keep their shared spacing.
+   Older webviews without :has() keep the shared gap. */
+@supports selector(:has(*)) {
+    .notices:has(> [data-ios-install-hint]:last-child) {
+        margin-bottom: var(--xc-space-2);
+    }
 }
 
 .notices > * {
