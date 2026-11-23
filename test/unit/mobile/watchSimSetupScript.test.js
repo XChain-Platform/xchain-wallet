@@ -182,15 +182,23 @@ describe('watch-sim-setup.sh', () => {
     });
 
     it('repairs without SIGPIPE when the manager fills the pipe', () => {
-        const fixture = makeFixture({
-            smallProfile: false,
-            largeProfile: false,
-            managerTrailingLines: 20000,
-        });
-
         expect(source).not.toMatch(/(?<!\|)\|(?!\|)\s*"\$avdmanager"/);
         for (let attempt = 0; attempt < 5; attempt += 1) {
-            expect(run(fixture).status).toBe(0);
+            const fixture = makeFixture({
+                smallProfile: false,
+                largeProfile: false,
+                managerTrailingLines: 20000,
+            });
+            const result = run(fixture);
+
+            expect(result.status).toBe(0);
+            const commands = readFileSync(fixture.log, 'utf8');
+            expect(commands).toContain(
+                'avdmanager create avd --force --name xc-wear-small-round',
+            );
+            expect(commands).toContain(
+                'avdmanager create avd --force --name xc-wear-large-round',
+            );
         }
     });
 
