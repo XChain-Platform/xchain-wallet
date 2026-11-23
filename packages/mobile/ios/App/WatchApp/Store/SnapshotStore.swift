@@ -34,6 +34,7 @@ struct SnapshotTotals: Codable {
 }
 
 final class SnapshotStore {
+    typealias DirectoryCreator = (URL, Bool, [FileAttributeKey: Any]?) throws -> Void
     typealias Writer = (Data, Data.WritingOptions) throws -> Void
 
     static let fileProtection: Data.WritingOptions = .completeFileProtectionUnlessOpen
@@ -45,12 +46,15 @@ final class SnapshotStore {
 
     private(set) var latest: Snapshot?
 
-    init(directory: URL, writer: Writer? = nil) {
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.protectionKey: Self.directoryProtection]
-        )
+    init(directory: URL, writer: Writer? = nil, directoryCreator: DirectoryCreator? = nil) {
+        let createDirectory = directoryCreator ?? { url, intermediates, attributes in
+            try FileManager.default.createDirectory(
+                at: url,
+                withIntermediateDirectories: intermediates,
+                attributes: attributes
+            )
+        }
+        try? createDirectory(directory, true, [.protectionKey: Self.directoryProtection])
         let file = SnapshotFile(directory: directory)
         self.file = file
         self.writer = writer ?? { data, options in

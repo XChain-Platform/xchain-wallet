@@ -28,12 +28,21 @@ final class SnapshotStoreTests: XCTestCase {
         }
     }
 
-    func testCreatesProtectedSnapshotDirectory() throws {
-        _ = SnapshotStore(directory: directory)
+    func testPassesCompleteUnlessOpenProtectionToDirectoryCreator() throws {
+        var receivedURL: URL?
+        var receivedIntermediates: Bool?
+        var receivedAttributes: [FileAttributeKey: Any]?
 
-        let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        _ = SnapshotStore(directory: directory, directoryCreator: { url, intermediates, attributes in
+            receivedURL = url
+            receivedIntermediates = intermediates
+            receivedAttributes = attributes
+        })
+
+        XCTAssertEqual(receivedURL, directory)
+        XCTAssertEqual(receivedIntermediates, true)
         XCTAssertEqual(
-            attributes[.protectionKey] as? FileProtectionType,
+            receivedAttributes?[.protectionKey] as? FileProtectionType,
             FileProtectionType.completeUnlessOpen
         )
     }
