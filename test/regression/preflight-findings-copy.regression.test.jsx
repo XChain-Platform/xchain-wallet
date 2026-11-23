@@ -130,9 +130,9 @@ describe('regression/preflight-findings-copy', () => {
         expect(within(page).getAllByText('Ticker format needs review before signing.')).toHaveLength(1);
         expect(within(notice).getAllByText(/verdict was not reached/i)).toHaveLength(1);
         expect(within(page).getAllByText('The dry-run service did not return a second verdict.')).toHaveLength(1);
-        // G130 keeps Approve enabled; pressing it re-checks and focuses the
-        // blocking status instead of hiding the reason behind a disabled action.
-        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+        // A blocking pre-flight finding disables Approve (operator ruling
+        // 2026-11-23); the reason stays visible in the status above it.
+        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
         expect(messaging.issueToken).not.toHaveBeenCalled();
         // Nothing was broadcast, so the review says what the network would do,
         // never that it refused.
