@@ -254,17 +254,20 @@ export async function handleSiteRequestCommand(command, dependencies = {}) {
  * @param {{ handle: (channel: string, listener: Function) => void }} args.ipcMain
  * @param {(event: object) => boolean} args.isTrustedSender
  * @param {(event: object) => object | Promise<object>} [args.dependencies]
+ * @param {(channel: string, listener: Function) => void} [args.register]
  */
 export function attachSiteRequestHandler({
     ipcMain,
     isTrustedSender,
     dependencies = () => ({}),
+    register = ipcMain?.handle?.bind(ipcMain),
 }) {
     if (typeof ipcMain?.handle !== 'function') throw new TypeError('site request ipcMain is unavailable');
     if (typeof isTrustedSender !== 'function') throw new TypeError('site request sender check is unavailable');
     if (typeof dependencies !== 'function') throw new TypeError('site request dependencies must be a function');
+    if (typeof register !== 'function') throw new TypeError('site request registration is unavailable');
 
-    ipcMain.handle(SITE_REQUEST_CHANNEL, async (event, command, ...extraArgs) => {
+    register(SITE_REQUEST_CHANNEL, async (event, command, ...extraArgs) => {
         if (!isTrustedSender(event)) return { sent: false, reason: 'FORBIDDEN_SENDER' };
         if (extraArgs.length !== 0) return { sent: false, reason: 'BAD_REQUEST' };
         return handleSiteRequestCommand(command, await dependencies(event));

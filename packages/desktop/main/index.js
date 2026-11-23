@@ -1471,6 +1471,12 @@ void runMainTask(async () => {
     attachSiteRequestHandler({
         ipcMain,
         isTrustedSender,
+        register: (channel, listener) => {
+            ipcMain.handle(channel, async (event, ...args) => {
+                if (!isTrustedSender(event)) return { sent: false, reason: 'FORBIDDEN_SENDER' };
+                return listener(event, ...args);
+            });
+        },
         dependencies: async () => {
             const settings = runtime?.vault
                 ? await flowsLib.getSettings(runtime.vault)

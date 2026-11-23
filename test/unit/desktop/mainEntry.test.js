@@ -289,6 +289,12 @@ describe('desktop main entry point', () => {
             const event = { senderFrame: { url: appIndex }, sender: { getURL: () => appIndex } };
             const returnUrl = 'https://app.example/#xchain=A';
 
+            await expect(handler(
+                { senderFrame: { url: 'file:///outside/index.html' } },
+                { type: 'return', url: returnUrl },
+            )).resolves.toEqual({ sent: false, reason: 'FORBIDDEN_SENDER' });
+            expect(electron.shell.openExternal).not.toHaveBeenCalled();
+
             await expect(handler(event, { type: 'return', url: returnUrl }))
                 .resolves.toEqual({ sent: true });
             expect(electron.shell.openExternal).toHaveBeenCalledWith(returnUrl);
