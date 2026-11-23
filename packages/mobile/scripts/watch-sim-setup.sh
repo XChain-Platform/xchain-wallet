@@ -81,14 +81,16 @@ ensure_pair() {
 }
 
 avd_config() {
-    "$avdmanager" list avd 2>/dev/null | awk -v wanted="$1" '
+    local output
+    output="$("$avdmanager" list avd 2>/dev/null)"
+    awk -v wanted="$1" '
         $1 == "Name:" { selected = ($2 == wanted) }
         selected && !found && $1 == "Path:" {
             sub(/^[[:space:]]*Path:[[:space:]]*/, "")
             print $0 "/config.ini"
             found = 1
         }
-    '
+    ' <<< "$output"
 }
 
 avd_valid() {
@@ -186,6 +188,7 @@ check_avd() {
 }
 
 check() {
+    local installed
     [ -n "$(platform_runtime iOS)" ] || miss 'runtime: missing iOS 27.2'
     [ -n "$(platform_runtime watchOS)" ] || miss 'runtime: missing watchOS 27.2'
     check_device 'XC iPhone 17' iPhone-17
@@ -197,7 +200,8 @@ check() {
     [ -x "$avdmanager" ] || miss "android: missing avdmanager at $avdmanager"
     [ -x "$emulator" ] || miss "android: missing emulator at $emulator"
     if [ -x "$sdkmanager" ]; then
-        "$sdkmanager" --sdk_root="$sdk" --list_installed 2>/dev/null | grep -F "$image" >/dev/null || \
+        installed="$("$sdkmanager" --sdk_root="$sdk" --list_installed 2>/dev/null)"
+        [[ "$installed" == *"$image"* ]] || \
             miss "android: missing image $image"
     fi
     if [ -x "$avdmanager" ]; then
