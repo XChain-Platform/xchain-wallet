@@ -1,0 +1,446 @@
+{
+  "protocol": "0.2.0",
+  "supported": [
+    "0.1.0",
+    "0.2.0"
+  ],
+  "link": {
+    "grammar": "xchain:request?v=1&req=<base64url(UTF-8 JSON)>",
+    "envelopeKeys": [
+      "v",
+      "id",
+      "method",
+      "params",
+      "return",
+      "callback",
+      "state",
+      "exp",
+      "app",
+      "browser"
+    ],
+    "browserValues": [
+      "chrome",
+      "firefox",
+      "edge",
+      "safari",
+      "samsung"
+    ],
+    "webLinkPrefixes": [
+      "https://xchain.io/wallet/link/",
+      "https://wallet.xchain.io/link/"
+    ]
+  },
+  "caps": {
+    "linkMaxChars": 16384,
+    "targetMaxChars": 2048,
+    "expMaxMs": 600000
+  },
+  "methods": {
+    "login": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "appId": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chainId": {
+            "type": "string"
+          },
+          "expiresInMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxAddresses": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1
+          }
+        },
+        "required": [
+          "appId",
+          "nonce"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "address": {
+            "type": "string"
+          },
+          "chainId": {
+            "type": "string"
+          },
+          "challenge": {
+            "type": "string"
+          },
+          "challengeParts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "version": {
+                "type": "integer"
+              },
+              "appId": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "nonce": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "integer"
+              },
+              "expiresAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "appId",
+              "origin",
+              "address",
+              "nonce",
+              "timestamp",
+              "expiresAt"
+            ]
+          },
+          "signature": {
+            "type": "string"
+          },
+          "signatureFormat": {
+            "enum": [
+              "legacy",
+              "bip322-simple"
+            ]
+          },
+          "addresses": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "chainId": {
+                  "type": "string"
+                },
+                "addressType": {
+                  "type": "string"
+                },
+                "challenge": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": "string"
+                },
+                "signatureFormat": {
+                  "enum": [
+                    "legacy",
+                    "bip322-simple"
+                  ]
+                }
+              },
+              "required": [
+                "address",
+                "chainId",
+                "addressType",
+                "challenge",
+                "signature",
+                "signatureFormat"
+              ]
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "address",
+          "chainId",
+          "challenge",
+          "challengeParts",
+          "signature",
+          "signatureFormat",
+          "addresses"
+        ]
+      },
+      "example": {
+        "v": 1,
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "method": "login",
+        "params": {
+          "appId": "request.example",
+          "nonce": "sample-login-nonce",
+          "chains": [
+            "bitcoin-testnet"
+          ],
+          "maxAddresses": 1
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    "signMessage": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chainId": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chainId",
+          "address",
+          "message"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "address": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "signatureFormat": {
+            "enum": [
+              "legacy",
+              "bip322-simple"
+            ]
+          },
+          "signedMessage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "address",
+          "signature",
+          "signatureFormat",
+          "signedMessage"
+        ]
+      },
+      "example": {
+        "v": 1,
+        "id": "BBBBBBBBBBBBBBBBBBBBBA",
+        "method": "signMessage",
+        "params": {
+          "chainId": "bitcoin-testnet",
+          "address": "tb1qexampleaddress",
+          "message": "Confirm this request"
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    "signAction": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chainId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "chainId",
+          "from",
+          "action",
+          "params"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "txid": {
+            "type": "string"
+          },
+          "chainId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "txid",
+          "chainId"
+        ]
+      },
+      "example": {
+        "v": 1,
+        "id": "CCCCCCCCCCCCCCCCCCCCCA",
+        "method": "signAction",
+        "params": {
+          "chainId": "bitcoin-testnet",
+          "from": "tb1qexampleaddress",
+          "action": "SEND",
+          "params": {
+            "destination": "tb1qdestinationaddress",
+            "quantity": 1250
+          }
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    },
+    "signPsbt": {
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chainId": {
+            "type": "string"
+          },
+          "psbtHex": {
+            "type": "string"
+          },
+          "signingPaths": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "address": {
+                  "type": "string"
+                },
+                "derivationPath": {
+                  "type": "string"
+                },
+                "sighashType": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "inputIndex"
+              ],
+              "anyOf": [
+                {
+                  "required": [
+                    "address"
+                  ]
+                },
+                {
+                  "required": [
+                    "derivationPath"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "chainId",
+          "psbtHex",
+          "signingPaths"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "signedPsbtHex": {
+            "type": "string"
+          },
+          "txHex": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "signedPsbtHex"
+        ]
+      },
+      "example": {
+        "v": 1,
+        "id": "DDDDDDDDDDDDDDDDDDDDDA",
+        "method": "signPsbt",
+        "params": {
+          "chainId": "bitcoin-testnet",
+          "psbtHex": "70736274ff",
+          "signingPaths": [
+            {
+              "inputIndex": 0,
+              "address": "tb1qexampleaddress"
+            }
+          ]
+        },
+        "return": "https://request.example/connect/return",
+        "exp": 1800000300000
+      }
+    }
+  },
+  "errors": [
+    "USER_REJECTED",
+    "NOT_CONNECTED",
+    "WALLET_LOCKED",
+    "CHAIN_NOT_SUPPORTED",
+    "ACCOUNT_NOT_AUTHORIZED",
+    "ADDRESS_NOT_AUTHORIZED",
+    "UNSUPPORTED_ACTION",
+    "INVALID_PARAMS",
+    "CHALLENGE_EXPIRED",
+    "BROADCAST_FAILED",
+    "PANIC_MODE",
+    "THROTTLED",
+    "BLOCKED_BY_USER",
+    "BRIDGE_VERSION_MISMATCH",
+    "BALANCES_UNAVAILABLE",
+    "INTERNAL_ERROR",
+    "REQUEST_EXPIRED",
+    "REQUEST_TOO_LARGE",
+    "RESULT_TOO_LARGE",
+    "NO_PENDING_REQUEST"
+  ]
+}
