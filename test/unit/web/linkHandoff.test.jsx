@@ -32,29 +32,28 @@ describe('<LinkHandoff>', () => {
         const payload = 'xchain:request?v=1&req=eyJ2IjoxfQ';
         renderPayload(payload);
 
-        expect(screen.getByRole('heading', { name: 'Open in the wallet' })).toBeInTheDocument();
-        expect(screen.getByText('This link asks you to review and approve a request from a site.', {
-            exact: false,
-        })).toBeInTheDocument();
-        expect(screen.getByLabelText('Wallet link')).toHaveTextContent(payload);
-        expect(screen.getByRole('link', { name: 'Open in the XChain Wallet app' }))
+        expect(screen.getByRole('heading', { name: 'Link actions' })).toBeInTheDocument();
+        expect(screen.getByText('Approval Request')).toBeInTheDocument();
+        expect(screen.getByLabelText('Link')).toHaveTextContent(payload);
+        expect(screen.getByRole('link', { name: 'Open on phone' }))
             .toHaveAttribute('href', payload);
-        expect(screen.getByRole('link', { name: 'Continue in the web wallet' }))
+        expect(screen.getByRole('link', { name: 'Open web wallet' }))
             .toHaveAttribute('href', `/?uri=${encodeURIComponent(payload)}`);
-        expect(screen.getByRole('link', { name: 'Get the app' }))
+        expect(screen.getByRole('link', { name: 'Download' }))
             .toHaveAttribute('href', GET_HREF);
+        expect(screen.getByText('Only approve it if you trust the source.')).toBeInTheDocument();
     });
 
     it.each([
-        ['xchain:BTC/send?amount=1', 'send', 'fills in a payment'],
-        ['xchain:BTC/receive', 'receive', 'opens a receiving address'],
-        ['xchain:BTC/execute?data=00', 'execute', 'fills in a contract call'],
-        ['xchain:BTC/swap', 'other', 'opens something in the wallet'],
+        ['xchain:BTC/send?amount=1', 'send', 'Send'],
+        ['xchain:BTC/receive', 'receive', 'Receive'],
+        ['xchain:BTC/execute?data=00', 'execute', 'Execute Contract'],
+        ['xchain:BTC/swap', 'other', 'Unrecognized link'],
     ])('renders the %s hand-off as %s', (payload, action, copy) => {
         const { container } = renderPayload(payload);
 
         expect(container.querySelector('section')).toHaveAttribute('data-link-action', action);
-        expect(screen.getByText(copy, { exact: false })).toBeInTheDocument();
+        expect(screen.getByText(copy)).toBeInTheDocument();
     });
 
     it.each([
@@ -76,7 +75,7 @@ describe('<LinkHandoff>', () => {
         const { container } = render(<LinkHandoff />);
 
         expect(container.querySelector('img')).toBeNull();
-        expect(screen.getByLabelText('Wallet link')).toHaveTextContent(payload);
+        expect(screen.getByLabelText('Link')).toHaveTextContent(payload);
         expect(window.location.href).toBe(before);
     });
 
@@ -84,6 +83,7 @@ describe('<LinkHandoff>', () => {
         const source = readFileSync(SOURCE_PATH, 'utf8');
 
         expect(source).not.toMatch(/requestLink\.js|xchainUri\.js/);
+        expect(source).not.toMatch(/addEnglish|linkHandoff\./);
         expect(source).not.toMatch(/location\.(?:assign|replace)|location\.href\s*=/);
         expect(source).toContain('linkHandoffModel(location.search)');
     });
