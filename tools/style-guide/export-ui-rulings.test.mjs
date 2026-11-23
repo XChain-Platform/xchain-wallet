@@ -46,7 +46,7 @@ test('exports every supported ruling shape and skips the Superseded table', () =
             topic: 'token-actions',
         },
         {
-            id: 'U46', kind: 'U', binding: false, supersededBy: null, scope: ['W', 'X', 'D', 'M'],
+            id: 'U101', kind: 'U', binding: false, supersededBy: null, scope: ['W', 'X', 'D', 'M'],
             text: 'When a notice lists more than one issue (the checks the network could not verify on Confirm, a form error summary, any list of problems), each issue is its own bullet in a bulleted list inside the notice, never stacked plain lines. Seen on the Confirm "Only partly checked" notice during a walk.',
             topic: 'notice-issues',
         },
