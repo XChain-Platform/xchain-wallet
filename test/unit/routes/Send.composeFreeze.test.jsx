@@ -115,6 +115,25 @@ afterEach(() => {
 });
 
 describe('Send: form while the request composes', () => {
+    it('refuses recipient edits, additions and Enter until the host answers', async () => {
+        const { messaging, release } = await startDelayedMultiSend();
+        const rowOne = screen.getByRole('button', { name: `Edit recipient 1: 4 PEPE to ${ALICE}` });
+
+        fireEvent.click(rowOne);
+        fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
+        expect(rowOne).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('group', { name: 'New recipient' })).toBeNull();
+        expect(screen.queryByTestId('send-multi-editor')).toBeNull();
+
+        // Enter is refused at the form, so no handler below it can commit a row.
+        const enterNotRefused = fireEvent.keyDown(rowOne, { key: 'Enter' });
+        expect(enterNotRefused).toBe(false);
+        expect(screen.getByTestId('send-multi-totals')).toHaveTextContent('Total: 9 PEPE');
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
+
+        await act(async () => { release(COMPOSED); });
+    });
+
     it('opens the review for the composed recipients and total', async () => {
         const { messaging, release } = await startDelayedMultiSend();
         await act(async () => { release(COMPOSED); });

@@ -2024,7 +2024,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: 'Balances could not be loaded. Check your connection and try again.',
+                    error: true,
                     sdkShape: null,
                 });
             });
@@ -4562,10 +4562,38 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                 ? { label: t('send.useMax'), onAction: onMax, icon: <Icon.MaxIcon /> }
                 : undefined}
-            onChangeCapture={() => {
+            onClickCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onChangeCapture={(event) => {
+                if (confirmBusy) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
                 if (submitError) setSubmitError(null);
                 if (submitFieldError) setSubmitFieldError(null);
             }}
+            onDropCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onPasteCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onKeyDownCapture={(event) => {
+                // Enter inside a recipient editor commits a row without a click,
+                // so it needs its own refusal while the request is composing.
+                if (!confirmBusy || event.key !== 'Enter') return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            aria-busy={confirmAction.composing || undefined}
             /*
               * State the signing freeze at the TOP of the form, so a duress observer
               * never watches a transaction get composed first. Duress-armed freezes
@@ -4833,7 +4861,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     previewBalances.loading
                         ? ((balanceGateWaived || balanceGateSettledRef.current) ? t('send.balance.unknown') : t('common.loading'))
                         : previewBalances.error
-                            ? t('send.balance.unavailable', { error: previewBalances.error })
+                            ? t('send.balance.unknown')
                             : networkOffline && !isDemo && !previewBalances.sdkShape
                                 ? t('send.balance.unknown')
                                 : sourceHalfUnavailable

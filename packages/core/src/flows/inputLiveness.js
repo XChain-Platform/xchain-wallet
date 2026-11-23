@@ -115,6 +115,14 @@ export const INPUTS_ALREADY_SPENT_NAME = 'InputsAlreadySpentError';
  */
 export const NAME_SALE_IN_FLIGHT_NAME = 'NameSaleInFlightError';
 
+/** Error name for an action refused because the pending-send queue is unreadable. */
+export const BROADCAST_QUEUE_UNAVAILABLE_NAME = 'BroadcastQueueUnavailableError';
+
+/** User-facing sentence for an action refused until the pending-send queue loads. */
+export function broadcastQueueUnavailableMessage() {
+    return t('flows.broadcastQueue.unavailable');
+}
+
 /**
  * The sentence for a sale refused because the name is already listed from this wallet.
  *

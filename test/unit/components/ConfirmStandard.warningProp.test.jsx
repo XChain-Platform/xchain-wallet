@@ -70,10 +70,11 @@ describe('ConfirmStandard warning prop', () => {
 
         const modal = screen.getByTestId('confirm-modal');
         expect(modal.firstElementChild).toBe(screen.getByTestId('confirm-status-slot'));
-        expect(screen.getByTestId('confirm-status').textContent).toContain('The recipient is invalid.');
+        expect(screen.getByTestId('confirm-status').textContent).toContain('The checks found a problem with this action.');
+        expect(screen.getByTestId('confirm-status').textContent).not.toContain('The recipient is invalid.');
         expect(screen.getByTestId('send-unusual-warnings').closest('[data-testid="confirm-warning"]'))
             .toBe(screen.getByTestId('confirm-warning'));
-        expect(screen.getAllByText('The recipient is invalid.')).toHaveLength(1);
+        expect(screen.getAllByText('The checks found a problem with this action.')).toHaveLength(1);
         expect(screen.getAllByText('The fee is unusually high.')).toHaveLength(1);
         // The decision footer holds only the two buttons.
         expect([...screen.getByTestId('confirm-decision').children]).toEqual([screen.getByTestId('confirm-buttons')]);

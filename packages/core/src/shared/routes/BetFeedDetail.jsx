@@ -473,6 +473,14 @@ export function BetFeedDetail({
             .catch(() => { /* Max stays disabled when this address's balance cannot be read. */ });
         return () => { cancelled = true; };
     }, [chainId, feed?.tick, fromAddress?.address, messaging]);
+    const stakeDivisibility = stakeTokenInfo?.divisibility ?? stakeBalanceDivisibility;
+    const rawProjectionDecimals = typeof stakeDivisibility === 'string'
+        ? stakeDivisibility.trim() : stakeDivisibility;
+    const numericProjectionDecimals = rawProjectionDecimals === ''
+        || rawProjectionDecimals === null || rawProjectionDecimals === undefined
+        ? null : Number(rawProjectionDecimals);
+    const projectionDecimals = Number.isSafeInteger(numericProjectionDecimals)
+        && numericProjectionDecimals >= 0 ? numericProjectionDecimals : null;
     const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -529,8 +537,8 @@ export function BetFeedDetail({
     const outcomeLabels = useMemo(() => outcomeLabelsOf(feed), [feed]);
 
     // Projected payout comes from the SDK's own settlement-order math over the
-    // host, never a local approximation: a projection that disagrees with the
-    // settled amount in the last decimal place reads to a user as a bug.
+    // host, never a local approximation. It waits for the wager token's actual
+    // precision because the SDK fallback would mis-round other token formats.
     //
     // Failures stay silent on purpose: a stake half-typed ("0.", "") is not an
     // error the user needs told about, it just has no projection yet.
@@ -538,6 +546,7 @@ export function BetFeedDetail({
         let cancelled = false;
         setProjected(null);
         if (!feed || outcome === null || betAmountError(amount, feed.min_amount)) return undefined;
+        if (projectionDecimals === null) return undefined;
         if (typeof messaging.betProjectPayout !== 'function') return undefined;
         messaging.betProjectPayout({
             chainId,
@@ -546,11 +555,12 @@ export function BetFeedDetail({
             outcome,
             stake: amount,
             feePct: feed.fee || 0,
+            decimals: projectionDecimals,
         })
             .then((v) => { if (!cancelled) setProjected(v && typeof v === 'object' ? v : null); })
             .catch(() => { if (!cancelled) setProjected(null); });
         return () => { cancelled = true; };
-    }, [feed, outcome, amount, chainId, messaging, outcomeLabels]);
+    }, [feed, outcome, amount, chainId, messaging, outcomeLabels, projectionDecimals]);
 
     // The UI-level params, derived in ONE place so the object handed to compose is
     // byte-for-byte the object handed to submit. Two derivations could diverge and
@@ -989,7 +999,6 @@ export function BetFeedDetail({
 
     // 25, 50 and 75 percent of the source address's stake balance,
     // rounded down to the token's decimals; Max is the whole balance.
-    const stakeDivisibility = stakeTokenInfo?.divisibility ?? stakeBalanceDivisibility;
     const portionOf = (percent) => {
         if (stakeBalance === null) return null;
         if (percent === 100) return stakeBalance;

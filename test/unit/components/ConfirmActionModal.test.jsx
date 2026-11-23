@@ -753,14 +753,13 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-reject')).toBeDisabled();
     });
 
-    it('a non-overridable error sends nothing on Approve, says why at the top, and offers no ack checkbox', () => {
+    it('a non-overridable error disables Approve and offers no ack checkbox', () => {
         const onApprove = vi.fn();
         render(<ConfirmActionModal {...base({ report: REPORT_HARD_FAIL, canApprove: false, onApprove })} />);
-        // G130: Approve keeps its colour and answers the tap instead.
-        expect(screen.getByTestId('confirm-approve').disabled).toBe(false);
+        expect(screen.getByTestId('confirm-approve').disabled).toBe(true);
         fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(onApprove).not.toHaveBeenCalled();
-        expect(screen.getByTestId('confirm-blocked')).toHaveTextContent("This will fail, so Approve won't send it.");
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
         expect(screen.queryByTestId('ack-DEST_ADDRESS_INVALID')).toBeNull();
     });
 
@@ -930,6 +929,7 @@ describe('ConfirmActionModal', () => {
         const notice = screen.getByTestId('confirm-status');
         expect(notice.getAttribute('role')).toBe('alert');
         expect(notice.getAttribute('aria-live')).toBe('assertive');
-        expect(notice).toHaveTextContent('bad address');
+        expect(notice).toHaveTextContent('The checks found a problem with this action.');
+        expect(notice).not.toHaveTextContent('bad address');
     });
 });

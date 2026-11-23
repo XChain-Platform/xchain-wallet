@@ -31,8 +31,8 @@ import {
     networkApprovalIsPartial,
     preflightCheckState,
 } from './preflightCheckState.js';
-import { consensusRefusalMessage, isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
-import { unverifiedText, warningText } from './preflightFindingCopy.js';
+import { isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
+import { errorText, unverifiedText, warningText } from './preflightFindingCopy.js';
 import { formatDisplayAmount, sumDecimalStrings } from './amountFormat.js';
 import { neutralizeControlText } from './textHardening.js';
 import { t } from '../../i18n/index.js';
@@ -48,6 +48,13 @@ const DRYRUN_ORACLE_FEES_OWED = 'DRYRUN_ORACLE_FEES_OWED';
 function warningPoint(f, key) {
     const { headline, detail } = warningText(f);
     return { key, text: headline, detail: detail || null };
+}
+
+function failurePoints(errors) {
+    return errors.map((f, index) => {
+        const { headline } = errorText(f);
+        return { key: `fail-${index}`, text: headline };
+    });
 }
 
 /** No network verdict: true whether it was unreachable or declined, with its reason beneath. */
@@ -783,27 +790,24 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
     if (state === S.FAIL) {
         title = t('confirmStandard.warning.fail');
         const errors = findings.filter((f) => f?.severity === 'error');
-        const reasons = [...new Set(errors
-            .map((f) => consensusRefusalMessage(f) || String(f?.message || '').trim())
-            .filter(Boolean))];
-        reasons.forEach((text, i) => points.push({ key: `fail-${i}`, text }));
-        if (reasons.length === 0) points.push({ key: 'fail-unexplained', text: t('confirmStandard.warning.failUnexplained') });
+        const failures = failurePoints(errors);
+        points.push(...failures);
+        if (failures.length === 0) points.push({ key: 'fail-unexplained', text: t('confirmStandard.warning.failUnexplained') });
         // A warning or an unanswered network check beside the failure is
         // still said, in the same notice.
         findings.filter((f) => f?.severity === 'warning').forEach((f, i) => points.push(warningPoint(f, `fail-warn-${i}`)));
         if (unavailable) points.push(unreachedPoint(unavailable, 'fail-unreached'));
-        for (const f of errors) {
-            if (approveGated && f?.overridable && !isHardPreflightFinding(f)) overrides.push(f);
-        }
-        const hard = errors.length === 0 || errors.some((f) => !(f?.overridable && !isHardPreflightFinding(f)));
+        const allOverridable = errors.length > 0
+            && errors.every((f) => f?.overridable && !isHardPreflightFinding(f));
+        if (approveGated && allOverridable) overrides.push(...errors);
         // Said only while the check really holds Approve: a caller's PSBT is
         // report-only (§5.5), and ticking every Sign anyway box releases it.
         const allTicked = overrides.length > 0
             && overrides.every((f) => acknowledged?.has?.(preflightFindingKey(f)));
-        if (approveGated && (hard || !allTicked)) {
+        if (approveGated && allOverridable && !allTicked) {
             points.push({
                 key: 'fail-approve',
-                text: hard ? t('confirmStandard.warning.approveOff') : t('confirmStandard.warning.signAnyway'),
+                text: t('confirmStandard.warning.signAnyway'),
                 // What Approve does about the failure, not one more reason.
                 place: 'after',
             });

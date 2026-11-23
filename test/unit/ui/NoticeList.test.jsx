@@ -43,6 +43,11 @@ describe('NoticeList', () => {
         expect(screen.getByText('Only problem')).toBeInTheDocument();
     });
 
+    it('can keep a single issue in a bulleted list when the notice requires one', () => {
+        render(<Notice tone="danger" title="One problem"><NoticeList items={items('Only problem')} forceList /></Notice>);
+        expect(within(screen.getByRole('list')).getByRole('listitem')).toHaveTextContent('Only problem');
+    });
+
     it('renders nothing for no issues, and skips empty entries', () => {
         const { container } = render(<NoticeList items={[]} />);
         expect(container.innerHTML).toBe('');

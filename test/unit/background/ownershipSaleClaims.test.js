@@ -25,6 +25,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { OWN_SPEND_HOLD_MS } from '../../../packages/extension/src/background/ownSpends.js';
+import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
 import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 import { BroadcastFailedError } from '../../../packages/core/src/sdk/submitWithSigner.js';
 import { RevealInputsRefusedError } from '../../../packages/core/src/sdk/p2shRevealInputs.js';
@@ -36,9 +37,10 @@ const PSBT_INPUTS = {
     'psbt-d': [{ prevTxHash: 'dd'.repeat(32), prevTxIndex: 2 }],
 };
 
-function makeHost() {
+function makeHost(broadcastQueueStorage = null, broadcastQueueStore = undefined) {
     return createBackgroundHost({
-        broadcastQueueStorage: null,
+        broadcastQueueStorage,
+        ...(broadcastQueueStore ? { broadcastQueueStore } : {}),
         signThrottleStorage: null,
         logConsoleStorage: null,
         approvals: { request: async () => ({ approved: true }) },
@@ -85,6 +87,51 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.restoreAllMocks();
+});
+
+describe('spend claims require a complete queue inventory', () => {
+    it.each([
+        ['rejects', async () => { throw new Error('read refused'); }],
+        ['returns no snapshot', async () => null],
+    ])('fails closed when queue storage %s', async (_label, load) => {
+        const host = makeHost({
+            load: vi.fn(load),
+            loadSettlements: vi.fn(async () => []),
+            save: vi.fn(async () => {}),
+            saveSettlements: vi.fn(async () => {}),
+        });
+
+        const coins = await host.handle(request('action.order', 'psbt-a', TOKEN_ORDER));
+        const name = await host.handle(request('action.order', 'psbt-c', SALE));
+
+        expect(coins.error?.name).toBe('BroadcastQueueUnavailableError');
+        expect(name.error?.name).toBe('BroadcastQueueUnavailableError');
+        expect(submitFailureMessage(coins.error, { fallback: 'x' })).toBe(
+            "Couldn't check pending sends. Nothing was signed. Try again.",
+        );
+        expect(orderActionMock).not.toHaveBeenCalled();
+    });
+
+    it('fails closed while the store is fenced after a lease release', async () => {
+        // A released lease fences the store before another tab takes the key,
+        // and the store reads nothing until the next lease reloads it. Its map
+        // is not the whole queue then, and another tab may be spending these coins.
+        const storage = {
+            load: vi.fn(async () => ({})),
+            loadSettlements: vi.fn(async () => []),
+            save: vi.fn(async () => {}),
+            saveSettlements: vi.fn(async () => {}),
+        };
+        const store = createBroadcastQueueStore({ storage });
+        store.dormant = true;
+        const host = makeHost(storage, store);
+
+        const coins = await host.handle(request('action.order', 'psbt-a', TOKEN_ORDER));
+
+        expect(coins.error?.name).toBe('BroadcastQueueUnavailableError');
+        expect(storage.load).not.toHaveBeenCalled();
+        expect(orderActionMock).not.toHaveBeenCalled();
+    });
 });
 
 describe('orders and sales claim what they spend', () => {

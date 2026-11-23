@@ -405,11 +405,10 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
         fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         expect(await screen.findByText(/The network would refuse this action/)).toBeInTheDocument();
-        // G130: Approve keeps its colour; the tap says why at the top.
         const approve = screen.getByTestId('confirm-approve');
-        expect(approve).toBeEnabled();
+        expect(approve).toBeDisabled();
         fireEvent.click(approve);
-        expect(screen.getByTestId('confirm-blocked')).toBeInTheDocument();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
         expect(screen.queryByText(/Buy submitted/)).toBeNull();

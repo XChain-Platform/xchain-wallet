@@ -149,15 +149,15 @@ describe('confirm screen pre-flight invalid notice', () => {
         const status = screen.getByTestId('confirm-status');
         expect(status.getAttribute('data-state')).toBe('fail');
         expect(status.textContent).toContain('This will fail');
-        expect(status.textContent).toContain('The new owner is not a valid address.');
-        expect(status.textContent).toContain("Approve won't send this while it fails.");
+        expect(status.textContent).toContain('The checks found a problem with this action.');
+        expect(status.textContent).not.toContain('The new owner is not a valid address.');
+        expect(status.textContent).not.toContain("Approve won't send this while it fails.");
         expect(screen.getByTestId('confirm-warning').textContent).toContain('The new owner controls this list from this block on.');
-        // G130: Approve keeps its colour; a tap says why at the top.
         const approve = screen.getByTestId('confirm-approve');
-        expect(approve).not.toBeDisabled();
+        expect(approve).toBeDisabled();
         fireEvent.click(approve);
-        expect(screen.getByTestId('confirm-blocked').textContent).toBe("This will fail, so Approve won't send it.");
-        expect(screen.getAllByText('The new owner is not a valid address.')).toHaveLength(1);
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
+        expect(screen.getAllByText('The checks found a problem with this action.')).toHaveLength(1);
     });
 
     it('keeps the deliberate Sign anyway override and says Approve waits for it', () => {
@@ -167,9 +167,10 @@ describe('confirm screen pre-flight invalid notice', () => {
         }));
         expect(screen.getByTestId('confirm-status').textContent)
             .toContain('Tick Sign anyway to approve it.');
-        expect(screen.getByTestId('confirm-approve')).not.toBeDisabled();
+        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
         expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
-        expect(screen.getAllByText('The network expects this to fail.')).toHaveLength(1);
+        expect(screen.getAllByText('The checks found a problem with this action.')).toHaveLength(1);
+        expect(screen.queryByText('The network expects this to fail.')).toBeNull();
     });
 
     it('drops the Approve line once the override is ticked', () => {

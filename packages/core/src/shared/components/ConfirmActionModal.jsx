@@ -21,10 +21,9 @@
 // back/reject; the header back arrow rejects the request. Both exits stay
 // reachable however long the intent is (§5.2.7 - a safety property, not
 // cosmetic). Once a signature exists both exits lock until a terminal state.
-// Approve never looks disabled (G130): it goes busy synchronously in the
-// click handler's tick, before any await, and a tap that cannot go ahead yet
-// (no password, a failing check, a refusal) sends nothing and says why at the
-// top of the page (G129).
+// Approve goes busy synchronously in the click handler's tick, before any
+// await. A blocking pre-flight finding disables it; other incomplete steps
+// answer a tap with the reason at the top of the page (G129).
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import { Notice, NoticeList, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
@@ -803,13 +802,14 @@ export function ConfirmActionModal({
         ],
         testId: warningTestId,
     });
-    // Reject and Approve, docked. Approve is busy while a request is in
-    // flight and otherwise always live (G130).
+    // Reject and Approve, docked. A failed gated pre-flight holds Approve
+    // until every permitted override is acknowledged.
     const footer = (
         <ConfirmDecisionFooter
             onReject={handleReject}
             onApprove={handleApprove}
             rejectDisabled={exitsLocked}
+            approveDisabled={variant === 'action' && status?.state === 'fail' && !canApprove}
             approveLoading={approveInFlight || signaturePhase}
         />
     );

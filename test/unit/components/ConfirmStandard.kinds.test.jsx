@@ -6,11 +6,13 @@
 // first (green only on the indexer's own approval), one hero icon, the address
 // once, one facts card holding the network, the signing wallet and every fee
 // row, no Total block, the short warning after the details, and Reject and
-// Approve docked, never disabled (G130).
+// Approve docked, disabled only while a pre-flight finding blocks.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import { ActionWarningsCard, ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
+import confirmStyles from '../../../packages/core/src/shared/components/ConfirmStandard.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     CONFIRM_KINDS,
     confirmHeadline,
@@ -175,7 +177,7 @@ function expectStandard(container) {
     expect(buttons).toHaveLength(2);
     expect(buttons[0].getAttribute('data-testid')).toBe('confirm-reject');
     expect(buttons[1].getAttribute('data-testid')).toBe('confirm-approve');
-    // Approve never looks or acts disabled while the page is ready (G130).
+    // A ready confirmation with no blocking finding keeps Approve enabled.
     expect(buttons[1].disabled).toBe(false);
 }
 
@@ -386,7 +388,8 @@ describe('Confirm Standard, every mapped kind', () => {
         // The decoded rows are the panel's, not repeated in the facts card.
         expect(container.querySelector('[data-testid="confirm-facts"]')?.textContent || '').not.toContain('Token');
         const notice = container.querySelector('[data-testid="confirm-status"]');
-        expect(notice.textContent).toContain('You hold 200 XYZ');
+        expect(notice.textContent).toContain('The checks found a problem with this action.');
+        expect(notice.textContent).not.toContain('You hold 200 XYZ');
         expect(notice.textContent).not.toMatch(/Approve won't|Sign anyway/);
         expect(container.querySelector('[data-testid="confirm-approve"]').disabled).toBe(false);
     });
@@ -612,32 +615,80 @@ describe('Confirm Standard, list transfer', () => {
 });
 
 describe('Confirm Standard status notice and short warning', () => {
-    it('a failed check says why in one alert at the top; Approve stays live and a tap sends nothing', () => {
-        const onApprove = vi.fn();
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('order', { report: FAIL, canApprove: false, onApprove })} />);
+    it('renders two blocking findings as two bullets and disables Approve without the removed sentence', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'FUTURE_ERROR_A', severity: 'error', overridable: false, message: 'First SDK diagnostic.' },
+                { code: 'FUTURE_ERROR_B', severity: 'error', overridable: false, message: 'Second SDK diagnostic.' },
+            ],
+            unverified: [],
+        };
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false })} />);
         const notice = getByTestId('confirm-status');
         expect(notice.getAttribute('role')).toBe('alert');
         expect(notice.textContent).toContain('This will fail');
-        expect(notice.textContent).toContain('You hold 200 XYZ');
+        const bullets = [...notice.querySelectorAll('[data-notice-list] > li')];
+        expect(bullets).toHaveLength(2);
+        expect(bullets.map((bullet) => bullet.textContent)).toEqual([
+            'The checks found a problem with this action.',
+            'The checks found a problem with this action.',
+        ]);
+        expect(bullets.every((bullet) => bullet.textContent.length < 60)).toBe(true);
+        expect(bullets.every((bullet) => /^[^.!?]+[.!?]$/.test(bullet.textContent))).toBe(true);
+        expect(bullets.every((bullet) => bullet.querySelector(`.${confirmStyles.pointDetail}`) === null)).toBe(true);
+        expect(notice.textContent).not.toContain('SDK diagnostic');
+        expect(notice.textContent).not.toContain("Approve won't send this while it fails.");
         expect(container.querySelector('[data-testid="confirm-modal"]').firstElementChild)
             .toBe(getByTestId('confirm-status-slot'));
-        const approve = getByTestId('confirm-approve');
-        expect(approve.disabled).toBe(false);
-        fireEvent.click(approve);
-        expect(onApprove).not.toHaveBeenCalled();
-        expect(getByTestId('confirm-blocked').textContent).toBe("This will fail, so Approve won't send it.");
+        expect(getByTestId('confirm-approve')).toBeDisabled();
+        expect(getByTestId('confirm-approve')).toHaveClass(buttonStyles.btn, confirmStyles.disabled);
     });
 
-    it('an overridable failure carries its Sign anyway box in the status notice', () => {
-        const report = { verdict: 'fail', findings: [{ code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' }], unverified: [] };
+    it('all-overridable findings keep Sign anyway and release Approve only after every acknowledgement', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' },
+                { code: 'DRYRUN_SECOND', severity: 'error', overridable: true, message: 'network also says no' },
+            ],
+            unverified: [],
+        };
         const toggled = [];
-        const { getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false, onAcknowledge: (k) => toggled.push(k) })} />);
+        const base = props('order', { report, canApprove: false, onAcknowledge: (k) => toggled.push(k) });
+        const { getAllByRole, getByTestId, rerender } = render(<ConfirmActionModal {...base} />);
+        expect(getAllByRole('checkbox', { name: 'Sign anyway' })).toHaveLength(2);
+        expect(getByTestId('confirm-approve').disabled).toBe(true);
         const box = getByTestId('confirm-status').querySelector('[data-testid="ack-DRYRUN_INVALID"] input, input[data-testid="ack-DRYRUN_INVALID"]')
             || getByTestId('ack-DRYRUN_INVALID');
         fireEvent.click(box);
         expect(toggled).toEqual(['DRYRUN_INVALID']);
-        fireEvent.click(getByTestId('confirm-approve'));
-        expect(getByTestId('confirm-blocked').textContent).toBe('Tick Sign anyway at the top to approve it.');
+        rerender(<ConfirmActionModal
+            {...base}
+            acknowledged={new Set(['DRYRUN_INVALID', 'DRYRUN_SECOND'])}
+            canApprove
+        />);
+        expect(getByTestId('confirm-approve').disabled).toBe(false);
+    });
+
+    it('hides Sign anyway when any error finding is not overridable', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' },
+                { code: 'HARD_FAILURE', severity: 'error', overridable: false, message: 'hard stop' },
+            ],
+            unverified: [],
+        };
+        const { queryByRole, getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false })} />);
+        expect(queryByRole('checkbox', { name: 'Sign anyway' })).toBeNull();
+        expect(getByTestId('confirm-approve').disabled).toBe(true);
+    });
+
+    it('leaves Approve enabled when the report has no findings', () => {
+        const report = { verdict: 'pass', findings: [], unverified: [] };
+        const { getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: true })} />);
+        expect(getByTestId('confirm-approve').disabled).toBe(false);
     });
 
     it('an approved mint whose only gap is checked at settlement shows one blue note', () => {
@@ -676,6 +727,18 @@ describe('Confirm Standard status notice and short warning', () => {
         expect(status.tone).toBe('danger');
         expect(status.state).toBe('partial');
         expect(status.points.map((p) => p.key)).toContain('oracle-owed');
+    });
+
+    it('keeps each failure as one short sentence without its SDK detail', () => {
+        const findings = ['first internal diagnostic', 'second internal diagnostic'].map((message) => ({
+            code: 'FUTURE_ERROR', severity: 'error', source: 'client', message, data: {},
+        }));
+        const status = confirmStatus({ report: { ...PASS, verdict: 'fail', findings } });
+        const failures = status.points.filter((point) => point.key.startsWith('fail-'));
+        expect(failures).toHaveLength(2);
+        expect(failures.every((point) => point.detail == null)).toBe(true);
+        expect(failures.every((point) => point.text === 'The checks found a problem with this action.')).toBe(true);
+        expect(failures.every((point) => point.text.length < 60)).toBe(true);
     });
 
     it('a partly checked batch and a warning verdict each show one red status', () => {
@@ -740,7 +803,7 @@ describe('Confirm Standard status notice and short warning', () => {
     });
 });
 
-describe('Confirm Standard Approve never looks disabled (G130)', () => {
+describe('Confirm Standard Approve gating', () => {
     it('never shows the green status on a PSBT that carries no XChain action', () => {
         // An ordinary payment PSBT has no chain state to check; even a pass
         // report must not claim it "will go through".

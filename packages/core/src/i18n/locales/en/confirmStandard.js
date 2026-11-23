@@ -68,7 +68,6 @@ const messages = {
     'confirmStandard.status.unknownActionBody': "This wallet can't explain what this action does. Only approve it if you trust where it came from.",
     'confirmStandard.warning.fail': 'This will fail',
     'confirmStandard.warning.failUnexplained': 'The network check gave no reason.',
-    'confirmStandard.warning.approveOff': "Approve won't send this while it fails.",
     'confirmStandard.warning.signAnyway': 'Tick Sign anyway to approve it.',
     'confirmStandard.warning.warn': 'Check this before you approve',
     'confirmStandard.warning.partial': 'Only partly checked',
@@ -86,8 +85,8 @@ const messages = {
     'confirmStandard.warning.unreached': 'A network verdict was not reached, so only local checks ran.',
     'confirmStandard.warning.oracleFeesOwed': "This batch owes oracle usage fees the check can't confirm are covered. Check each amount owed before you approve.",
 
-    // Approve never looks disabled (G130): a tap that cannot go ahead yet
-    // says why at the top of the page (G129) and sends nothing.
+    // A blocking pre-flight finding disables Approve. Other incomplete steps
+    // say why at the top of the page (G129) after a tap and send nothing.
     'confirmStandard.blocked.password': 'Enter your password to approve.',
     'confirmStandard.blocked.passwordField': 'Enter your password.',
     'confirmStandard.blocked.device': 'Connect and unlock your device to approve.',

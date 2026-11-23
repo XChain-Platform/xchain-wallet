@@ -32,11 +32,12 @@ import styles from './NoticeList.module.css';
  * @param {ReadonlyArray<NoticeListItem>} props.items
  * @param {string} [props.label]   accessible name of the list (several items only)
  * @param {string} [props.testId]  data-testid on the list or the single line
+ * @param {boolean} [props.forceList] render one item as a bullet when the notice requires a list
  */
-export function NoticeList({ items, label, testId }) {
+export function NoticeList({ items, label, testId, forceList = false }) {
     const shown = (items || []).filter((item) => item && item.content !== null && item.content !== undefined && item.content !== false && item.content !== '');
     if (shown.length === 0) return null;
-    if (shown.length === 1) {
+    if (shown.length === 1 && !forceList) {
         const [only] = shown;
         // A block, not a paragraph: an issue may hold a block of its own (a
         // diagnostic that links to its code line).

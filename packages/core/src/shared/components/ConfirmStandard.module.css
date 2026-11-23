@@ -219,6 +219,15 @@
     min-width: 0;
 }
 
+/* A failed pre-flight cannot be corrected on the confirm page, so its
+   disabled Approve uses the shared control-disabled palette. */
+.button.disabled {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    cursor: not-allowed;
+}
+
 /* The docked footer that holds Reject and Approve pads 8px all round (left,
    right, top and bottom) in place of Screen's 12px block padding and page
    gutter, its short-landscape rule included; the bottom still pays the home

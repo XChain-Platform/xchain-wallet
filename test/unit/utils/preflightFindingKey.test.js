@@ -19,7 +19,9 @@ describe('consensusRefusalMessage', () => {
         const raw = 'invalid: trailing data after batch signatures';
         const finding = refusal(raw);
         expect(consensusRefusalMessage(finding))
-            .toBe('This price batch would be refused because it contains extra data after its signatures.');
+            .toBe('The price batch has extra data after its signatures.');
+        expect(consensusRefusalMessage(finding).length).toBeLessThan(60);
+        expect(consensusRefusalMessage(finding)).toMatch(/^[^.!?]+[.!?]$/);
         expect(consensusRefusalMessage(finding)).not.toContain('trailing data');
     });
 

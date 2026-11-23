@@ -30,7 +30,8 @@
 
 import { AddressText, Button, Checkbox, Icon, Notice, NoticeList } from '@xchain-wallet/core/ui';
 import factStyles from '../routes/FactRows.module.css';
-import { preflightFindingKey, consensusRefusalMessage } from '../utils/preflightFindingKey.js';
+import { preflightFindingKey } from '../utils/preflightFindingKey.js';
+import { errorText } from '../utils/preflightFindingCopy.js';
 import { unknownActionStatus, withAddressFact, withNetworkFact } from '../utils/confirmStandardModel.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import styles from './ConfirmStandard.module.css';
@@ -158,9 +159,9 @@ function pointContent(point) {
  * (U101), a single issue as a plain line, with a `lead` sentence above them
  * and an `after` line under them kept plain.
  *
- * @param {{ points: Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>, testId?: string }} props
+ * @param {{ points: Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>, testId?: string, bulleted?: boolean }} props
  */
-function Points({ points, testId }) {
+function Points({ points, testId, bulleted = false }) {
     if (points.length === 0 && !testId) return null;
     const line = (point) => (
         <p key={point.key} data-testid="confirm-warning-point">{pointContent(point)}</p>
@@ -170,6 +171,7 @@ function Points({ points, testId }) {
         <div className={styles.points} data-testid={testId || undefined}>
             {points.filter((point) => point.place === 'lead').map(line)}
             <NoticeList
+                forceList={bulleted}
                 items={issues.map((point) => ({
                     key: point.key,
                     content: pointContent(point),
@@ -213,7 +215,7 @@ export function ConfirmStatusNotice({ status, acknowledged, onAcknowledge, statu
                 testId="confirm-status"
                 data-state={status.state}
             >
-                {status.points.length > 0 ? <Points points={status.points} /> : null}
+                {status.points.length > 0 ? <Points points={status.points} bulleted={status.state === 'fail'} /> : null}
                 {status.overrides.map((finding, index) => {
                     const key = preflightFindingKey(finding);
                     return (
@@ -221,7 +223,7 @@ export function ConfirmStatusNotice({ status, acknowledged, onAcknowledge, statu
                             key={`${key}-${index}`}
                             label={t('components.preflightPanel.signAnyway')}
                             help={status.overrides.length > 1
-                                ? (consensusRefusalMessage(finding) || finding.message)
+                                ? errorText(finding).headline
                                 : t('components.preflightPanel.signAnywayHelp')}
                             checked={Boolean(acknowledged?.has(key))}
                             onChange={() => onAcknowledge?.(key)}
@@ -259,20 +261,21 @@ export function ConfirmWarningSlot({ warning }) {
 
 /**
  * Reject (red, thumbs down) and Approve (green, thumbs up), each half the
- * width and 8px apart, at every width. Approve never looks disabled (G130):
- * while a request is in flight it shows its spinner and ignores repeat taps,
- * and a tap that cannot go ahead yet is answered by the caller with the
- * reason at the top of the page.
+ * width and 8px apart, at every width. A blocking pre-flight finding disables
+ * Approve; other incomplete steps continue to answer a tap with their reason.
  *
  * @param {{
  *   onReject: (e?: any) => void,
  *   onApprove: (e?: any) => void,
  *   rejectDisabled?: boolean,     both exits lock while a signature is in flight
+ *   approveDisabled?: boolean,    a blocking pre-flight finding holds approval
  *   approveLoading?: boolean,
  *   approveLabel?: string,
  * }} props
  */
-export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel }) {
+export function ConfirmButtons({
+    onReject, onApprove, rejectDisabled = false, approveDisabled = false, approveLoading = false, approveLabel,
+}) {
     const approve = approveLabel || t('extension.connect.approve');
     return (
         <div className={styles.buttons} data-testid="confirm-buttons">
@@ -288,9 +291,10 @@ export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, ap
             </Button>
             <Button
                 variant="success"
-                className={styles.button}
+                className={[styles.button, approveDisabled ? styles.disabled : null].filter(Boolean).join(' ')}
                 icon={<Icon.ThumbsUpIcon />}
                 onClick={onApprove}
+                disabled={approveDisabled}
                 loading={approveLoading}
                 data-testid="confirm-approve"
                 aria-label={approve}
@@ -309,7 +313,7 @@ export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, ap
  * window's footer included, since that one holds ConfirmButtons too.
  */
 export function ConfirmDecisionFooter({
-    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel,
+    onReject, onApprove, rejectDisabled = false, approveDisabled = false, approveLoading = false, approveLabel,
 }) {
     return (
         <div className={styles.decision} data-testid="confirm-decision">
@@ -317,6 +321,7 @@ export function ConfirmDecisionFooter({
                 onReject={onReject}
                 onApprove={onApprove}
                 rejectDisabled={rejectDisabled}
+                approveDisabled={approveDisabled}
                 approveLoading={approveLoading}
                 approveLabel={approveLabel}
             />

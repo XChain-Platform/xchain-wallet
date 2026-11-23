@@ -277,12 +277,10 @@ describe('SignApproval signPsbt intent', () => {
 
         expect(await screen.findByText('The action would exceed the available balance.'))
             .toBeTruthy();
-        // G130: Approve keeps its colour; the tap says why at the top and
-        // resolves nothing.
         const approve = screen.getByRole('button', { name: /Approve/i });
-        expect(approve.disabled).toBe(false);
+        expect(approve.disabled).toBe(true);
         fireEvent.click(approve);
-        expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
 

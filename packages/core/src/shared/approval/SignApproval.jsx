@@ -882,9 +882,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
-    // Why Approve cannot go ahead yet, or null. Approve never looks disabled
-    // (G130): the tap says why at the top of the window (G129) and sends
-    // nothing; a missing password also marks the password field.
+    // Why Approve cannot go ahead yet, or null. A blocking pre-flight finding
+    // disables Approve; other incomplete steps say why at the top of the
+    // window (G129), and a missing password also marks the password field.
     function approveBlockReason() {
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
@@ -1200,6 +1200,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             onReject={onReject}
                             onApprove={handleApprove}
                             rejectDisabled={busy}
+                            approveDisabled={confirmationStatus?.state === 'fail' && preflightBlocked}
                             approveLoading={busy}
                             approveLabel={approveLabel}
                         />

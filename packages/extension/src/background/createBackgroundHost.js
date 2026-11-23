@@ -1800,10 +1800,23 @@ export function createBackgroundHost(deps) {
     // The coins waiting in either the live queue or durable queued records, for
     // every wallet. `exceptTxid` leaves out the queued copy of the transaction
     // being sent.
-    async function queuedOutpoints(chainId, exceptTxid = '') {
+    // The live queue as a complete inventory. A read that failed, or a tab
+    // without the writer lease, leaves `loaded` false and the map partial, so a
+    // claim checked against it could reuse coins or a name already committed.
+    async function loadedQueueInventory() {
         await ensureQueueLoaded();
+        if (!queueStore.loaded) {
+            throw Object.assign(new Error(flows.broadcastQueueUnavailableMessage()), {
+                name: flows.BROADCAST_QUEUE_UNAVAILABLE_NAME,
+            });
+        }
+        return queueStore.queues;
+    }
+
+    async function queuedOutpoints(chainId, exceptTxid = '') {
+        const queues = await loadedQueueInventory();
         const except = String(exceptTxid || '').toLowerCase();
-        const live = [...queueStore.queues.values()]
+        const live = [...queues.values()]
             .flatMap((entries) => (Array.isArray(entries) ? entries : []))
             .filter((entry) => entry?.chainId === chainId)
             .filter((entry) => !except || txidOfRaw(entry?.signedTxHex) !== except)
@@ -1816,8 +1829,8 @@ export function createBackgroundHost(deps) {
     }
 
     async function queuedNames(chainId) {
-        await ensureQueueLoaded();
-        const live = [...queueStore.queues.values()]
+        const queues = await loadedQueueInventory();
+        const live = [...queues.values()]
             .flatMap((entries) => (Array.isArray(entries) ? entries : []))
             .filter((entry) => entry?.chainId === chainId)
             .flatMap((entry) => (Array.isArray(entry?.soldNames) ? entry.soldNames : []));

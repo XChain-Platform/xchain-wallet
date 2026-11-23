@@ -35,6 +35,7 @@ import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/Crea
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 import { projectBetPayout } from '../../../packages/core/src/flows/betQueries.js';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 // A chain with NO XCHAIN fee lane, where a native-coin output is the
@@ -92,7 +93,7 @@ const WHALE_FEED = Object.freeze({
 // pools handed in, and every pool must parse as a number. Floats are fine at
 // this size; the point under test is the shape reaching the SDK, not the last
 // decimal place (the bignumber ordering is the SDK's own test).
-function sdkProjectPayout({ pools, outcome, stake, feePct = 0 }) {
+function sdkProjectPayout({ pools, outcome, stake, feePct = 0, decimals = 8 }) {
     if (!Array.isArray(pools)) throw new Error('projectPayout: pools must be an array');
     const index = Number(outcome);
     if (!Number.isInteger(index) || index < 0 || index >= pools.length) {
@@ -103,20 +104,21 @@ function sdkProjectPayout({ pools, outcome, stake, feePct = 0 }) {
         if (!Number.isFinite(n)) throw new Error(`projectPayout: pool is not a number: ${String(v)}`);
         return n;
     };
-    const floor8 = (n) => Math.floor(n * 1e8) / 1e8;
+    const scale = 10 ** decimals;
+    const floorValue = (n) => Math.floor(n * scale) / scale;
     const staked = Number(stake);
     const totalIn = pools.reduce((sum, p) => sum + num(p), 0) + staked;
     const winning = num(pools[index]) + staked;
     if (!(winning > 0)) return null;
-    const fee = floor8((totalIn * Number(feePct)) / 100);
-    const payout = floor8((staked * (totalIn - fee)) / winning);
+    const fee = floorValue((totalIn * Number(feePct)) / 100);
+    const payout = floorValue((staked * (totalIn - fee)) / winning);
     return {
-        payout: payout.toFixed(8),
-        profit: (payout - staked).toFixed(8),
-        impliedOdds: (payout / staked).toFixed(8),
-        total: totalIn.toFixed(8),
-        winningPool: winning.toFixed(8),
-        fee: fee.toFixed(8),
+        payout: payout.toFixed(decimals),
+        profit: (payout - staked).toFixed(decimals),
+        impliedOdds: (payout / staked).toFixed(decimals),
+        total: totalIn.toFixed(decimals),
+        winningPool: winning.toFixed(decimals),
+        fee: fee.toFixed(decimals),
     };
 }
 
@@ -136,6 +138,7 @@ const OWN_CLOSED_FEED = Object.freeze({
 
 beforeEach(() => {
     resetWalletModes();
+    __clearTokenInfoCache();
     vi.useRealTimers();
     // The Quick | Full choice is remembered per browser; every test starts on Quick.
     localStorage.clear();
@@ -150,6 +153,7 @@ function harness({ walletMode = 'full', ...overrides } = {}) {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
         getSettings: () => Promise.resolve({}),
+        getTokenInfo: () => Promise.resolve({ divisibility: 8 }),
         listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
@@ -680,6 +684,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(call.args.outcome).toBe(1);
         expect(call.args.stake).toBe('5');
         expect(call.args.feePct).toBe('1.00');
+        expect(call.args.decimals).toBe(8);
 
         // 10 already staked + 5 = 15 in, 1% oracle fee floors to 0.15, and the
         // lone winner takes the whole 14.85 pot.
@@ -690,6 +695,34 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(shown).toMatch(/2\.97x your stake/);
         // Never presented as a price: the pot is re-divided by every later bet.
         expect(shown).toMatch(/not a locked-in price/i);
+    });
+
+    it('rounds a zero-decimal wager projection like settlement', async () => {
+        const feed = {
+            ...FEED,
+            fee: '0',
+            pools: [
+                { outcome: 0, pool: '1', bet_count: 1 },
+                { outcome: 1, pool: '1', bet_count: 1 },
+            ],
+        };
+        const { messaging, calls } = harness({
+            betFeed: () => Promise.resolve({ data: [feed] }),
+            getTokenInfo: () => Promise.resolve({ divisibility: 0 }),
+        });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Home', '1');
+        expect(calls.filter((call) => call.method === 'betProjectPayout').pop().args.decimals).toBe(0);
+        expect(utils.getByTestId('bet-projection').textContent).toContain('1 PEPECREATURE');
+        expect(utils.getByTestId('bet-projection').textContent).not.toContain('1.5 PEPECREATURE');
+    });
+
+    it('does not project while wager token precision is unknown', async () => {
+        const { messaging, calls } = harness({ getTokenInfo: () => Promise.resolve({}) });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+        expect(calls.some((call) => call.method === 'betProjectPayout')).toBe(false);
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
     });
 
     it('projects the crowded side too, where the payout is barely above the stake', async () => {
@@ -833,7 +866,7 @@ describe('BetFeedDetail states what a win would pay', () => {
     });
 
     it.each([
-        ['1.0000000000000000001', /at most 18 decimal places/i],
+        ['1.0000000000000000001', /at most 8 decimal places/i],
         ['1'.repeat(48), /too large/i],
     ])('refuses an unsupported stake %s before projection or compose', async (stake, message) => {
         const { messaging, calls } = harness();

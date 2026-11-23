@@ -15,6 +15,31 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'preflightCopy.error.fallback': 'The checks found a problem with this action.',
+    'preflightCopy.error.tooLong': 'The {field} is too long for the network.',
+    'preflightCopy.error.prefixedNumber': 'The {field} must use decimal digits.',
+    'preflightCopy.error.required': 'The {field} is required.',
+    'preflightCopy.error.invalidReference': "The {field} isn't a valid action number.",
+    'preflightCopy.fieldName.value': 'value in this action',
+    'preflightCopy.fieldName.decimals': 'number of decimal places',
+    'preflightCopy.fieldName.callbackBlock': 'callback block',
+    'preflightCopy.fieldName.mintStartBlock': 'mint start block',
+    'preflightCopy.fieldName.mintStopBlock': 'mint stop block',
+    'preflightCopy.fieldName.bridgeChains': 'bridge chain list',
+    'preflightCopy.fieldName.bridgeLock': 'bridge lock setting',
+    'preflightCopy.fieldName.minimumDepth': 'minimum bridge depth',
+    'preflightCopy.fieldName.dispenserAction': 'dispenser action number',
+    'preflightCopy.fieldName.orderAction': 'order action number',
+    'preflightCopy.fieldName.swapAction': 'swap action number',
+    'preflightCopy.fieldName.feedAction': 'feed action number',
+    'preflightCopy.fieldName.signingKey': 'signing public key',
+    'preflightCopy.fieldName.expiration': 'expiration block',
+    'preflightCopy.fieldName.deadline': 'deadline block',
+    'preflightCopy.fieldName.refundWindow': 'refund window',
+    'preflightCopy.fieldName.outcome': 'outcome number',
+    'preflightCopy.fieldName.firstLinkedAction': 'first action number',
+    'preflightCopy.fieldName.secondLinkedAction': 'second action number',
+    'preflightCopy.fieldName.targetContract': 'target contract number',
     // Said for a check code with no line of its own.
     'preflightCopy.unverified.fallback': 'Other conditions the network checks when this transaction arrives',
     // A read the explorer did not answer.

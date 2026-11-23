@@ -357,11 +357,9 @@ describe('ParallelComposer confirmation', () => {
 
         expect(await screen.findByText('Balance of TOKEN (1) does not cover the send total (2).'))
             .toBeTruthy();
-        // G130: Approve keeps its colour; a tap says why at the top and
-        // signs nothing.
-        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
         fireEvent.click(screen.getByTestId('confirm-approve'));
-        expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
         expect(messaging.advancedAction).not.toHaveBeenCalled();
     });
 
