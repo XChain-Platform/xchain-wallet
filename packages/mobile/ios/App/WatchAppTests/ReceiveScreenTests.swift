@@ -36,10 +36,12 @@ final class ReceiveScreenTests: XCTestCase {
     }
 
     func testUsesAnIconForEachChainFamilyAndFallback() {
-        XCTAssertEqual(ReceivePresentation.chainIconName(for: "bitcoin-mainnet"), "bitcoinsign.circle")
-        XCTAssertEqual(ReceivePresentation.chainIconName(for: "litecoin-testnet"), "l.circle")
-        XCTAssertEqual(ReceivePresentation.chainIconName(for: "dogecoin-regtest"), "d.circle")
-        XCTAssertEqual(ReceivePresentation.chainIconName(for: "unknown-mainnet"), "link")
+        let chainIds = ["bitcoin-mainnet", "litecoin-testnet", "dogecoin-regtest", "unknown-mainnet"]
+        let iconNames = chainIds.map {
+            ReceivePage(entry: entry(chainId: $0, address: "rawaddress", bits: "oA==")).iconName
+        }
+
+        XCTAssertEqual(iconNames, ["bitcoinsign.circle", "l.circle", "d.circle", "link"])
     }
 
     func testDecodesTheQrMatrix() {
