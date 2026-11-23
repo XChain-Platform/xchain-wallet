@@ -75,6 +75,7 @@ final class XChainLinkInbox {
     private static let pathPrefixWeb = "/wallet/link/"
     private static let hostWallet = "wallet.xchain.io"
     private static let pathPrefixWallet = "/link/"
+    private static let maxLinkLength = 16384
 
     /// Delivery can arrive on the main thread (the scene callbacks) while the
     /// plugin drains on the bridge's queue, so the one field they share is
@@ -142,14 +143,15 @@ final class XChainLinkInbox {
     /// Nil for everything else.
     ///
     /// Mirrors `isAcceptableDeepLink` in nativeDeepLinks.js, including the
-    /// 4096-character bound and the reason it parses instead of prefix-matching:
+    /// 16,384-unit bound on the whole link as native intake receives it and the
+    /// reason it parses instead of prefix-matching:
     /// `https://xchain.io.evil.com/` and `https://xchain.io@evil.com/` both pass
     /// a naive `hasPrefix`, and `URLComponents` puts the host where it belongs.
     /// The JS half checks this too; that is the half that still runs if this
     /// plugin is ever replaced, and this is the half that keeps a hostile link
     /// out of the WebView entirely.
     static func accept(_ raw: String?) -> String? {
-        guard let raw = raw, !raw.isEmpty, raw.count <= 4096,
+        guard let raw = raw, !raw.isEmpty, raw.utf16.count <= Self.maxLinkLength,
               let parsed = URLComponents(string: raw),
               let scheme = parsed.scheme?.lowercased() else { return nil }
 
