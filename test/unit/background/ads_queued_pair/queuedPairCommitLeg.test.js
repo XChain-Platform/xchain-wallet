@@ -213,14 +213,14 @@ describe('broadcast.queue books the commit of a queued two-phase pair', () => {
         expect(w.ads().reserved).toBeUndefined();
     });
 
-    it('releases the payout a chunk-lane reveal refused for good would have carried', async () => {
+    it('settles the claim when a chunk-lane reveal is refused after its commit lands', async () => {
         const w = walletVault();
         const q = queueBlob();
         await queuePair(w, q, CHUNK);
         const host = makeHost(w.vault, q.storage, revealAnswer(() => { throw new Error(PERMANENT); }));
         const res = await host.call('broadcast.queue.broadcast', { walletId: W, id: q.blob[W][0].id });
         expect(res.ok).toBe(false);
-        expect(w.ads()).toMatchObject({ queued: '30.05', donated: '0', donationCount: 0 });
+        expect(w.ads()).toMatchObject({ queued: '0.05', donated: '30', donationCount: 1 });
         expect(w.ads().reserved).toBeUndefined();
     });
 

@@ -4842,8 +4842,7 @@ export function createBackgroundHost(deps) {
         });
         return adsCommit ? { ...entry, adsCommit } : entry;
     }
-    // Let a queued entry's claim go: its bytes were refused for good or
-    // discarded, so they never pay the donation.
+    // Let a queued entry's claim go when no leg landed or it was discarded.
     async function releaseQueuedAds(vault, entry) {
         // Only the named claim is cleared, so the record id is a safe fallback.
         const reservationId = adsClaimOf(entry) ?? (typeof entry?.pendingTxId === 'string' ? entry.pendingTxId : null);
@@ -4852,6 +4851,17 @@ export function createBackgroundHost(deps) {
             await flows.releaseAdsReservation({ vault, reservationId });
         } catch (e) {
             console.warn('broadcast.queue: ADS release failed', e && e.message ? String(e.message) : String(e));
+        }
+    }
+    // Settle a queued pair's claim once its commit landed, even when the reveal
+    // was refused. The commit still contributes as a landed transaction.
+    async function settleQueuedAds(vault, entry) {
+        const reservationId = adsClaimOf(entry) ?? (typeof entry?.pendingTxId === 'string' ? entry.pendingTxId : null);
+        if (!reservationId) return;
+        try {
+            await flows.settleAdsReservation({ vault, reservationId });
+        } catch (e) {
+            console.warn('broadcast.queue: ADS settlement failed', e && e.message ? String(e.message) : String(e));
         }
     }
     async function replacedOriginalPendingTxId(vault, entry) {
@@ -5157,11 +5167,9 @@ export function createBackgroundHost(deps) {
                     await bookLandedAds(vault, chainRegistry, entry, { accrue: true });
                     return { txid: deliveredTxid, alreadyOnNetwork: true };
                 }
-                // Release the claim either way, the two transitions core's drain
-                // records: a permanent rejection retires the record so it stops
-                // netting and offers a re-compose, and a transient one returns it
-                // to 'queued', the status both this surface and the reload
-                // recovery read as "signed, never sent".
+                // Apply the two transitions core's drain records: a permanent
+                // rejection retires the record unless its commit landed, and a
+                // transient one returns it to 'queued' for another attempt.
                 const permanent = flows.classifyBroadcastFailure(err) === 'permanent';
                 const releasePatch = permanent
                     ? permanentReleasePatch(entry, failure)
@@ -5173,8 +5181,9 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
-                    // Bytes that can never confirm never pay the donation.
-                    await releaseQueuedAds(vault, entry);
+                    // A landed commit settles the pair's claim; a refused first leg releases it.
+                    if (entry.commitLanded === true) await settleQueuedAds(vault, entry);
+                    else await releaseQueuedAds(vault, entry);
                 } else {
                     const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
                         ? entry.retryAttempt + 1

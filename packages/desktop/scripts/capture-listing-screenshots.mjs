@@ -162,8 +162,7 @@ async function switchToMainnet(win) {
     const already = win.getByRole('button', { name: /^Network\s*Mainnet$/ });
     if (await already.isVisible().catch(() => false)) {
         // Demo lands on Mainnet; the picker now lives on a sub-page, so leave it.
-        await win.reload();
-        await win.waitForLoadState('load', { timeout: 30_000 }).catch(() => {});
+        await win.getByRole('button', { name: 'Home', exact: true }).first().click();
         return;
     }
     await win.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
@@ -250,6 +249,20 @@ async function main() {
         // this is the only thing worth settling for.
         await win.waitForTimeout(2000);
 
+        // A fixed delay after a click captured the Exchange while it still read
+        // "Loading markets" on one run and filled on the next, so each screen
+        // waits until nothing on it is loading before the delay that lets
+        // charts finish drawing.
+        const settled = async () => {
+            await win.waitForFunction(() => {
+                const busy = document.querySelector('[aria-busy="true"]');
+                const loading = [...document.querySelectorAll('[role="status"], p, span, div')]
+                    .some((el) => el.childElementCount === 0 && /^Loading\b/.test(el.textContent.trim())
+                        && el.getClientRects().length > 0);
+                return !busy && !loading;
+            }, null, { timeout: 60_000 });
+        };
+
         const shots = [
             {
                 name: 'screenshot-home.png',
@@ -257,6 +270,7 @@ async function main() {
                     // Wide Home with the platform token selected, so its detail
                     // panel shows beside the list.
                     await win.getByRole('button', { name: /XChain/ }).filter({ hasText: 'XCHAIN' }).first().click();
+                    await settled();
                     await win.waitForTimeout(2500);
                 },
             },
@@ -267,6 +281,7 @@ async function main() {
                     // selected on arrival, with the chart and order book filled
                     // from the demo's sample trades.
                     await win.getByRole('button', { name: /Exchange \(DEX\)/ }).first().click();
+                    await settled();
                     await win.waitForTimeout(3000);
                 },
             },
@@ -277,6 +292,7 @@ async function main() {
                     // hero and chart on top and the owner actions (supply,
                     // distribute, token page) leading the list below.
                     await win.getByRole('button', { name: /^My Tokens/ }).first().click();
+                    await settled();
                     await win.waitForTimeout(3500);
                 },
             },
@@ -288,7 +304,7 @@ async function main() {
                 await shot.take();
                 const file = path.join(OUT_DIR, shot.name);
                 // eslint-disable-next-line no-await-in-loop
-                await win.screenshot({ path: file });
+                await win.screenshot({ path: file, animations: 'disabled', caret: 'hide' });
                 const actual = pngSize(file);
                 if (!actual || actual.width !== size.width || actual.height !== size.height) {
                     throw new Error(`captured ${actual ? `${actual.width}x${actual.height}` : 'an unreadable PNG'}, `

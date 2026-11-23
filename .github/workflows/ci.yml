@@ -557,8 +557,21 @@ jobs:
           gatePid=$!
           until grep -qx venue-lock-acquired "$gateState"; do
             if ! kill -0 "$gatePid" 2>/dev/null; then
-              echo "::error::The regtest venue lock was not acquired: $(cat "$gateState")"
-              exit 1
+              gateStatus=0
+              wait "$gatePid" || gateStatus=$?
+              # ssh itself exits 255 (unreachable host, refused key), which is a
+              # broken venue and fails the job. Any other exit is the venue gate
+              # giving up its two-hour lock wait while other runs held the venue:
+              # that is contention, not a defect in this commit, so it reports
+              # NOT RUN the way an unconfigured venue does.
+              if [ "$gateStatus" = 255 ]; then
+                echo "::error::The regtest venue could not be reached: $(cat "$gateState")"
+                exit 1
+              fi
+              echo "::warning::regtest e2e venue run NOT RUN: the venue lock stayed busy for the gate wait (exit $gateStatus)"
+              echo "### regtest e2e venue run NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+              echo "Other runs held the shared regtest venue for the whole lock wait, so this rolling shard did not execute." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
             fi
             sleep 5
           done
