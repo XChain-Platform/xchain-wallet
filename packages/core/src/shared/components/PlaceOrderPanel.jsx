@@ -65,6 +65,7 @@ import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { FeeSection } from './formStandard/FeeSection.jsx';
 import { FormAction, FormFrame, FormSection, FromSection, joinSummary, useFormSections } from './formStandard/index.js';
 import { ResultScreen } from './ResultScreen.jsx';
+import { MobileAutopayNotice } from './MobileAutopayNotice.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -876,9 +877,12 @@ export function PlaceOrderPanel({
                     }}
                 />
                 {result?.autopayArmed === true ? (
-                    <StatusMessage variant="success">
-                        {t('components.placeOrderPanel.coinpayAutoPayIsArmed')}
-                    </StatusMessage>
+                    <>
+                        <StatusMessage variant="success">
+                            {t('components.placeOrderPanel.coinpayAutoPayIsArmed')}
+                        </StatusMessage>
+                        <MobileAutopayNotice />
+                    </>
                 ) : result?.autopayArmed === false ? (
                     <StatusMessage variant="error">
                         {t('components.placeOrderPanel.theOrderWasPlacedBut')}
@@ -1107,6 +1111,7 @@ export function PlaceOrderPanel({
                             </li>
                         ))}
                     </ul>
+                    <MobileAutopayNotice />
                     {coinpayArmShown && exposure && exposure[chainId] ? (
                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
                             {t('components.placeOrderPanel.outstandingAutoPayExposureOn')}{' '}

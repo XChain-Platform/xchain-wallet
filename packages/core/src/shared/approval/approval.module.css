@@ -68,17 +68,6 @@
     letter-spacing: 0.04em;
 }
 
-.summaryValue {
-    max-width: 100%;
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: normal;
-    margin: 0;
-}
-
 .toggleRow {
     display: flex;
     align-items: center;

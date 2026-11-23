@@ -55,6 +55,14 @@ describe('Notice', () => {
         expect(box).toHaveAttribute('data-variant', 'warning');
     });
 
+    it('uses warning semantics for a danger caution', () => {
+        render(<Notice tone="danger" caution>This wallet has never sent to this address before.</Notice>);
+        const box = screen.getByRole('status');
+        expect(box).toHaveAttribute('data-tone', 'danger');
+        expect(box).toHaveAttribute('data-variant', 'warning');
+        expect(box).toHaveClass(styles.warning);
+    });
+
     it('keeps a static critical caution out of the live regions with role note', () => {
         render(<Notice tone="danger" role="note">Never share your recovery phrase.</Notice>);
         const box = screen.getByRole('note');

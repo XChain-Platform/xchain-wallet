@@ -1274,6 +1274,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             // second line. Values are the list index as text.
                             <IconSelect
                                 label={t('extension.sign.signInAs')}
+                                help={t('extension.sign.signInAsHint')}
                                 value={String(signInChoice)}
                                 onChange={(next) => setSignInChoice(Number(next))}
                                 disabled={busy}

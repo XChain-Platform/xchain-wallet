@@ -1,0 +1,1740 @@
+{
+  "snapshot-capped": {
+    "fiat": {
+      "header": {
+        "text": "$1,275.00"
+      },
+      "lines": [
+        {
+          "name": "Token 01",
+          "primary": {
+            "text": "$1.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 02",
+          "primary": {
+            "text": "$2.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 03",
+          "primary": {
+            "text": "$3.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 04",
+          "primary": {
+            "text": "$4.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 05",
+          "primary": {
+            "text": "$5.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 06",
+          "primary": {
+            "text": "$6.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 07",
+          "primary": {
+            "text": "$7.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 08",
+          "primary": {
+            "text": "$8.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 09",
+          "primary": {
+            "text": "$9.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 10",
+          "primary": {
+            "text": "$10.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 11",
+          "primary": {
+            "text": "$11.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 12",
+          "primary": {
+            "text": "$12.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 13",
+          "primary": {
+            "text": "$13.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 14",
+          "primary": {
+            "text": "$14.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 15",
+          "primary": {
+            "text": "$15.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 16",
+          "primary": {
+            "text": "$16.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 17",
+          "primary": {
+            "text": "$17.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 18",
+          "primary": {
+            "text": "$18.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 19",
+          "primary": {
+            "text": "$19.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 20",
+          "primary": {
+            "text": "$20.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 21",
+          "primary": {
+            "text": "$21.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 22",
+          "primary": {
+            "text": "$22.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 23",
+          "primary": {
+            "text": "$23.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 24",
+          "primary": {
+            "text": "$24.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 25",
+          "primary": {
+            "text": "$25.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 26",
+          "primary": {
+            "text": "$26.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 27",
+          "primary": {
+            "text": "$27.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 28",
+          "primary": {
+            "text": "$28.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 29",
+          "primary": {
+            "text": "$29.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 30",
+          "primary": {
+            "text": "$30.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 31",
+          "primary": {
+            "text": "$31.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 32",
+          "primary": {
+            "text": "$32.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 33",
+          "primary": {
+            "text": "$33.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 34",
+          "primary": {
+            "text": "$34.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 35",
+          "primary": {
+            "text": "$35.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 36",
+          "primary": {
+            "text": "$36.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 37",
+          "primary": {
+            "text": "$37.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 38",
+          "primary": {
+            "text": "$38.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 39",
+          "primary": {
+            "text": "$39.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 40",
+          "primary": {
+            "text": "$40.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 41",
+          "primary": {
+            "text": "$41.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 42",
+          "primary": {
+            "text": "$42.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 43",
+          "primary": {
+            "text": "$43.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 44",
+          "primary": {
+            "text": "$44.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 45",
+          "primary": {
+            "text": "$45.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 46",
+          "primary": {
+            "text": "$46.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 47",
+          "primary": {
+            "text": "$47.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 48",
+          "primary": {
+            "text": "$48.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 49",
+          "primary": {
+            "text": "$49.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 50",
+          "primary": {
+            "text": "$50.00"
+          },
+          "secondary": null
+        },
+        {
+          "key": "state.moreOnPhone"
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Token 01",
+          "primary": {
+            "text": "1 T01"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 02",
+          "primary": {
+            "text": "2 T02"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 03",
+          "primary": {
+            "text": "3 T03"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 04",
+          "primary": {
+            "text": "4 T04"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 05",
+          "primary": {
+            "text": "5 T05"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 06",
+          "primary": {
+            "text": "6 T06"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 07",
+          "primary": {
+            "text": "7 T07"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 08",
+          "primary": {
+            "text": "8 T08"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 09",
+          "primary": {
+            "text": "9 T09"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 10",
+          "primary": {
+            "text": "10 T10"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 11",
+          "primary": {
+            "text": "11 T11"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 12",
+          "primary": {
+            "text": "12 T12"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 13",
+          "primary": {
+            "text": "13 T13"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 14",
+          "primary": {
+            "text": "14 T14"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 15",
+          "primary": {
+            "text": "15 T15"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 16",
+          "primary": {
+            "text": "16 T16"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 17",
+          "primary": {
+            "text": "17 T17"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 18",
+          "primary": {
+            "text": "18 T18"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 19",
+          "primary": {
+            "text": "19 T19"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 20",
+          "primary": {
+            "text": "20 T20"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 21",
+          "primary": {
+            "text": "21 T21"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 22",
+          "primary": {
+            "text": "22 T22"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 23",
+          "primary": {
+            "text": "23 T23"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 24",
+          "primary": {
+            "text": "24 T24"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 25",
+          "primary": {
+            "text": "25 T25"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 26",
+          "primary": {
+            "text": "26 T26"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 27",
+          "primary": {
+            "text": "27 T27"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 28",
+          "primary": {
+            "text": "28 T28"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 29",
+          "primary": {
+            "text": "29 T29"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 30",
+          "primary": {
+            "text": "30 T30"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 31",
+          "primary": {
+            "text": "31 T31"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 32",
+          "primary": {
+            "text": "32 T32"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 33",
+          "primary": {
+            "text": "33 T33"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 34",
+          "primary": {
+            "text": "34 T34"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 35",
+          "primary": {
+            "text": "35 T35"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 36",
+          "primary": {
+            "text": "36 T36"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 37",
+          "primary": {
+            "text": "37 T37"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 38",
+          "primary": {
+            "text": "38 T38"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 39",
+          "primary": {
+            "text": "39 T39"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 40",
+          "primary": {
+            "text": "40 T40"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 41",
+          "primary": {
+            "text": "41 T41"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 42",
+          "primary": {
+            "text": "42 T42"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 43",
+          "primary": {
+            "text": "43 T43"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 44",
+          "primary": {
+            "text": "44 T44"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 45",
+          "primary": {
+            "text": "45 T45"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 46",
+          "primary": {
+            "text": "46 T46"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 47",
+          "primary": {
+            "text": "47 T47"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 48",
+          "primary": {
+            "text": "48 T48"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 49",
+          "primary": {
+            "text": "49 T49"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 50",
+          "primary": {
+            "text": "50 T50"
+          },
+          "secondary": null
+        },
+        {
+          "key": "state.moreOnPhone"
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-disabled": {
+    "fiat": {
+      "header": null,
+      "lines": [],
+      "banners": [
+        "state.watchDisabled"
+      ],
+      "ageLine": null
+    },
+    "units": {
+      "header": null,
+      "lines": [],
+      "banners": [
+        "state.watchDisabled"
+      ],
+      "ageLine": null
+    }
+  },
+  "snapshot-empty": {
+    "fiat": {
+      "header": {
+        "text": "$0.00"
+      },
+      "lines": [
+        {
+          "key": "w1.empty"
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "key": "w1.empty"
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-hidden": {
+    "fiat": {
+      "header": {
+        "key": "state.hidden"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "key": "state.hidden"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "key": "state.hidden"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-locked": {
+    "fiat": {
+      "header": {
+        "text": "$20,000.00"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "$20,000.00"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [
+        "state.locked"
+      ],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "0.50 BTC"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [
+        "state.locked"
+      ],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-longnames": {
+    "fiat": {
+      "header": {
+        "text": "$20,000.00"
+      },
+      "lines": [
+        {
+          "name": "Extremely long asset name NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+          "primary": {
+            "text": "$123,456,789.12"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Extremely long asset name NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+          "primary": {
+            "text": "123,456,789.12345678 LONG"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-rows50": {
+    "fiat": {
+      "header": {
+        "text": "$1,275.00"
+      },
+      "lines": [
+        {
+          "name": "Token 01",
+          "primary": {
+            "text": "$1.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 02",
+          "primary": {
+            "text": "$2.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 03",
+          "primary": {
+            "text": "$3.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 04",
+          "primary": {
+            "text": "$4.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 05",
+          "primary": {
+            "text": "$5.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 06",
+          "primary": {
+            "text": "$6.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 07",
+          "primary": {
+            "text": "$7.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 08",
+          "primary": {
+            "text": "$8.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 09",
+          "primary": {
+            "text": "$9.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 10",
+          "primary": {
+            "text": "$10.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 11",
+          "primary": {
+            "text": "$11.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 12",
+          "primary": {
+            "text": "$12.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 13",
+          "primary": {
+            "text": "$13.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 14",
+          "primary": {
+            "text": "$14.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 15",
+          "primary": {
+            "text": "$15.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 16",
+          "primary": {
+            "text": "$16.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 17",
+          "primary": {
+            "text": "$17.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 18",
+          "primary": {
+            "text": "$18.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 19",
+          "primary": {
+            "text": "$19.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 20",
+          "primary": {
+            "text": "$20.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 21",
+          "primary": {
+            "text": "$21.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 22",
+          "primary": {
+            "text": "$22.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 23",
+          "primary": {
+            "text": "$23.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 24",
+          "primary": {
+            "text": "$24.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 25",
+          "primary": {
+            "text": "$25.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 26",
+          "primary": {
+            "text": "$26.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 27",
+          "primary": {
+            "text": "$27.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 28",
+          "primary": {
+            "text": "$28.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 29",
+          "primary": {
+            "text": "$29.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 30",
+          "primary": {
+            "text": "$30.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 31",
+          "primary": {
+            "text": "$31.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 32",
+          "primary": {
+            "text": "$32.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 33",
+          "primary": {
+            "text": "$33.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 34",
+          "primary": {
+            "text": "$34.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 35",
+          "primary": {
+            "text": "$35.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 36",
+          "primary": {
+            "text": "$36.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 37",
+          "primary": {
+            "text": "$37.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 38",
+          "primary": {
+            "text": "$38.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 39",
+          "primary": {
+            "text": "$39.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 40",
+          "primary": {
+            "text": "$40.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 41",
+          "primary": {
+            "text": "$41.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 42",
+          "primary": {
+            "text": "$42.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 43",
+          "primary": {
+            "text": "$43.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 44",
+          "primary": {
+            "text": "$44.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 45",
+          "primary": {
+            "text": "$45.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 46",
+          "primary": {
+            "text": "$46.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 47",
+          "primary": {
+            "text": "$47.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 48",
+          "primary": {
+            "text": "$48.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 49",
+          "primary": {
+            "text": "$49.00"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 50",
+          "primary": {
+            "text": "$50.00"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Token 01",
+          "primary": {
+            "text": "1 T01"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 02",
+          "primary": {
+            "text": "2 T02"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 03",
+          "primary": {
+            "text": "3 T03"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 04",
+          "primary": {
+            "text": "4 T04"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 05",
+          "primary": {
+            "text": "5 T05"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 06",
+          "primary": {
+            "text": "6 T06"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 07",
+          "primary": {
+            "text": "7 T07"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 08",
+          "primary": {
+            "text": "8 T08"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 09",
+          "primary": {
+            "text": "9 T09"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 10",
+          "primary": {
+            "text": "10 T10"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 11",
+          "primary": {
+            "text": "11 T11"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 12",
+          "primary": {
+            "text": "12 T12"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 13",
+          "primary": {
+            "text": "13 T13"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 14",
+          "primary": {
+            "text": "14 T14"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 15",
+          "primary": {
+            "text": "15 T15"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 16",
+          "primary": {
+            "text": "16 T16"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 17",
+          "primary": {
+            "text": "17 T17"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 18",
+          "primary": {
+            "text": "18 T18"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 19",
+          "primary": {
+            "text": "19 T19"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 20",
+          "primary": {
+            "text": "20 T20"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 21",
+          "primary": {
+            "text": "21 T21"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 22",
+          "primary": {
+            "text": "22 T22"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 23",
+          "primary": {
+            "text": "23 T23"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 24",
+          "primary": {
+            "text": "24 T24"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 25",
+          "primary": {
+            "text": "25 T25"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 26",
+          "primary": {
+            "text": "26 T26"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 27",
+          "primary": {
+            "text": "27 T27"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 28",
+          "primary": {
+            "text": "28 T28"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 29",
+          "primary": {
+            "text": "29 T29"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 30",
+          "primary": {
+            "text": "30 T30"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 31",
+          "primary": {
+            "text": "31 T31"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 32",
+          "primary": {
+            "text": "32 T32"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 33",
+          "primary": {
+            "text": "33 T33"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 34",
+          "primary": {
+            "text": "34 T34"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 35",
+          "primary": {
+            "text": "35 T35"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 36",
+          "primary": {
+            "text": "36 T36"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 37",
+          "primary": {
+            "text": "37 T37"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 38",
+          "primary": {
+            "text": "38 T38"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 39",
+          "primary": {
+            "text": "39 T39"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 40",
+          "primary": {
+            "text": "40 T40"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 41",
+          "primary": {
+            "text": "41 T41"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 42",
+          "primary": {
+            "text": "42 T42"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 43",
+          "primary": {
+            "text": "43 T43"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 44",
+          "primary": {
+            "text": "44 T44"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 45",
+          "primary": {
+            "text": "45 T45"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 46",
+          "primary": {
+            "text": "46 T46"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 47",
+          "primary": {
+            "text": "47 T47"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 48",
+          "primary": {
+            "text": "48 T48"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 49",
+          "primary": {
+            "text": "49 T49"
+          },
+          "secondary": null
+        },
+        {
+          "name": "Token 50",
+          "primary": {
+            "text": "50 T50"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-stale": {
+    "fiat": {
+      "header": {
+        "text": "$20,000.00"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "$20,000.00"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.ageAmber"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "0.50 BTC"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.ageAmber"
+    }
+  },
+  "snapshot-stale24": {
+    "fiat": {
+      "header": {
+        "text": "$20,000.00"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "$20,000.00"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [
+        "state.stale24h"
+      ],
+      "ageLine": "state.ageAmber"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "0.50 BTC"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [
+        "state.stale24h"
+      ],
+      "ageLine": "state.ageAmber"
+    }
+  },
+  "snapshot-testnet": {
+    "fiat": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "0.50 BTC"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Bitcoin",
+          "primary": {
+            "text": "0.50 BTC"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  },
+  "snapshot-unpriced": {
+    "fiat": {
+      "header": {
+        "text": "$0.00"
+      },
+      "lines": [
+        {
+          "name": "Pepe Cash",
+          "primary": {
+            "text": "No price yet"
+          },
+          "secondary": {
+            "text": "1,000 PEPECASH"
+          }
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    },
+    "units": {
+      "header": {
+        "key": "w1.title"
+      },
+      "lines": [
+        {
+          "name": "Pepe Cash",
+          "primary": {
+            "text": "1,000 PEPECASH"
+          },
+          "secondary": null
+        }
+      ],
+      "banners": [],
+      "ageLine": "state.age"
+    }
+  }
+}

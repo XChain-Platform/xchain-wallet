@@ -1,0 +1,86 @@
+{
+  "now": 1700000000000,
+  "request-confirm": {
+    "pinned": {
+      "key": "w1.requestWaiting"
+    },
+    "lines": [
+      {
+        "label": {
+          "key": "w4.requestSentence"
+        },
+        "value": {
+          "text": "Confirm this Send request on your phone."
+        }
+      },
+      {
+        "label": {
+          "key": "w4.requestAmount"
+        },
+        "value": {
+          "text": "0.025 BTC"
+        }
+      }
+    ]
+  },
+  "request-expired": {
+    "pinned": {
+      "key": "w1.requestWaiting"
+    },
+    "lines": [
+      {
+        "label": {
+          "key": "w4.requestSentence"
+        },
+        "value": {
+          "text": "This payment request has expired."
+        }
+      },
+      {
+        "label": {
+          "key": "w4.requestAmount"
+        },
+        "value": {
+          "text": "48.50 USDC"
+        }
+      },
+      {
+        "label": null,
+        "value": {
+          "key": "w4.requestExpired"
+        }
+      }
+    ]
+  },
+  "request-paydue": {
+    "pinned": {
+      "key": "w1.requestWaiting"
+    },
+    "lines": [
+      {
+        "label": {
+          "key": "w4.requestSentence"
+        },
+        "value": {
+          "text": "Payment is due for this request."
+        }
+      },
+      {
+        "label": {
+          "key": "w4.requestAmount"
+        },
+        "value": {
+          "text": "125.00 USDC"
+        }
+      },
+      {
+        "label": {
+          "key": "w4.requestExpiry"
+        },
+        "value": {
+          "at": 4102444800000
+        }
+      }
+    ]
+  }
+}

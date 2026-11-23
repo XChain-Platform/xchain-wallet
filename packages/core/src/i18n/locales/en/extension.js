@@ -38,6 +38,7 @@ const messages = {
 
     'extension.sign.declaredName': 'Site-provided name: {name}',
     'extension.sign.signInAs': 'Sign in as',
+    'extension.sign.signInAsHint': 'Select the approved address this site will use to sign in.',
     'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
     'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
     'extension.sign.feeSetBySite': 'Set by the site{rate}',

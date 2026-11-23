@@ -34,6 +34,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 // included.
 import buttonStyles from './Button.module.css';
 import styles from './InfoTip.module.css';
+import { useOutsidePress } from './useOutsidePress.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
 
@@ -129,18 +130,18 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
     const wrapRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
     const bubbleRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
+    useOutsidePress([wrapRef], () => setOpen(false), {
+        events: ['pointerdown'],
+        target: 'document',
+        enabled: open,
+    });
+
     useEffect(() => {
         if (!open) return undefined;
         const onKey = (event) => { if (event.key === 'Escape') setOpen(false); };
-        const onPointer = (event) => {
-            if (!wrapRef.current) return;
-            if (!wrapRef.current.contains(event.target)) setOpen(false);
-        };
         document.addEventListener('keydown', onKey);
-        document.addEventListener('pointerdown', onPointer);
         return () => {
             document.removeEventListener('keydown', onKey);
-            document.removeEventListener('pointerdown', onPointer);
         };
     }, [open]);
 

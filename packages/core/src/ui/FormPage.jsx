@@ -99,10 +99,10 @@ function successLastPrimary(node) {
  */
 function noticeEntry(node, key) {
     if (!isValidElement(node) || node.type !== StatusMessage) return null;
-    const { children, tone, variant, title, lead, action, recovery, details, role, testId, id, onDismiss } = node.props;
+    const { children, tone, caution, variant, title, lead, action, recovery, details, role, testId, id, onDismiss } = node.props;
     const noBody = children === null || children === undefined || children === '';
     if (noBody && !title) return null;
-    return { key, id, children, variant: tone || variant, title, lead, recovery: action || recovery, details, role, testId, onDismiss };
+    return { key, id, children, tone, caution, variant, title, lead, recovery: action || recovery, details, role, testId, onDismiss };
 }
 
 /**
@@ -279,6 +279,8 @@ export const FormPage = forwardRef(function FormPage(
         for (const [id, entry] of controlNoticeList) {
             entries.push({
                 key: id,
+                tone: entry.tone,
+                caution: entry.caution,
                 variant: entry.variant,
                 role: entry.role,
                 title: entry.title || entry.lead,

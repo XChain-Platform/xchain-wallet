@@ -217,11 +217,9 @@ export function measureInPage(opts = {}) {
         const frameRight = frameLeft + main.clientWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
-        // The tiered page gutter (--xc-page-gutter): 12px below 640px, 16px
-        // from 640px, 24px from 900px. Kept in step with pageGutterForWidth by
-        // hand, since this body runs in the page.
-        const vwNow = window.innerWidth;
-        const expectedGutter = vwNow >= 900 ? 24 : vwNow >= 640 ? 16 : 12;
+        // Kept in step with pageGutterForWidth by hand, since this body runs
+        // in the page.
+        const expectedGutter = 8;
         const visible = (el) => {
             const cs = getComputedStyle(el);
             const r = el.getBoundingClientRect();
@@ -744,15 +742,12 @@ export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expecte
 }
 
 /**
- * The compact page gutter, the --xc-page-gutter token below 640px (also the
- * extension popup and side panel).
+ * The ruled --xc-page-gutter used at every viewport width.
  */
-export const PAGE_GUTTER_PX = 12;
+export const PAGE_GUTTER_PX = 8;
 
-/** The tiered --xc-page-gutter for a viewport width: 12px, 16px from 640px, 24px from 900px. */
-export function pageGutterForWidth(width) {
-    if (width >= 900) return 24;
-    if (width >= 640) return 16;
+/** The ruled --xc-page-gutter for a viewport width. */
+export function pageGutterForWidth(_width) {
     return PAGE_GUTTER_PX;
 }
 

@@ -19,20 +19,33 @@ if (process.platform !== 'darwin') {
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const android = join(root, 'packages/mobile/android');
+const verifierPermissions = [...readFileSync(
+    join(root, 'tools/release/verify-android-manifest.mjs'), 'utf8',
+).matchAll(/^ {4}'([\w.]+)',$/gm)].map((match) => match[1]).sort();
 const expected = {
     app: {
         components: [
+            'activity:com.google.android.gms.common.api.GoogleApiActivity:exported=false',
             'activity:io.xchain.wallet.android.MainActivity:exported=true',
             'provider:androidx.core.content.FileProvider:exported=false',
             'provider:androidx.startup.InitializationProvider:exported=false',
+            'receiver:androidx.work.impl.background.systemalarm.RescheduleReceiver:exported=false',
+            'receiver:androidx.work.impl.utils.ForceStopRunnable$BroadcastReceiver:exported=false',
+            'service:androidx.room.MultiInstanceInvalidationService:exported=false',
+            'service:androidx.work.impl.background.systemjob.SystemJobService:exported=false',
+            'service:androidx.work.impl.foreground.SystemForegroundService:exported=false',
         ],
         permissions: [
+            'android.permission.ACCESS_NETWORK_STATE',
             'android.permission.CAMERA',
+            'android.permission.FOREGROUND_SERVICE',
             'android.permission.INTERNET',
             'android.permission.POST_NOTIFICATIONS',
+            'android.permission.RECEIVE_BOOT_COMPLETED',
             'android.permission.USE_BIOMETRIC',
             'android.permission.USE_FINGERPRINT',
             'android.permission.VIBRATE',
+            'android.permission.WAKE_LOCK',
             'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
         ],
     },
@@ -51,6 +64,8 @@ const expected = {
         ],
     },
 };
+assert.deepEqual(expected.app.permissions, verifierPermissions,
+    ':app merged permission pin must equal the release verifier set');
 
 execFileSync('bash', [
     join(root, 'packages/mobile/scripts/watch-test.sh'),

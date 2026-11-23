@@ -18,6 +18,7 @@
 // precisely the link the user cared about most.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { URI_MAX_LENGTH } from '@xchain-wallet/core/uri/bip21.js';
 import {
     isAcceptableDeepLink,
     subscribeToNativeDeepLinks,
@@ -98,8 +99,17 @@ describe('isAcceptableDeepLink', () => {
         expect(isAcceptableDeepLink('https://xchain.io/wallet/linkage/x')).toBe(false);
     });
 
-    it('rejects non-strings, empties, and absurd lengths', () => {
-        for (const bad of [undefined, null, 42, {}, '', `xchain:${'a'.repeat(5000)}`]) {
+    it('accepts 16,384 characters and rejects 16,385 for native link forms', () => {
+        for (const prefix of ['xchain:', 'https://wallet.xchain.io/link/']) {
+            const atLimit = `${prefix}${'a'.repeat(URI_MAX_LENGTH - prefix.length)}`;
+            expect(atLimit).toHaveLength(16_384);
+            expect(isAcceptableDeepLink(atLimit), prefix).toBe(true);
+            expect(isAcceptableDeepLink(`${atLimit}a`), prefix).toBe(false);
+        }
+    });
+
+    it('rejects non-strings and empties', () => {
+        for (const bad of [undefined, null, 42, {}, '']) {
             expect(isAcceptableDeepLink(bad)).toBe(false);
         }
     });
