@@ -253,7 +253,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form does not warn that a first price is inert for 24 hours')
                 .toContainText(`First price for ${TICK} in ${FIAT}`);
 
-            await main.getByRole('button', { name: 'Publish price' }).click();
+            await main.getByRole('button', { name: 'Publish Price', exact: true }).click();
             // A full-mode wallet signs from the shared confirm screen.
             const review = await expectConfirmModal(page, 'the price publish', 60_000);
             // The review's three load-bearing statements: what it costs the

@@ -153,6 +153,13 @@ assert.ok(!/\$\{walletId \|\| '_'\}/.test(chartSrc),
     'the synthesized walk must be keyed on the seed, not on the raw wallet id');
 assert.ok(DEMO_CHART_SEED.length > 0, 'the demo chart seed is a real constant');
 
+const tokenDetailSrc = read('packages', 'core', 'src', 'shared', 'routes', 'TokenDetail.jsx');
+assert.match(tokenDetailSrc, /seedId: isDemo \? DEMO_CHART_SEED : walletId,/,
+    'the standalone token value chart must use the same demo seed as the portfolio chart');
+const chartGeneratorSrc = read('packages', 'core', 'src', 'shared', 'components', 'Sparkline.jsx');
+assert.doesNotMatch(chartGeneratorSrc, /Math\.random|crypto\.(?:getRandomValues|randomUUID)|Date\.now/,
+    'the demo chart generator must derive every variation from its explicit seed');
+
 // ─── 3b. a demo wallet prices itself, so no live quote moves the card ──
 
 // The last mover found by actually running two captures: the hero's 24h
@@ -223,6 +230,20 @@ for (const [label, ...parts] of [
         + 'fixtures date their rows against `now` while the UI ages them against its own, so '
         + 'freezing one of the two would advertise a months-old wallet in a store listing');
 }
+
+const desktopCaptureSrc = read('packages', 'desktop', 'scripts', 'capture-listing-screenshots.mjs');
+// Keep an already-active Mainnet on the no-reload path, where Home is ready for capture.
+assert.match(desktopCaptureSrc,
+    /if \(await already\.isVisible\(\)\.catch\(\(\) => false\)\) \{\s*\/\/[^\n]*\n\s*await win\.getByRole\('button', \{ name: 'Home', exact: true \}\)\.first\(\)\.click\(\);\s*return;\s*\}/,
+    'the desktop capture must return Home without reloading when Mainnet is already active');
+// Keep the reload and unlocked-shell waits on the path that really changes networks.
+assert.match(desktopCaptureSrc,
+    /await select\.selectOption\('mainnet'\);[\s\S]*?await win\.waitForLoadState\('load',[^\n]*\n\s*await unlockedShell\(win\)\.waitFor/,
+    'the desktop capture must wait for reload and unlock after switching to Mainnet');
+// Every listing surface has motion; wall-clock waits cannot choose the same animation frame.
+assert.match(desktopCaptureSrc,
+    /await win\.screenshot\(\{ path: file, animations: 'disabled', caret: 'hide' \}\);/,
+    'the desktop capture must disable animations and hide carets at screenshot time');
 
 console.log('OK: listing capture is reproducible '
     + `(capture mode off by default, ${clockReads.length}/${clockReads.length} demo clocks `

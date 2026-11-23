@@ -41,6 +41,9 @@ const { join } = require('node:path');
 
 const { SUBJECT_VAR, assertWindowsSigningMaterial } = require('./scripts/windows-signing.cjs');
 const { assertMacosSigningMaterial, macosSigningStatus } = require('./scripts/macos-signing.cjs');
+const {
+    installSnapcraftDesktopCompatibility,
+} = require('./scripts/snapcraft-desktop.cjs');
 
 const here = __dirname;
 const rootPkg = JSON.parse(
@@ -576,6 +579,9 @@ const config = {
         if (context.electronPlatformName !== 'linux') {
             return;
         }
+        // Duplicate the Core 24 desktop entry because Snapcraft 9 resolves it
+        // from the project root while Snapcraft 8 still consumes snap/gui.
+        installSnapcraftDesktopCompatibility(context);
         const { normalizeTreeModes } = require('./scripts/deterministic-modes.cjs');
         normalizeTreeModes(context.appOutDir);
         const {

@@ -258,7 +258,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('button', { name: /^Callback token:/ })).toBeDisabled();
             await expect(fieldByLabel(main, 'Payout per unit')).toBeDisabled();
             await expect(fieldByLabel(main, 'Callback allowed from block')).toBeDisabled();
-            await expect(main.getByRole('button', { name: 'Update Callback Settings', exact: true }))
+            await expect(main.getByRole('button', { name: 'Update callback settings', exact: true }))
                 .toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });

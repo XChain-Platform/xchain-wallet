@@ -166,7 +166,7 @@ async function stagePublish(page, value) {
     await pickFiatCurrency(main, FIAT);
     await main.getByLabel(/^Price of one/).fill(value);
     await setUsageFee(main);
-    await main.getByRole('button', { name: 'Publish price' }).click();
+    await main.getByRole('button', { name: 'Publish Price', exact: true }).click();
     // A full-mode wallet signs from the shared confirm screen, which carries the
     // oracle notes, the typed PUBLISH box and the password.
     return expectConfirmModal(page, 'the price publish', 60_000);
