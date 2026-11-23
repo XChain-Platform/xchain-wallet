@@ -2,13 +2,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
-import { multipartMethodSummaries } from '../../../packages/core/src/flows/multipartMethodOptions.js';
+import { quoteMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
+import {
+    multipartMethodSummaries,
+    multipartReviewFee,
+} from '../../../packages/core/src/flows/multipartMethodOptions.js';
 
 const quote = (parts, fee = 100) => ({
     parts,
     transactions: Math.ceil((parts + 1) / 100) + (2 * (parts + 1)),
     fee,
+    fundingTotal: fee,
 });
+
+function fundedQuote(parts) {
+    return quoteMultipartFile({
+        parts: Array.from({ length: parts }, () => ({ byteLength: 900 })),
+        totalParts: parts,
+    }, 6, { type: 'envelope', outputFloor: 546 }, {
+        envelopePairVbytes: (bytes) => (bytes > 0 ? bytes : 1024) + 100,
+    });
+}
 
 describe('multipart method summaries for available quotes', () => {
     it.each([
@@ -36,6 +50,16 @@ describe('multipart method summaries for available quotes', () => {
     });
 });
 
+describe('multipart review funding total', () => {
+    it.each([26, 1])('matches the funded output total for a %i-part file', (parts) => {
+        const priced = fundedQuote(parts);
+
+        expect(multipartReviewFee(priced)).toBe(
+            priced.outputs.reduce((total, value) => total + value, 0),
+        );
+    });
+});
+
 describe('multipart method summaries for unavailable quotes', () => {
     it('keeps one unavailable method empty', () => {
         expect(multipartMethodSummaries({
@@ -56,14 +80,14 @@ describe('multipart method summaries for unavailable quotes', () => {
 
 describe('invalid multipart quotes', () => {
     it.each([
-        ['fractional parts', { parts: 2.5, transactions: 7, fee: 1 }],
-        ['too few parts', { parts: 1, transactions: 5, fee: 1 }],
-        ['too many parts', { parts: 65_536, transactions: 131_075, fee: 1 }],
-        ['wrong transaction count', { parts: 2, transactions: 8, fee: 1 }],
-        ['fractional transactions', { parts: 2, transactions: 7.5, fee: 1 }],
-        ['negative fee', { parts: 2, transactions: 7, fee: -1 }],
-        ['infinite fee', { parts: 2, transactions: 7, fee: Infinity }],
-        ['non-number fee', { parts: 2, transactions: 7, fee: '1' }],
+        ['fractional parts', { parts: 2.5, transactions: 7, fundingTotal: 1 }],
+        ['too few parts', { parts: 1, transactions: 5, fundingTotal: 1 }],
+        ['too many parts', { parts: 65_536, transactions: 131_075, fundingTotal: 1 }],
+        ['wrong transaction count', { parts: 2, transactions: 8, fundingTotal: 1 }],
+        ['fractional transactions', { parts: 2, transactions: 7.5, fundingTotal: 1 }],
+        ['negative fee', { parts: 2, transactions: 7, fundingTotal: -1 }],
+        ['infinite fee', { parts: 2, transactions: 7, fundingTotal: Infinity }],
+        ['non-number fee', { parts: 2, transactions: 7, fundingTotal: '1' }],
     ])('rejects %s', (_label, invalid) => {
         let thrown;
         try {
@@ -79,7 +103,7 @@ describe('invalid multipart quotes', () => {
 
     it('names taproot when its quote is invalid', () => {
         expect(() => multipartMethodSummaries({
-            taproot: { parts: 2, transactions: 7, fee: NaN },
+            taproot: { parts: 2, transactions: 7, fundingTotal: NaN },
             standard: null,
         })).toThrow(/taproot/);
     });

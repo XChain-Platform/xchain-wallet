@@ -449,7 +449,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     await expect(form).toContainText(`List #${listIndex}`);
     await expect(form).toContainText(`${memberCount} member${memberCount === 1 ? '' : 's'}`);
 
-    await form.getByRole('button', { name: 'Update Access Lists', exact: true }).click();
+    await form.getByRole('button', { name: 'Update access lists', exact: true }).click();
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(bound.action)).toBe('ISSUE');

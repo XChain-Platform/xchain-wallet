@@ -956,11 +956,11 @@ function readBridgeChains(row) {
  * @param {string} tick
  * @param {any} raw                                     explorer row
  * @param {ReturnType<typeof tisToMediaBundle> | null} [tisBundle]
- * @param {{ allowRemoteMedia?: boolean, tisReadError?: boolean }} [options]
+ * @param {{ allowRemoteMedia?: boolean, tisReadError?: boolean, fallbackImages?: Array<Object> }} [options]
  * @returns {TokenInfo}
  */
 export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options = {}) {
-    const { allowRemoteMedia = true, tisReadError = false } = options;
+    const { allowRemoteMedia = true, tisReadError = false, fallbackImages = [] } = options;
     const row = Array.isArray(raw) ? raw[0] : raw;
     const onChainDescription = row?.info?.description ?? null;
     const creator = row?.info?.owner ?? null;
@@ -1088,11 +1088,11 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // media arrays. We keep the on-chain description string as a fallback
     // for the description text, but prefer the TIS body when available
     // since it's usually the human-readable version. The hero `imageUrl`
-    // falls back to the regex extractor for tokens that didn't bother
-    // with a TIS document.
+    // takes TIS images first, then vetted LINKed artwork, then the regex
+    // extractor for tokens that did not publish either kind of picture.
     const description = tisBundle?.description || (tisReadError ? null : onChainDescription);
     const name = tisBundle?.name || null;
-    const images = allowRemoteMedia ? (tisBundle?.images || []) : [];
+    const images = allowRemoteMedia ? [...(tisBundle?.images || []), ...fallbackImages] : [];
     const audio = allowRemoteMedia ? (tisBundle?.audio || []) : [];
     const video = allowRemoteMedia ? (tisBundle?.video || []) : [];
     const website = tisBundle?.website || null;
@@ -1420,6 +1420,30 @@ function rawImageBundle(bytes, actionIndex, coin) {
     return bundle;
 }
 
+// LINKed file metadata narrows the raw reads to declared pictures, while the
+// bytes still decide whether a candidate is safe to render as artwork.
+async function fetchLinkedArtworkBundle(sdk, raw) {
+    if (typeof sdk?.getGatedFileRaw !== 'function') return null;
+    const row = Array.isArray(raw) ? raw[0] : raw;
+    const files = Array.isArray(row?.linked_files) ? row.linked_files : [];
+    for (const file of files) {
+        const declaredType = String(file?.type || '').toLowerCase();
+        if (file?.gated || file?.action_index == null || !declaredType.startsWith('image/')) continue;
+        try {
+            const result = await readRawFile(sdk, String(file.action_index));
+            if (result.state !== 'ready') continue;
+            const bytes = result.bytes instanceof Uint8Array
+                ? result.bytes
+                : new Uint8Array(/** @type {any} */ (result.bytes));
+            const bundle = rawImageBundle(bytes, file.action_index, null);
+            if (bundle) return bundle;
+        } catch {
+            // Try the next LINKed picture when one raw endpoint cannot answer.
+        }
+    }
+    return null;
+}
+
 // Shared TIS text → media-bundle path for the off-chain (URL fetch) and
 // on-chain (raw FILE bytes) document sources.
 function parseTisText(text) {
@@ -1531,10 +1555,16 @@ export async function tokenInfoFor({
         const fixture = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
         if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
+    // A TIS picture remains authoritative. Only when it has no artwork do
+    // owner-approved FILE+LINK bytes supply the token image.
+    const linkedArtworkBundle = metadataFetchEnabled && !demo && !tisBundle?.images?.length
+        ? await fetchLinkedArtworkBundle(sdk, raw)
+        : null;
     if (!demo) resolveMediaDataRefs(tisBundle, sdk);
     const info = normalizeTokenInfo(chainId, tick, raw, tisBundle, {
         allowRemoteMedia: metadataFetchEnabled && !demo,
         tisReadError: tisAttempted && !tisBundle,
+        fallbackImages: linkedArtworkBundle?.images || [],
     });
     // Marks a record built without the explorer's answer, so callers neither
     // cache it nor present its empty fields as the token's real state.

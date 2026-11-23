@@ -45,8 +45,10 @@ function deferred() {
 function resultWith(fee = 123) {
     return {
         quotes: {
-            taproot: { parts: 2, transactions: 7, fee },
-            standard: { parts: 3, transactions: 9, fee: fee + 1 },
+            taproot: { parts: 2, transactions: 7, fee, fundingTotal: fee },
+            standard: {
+                parts: 3, transactions: 9, fee: fee + 1, fundingTotal: fee + 1,
+            },
         },
         reasons: { taproot: null, standard: null },
     };
