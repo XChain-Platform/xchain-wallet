@@ -183,8 +183,10 @@ import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
+import { createInAppApprovals } from '../../core/src/site_request/inAppApprovals.js';
 
 const chainRegistry = defaultRegistry();
+const inAppApprovals = createInAppApprovals();
 
 /**
  * Token-ticker price source for the price-alert watcher, or null when the
@@ -1686,6 +1688,7 @@ export async function createWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            approvals: inAppApprovals,
             fileBlobs: null,
             resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
@@ -1841,6 +1844,7 @@ export async function importMnemonicLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            approvals: inAppApprovals,
             fileBlobs: null,
             resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
@@ -2047,6 +2051,7 @@ export async function importBackupLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            approvals: inAppApprovals,
             fileBlobs: null,
             resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
@@ -2135,6 +2140,7 @@ export async function createHardwareWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            approvals: inAppApprovals,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -2314,6 +2320,7 @@ export async function unlockWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            approvals: inAppApprovals,
             fileBlobs: null,
             resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
