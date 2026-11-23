@@ -58,6 +58,14 @@ const idx = readFileSync(
     join(wsRoot, 'packages', 'test-dapp', 'src', 'index.ts'),
     'utf8',
 );
+const page = readFileSync(
+    join(wsRoot, 'packages', 'test-dapp', 'public', 'index.html'),
+    'utf8',
+);
+const {
+    createCallbackStore,
+    createTestDappServer,
+} = await import('../../../packages/test-dapp/server.js');
 
 // --- 1. Mock provider options ------------------------------------------
 
@@ -222,6 +230,140 @@ for (const symbol of [
     );
 }
 
+assert.match(page, /createClient/);
+assert.match(page, /data-method="login"/);
+assert.match(page, /data-method="signMessage"/);
+assert.match(page, /data-method="signAction"/);
+assert.match(page, /data-method="signPsbt"/);
+assert.match(page, /\/callback/);
+assert.match(page, /\/claim\/\$\{envelope\.id\}/);
+
+const store = createCallbackStore();
+const callbackCalls = [];
+const auth = {
+    async receiveCallback(body, options) {
+        callbackCalls.push({ body, options });
+        const nonce = body.result.challenge.split(':').at(-1);
+        const issued = options.store.takeNonce(nonce);
+        if (!issued) {
+            return { accepted: false, id: body.id, status: 'rejected', error: 'bad nonce' };
+        }
+        const claimed = body.claim === undefined && issued.mode === 'cross-device';
+        const record = {
+            body,
+            verified: { address: body.result.address },
+            nonceMode: issued.mode,
+            claim: body.claim ?? null,
+            claimed,
+            status: claimed ? 'approved' : 'approved-unclaimed',
+        };
+        options.store.put(body.id, record);
+        return {
+            accepted: true,
+            id: body.id,
+            status: record.status,
+            claimed,
+            verified: record.verified,
+        };
+    },
+};
+const server = createTestDappServer({ auth, store });
+await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+});
+
+try {
+    const address = server.address();
+    const base = `http://127.0.0.1:${address.port}`;
+    const post = (path, body) => fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    const rootResponse = await fetch(`${base}/`);
+    assert.equal(rootResponse.status, 200);
+    assert.match(rootResponse.headers.get('content-type'), /^text\/html/);
+    assert.match(await rootResponse.text(), /XChain test dApp/);
+
+    const moduleResponse = await fetch(`${base}/connect/client.js`);
+    assert.equal(moduleResponse.status, 200);
+    assert.match(await moduleResponse.text(), /export function createClient/);
+
+    const nonceResponse = await post('/nonce', { mode: 'same-device' });
+    assert.equal(nonceResponse.status, 201);
+    const { nonce } = await nonceResponse.json();
+    assert.match(nonce, /^[A-Za-z0-9_-]{22}$/);
+
+    const id = 'A'.repeat(22);
+    const claim = 'B'.repeat(22);
+    const result = {
+        address: 'bcrt1qclaimant',
+        challenge: `test-login:${nonce}`,
+        signature: 'signed-test-login',
+    };
+    const callback = await post('/callback', {
+        v: 1,
+        id,
+        method: 'login',
+        ok: true,
+        result,
+        claim,
+    });
+    assert.equal(callback.status, 202);
+    assert.equal((await callback.json()).status, 'approved-unclaimed');
+    assert.equal(callbackCalls.length, 1);
+    assert.equal(callbackCalls[0].options.store, store);
+    assert.equal(callbackCalls[0].options.appId, 'xchain-test-dapp');
+    assert.equal(callbackCalls[0].options.origin, base);
+
+    const pending = await fetch(`${base}/result/${id}`);
+    assert.deepEqual(await pending.json(), {
+        ok: true,
+        status: 'approved-unclaimed',
+        claimed: false,
+    });
+
+    const wrongClaim = await post(`/claim/${id}`, { claim: 'C'.repeat(22) });
+    assert.equal(wrongClaim.status, 400);
+    assert.deepEqual(await wrongClaim.json(), { ok: false, reason: 'NO_MATCH' });
+
+    const acceptedClaim = await post(`/claim/${id}`, { claim });
+    assert.equal(acceptedClaim.status, 200);
+    assert.deepEqual(await acceptedClaim.json(), { ok: true, address: result.address });
+
+    const replayedClaim = await post(`/claim/${id}`, { claim });
+    assert.equal(replayedClaim.status, 409);
+    assert.deepEqual(await replayedClaim.json(), {
+        ok: false,
+        reason: 'ALREADY_CLAIMED',
+    });
+
+    const secondNonceResponse = await post('/nonce', { mode: 'same-device' });
+    const { nonce: secondNonce } = await secondNonceResponse.json();
+    const callbackOnlyId = 'D'.repeat(22);
+    const callbackOnly = await post('/callback', {
+        v: 1,
+        id: callbackOnlyId,
+        method: 'login',
+        ok: true,
+        result: {
+            address: 'bcrt1qcallback',
+            challenge: `test-login:${secondNonce}`,
+            signature: 'signed-callback-login',
+        },
+    });
+    assert.equal(callbackOnly.status, 202);
+    const noBrowserResult = await post(`/claim/${callbackOnlyId}`, {});
+    assert.equal(noBrowserResult.status, 400);
+    assert.deepEqual(await noBrowserResult.json(), { ok: false, reason: 'NO_MATCH' });
+} finally {
+    await new Promise((resolve, reject) => server.close((error) => (
+        error ? reject(error) : resolve()
+    )));
+}
+
 console.log(
-    'OK: test-dapp-error-scenarios smoke (Cluster S FOLLOWUP 5: MockProviderOptions.blockedSite + .throttle short-circuit connect/signMessage/signAction/signPsbt/signIn; example.ts adds handleSignActionResult tagged outcome with 7 branches incl. blocked/throttled; signActionWithRetry loops on THROTTLED with maxRetries + injectable sleep; runErrorScenarios + ErrorScenarioReport demonstrate both branches; index.ts re-exports the new surface)',
+    'OK: test-dapp error scenarios, browser page, callback receiver, claim match, replay refusal, and callback-only no-result rule',
 );

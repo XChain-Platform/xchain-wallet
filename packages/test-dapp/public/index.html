@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>XChain test dApp</title>
+    <style>
+        :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+        body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; background: #10131a; color: #f6f7fb; }
+        main { display: grid; gap: 1rem; }
+        section { padding: 1rem; border: 1px solid #384052; border-radius: .75rem; background: #181d27; }
+        button { margin: .25rem; padding: .65rem .9rem; border: 0; border-radius: .5rem; cursor: pointer; }
+        textarea { box-sizing: border-box; width: 100%; min-height: 8rem; padding: .75rem; }
+        pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>XChain test dApp</h1>
+        <p>Exercise the installed wallet provider and request-link return flow.</p>
+    </header>
+    <section aria-labelledby="requests-heading">
+        <h2 id="requests-heading">Requests</h2>
+        <button type="button" data-method="login">Login with XChain</button>
+        <button type="button" data-method="signMessage">Sign message</button>
+        <button type="button" data-method="signAction">Sign action</button>
+        <button type="button" data-method="signPsbt">Sign PSBT</button>
+    </section>
+    <section aria-labelledby="response-heading">
+        <h2 id="response-heading">Response</h2>
+        <pre id="response" aria-live="polite">Ready.</pre>
+    </section>
+</main>
+<script type="module">
+    import { createClient } from '/connect/client.js';
+
+    const output = document.querySelector('#response');
+    const params = {
+        signMessage: {
+            chainId: 'bitcoin-regtest',
+            address: '',
+            message: 'XChain test dApp message',
+        },
+        signAction: {
+            chainId: 'bitcoin-regtest',
+            from: '',
+            action: 'SEND',
+            params: { destination: '', quantity: '1' },
+        },
+        signPsbt: {
+            chainId: 'bitcoin-regtest',
+            psbtHex: '',
+            signingPaths: [],
+        },
+    };
+
+    function requestId() {
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+    }
+
+    async function jsonFetch(url, options) {
+        const response = await fetch(url, options);
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? body.reason ?? `HTTP ${response.status}`);
+        return body;
+    }
+
+    async function issueNonce() {
+        const response = await jsonFetch('/nonce', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'same-device' }),
+        });
+        return response.nonce;
+    }
+
+    let loginNonce = await issueNonce();
+    const client = createClient({ window, storage: localStorage });
+
+    async function claimReturnedLogin(envelope) {
+        if (envelope.method !== 'login' || envelope.ok !== true || !envelope.claim) return envelope;
+        const claimed = await jsonFetch(`/claim/${envelope.id}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ claim: envelope.claim, result: envelope.result }),
+        });
+        return { ...envelope, claimed };
+    }
+
+    client.onReturn(async (envelope) => {
+        try {
+            output.textContent = JSON.stringify(await claimReturnedLogin(envelope), null, 2);
+        } catch (error) {
+            output.textContent = JSON.stringify({ ok: false, error: error.message }, null, 2);
+        }
+    });
+    client.start();
+
+    document.querySelectorAll('[data-method]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const method = button.dataset.method;
+            const id = requestId();
+            const requestParams = method === 'login'
+                ? {
+                    appId: 'xchain-test-dapp',
+                    nonce: loginNonce,
+                    chains: ['bitcoin-regtest'],
+                }
+                : params[method];
+            output.textContent = 'Waiting for the wallet...';
+            try {
+                const request = client.request(method, requestParams, {
+                    id,
+                    return: location.href.split('#', 1)[0],
+                    callback: `${location.origin}/callback`,
+                    developerMode: true,
+                    app: { name: 'XChain test dApp' },
+                });
+                if (method === 'login') loginNonce = await issueNonce();
+                const result = await request;
+                output.textContent = JSON.stringify(await claimReturnedLogin(result), null, 2);
+            } catch (error) {
+                output.textContent = JSON.stringify({ ok: false, error: error.message }, null, 2);
+            }
+        });
+    });
+</script>
+</body>
+</html>
