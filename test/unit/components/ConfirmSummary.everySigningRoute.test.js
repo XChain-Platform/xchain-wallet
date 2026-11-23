@@ -25,7 +25,7 @@ const PACKAGES = path.join(ROOT, 'packages');
 // Call sites that are not a signing surface.
 const NOT_SIGNING = new Set([
     // The style guide's live specimen of the screen, fed a fixture.
-    'packages/web/src/style-guide/sections/ConfirmAndResultSections.jsx',
+    'packages/web/src/style-guide/sections/ActionConfirmSection.jsx',
 ]);
 
 // These adapters render the modal for a specialized input. Message and PSBT
