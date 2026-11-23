@@ -55,8 +55,15 @@ import { GovernancePollWatcher } from '../../core/src/notifications/GovernancePo
 import { DeadlineWatcher } from '../../core/src/notifications/DeadlineWatcher.js';
 import { DispenserEscrowWatcher } from '../../core/src/notifications/DispenserEscrowWatcher.js';
 import { CoinpayAutopayWatcher } from '../../core/src/notifications/CoinpayAutopayWatcher.js';
+import { syncDeadlineSchedule } from '../../core/src/notifications/scheduledDeadlines.js';
+import {
+    HOME_BALANCES_PUBLISHED_EVENT,
+    startActivityCheckSync,
+} from '../../core/src/notifications/activityCheckConfig.js';
 import { createLockedAutopay } from '../../core/src/market/autopaySession.js';
 import { getActiveAddresses } from '../../core/src/notifications/getActiveAddresses.js';
+import { isNativeShell } from '../../core/src/shared/nativeShell.js';
+import { createWatchBridge } from '../../core/src/watch/watchBridge.js';
 import {
     SOUND_PREVIEW_EVENT,
     withNotificationSound,
@@ -67,6 +74,7 @@ import {
     markPendingTxMempoolSeen,
 } from '../../core/src/notifications/pendingTxBridge.js';
 import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
+import { chooseNotifyAdapter } from './notifications/chooseNotifyAdapter.js';
 import { installSampleFiatSource } from './devFiatSource.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
 // this module resolves under Node without the pnpm workspace symlink
@@ -898,6 +906,37 @@ function rememberDesktopNotificationsSetting(settings) {
     return settings;
 }
 
+const createShellNotifyAdapter = () => chooseNotifyAdapter({
+    createWeb: () => createWebNotifyAdapter({
+        getDesktopSetting: getDesktopNotificationsSetting,
+    }),
+});
+
+let nativeHomeState = {};
+if (isNativeShell(globalThis)) {
+    const bridge = createWatchBridge();
+    globalThis.addEventListener?.(HOME_BALANCES_PUBLISHED_EVENT, (event) => {
+        nativeHomeState = event?.detail || {};
+    });
+    void Promise.all([
+        import('../../core/src/watch/watchHost.js'),
+        import('../../core/src/watch/watchIntents.js'),
+    ]).then(([{ startWatchHost }, { createWatchIntents }]) => {
+        void startWatchHost({ bridge });
+        const intents = createWatchIntents({
+            getRows: () => nativeHomeState.rows || [],
+            getDetailOptions: () => nativeHomeState,
+            getTokenInfo: ({ chainId, tick }) => sdkRegistry.get(chainId)?.getTokenInfo(tick),
+            sendDetail: (detail) => bridge.sendDetail(detail),
+            refresh: () => globalThis.dispatchEvent?.(new CustomEvent(HOME_BALANCES_PUBLISHED_EVENT, { detail: nativeHomeState })),
+            markRead: (id) => sendMessage('alertInbox.markRead', { id }),
+            openOnPhone: (route) => globalThis.dispatchEvent?.(new CustomEvent('xc:watch-open-on-phone', { detail: { route } })),
+        });
+        bridge.onIntent(intents.handle);
+    });
+    startActivityCheckSync({ target: globalThis, readState: () => nativeHomeState });
+}
+
 // PC-16 Phase B: auto pay keeps paying armed orders after a lock, for as long
 // as this tab stays open. The session lives in this page's memory only and is
 // reachable through nothing but the status and Stop exports below. While it
@@ -905,7 +944,7 @@ function rememberDesktopNotificationsSetting(settings) {
 // race its writes); every end except an unlock gives the lease back.
 const lockedAutopay = createLockedAutopay({
     shellKind: 'web',
-    notify: createWebNotifyAdapter({ getDesktopSetting: getDesktopNotificationsSetting }),
+    notify: createShellNotifyAdapter(),
     logger: console,
     onEnded: (reason) => {
         if (reason !== 'unlock' && !vault) void releaseWebVaultLease();
@@ -1093,13 +1132,18 @@ function startNotificationsNow() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
-    const notify = withNotificationSound(
-        createWebNotifyAdapter({ getDesktopSetting: getDesktopNotificationsSetting }),
+    const delivery = createShellNotifyAdapter();
+    const notify = Object.assign(withNotificationSound(
+        delivery,
         async () => {
             const flowsNs = await getFlows();
             return rememberDesktopNotificationsSetting(await flowsNs.getSettings(vault));
         },
-    );
+    ), {
+        cancel: delivery.cancel,
+        onAction: delivery.onAction,
+        schedule: delivery.schedule,
+    });
     notificationService = new NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
@@ -1184,6 +1228,23 @@ function startNotificationsNow() {
     // PC-45: deadline watcher. COINPAY obligations (PC-15) and unstake
     // cooldowns (PC-47) own their own timers; this deep-links to them.
     if (!deadlineWatcher) {
+        const deadlineIds = (seen) => new Set(Object.entries(seen || {}).flatMap(
+            ([chainId, keys]) => (Array.isArray(keys)
+                ? keys.map((key) => `deadline:${chainId}:${key}`)
+                : []),
+        ));
+        let knownDeadlineIds = new Set();
+        const deadlineNotify = async (payload) => {
+            const data = payload?.data || {};
+            if (!isNativeShell(globalThis) || payload?.kind !== 'deadline') return notify(payload);
+            const expirationMs = Number(data.expiration) * 1000;
+            await syncDeadlineSchedule([{
+                ...payload,
+                key: `${data.chainId}:${data.kind}:${data.actionIndex}`,
+                deadlineMs: Number.isFinite(expirationMs) ? expirationMs : Date.now() + 60_000,
+            }], { notify });
+            return true;
+        };
         deadlineWatcher = new DeadlineWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
@@ -1198,12 +1259,23 @@ function startNotificationsNow() {
                 return flowsNs.getSettings(vault);
             },
             coinForChain: (chainId) => chainRegistry.get(chainId)?.coin || null,
-            notify,
+            notify: deadlineNotify,
             loadSeen: () => {
-                try { return JSON.parse(globalThis.localStorage?.getItem(DEADLINE_SEEN_KEY) || 'null'); }
+                try {
+                    const seen = JSON.parse(globalThis.localStorage?.getItem(DEADLINE_SEEN_KEY) || 'null');
+                    knownDeadlineIds = deadlineIds(seen);
+                    return seen;
+                }
                 catch (_err) { return null; }
             },
-            saveSeen: (seen) => {
+            saveSeen: async (seen) => {
+                const nextIds = deadlineIds(seen);
+                if (isNativeShell(globalThis) && typeof notify.cancel === 'function') {
+                    await Promise.all(Array.from(knownDeadlineIds)
+                        .filter((id) => !nextIds.has(id))
+                        .map((id) => notify.cancel(id)));
+                }
+                knownDeadlineIds = nextIds;
                 try { globalThis.localStorage?.setItem(DEADLINE_SEEN_KEY, JSON.stringify(seen)); }
                 catch (_err) { /* quota/private-mode: fall back to in-session only */ }
             },
