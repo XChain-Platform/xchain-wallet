@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
@@ -57,6 +59,23 @@ internal fun BalancesScreen(
     text: @Composable (String) -> String,
 ) {
     val state = rememberTransformingLazyColumnState()
+    val resolvedLabelText = mutableMapOf<String, String>()
+    for (line in display.lines) {
+        val lineKey = line.key
+        if (lineKey != null) resolvedLabelText[lineKey] = text(lineKey)
+
+        val primaryKey = line.primary?.key
+        if (primaryKey != null) {
+            resolvedLabelText[primaryKey] = text(primaryKey)
+            if (primaryKey == "state.hidden") {
+                resolvedLabelText[SpokenLabels.HIDDEN_KEY] = text(SpokenLabels.HIDDEN_KEY)
+            }
+        }
+
+        val secondaryKey = line.secondary?.key
+        if (secondaryKey != null) resolvedLabelText[secondaryKey] = text(secondaryKey)
+    }
+    val labels = AccessibilityLabels.balanceLines(display, resolvedLabelText::getValue)
     ScreenScaffold(scrollState = state) { padding ->
         TransformingLazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -93,7 +112,7 @@ internal fun BalancesScreen(
                     Age(line, text(key))
                 }
             }
-            items(display.lines) { line -> BalanceLine(line, text) }
+            items(display.lines.zip(labels)) { (line, label) -> BalanceLine(line, label, text) }
         }
     }
 }
@@ -117,13 +136,23 @@ private fun Head(
 }
 
 @Composable
-private fun BalanceLine(line: BalanceLine, text: @Composable (String) -> String) {
+private fun BalanceLine(
+    line: BalanceLine,
+    label: String,
+    text: @Composable (String) -> String,
+) {
     if (line.name == null) {
-        Text(text(requireNotNull(line.key)))
+        Text(
+            text(requireNotNull(line.key)),
+            Modifier.semantics(mergeDescendants = true) { contentDescription = label },
+        )
         return
     }
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) { contentDescription = label },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(line.name, Modifier.weight(1f))
@@ -143,6 +172,7 @@ private fun balancesText(key: String): String = stringResource(
     when (key) {
         "state.age" -> R.string.state_age
         "state.ageAmber" -> R.string.state_age_amber
+        "state.amountHidden" -> R.string.state_amount_hidden
         "state.balanceUnavailable" -> R.string.state_balance_unavailable
         "state.hidden" -> R.string.state_hidden
         "state.loading" -> R.string.state_loading

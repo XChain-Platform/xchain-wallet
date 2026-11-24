@@ -7,7 +7,7 @@ import SwiftUI
 struct XChainWatchApp: App {
     var body: some Scene {
         WindowGroup {
-            Text("Open XChain Wallet on your phone")
+            RootView()
         }
     }
 }

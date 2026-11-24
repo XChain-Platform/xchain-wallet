@@ -33,6 +33,7 @@ struct BalancesScreen: View {
     let now: Int64?
     let setMode: (WatchUnitsMode) -> Void
     let open: (WatchScreen) -> Void
+    var onShown: () -> Void = { WatchEventLog.screenShown(.balances) }
 
     @State private var crownDetent = 0
     @State private var scrollTarget: Int?
@@ -80,6 +81,10 @@ struct BalancesScreen: View {
         setMode(target)
     }
 
+    func appeared() {
+        onShown()
+    }
+
     var body: some View {
         List {
             ForEach(display.banners, id: \.self) {
@@ -98,6 +103,7 @@ struct BalancesScreen: View {
                 ageLine(age)
             }
         }
+        .onAppear { appeared() }
         .scrollPosition(id: $scrollTarget)
         .digitalCrownRotation(
             detent: $crownDetent,
