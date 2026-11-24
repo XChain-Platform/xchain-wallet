@@ -3,6 +3,14 @@
 
 import SwiftUI
 
+struct WatchAmountFit: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+}
+
 struct BalanceSelection: Hashable {
     let id: String
 }
@@ -60,6 +68,11 @@ struct BalancesScreen: View {
         )
     }
 
+    var requestModel: AlertsPresenter.RequestModel? {
+        guard let snapshot, !snapshot.request.id.isEmpty else { return nil }
+        return AlertsPresenter.request(snapshot.request, now: now ?? snapshot.builtAt)
+    }
+
     func toggleUnits() {
         guard let target = BalancesToolbarRules.headerTap(
             mode: resolvedMode,
@@ -75,15 +88,20 @@ struct BalancesScreen: View {
     var body: some View {
         List {
             ForEach(display.banners, id: \.self) {
-                Text(LocalizedStringKey($0)).font(.caption2)
+                banner($0)
             }
             if let header = display.header { headerButton(header) }
+            if let requestModel { requestLink(requestModel) }
             ForEach(rows) { row in rowLink(row).id(row.index) }
             ForEach(Array(display.lines.dropFirst(rows.count).enumerated()), id: \.offset) {
-                _, line in
-                if let key = line.key { Text(LocalizedStringKey(key)).font(.caption2) }
+                offset, line in
+                if let key = line.key {
+                    statusLine(key, index: rows.count + offset)
+                }
             }
-            if let age = display.ageLine { Text(LocalizedStringKey(age)).font(.caption2) }
+            if let age = display.ageLine {
+                ageLine(age)
+            }
         }
         .onAppear { appeared() }
         .scrollPosition(id: $scrollTarget)
@@ -104,7 +122,27 @@ struct BalancesScreen: View {
     }
 
     func headerButton(_ header: BalanceText) -> BalancesHeaderButton {
-        BalancesHeaderButton(header: header, action: toggleUnits)
+        BalancesHeaderButton(
+            header: header,
+            accessibilityLabel: headerLabel(),
+            action: toggleUnits
+        )
+    }
+
+    func headerLabel() -> String {
+        AccessibilityLabels.balanceHeader(display, text: localized)
+    }
+
+    func rowLabel(_ index: Int) -> String {
+        AccessibilityLabels.balanceLine(display.lines[index], text: localized)
+    }
+
+    func requestLabel(_ model: AlertsPresenter.RequestModel) -> String {
+        AccessibilityLabels.requestPinned(model, text: localized)
+    }
+
+    func controlLabel(_ key: String) -> String {
+        AccessibilityLabels.control(key, text: localized)
     }
 
     @ViewBuilder
@@ -121,25 +159,64 @@ struct BalancesScreen: View {
         BalancesToolbar(unread: unread, open: open)
     }
 
+    func requestLink(_ model: AlertsPresenter.RequestModel) -> some View {
+        NavigationLink(value: AlertSelection(id: snapshot?.request.id ?? "")) {
+            Text(LocalizedStringKey(display.requestKey ?? "w1.requestWaiting"))
+        }
+        .accessibilityLabel(Text(verbatim: requestLabel(model)))
+    }
+
+    func banner(_ key: String) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: controlLabel(key)))
+    }
+
+    func statusLine(_ key: String, index: Int) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: rowLabel(index)))
+    }
+
+    func ageLine(_ key: String) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: controlLabel(key)))
+    }
+
     func rowLink(_ item: BalancesScreenRow) -> some View {
         NavigationLink(value: item.selection) {
-            BalanceRowView(
-                name: item.line.name ?? "",
-                chainId: item.row.chainId,
-                tick: item.row.tick,
-                tickerColor: item.row.tickerColor,
-                amountCell: (cellText(item.line.primary), item.line.secondary?.text)
-            )
+            fittedRow(item)
         }
+        .accessibilityLabel(Text(verbatim: rowLabel(item.index)))
+    }
+
+    func fittedRow(_ item: BalancesScreenRow) -> some View {
+        rowView(item).modifier(WatchAmountFit())
+    }
+
+    func rowView(_ item: BalancesScreenRow) -> BalanceRowView {
+        BalanceRowView(
+            name: item.line.name ?? "",
+            chainId: item.row.chainId,
+            tick: item.row.tick,
+            tickerColor: item.row.tickerColor,
+            amountCell: (cellText(item.line.primary), item.line.secondary?.text)
+        )
     }
 
     private func cellText(_ text: BalanceText?) -> String {
         text?.text ?? text?.key.map { NSLocalizedString($0, comment: "") } ?? ""
     }
+
+    private func localized(_ key: String) -> String {
+        NSLocalizedString(key, comment: "")
+    }
 }
 
 struct BalancesHeaderButton: View {
     let header: BalanceText
+    let accessibilityLabel: String
     let action: () -> Void
 
     var body: some View {
@@ -147,6 +224,7 @@ struct BalancesHeaderButton: View {
             Text(header.key.map { LocalizedStringKey($0) } ?? LocalizedStringKey(header.text ?? ""))
                 .font(.headline)
         }
+        .accessibilityLabel(Text(verbatim: accessibilityLabel))
     }
 }
 
@@ -165,6 +243,22 @@ struct BalancesToolbar: ToolbarContent {
     func controlButton(_ control: BalancesToolbarRules.Control) -> some View {
         Button { open(BalancesToolbarRules.destination(control)) } label: {
             Image(systemName: iconName(control))
+        }
+        .accessibilityLabel(Text(verbatim: controlLabel(control)))
+    }
+
+    func controlLabel(_ control: BalancesToolbarRules.Control) -> String {
+        AccessibilityLabels.control(
+            labelKey(control),
+            text: { NSLocalizedString($0, comment: "") }
+        )
+    }
+
+    private func labelKey(_ control: BalancesToolbarRules.Control) -> String {
+        switch control {
+        case .bell: return "w3.title"
+        case .qr: return "w1.receive"
+        case .status: return "state.status"
         }
     }
 
