@@ -9,27 +9,31 @@ struct RequestLongLook: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            if let content = presentation(at: context.date) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(LocalizedStringKey(content.titleKey))
-                            .font(.headline)
-                        Text(content.sentence)
-                        Text(content.amountText)
-                            .font(.title3.weight(.semibold))
-                        if let expiresAt = request.expiresAt {
-                            Text(
-                                timerInterval: context.date...Date(
-                                    timeIntervalSince1970: TimeInterval(expiresAt) / 1_000
-                                ),
-                                countsDown: true
-                            )
-                            .font(.caption)
-                        }
-                        RequestLongLookOpenOnPhoneAction(
-                            titleKey: content.openOnPhoneKey,
-                            openOnPhone: openOnPhone
+            longLookContent(at: context.date)
+        }
+    }
+
+    @ViewBuilder
+    func longLookContent(at date: Date) -> some View {
+        if let content = presentation(at: date) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(LocalizedStringKey(content.titleKey))
+                        .font(.headline)
+                    Text(content.sentence)
+                    Text(content.amountText)
+                        .font(.title3.weight(.semibold))
+                    if let expiresAt = request.expiresAt {
+                        Text(
+                            timerInterval: date...Date(
+                                timeIntervalSince1970: TimeInterval(expiresAt) / 1_000
+                            ),
+                            countsDown: true
                         )
+                        .font(.caption)
+                    }
+                    Button(action: openOnPhone) {
+                        Label(LocalizedStringKey(content.openOnPhoneKey), systemImage: "iphone")
                     }
                 }
             }
@@ -44,16 +48,5 @@ struct RequestLongLook: View {
             expiresAt: request.expiresAt,
             now: Int64(date.timeIntervalSince1970 * 1_000)
         )
-    }
-}
-
-struct RequestLongLookOpenOnPhoneAction: View {
-    let titleKey: String
-    let openOnPhone: () -> Void
-
-    var body: some View {
-        Button(action: openOnPhone) {
-            Label(LocalizedStringKey(titleKey), systemImage: "iphone")
-        }
     }
 }

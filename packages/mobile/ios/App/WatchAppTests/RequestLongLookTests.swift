@@ -45,13 +45,13 @@ final class RequestLongLookTests: XCTestCase {
                 openedIds.append(fixture.id)
             }
             let content = try XCTUnwrap(view.presentation(at: Date(timeIntervalSince1970: 0)))
-            let action = RequestLongLookOpenOnPhoneAction(
-                titleKey: content.openOnPhoneKey,
-                openOnPhone: view.openOnPhone
+            let renderedContent = view.longLookContent(at: Date(timeIntervalSince1970: 0))
+            let button = try XCTUnwrap(
+                descendant(in: renderedContent) {
+                    String(reflecting: type(of: $0)).hasPrefix("SwiftUI.Button<")
+                },
+                "Rendered long look has no button for \(name)"
             )
-            let button = action.body
-            let buttonType = String(reflecting: type(of: button))
-            XCTAssertTrue(buttonType.contains("SwiftUI.Button<"), buttonType)
             let installedAction = try XCTUnwrap(
                 Mirror(reflecting: button).children.first { $0.label == "action" }?.value,
                 "Rendered view has no button action for \(name)"
@@ -67,6 +67,18 @@ final class RequestLongLookTests: XCTestCase {
             XCTAssertEqual(openedIds, [fixture.id], name)
             XCTAssertEqual(content.openOnPhoneKey, "n2.openOnPhone", name)
         }
+    }
+
+    private func descendant(in value: Any, matching predicate: (Any) -> Bool) -> Any? {
+        if predicate(value) {
+            return value
+        }
+        for child in Mirror(reflecting: value).children {
+            if let match = descendant(in: child.value, matching: predicate) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func request(_ name: String, in directory: URL) throws -> Request {
