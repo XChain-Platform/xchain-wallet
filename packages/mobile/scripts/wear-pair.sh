@@ -43,8 +43,9 @@ mkdir -p "$pid_dir"
 
 boot_avd() {
     local avd="$1" serial="$2" port="$3" pid_file="$pid_dir/wear-pair-$1.pid"
+    shift 3
     if adb_for "$serial" emu avd name 2>/dev/null | tr -d '\r' | grep -Fqx "$avd"; then return; fi
-    "$emulator" -avd "$avd" -port "$port" -no-window -no-audio >"$pid_dir/wear-pair-$avd.log" 2>&1 &
+    "$emulator" -avd "$avd" -port "$port" -no-window -no-audio "$@" >"$pid_dir/wear-pair-$avd.log" 2>&1 &
     printf '%s\n' "$!" > "$pid_file"
     "$adb" -s "$serial" wait-for-device
     local deadline=$((SECONDS + 300))
@@ -66,13 +67,23 @@ else
     fi
     boot_avd "$phone_avd" "$phone_serial" 5560
 fi
-boot_avd "$watch_avd" "$watch_serial" 5570
+boot_avd "$watch_avd" "$watch_serial" 5570 -no-snapshot
 
 adb_for "$phone_serial" forward tcp:5601 tcp:5601
 adb_for "$phone_serial" shell pm path com.google.android.wearable.app >/dev/null 2>&1 \
     || die 'missing Wear OS companion app'
-adb_for "$phone_serial" shell dumpsys account 2>/dev/null | grep 'type=com.google' >/dev/null \
-    || die 'missing Google sign-in'
+adb_for "$phone_serial" shell dumpsys account 2>/dev/null | awk '
+    /^[[:space:]]*Accounts: [0-9]+/ { accounts = 1; next }
+    accounts && /^[[:space:]]+/ {
+        entry = $0
+        sub(/^[[:space:]]+/, "", entry)
+        if (index(entry, "Account {") != 1) exit !found
+        if ($0 ~ /type=com[.]google[},]/) found = 1
+        next
+    }
+    accounts { exit !found }
+    END { exit !found }
+' || die "missing Google sign-in on $phone_serial"
 adb_for "$phone_serial" shell monkey -p com.google.android.wearable.app -c android.intent.category.LAUNCHER 1 >/dev/null
 adb_for "$phone_serial" shell input keyevent KEYCODE_MENU
 

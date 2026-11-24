@@ -50,6 +50,7 @@ describe('wear-pair.sh', () => {
         const commands = lines(fixture.log);
 
         expect(result.status).toBe(0);
+        expect(result.stdout + result.stderr).not.toContain('signed-in@example.test');
         expect(commands).toContain('adb -d get-serialno');
         expect(commands).toContain('adb -s LGK500 shell getprop ro.product.model');
         expect(commands).toContain('adb -s LGK500 forward tcp:5601 tcp:5601');
@@ -60,7 +61,8 @@ describe('wear-pair.sh', () => {
         expect(commands).toContain('watch-test gradle :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug');
         expect(commands.some((line) => line.includes('WatchPairedTest'))).toBe(true);
         expect(commands.some((line) => line.includes('-avd xc-phone-play'))).toBe(false);
-        expect(commands.some((line) => line.includes('-avd xc-wear-large-round -port 5570'))).toBe(true);
+        expect(commands.some((line) => line.includes('-avd xc-wear-large-round -port 5570')
+            && line.includes('-no-snapshot'))).toBe(true);
     });
 
     it('creates and boots the fallback phone AVD, then forwards through it', () => {
@@ -72,6 +74,8 @@ describe('wear-pair.sh', () => {
         expect(commands).toContain('sdkmanager --install system-images;android-36;google_apis_playstore;arm64-v8a');
         expect(commands).toContain('avdmanager create avd -n xc-phone-play -k system-images;android-36;google_apis_playstore;arm64-v8a -d pixel_6');
         expect(commands.some((line) => line.includes('-avd xc-phone-play -port 5560'))).toBe(true);
+        expect(commands.some((line) => line.includes('-avd xc-phone-play')
+            && line.includes('-no-snapshot'))).toBe(false);
         expect(commands).toContain('adb -s emulator-5560 forward tcp:5601 tcp:5601');
     });
 
@@ -99,7 +103,6 @@ describe('wear-pair.sh', () => {
 
     it.each([
         [{ companion: false }, 'missing Wear OS companion app'],
-        [{ signIn: false }, 'missing Google sign-in'],
         [{ model: 'Pixel 9' }, 'attached device is not the LG K500'],
     ])('names an unavailable device prerequisite', (options, message) => {
         const fixture = makeFixture(options);
@@ -107,6 +110,14 @@ describe('wear-pair.sh', () => {
 
         expect(result.status).toBe(1);
         expect(result.stderr).toContain(message);
+    });
+
+    it('rejects Google authenticator services when the Accounts section is empty', () => {
+        const fixture = makeFixture({ signIn: false });
+        const result = run(fixture, ['--device']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('missing Google sign-in on LGK500');
     });
 
     it('rejects broad process termination', () => {
@@ -295,7 +306,13 @@ case "$*" in
     [ "$HAS_COMPANION" = 1 ] || exit 1
     printf 'package:wear.apk\\n'
     ;;
-  *' shell dumpsys account') [ "$HAS_SIGN_IN" = 1 ] && printf 'type=com.google\\n' ;;
+  *' shell dumpsys account')
+    if [ "$HAS_SIGN_IN" = 1 ]; then
+      printf '%s\\n' 'Accounts: 1' '  Account {name=signed-in@example.test, type=com.google}'
+    else
+      printf '%s\\n' 'Accounts: 0' 'AuthenticatorDescription {type=com.google}' 'ServiceInfo: type=com.google'
+    fi
+    ;;
   *' shell cat /sdcard/xchain-wear-pair.xml')
     printf '%s\\n' '<hierarchy><node text="Pair with emulator" bounds="[10,20][110,120]"/><node text="Pair" bounds="[200,300][400,500]"/></hierarchy>'
     ;;
