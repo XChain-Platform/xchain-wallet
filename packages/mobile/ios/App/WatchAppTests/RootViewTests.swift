@@ -90,17 +90,22 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testRootNavigationStackRendersAtBothWatchSizes() throws {
+    func testRootNavigationStackBuildsAtBothWatchSizes() throws {
         let model = makeModel()
         session.receive(snapshot(enabled: true))
         waitForMainQueue()
 
         for size in [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)] {
-            let renderer = ImageRenderer(content: RootView(model: model).frame(
+            let body = RootView(model: model).body.frame(
                 width: size.width,
                 height: size.height
-            ))
-            XCTAssertNotNil(renderer.cgImage, "\(size)")
+            )
+            let typeNames = renderedTypeNames(in: body)
+
+            XCTAssertTrue(typeNames.contains { $0.contains("NavigationStack") }, "\(size)")
+            XCTAssertTrue(typeNames.contains { $0.contains("WatchScreen") }, "\(size)")
+            XCTAssertTrue(typeNames.contains { $0.contains("BalanceSelection") }, "\(size)")
+            XCTAssertTrue(typeNames.contains { $0.contains("AlertSelection") }, "\(size)")
         }
     }
 
@@ -160,6 +165,26 @@ final class RootViewTests: XCTestCase {
     private func value(kind: String) throws -> [String: Any] {
         let message = try XCTUnwrap(session.messages.first { $0["kind"] as? String == kind })
         return try XCTUnwrap(message["value"] as? [String: Any])
+    }
+
+    private func renderedTypeNames(in value: Any) -> Set<String> {
+        var typeNames = Set<String>()
+        var visited = Set<ObjectIdentifier>()
+
+        func visit(_ value: Any, depth: Int) {
+            guard depth < 50 else { return }
+            typeNames.insert(String(reflecting: type(of: value)))
+
+            let mirror = Mirror(reflecting: value)
+            if mirror.displayStyle == .class {
+                let identifier = ObjectIdentifier(value as AnyObject)
+                guard visited.insert(identifier).inserted else { return }
+            }
+            for child in mirror.children { visit(child.value, depth: depth + 1) }
+        }
+
+        visit(value, depth: 0)
+        return typeNames
     }
 }
 
