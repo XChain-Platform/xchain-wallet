@@ -86,6 +86,7 @@ const PORT = Number(process.env.E2E_DEV_PORT) || 5473;
 const BASE_URL = `http://localhost:${PORT}`;
 
 const budget = timeoutBudget();
+const runDeviceSpecs = process.env.XCHAIN_DEVICE_E2E === '1';
 // Named in the run's own output, so a red run is self-describing: the
 // budget it had is the first thing you need to know when deciding whether
 // a timeout was pressure or a genuine hang.
@@ -103,6 +104,8 @@ export default defineConfig({
         '**/*.regtest.spec.js',
         '**/*.testnet.spec.js',
         '**/*.extension.spec.js',
+        // On a Mac with a booted simulator or attached device: XCHAIN_DEVICE_E2E=1 npx playwright test --config test/e2e/playwright.config.js test/e2e/tests/flows/site-request/round-trip.device.spec.js
+        ...(runDeviceSpecs ? [] : ['**/*.device.spec.js']),
         // On demand through playwright.a11y-sweep.config.js: about a hundred
         // screens per theme and size is too long for the default run.
         '**/demo-axe-sweep.spec.js',
