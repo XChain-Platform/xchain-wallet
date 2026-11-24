@@ -172,7 +172,7 @@ public class XChainNotifyPluginTest {
 
         TestDriver driver = WorkManagerTestInitHelper.getTestDriver(context);
         assertNotNull(driver);
-        assertTrue(driver.setInitialDelayMet(scheduled.getId()));
+        driver.setInitialDelayMet(scheduled.getId());
         assertEquals(WorkInfo.State.SUCCEEDED,
                 workManager.getWorkInfoById(scheduled.getId()).get().getState());
         Notification posted = shadowOf(context.getSystemService(NotificationManager.class))
