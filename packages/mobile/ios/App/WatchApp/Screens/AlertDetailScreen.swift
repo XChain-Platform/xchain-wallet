@@ -31,6 +31,73 @@ struct AlertDetailScreen: View {
         self.onOpenOnPhone = onOpenOnPhone
     }
 
+    var content: AlertDetailContent {
+        AlertDetailContent(
+            item: item,
+            request: request,
+            now: now,
+            onOpenOnPhone: onOpenOnPhone
+        )
+    }
+
+    var familySymbol: String { content.familySymbol }
+
+    var detailBody: String? { content.detailBody }
+    var alertTime: (key: String, n: Int)? { content.alertTime }
+    var requestExpired: Bool { content.requestExpired }
+    var requestModel: AlertsPresenter.RequestModel? { content.requestModel }
+    var alertLabel: (SnapshotInboxItem) -> String { content.alertLabel }
+    var requestLabel: (Int) -> String { content.requestLabel }
+    var controlLabel: (String) -> String { content.controlLabel }
+
+    var body: some View {
+        ScrollView {
+            content
+        }
+        .navigationTitle(LocalizedStringKey("w4.title"))
+    }
+}
+
+struct AlertDetailContent: View {
+    let item: SnapshotInboxItem?
+    let request: Request?
+    let now: Int64
+    let onOpenOnPhone: () -> Void
+
+    init(
+        item: SnapshotInboxItem,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1_000),
+        onOpenOnPhone: @escaping () -> Void
+    ) {
+        self.item = item
+        request = nil
+        self.now = now
+        self.onOpenOnPhone = onOpenOnPhone
+    }
+
+    init(
+        request: Request,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1_000),
+        onOpenOnPhone: @escaping () -> Void
+    ) {
+        item = nil
+        self.request = request
+        self.now = now
+        self.onOpenOnPhone = onOpenOnPhone
+    }
+
+    init(
+        item: SnapshotInboxItem?,
+        request: Request?,
+        now: Int64,
+        onOpenOnPhone: @escaping () -> Void
+    ) {
+        self.item = item
+        self.request = request
+        self.now = now
+        self.onOpenOnPhone = onOpenOnPhone
+    }
+
     var familySymbol: String {
         AlertFamilyIcon.symbol(family: item?.family ?? request?.kind.rawValue ?? "")
     }
@@ -43,6 +110,50 @@ struct AlertDetailScreen: View {
     var requestModel: AlertsPresenter.RequestModel? {
         request.map { AlertsPresenter.request($0, now: now) }
     }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: familySymbol).font(.title2).foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            if let item {
+                Text(item.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(Text(verbatim: alertLabel(item)))
+                if let detailBody {
+                    Text(detailBody).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                }
+                if let time = alertTime {
+                    Text(RelativeTimeText.fill(NSLocalizedString(time.key, comment: ""), n: time.n))
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            } else if let request {
+                Text(request.sentence).font(.headline).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(Text(verbatim: requestLabel(0)))
+                LabeledContent(LocalizedStringKey("w4.requestAmount"), value: request.amountText)
+                    .accessibilityLabel(Text(verbatim: requestLabel(1)))
+                if let expiresAt = request.expiresAt {
+                    if requestExpired {
+                        Text(LocalizedStringKey("w4.requestExpired"))
+                            .accessibilityLabel(Text(verbatim: requestLabel(2)))
+                    } else {
+                        LabeledContent(LocalizedStringKey("w4.requestExpiry")) {
+                            Text(
+                                Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
+                                format: .dateTime.month(.abbreviated).day().hour().minute()
+                            )
+                        }
+                        .accessibilityLabel(Text(verbatim: requestLabel(2)))
+                    }
+                }
+            }
+            Button(action: onOpenOnPhone) {
+                Label(LocalizedStringKey("w4.openOnPhone"), systemImage: "iphone")
+            }
+            .accessibilityLabel(Text(verbatim: controlLabel("w4.openOnPhone")))
+        }
+    }
+
     func alertLabel(_ item: SnapshotInboxItem) -> String {
         AccessibilityLabels.alertDetail(item, time: formattedAlertTime)
     }
@@ -58,52 +169,6 @@ struct AlertDetailScreen: View {
 
     func controlLabel(_ key: String) -> String {
         AccessibilityLabels.control(key, text: localized)
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: familySymbol).font(.title2).foregroundStyle(.tint)
-                    .accessibilityHidden(true)
-                if let item {
-                    Text(item.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(Text(verbatim: alertLabel(item)))
-                    if let detailBody {
-                        Text(detailBody).fixedSize(horizontal: false, vertical: true)
-                            .accessibilityHidden(true)
-                    }
-                    if let time = alertTime {
-                        Text(RelativeTimeText.fill(NSLocalizedString(time.key, comment: ""), n: time.n))
-                            .font(.footnote).foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    }
-                } else if let request {
-                    Text(request.sentence).font(.headline).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(Text(verbatim: requestLabel(0)))
-                    LabeledContent(LocalizedStringKey("w4.requestAmount"), value: request.amountText)
-                        .accessibilityLabel(Text(verbatim: requestLabel(1)))
-                    if let expiresAt = request.expiresAt {
-                        if requestExpired {
-                            Text(LocalizedStringKey("w4.requestExpired"))
-                                .accessibilityLabel(Text(verbatim: requestLabel(2)))
-                        } else {
-                            LabeledContent(LocalizedStringKey("w4.requestExpiry")) {
-                                Text(
-                                    Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
-                                    format: .dateTime.month(.abbreviated).day().hour().minute()
-                                )
-                            }
-                            .accessibilityLabel(Text(verbatim: requestLabel(2)))
-                        }
-                    }
-                }
-                Button(action: onOpenOnPhone) {
-                    Label(LocalizedStringKey("w4.openOnPhone"), systemImage: "iphone")
-                }
-                .accessibilityLabel(Text(verbatim: controlLabel("w4.openOnPhone")))
-            }
-        }
-        .navigationTitle(LocalizedStringKey("w4.title"))
     }
 
     private var formattedAlertTime: String {
