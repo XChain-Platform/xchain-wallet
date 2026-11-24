@@ -7,14 +7,23 @@ enum RealOnboarding {
         password: String,
         timeout: TimeInterval = 90
     ) -> [String]? {
-        guard acceptTerms(app, timeout: timeout) else {
-            return failed("license acceptance", app: app)
-        }
-        guard advanceIntro(app, timeout: timeout) else {
-            return failed("intro carousel", app: app)
+        let create = button(app, named: "Create new wallet")
+        let intro = introControl(app)
+        _ = waitUntil(timeout: 25) {
+            create.exists
+                || intro.exists
+                || button(app, named: "Accept and continue").exists
         }
 
-        let create = button(app, named: "Create new wallet")
+        if !create.exists {
+            if !intro.exists && !acceptTerms(app, timeout: timeout) {
+                return failed("license acceptance", app: app)
+            }
+            guard advanceIntro(app, timeout: timeout) else {
+                return failed("intro carousel", app: app)
+            }
+        }
+
         guard waitUntilHittable(create, timeout: timeout) else {
             return failed("Create new wallet", app: app)
         }
@@ -178,6 +187,17 @@ enum RealOnboarding {
         return create.exists
     }
 
+    private static func introControl(_ app: XCUIApplication) -> XCUIElement {
+        let labels = "label CONTAINS[c] 'Next' "
+            + "OR label CONTAINS[c] 'Get started' "
+            + "OR label CONTAINS[c] 'Done' "
+            + "OR (label CONTAINS[c] 'Continue' "
+            + "AND NOT label CONTAINS[c] 'Accept')"
+        return app.buttons.matching(
+            NSPredicate(format: labels)
+        ).firstMatch
+    }
+
     private static func recoveryWords(
         _ app: XCUIApplication,
         timeout: TimeInterval
@@ -278,41 +298,43 @@ enum RealOnboarding {
         confirmField: XCUIElement,
         password: String
     ) -> Bool {
+        let reveal = button(app, named: "Reveal Recovery Phrase")
+        if reveal.exists || !passwordField.exists { return true }
+
+        if
+            let passwordLength = secureEntryLength(passwordField),
+            let confirmLength = secureEntryLength(confirmField),
+            confirmLength > passwordLength
+        {
+            confirmField.press(forDuration: 1.0)
+            let selectAll = namedElement(
+                app.descendants(matching: .any),
+                label: "Select All",
+                comparison: "CONTAINS[c]"
+            )
+            if waitUntilHittable(selectAll, timeout: 2) {
+                selectAll.tap()
+            } else {
+                confirmField.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+            }
+            confirmField.typeText(password)
+            guard
+                let retriedLength = secureEntryLength(confirmField),
+                retriedLength <= passwordLength
+            else {
+                return false
+            }
+        }
+
         let submitKey = keyboardSubmitKey(app)
         if submitKey.exists {
             guard waitUntilHittable(submitKey, timeout: 5) else { return false }
             submitKey.tap()
         } else {
+            if reveal.exists || !passwordField.exists { return true }
+            guard confirmField.exists else { return false }
             confirmField.typeText("\n")
         }
-
-        guard
-            let passwordLength = secureEntryLength(passwordField),
-            let confirmLength = secureEntryLength(confirmField),
-            confirmLength > passwordLength
-        else {
-            return true
-        }
-
-        confirmField.press(forDuration: 1.0)
-        let selectAll = namedElement(
-            app.descendants(matching: .any),
-            label: "Select All",
-            comparison: "CONTAINS[c]"
-        )
-        if waitUntilHittable(selectAll, timeout: 2) {
-            selectAll.tap()
-        } else {
-            confirmField.tap(withNumberOfTaps: 3, numberOfTouches: 1)
-        }
-        confirmField.typeText(password)
-        if let retriedLength = secureEntryLength(confirmField), retriedLength > passwordLength {
-            return false
-        }
-
-        let retrySubmitKey = keyboardSubmitKey(app)
-        guard waitUntilHittable(retrySubmitKey, timeout: 5) else { return false }
-        retrySubmitKey.tap()
         return true
     }
 
@@ -325,6 +347,7 @@ enum RealOnboarding {
     }
 
     private static func secureEntryLength(_ field: XCUIElement) -> Int? {
+        guard field.exists else { return nil }
         guard let value = field.value as? String else { return nil }
         if let reportedLength = Int(value.split(separator: " ").first ?? "") {
             return reportedLength
