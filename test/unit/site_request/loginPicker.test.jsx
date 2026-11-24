@@ -242,7 +242,8 @@ describe('login address picker', () => {
         fireEvent.change(screen.getByLabelText('Password'), {
             target: { value: TEST_UNLOCK_INPUT },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+        expect(screen.queryByRole('button', { name: 'Sign In' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(mocks.resolveApproval).toHaveBeenCalledWith(
             'login-picker',
