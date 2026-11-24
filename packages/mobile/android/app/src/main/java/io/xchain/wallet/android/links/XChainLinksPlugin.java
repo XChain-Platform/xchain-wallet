@@ -15,6 +15,7 @@ package io.xchain.wallet.android.links;
 import android.content.Intent;
 import android.net.Uri;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -77,6 +78,7 @@ public class XChainLinksPlugin extends Plugin {
     private String pending;
 
     CallbackPinnedOpen.Opener callbackOpener = CallbackPinnedOpen.SYSTEM;
+    CallbackResolve.Lookup callbackLookup = CallbackResolve.SYSTEM;
     Executor callbackExecutor = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "xchain-callback-post");
         thread.setDaemon(true);
@@ -160,6 +162,23 @@ public class XChainLinksPlugin extends Plugin {
                 call.reject("Callback POST failed");
             } catch (Exception exception) {
                 call.reject("Callback POST failed");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void resolveHost(PluginCall call) {
+        String host = call.getString("host");
+        callbackExecutor.execute(() -> {
+            try {
+                JSObject reply = new JSObject();
+                reply.put("addresses", new JSArray(
+                        CallbackHostAnswer.addresses(host, callbackLookup)));
+                call.resolve(reply);
+            } catch (java.io.IOException exception) {
+                call.reject("Callback host lookup failed");
+            } catch (Exception exception) {
+                call.reject("Callback host lookup failed");
             }
         });
     }
