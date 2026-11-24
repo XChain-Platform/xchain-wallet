@@ -63,8 +63,13 @@ assert.doesNotMatch(
 );
 assert.match(
     signSrc,
-    /kind === 'signIn' \? 'Sign In' : 'Approve'/,
-    'every kind but signIn approves with a bare "Approve"',
+    /approveLabel = t\('extension\.connect\.approve'\)/,
+    'every kind approves with the translated bare "Approve"',
+);
+assert.doesNotMatch(
+    signSrc,
+    /\? 'Sign In' : 'Approve'/,
+    'the retired per-kind approve-label ternary has not come back',
 );
 assert.match(
     confirmStandardSrc,

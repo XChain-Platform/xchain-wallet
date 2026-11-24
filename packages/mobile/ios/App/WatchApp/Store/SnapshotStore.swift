@@ -13,6 +13,7 @@ final class SnapshotStore {
     private let file: SnapshotFile
     private let writer: Writer
     private let widgetSummary: WidgetSummary
+    private let eventLog: (Int) -> Void
     private let decoder = JSONDecoder()
 
     private(set) var latest: Snapshot?
@@ -21,7 +22,8 @@ final class SnapshotStore {
         directory: URL,
         writer: Writer? = nil,
         directoryCreator: DirectoryCreator? = nil,
-        widgetSummary: WidgetSummary = WidgetSummary()
+        widgetSummary: WidgetSummary = WidgetSummary(),
+        eventLog: @escaping (Int) -> Void = { WatchEventLog.snapshotReceived(v: $0) }
     ) {
         let createDirectory = directoryCreator ?? { url, intermediates, attributes in
             try FileManager.default.createDirectory(
@@ -37,6 +39,7 @@ final class SnapshotStore {
             try file.save(data, options: options)
         }
         self.widgetSummary = widgetSummary
+        self.eventLog = eventLog
         latest = file.load().flatMap { try? decoder.decode(Snapshot.self, from: $0) }
     }
 
@@ -58,6 +61,7 @@ final class SnapshotStore {
         do {
             try writer(data, Self.fileProtection)
             latest = snapshot
+            eventLog(snapshot.v)
             widgetSummary.save(
                 showTotal: snapshot.settings.showTotal,
                 session: snapshot.session,

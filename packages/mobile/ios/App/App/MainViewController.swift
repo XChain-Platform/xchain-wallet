@@ -90,6 +90,8 @@ class MainViewController: CAPBridgeViewController {
         // defence demos as broken.
         bridge?.registerPluginInstance(XChainLinksPlugin())
         bridge?.registerPluginInstance(XChainSplashPlugin())
+        // Without this, getPlugin('XChainActivity') in packages/core/src/notifications/activityCheckConfig.js finds nothing and the setting is silently never stored.
+        bridge?.registerPluginInstance(XChainActivityPlugin())
 
         // WebKit history does not know about route-local review steps or
         // signing locks. The app-owned edge gesture routes through the same
