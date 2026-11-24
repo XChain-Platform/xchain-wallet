@@ -81,11 +81,11 @@ describe('style guide shared component coverage', () => {
         }
     });
 
-    it('shows the Button link variant and the StatusMessage info state', () => {
+    it('shows the Button link variant and the Notice info state', () => {
         const buttons = fs.readFileSync(path.join(guideDir, 'ButtonsSection.jsx'), 'utf8');
         const states = fs.readFileSync(path.join(guideDir, 'StatesSection.jsx'), 'utf8');
         expect(buttons).toMatch(/const VARIANTS = \[[^\]]*'link'/);
-        expect(states).toContain('<StatusMessage variant="info">');
+        expect(states).toContain('<Notice tone="info">');
     });
 
     it('draws the shared parts from the real components, not route CSS copies', () => {

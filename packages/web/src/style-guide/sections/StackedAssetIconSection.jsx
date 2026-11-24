@@ -18,9 +18,9 @@ export function StackedAssetIconSection() {
                 what={<><code>&lt;TickerIcon chainId tick context /&gt;</code> draws the published token image, or a one-letter chip tinted by the ticker when there is none. A token on a chain other than its own shows the network pip; a native coin is the network.</>}
                 when={<>Any row or control that stands for a held, receivable or sendable asset.</>}
                 whenNot={<>A plain avatar: use the identity avatar.</>}
-                variants={<><code>context</code> picks the size: <code>list</code> for rows, <code>header</code> beside a title, <code>hero</code> for the large Send icon.</>}
+                variants={<><code>context</code> picks the size: <code>list</code> for rows, <code>header</code> beside a title, <code>hero</code> for the large Send icon. <code>pip</code> turns the network pip on or off and <code>imageUrl</code> overrides the token art. <code>PairIcons</code> draws two overlapping TickerIcons for a trading pair, with the chain pip off.</>}
                 doRule={<>✓ Pass the chain and the ticker and let the component pick the art</>}
-                dontRule={<>✗ Crop token art to a circle · drop the pip on a token</>}
+                dontRule={<>✗ Crop token art to a circle · drop the pip on a token (except <code>pip={'{false}'}</code> in a list whose rows share one chain the page names)</>}
                 supersedes={<>The hand-drawn copy this section used to show. Source: <code>TickerIcon.jsx</code> in <code>shared/components</code>.</>}
             />
             <Markup>

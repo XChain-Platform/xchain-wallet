@@ -58,6 +58,7 @@ const lanesFile = join(repo, 'tools', 'release', 'shipped-lanes.txt');
 
 const V = '0.336.0';
 const AAB = `xchain-wallet-android-v${V}.aab`;
+const WEAR_AAB = `xchain-wallet-wear-v${V}.aab`;
 const APK = `xchain-wallet-v${V}.apk`;
 const WEB = `xchain-wallet-web-v${V}.tar.gz`;
 
@@ -122,14 +123,15 @@ try {
         const s = scope(['android']);
         check('a lane scope is derivable for android', s.ok, s.out);
         const rows = s.out.split('\n').filter((l) => l && !l.startsWith('#'));
-        check('...and it carries exactly the two android rows',
-            rows.length === 2, s.out);
-        check('...both promoted to required',
+        check('...and it carries exactly the three android rows',
+            rows.length === 3, s.out);
+        check('...all promoted to required',
             rows.every((r) => /^required\s/.test(r)), s.out);
         check('...keeping the store profile the source list declares',
             rows.every((r) => /\sstore\s/.test(r)), s.out);
-        check('...and naming both halves of the pair',
-            rows.some((r) => r.includes('.aab')) && rows.some((r) => r.includes('.apk')), s.out);
+        check('...and naming both AABs plus the direct APK',
+            rows.filter((r) => r.includes('.aab')).length === 2
+            && rows.some((r) => r.includes('.apk')), s.out);
         check('...and no row from any other lane',
             !/\.dmg|\.exe|\.deb|tar\.gz|\.zip/.test(s.out), s.out);
 
@@ -153,9 +155,11 @@ try {
         // The android rows' fifth column specifically, by value: this is
         // what verify-signatures.mjs reads, and `deferred-android` is the
         // class that says the ceremony verified the signature itself.
-        const androidSource = sourceRows.filter((l) => /android-v\*\.aab|wallet-v\*\[0-9\]\.apk/.test(l));
+        const androidSource = sourceRows.filter((l) => (
+            /android-v\*\.aab|wear-v\*\.aab|wallet-v\*\[0-9\]\.apk/.test(l)
+        ));
         check('...preserving the signature class verbatim',
-            androidSource.length === 2 && androidSource.every((src) => {
+            androidSource.length === 3 && androidSource.every((src) => {
                 const cols = src.trim().split(/\s+/);
                 return rows.some((r) => r.trim().split(/\s+/).slice(1).join(' ')
                     === cols.slice(1).join(' '));
@@ -166,7 +170,7 @@ try {
     //    through the scoped list is a clean release.
     {
         const s = scope(['android']);
-        const r = gate(stage([AAB, APK]), s.path);
+        const r = gate(stage([AAB, WEAR_AAB, APK]), s.path);
         check('an android-only staging dir passes the artifact-set gate under scope',
             r.ok && /artifact-set gate ok/.test(r.out), r.out);
     }
@@ -175,7 +179,7 @@ try {
     //    was weakened for the default path. This is the measurement that
     //    proves the mode is opt-in rather than a loosening.
     {
-        const r = gate(stage([AAB, APK]), expected);
+        const r = gate(stage([AAB, WEAR_AAB, APK]), expected);
         check('the unscoped gate still refuses an android-only release',
             !r.ok && /artifact-set gate FAILED/.test(r.out), r.out);
         check('...naming the desktop rows it is missing',
@@ -187,7 +191,7 @@ try {
     //    become a place to launder a stray file.
     {
         const s = scope(['android']);
-        const r = gate(stage([AAB, APK, WEB]), s.path);
+        const r = gate(stage([AAB, WEAR_AAB, APK, WEB]), s.path);
         check('an out-of-scope artifact is UNDECLARED under scope, not tolerated',
             !r.ok && /UNDECLARED/.test(r.out) && r.out.includes(WEB), r.out);
     }
@@ -197,7 +201,7 @@ try {
     //    interrupted ceremony, never a smaller release.
     {
         const s = scope(['android']);
-        const r = gate(stage([AAB]), s.path);
+        const r = gate(stage([AAB, WEAR_AAB]), s.path);
         check('the AAB alone fails under scope: the direct APK is required',
             !r.ok && /MISSING.*\.apk/.test(r.out), r.out);
     }
@@ -227,7 +231,7 @@ try {
     //    perfectly verifying record read as evidence about a release it
     //    never covered.
     {
-        const dir = stage([AAB, APK]);
+        const dir = stage([AAB, WEAR_AAB, APK]);
         const s = scope(['android']);
         const r = sh(`xr_write_manifest ${JSON.stringify(dir)} v${V} abc123 `
             + `2026-08-06T07:00:00Z enforced ${JSON.stringify(s.path)} android 2>&1`);
@@ -243,7 +247,7 @@ try {
     //    so "partial" is something a manifest says, never something a
     //    reader has to infer from what is absent.
     {
-        const dir = stage([AAB, APK]);
+        const dir = stage([AAB, WEAR_AAB, APK]);
         const s = scope(['android']);
         const r = sh(`xr_write_manifest ${JSON.stringify(dir)} v${V} abc123 `
             + `2026-08-06T07:00:00Z enforced ${JSON.stringify(s.path)} 2>&1`);
@@ -260,7 +264,7 @@ try {
     {
         const lanesShipped = join(work, 'lanes-shipped.txt');
         writeFileSync(lanesShipped, [
-            'android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*[0-9].apk',
+            'android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-wear-v*.aab xchain-wallet-v*[0-9].apk',
             'ios       SHIPPED      store-only  xchain-wallet-ios-v*.ipa',
             'mas       NOT-SHIPPED  store-only  *-mas.pkg',
             'msstore   NOT-SHIPPED  store-only  *-appx.appx',
@@ -271,7 +275,7 @@ try {
             'android-full NOT-SHIPPED store-only  xchain-wallet-v*-full.apk',
             '',
         ].join('\n'));
-        const dir = stage([AAB, APK]);
+        const dir = stage([AAB, WEAR_AAB, APK]);
         const scoped = sh(`xr_check_shipped_lanes ${JSON.stringify(dir)} `
             + `${JSON.stringify(lanesShipped)} ${JSON.stringify(expected)} android 2>&1`);
         check('a scoped shipped-lane gate ignores a SHIPPED lane outside the scope',
@@ -285,7 +289,7 @@ try {
             !unscoped.ok && /LANE-REGRESSION/.test(unscoped.out) && /ipa/.test(unscoped.out),
             unscoped.out);
 
-        const halfPair = sh(`xr_check_shipped_lanes ${JSON.stringify(stage([AAB]))} `
+        const halfPair = sh(`xr_check_shipped_lanes ${JSON.stringify(stage([AAB, WEAR_AAB]))} `
             + `${JSON.stringify(lanesShipped)} ${JSON.stringify(expected)} android 2>&1`);
         check('...and a regression INSIDE the scope still fails',
             !halfPair.ok && /LANE-REGRESSION/.test(halfPair.out) && /apk/.test(halfPair.out),
