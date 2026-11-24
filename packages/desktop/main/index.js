@@ -90,7 +90,7 @@ import {
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
-import { attachSiteRequestHandler } from './siteRequest.js';
+import { attachSiteRequestHandler, SITE_REQUEST_CHANNEL } from './siteRequest.js';
 import { createTrezorBridge } from './trezorBridgeWindow.js';
 import { attachUpdater, desktopInstallChannel } from './updater.js';
 import { retainUpdaterEvent } from './updaterState/retainUpdaterEvent.js';
@@ -1471,8 +1471,8 @@ void runMainTask(async () => {
     attachSiteRequestHandler({
         ipcMain,
         isTrustedSender,
-        register: (channel, listener) => {
-            ipcMain.handle(channel, async (event, ...args) => {
+        register: (_channel, listener) => {
+            ipcMain.handle(SITE_REQUEST_CHANNEL, async (event, ...args) => {
                 if (!isTrustedSender(event)) return { sent: false, reason: 'FORBIDDEN_SENDER' };
                 return listener(event, ...args);
             });
