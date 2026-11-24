@@ -81,6 +81,28 @@ describe('AlertsRoute', () => {
         expect(screen.getAllByLabelText('Unread')).toHaveLength(3);
     });
 
+    it('highlights a Payment due signing refusal and keeps its pay action', () => {
+        const onSelect = vi.fn();
+        mount({
+            alerts: [{
+                id: 'payment-due:bitcoin-mainnet:42',
+                type: 'payments',
+                label: 'Payment due',
+                title: 'Pay 0.5 BTC',
+                message: 'Order #42: sign to pay',
+                attention: 'autopay-cannot-sign',
+                at: now,
+                read: false,
+                action: { label: 'Pay now', onSelect },
+            }],
+        });
+
+        const copy = screen.getByText("Auto Pay can't sign this address. Tap to pay.");
+        expect(copy.closest('li')).toHaveClass(routeStyles.attention);
+        fireEvent.click(screen.getByRole('button', { name: 'Pay now' }));
+        expect(onSelect).toHaveBeenCalledOnce();
+    });
+
     it('filters every alert text, reports matches, highlights matches, and clears search', () => {
         mount();
         // No match line while nothing is filtered.

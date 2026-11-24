@@ -117,14 +117,17 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
         'BetFeedDetail composes through the BET builder route');
     assert.ok(src.includes("builder: 'placeBetParams'"), 'BetFeedDetail names the placeBetParams builder');
 
-    // One derivation feeding BOTH compose and submit. Two would be free to
-    // diverge, and the divergence would be signed rather than caught.
+    // One decoded set of bet details feeds BOTH compose and submit. Two values
+    // would be free to diverge, and the divergence would be signed rather than
+    // caught.
     assert.match(src, /function betParams\(\)/, 'BetFeedDetail derives the bet input in one place');
-    // The window is a proximity heuristic for "compose and submit are handed the
-    // SAME derivation", not a line budget; it widened when threaded the
-    // native-fee flag (and its comment) through both calls.
-    assert.match(src, /params: betParams\(\),[\s\S]{0,600}params: betParams\(\),/,
-        'BetFeedDetail composes and submits the same betParams()');
+    const submitStart = src.indexOf('const params = betParams();');
+    assert.ok(submitStart !== -1, 'BetFeedDetail snapshots the bet details before confirm');
+    const submitFlow = src.slice(submitStart, submitStart + 1400);
+    assert.match(submitFlow, /compose:[\s\S]*?builder: 'placeBetParams', params,/,
+        'BetFeedDetail composes the snapshotted bet details');
+    assert.match(submitFlow, /onApprove:[\s\S]*?submitConfirmed\(\{[\s\S]*?params, prebuiltPsbt,/,
+        'BetFeedDetail submits the same bet details that were composed');
 
     // The generic compose route would mean a client-side wire mirror.
     assert.ok(!/actionData: \{ action: 'BET'/.test(src),

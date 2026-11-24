@@ -10,6 +10,7 @@
 // it: the scan keeps pending rows only). What each row buys comes from one
 // bulk read for the whole list, however many rows there are.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -33,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useNetworkOffline.js', () => ({
 
 import { ObligationsView, shortTimeLeft } from '../../../packages/core/src/shared/routes/ObligationsView.jsx';
 import { scanCoinpayObligations } from '../../../packages/core/src/shared/hooks/useCoinpayObligations.js';
+import viewStyles from '../../../packages/core/src/shared/routes/ObligationsView.module.css';
 
 const PAYEE = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const PAYER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -112,6 +114,35 @@ describe('ObligationsView list', () => {
         // no address and no auto pay chip on the row.
         expect(button.querySelectorAll('svg[data-xc-directional]')).toHaveLength(1);
         expect(button).not.toHaveTextContent(/#?700210|Match|Order|bc1q|Auto pay/i);
+    });
+
+    it('highlights an owed row that auto pay cannot sign, opens pay, and clears after payment', async () => {
+        hookState.obligations = [row(700210, { attention: 'autopay-cannot-sign' })];
+        const { onPay, messaging, utils } = renderView();
+        const button = await screen.findByRole('button', { name: /Auto Pay can't sign this address\. Tap to pay\./ });
+
+        expect(button).toHaveAttribute('data-autopay-cannot-sign');
+        expect(button).toHaveClass(viewStyles.attentionRow);
+        expect(button).toHaveTextContent("Auto Pay can't sign this address. Tap to pay.");
+        const css = readFileSync('packages/core/src/shared/routes/ObligationsView.module.css', 'utf8');
+        const attentionRule = css.match(/\.attentionRow\s*\{([^}]*)\}/)?.[1] || '';
+        expect(attentionRule).not.toMatch(/border-inline-start/);
+        expect(css).toMatch(/\.attentionRow::before\s*\{[^}]*inset-inline-start:\s*0;[^}]*width:\s*3px;/s);
+        fireEvent.click(button);
+        expect(onPay).toHaveBeenCalledWith({
+            chainId: 'bitcoin-mainnet',
+            address: PAYER,
+            orderMatchActionIndex: '700210',
+        });
+
+        hookState.obligations = [];
+        utils.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ObligationsView walletId="w1" onPay={onPay} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        expect(screen.queryByText("Auto Pay can't sign this address. Tap to pay.")).toBeNull();
+        expect(utils.container.querySelector('[data-autopay-cannot-sign]')).toBeNull();
     });
 
     it('shows Buying with a loading placeholder until the bought side is known, never a guess', async () => {

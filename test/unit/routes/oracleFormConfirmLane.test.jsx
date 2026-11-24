@@ -204,10 +204,8 @@ describe('OracleForm publishes through the confirm lane', () => {
         await publishAndApprove(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
-        // G130: Approve keeps its colour; the tap was answered at the top of
-        // the page and signed nothing.
-        expect(approveButton(utils)?.disabled, 'Approve never looks disabled').toBe(false);
-        expect(utils.getByTestId('confirm-blocked')).toHaveTextContent("This will fail, so Approve won't send it.");
+        expect(approveButton(utils)?.disabled, 'a blocking finding disables Approve').toBe(true);
+        expect(utils.queryByTestId('confirm-blocked')).toBeNull();
         expect(calls.some((c) => c.method === 'oraclePriceAction' || c.method === 'oraclePriceActionHw')).toBe(false);
     });
 

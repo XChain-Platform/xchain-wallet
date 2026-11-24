@@ -47,6 +47,9 @@ const COMPOSED = Object.freeze({
     actionString: `LIST|3|2700|${DESTINATION}|handoff`,
     version: 1,
     actionWarnings: ['LIST_TRANSFER'],
+    // The compose quote's free answer, which composeActionForConfirm sets for
+    // a transfer; the form's own zero no longer hides the unknown fee row.
+    protocolFeeKnownFree: true,
 });
 
 function makeMessaging({ walletMode = 'full', listError = null, listExtra = {} } = {}) {

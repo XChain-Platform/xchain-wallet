@@ -229,6 +229,7 @@ const CLIENT_MODULES = [
     { file: 'packages/web/src/messaging.js', preHost: false, floor: 250 },
     { file: 'packages/extension/src/approval/messaging.js', preHost: true, floor: 5 },
     { file: 'packages/desktop/renderer/fiatRateSource.js', preHost: true, floor: 0 },
+    { file: 'packages/desktop/renderer/releaseFeedSource.js', preHost: true, floor: 0 },
 ];
 // Shared core runs under web too, so it is scanned with no pre-host lane.
 const SHARED_CORE = 'packages/core/src';

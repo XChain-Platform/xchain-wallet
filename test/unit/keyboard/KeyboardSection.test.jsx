@@ -20,11 +20,12 @@ import { createDefaultSettings } from '../../../packages/core/src/schemas/settin
 
 afterEach(() => cleanup());
 
-function makeMessaging(initialBindings = {}) {
+function makeMessaging(initialBindings = {}, updateError = null) {
     let settings = { keyboard: { bindings: { ...initialBindings } } };
     return {
         getSettings: vi.fn(() => Promise.resolve(settings)),
         updateSettings: vi.fn((patch) => {
+            if (updateError) return Promise.reject(updateError);
             settings = { ...settings, ...patch };
             return Promise.resolve(settings);
         }),
@@ -32,8 +33,8 @@ function makeMessaging(initialBindings = {}) {
     };
 }
 
-async function setup(initialBindings) {
-    const messaging = makeMessaging(initialBindings);
+async function setup(initialBindings, updateError) {
+    const messaging = makeMessaging(initialBindings, updateError);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <KeyboardSection />
@@ -151,6 +152,31 @@ describe('KeyboardSection', () => {
             keyboard: { bindings: {} },
         }));
         expect(await screen.findByText('All shortcuts reset to defaults.')).toBeTruthy();
+    });
+
+    it('hides a developer save error behind shortcut copy', async () => {
+        await setup({}, new Error('updateSettings: invalid settings: keyboard.bindings'));
+        fireEvent.click(screen.getByText('Lock wallet').closest('div').querySelector('button'));
+        press({ key: 'j', ctrlKey: true });
+
+        expect(await screen.findByText('Could not save this shortcut. Try again.')).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/updateSettings|keyboard.bindings/);
+    });
+
+    it('uses reset-specific copy when resetting one shortcut fails', async () => {
+        await setup({ lock: 'mod+j' }, new Error('updateSettings: patch must be an object'));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+        expect(await screen.findByText('Could not reset this shortcut. Try again.')).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/updateSettings|patch must be/);
+    });
+
+    it('uses reset-all copy when resetting every shortcut fails', async () => {
+        await setup({ lock: 'mod+j' }, new Error('updateSettings: patch must be an object'));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset All Shortcuts' }));
+
+        expect(await screen.findByText('Could not reset shortcuts. Try again.')).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/updateSettings|patch must be/);
     });
 });
 

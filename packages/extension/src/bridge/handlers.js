@@ -80,6 +80,7 @@ const {
     findCoSignerAccountByAddress,
     filterChainIdsByActiveNetwork,
     unsafeNumericAmount,
+    assertNativeAmountPrecision,
 } = flows;
 
 // §43.2 parallel(): cap the batch so a single call can't ask the user to
@@ -1346,7 +1347,7 @@ async function executeSignAction(req, deps, ctx) {
 
 async function prepareLegacyTransfer(req, deps, params, spendFromAddress) {
     assertSupportedSweepParams(req.action, params);
-    assertSingleSendAmount(req.action, params);
+    assertSingleSendAmount(req.action, params, deps.chainRegistry.get(req.chainId));
     const resolved = await resolveSendValues(req, deps, params, spendFromAddress);
     return {
         ...resolved,
@@ -1524,7 +1525,7 @@ function usesLegacyTransferFlow(req, actionName, params) {
 // `amount` a human-scale decimal. Picking either silently could sign a
 // magnitude 1e8 off the one the page meant, so the request is refused before
 // any prompt or read.
-function assertSingleSendAmount(actionName, params) {
+function assertSingleSendAmount(actionName, params, descriptor) {
     if (actionName !== 'SEND') return;
     if (isSet(params?.amount) && isSet(params?.amountRaw)) {
         throw bridgeError('INVALID_PARAMS', 'SEND takes amountRaw or amount, not both');
@@ -1536,6 +1537,19 @@ function assertSingleSendAmount(actionName, params) {
                 `SEND ${name} must be a decimal string when it exceeds safe JS number precision`,
             );
         }
+    }
+    try {
+        assertNativeAmountPrecision({
+            tick: params?.asset ?? params?.tick,
+            amount: params?.amount,
+            descriptor,
+        });
+    } catch (error) {
+        if (error?.code !== 'NATIVE_AMOUNT_PRECISION') throw error;
+        throw bridgeError(
+            'INVALID_PARAMS',
+            'SEND amount has more decimal places than the native coin allows',
+        );
     }
 }
 

@@ -76,8 +76,14 @@ function makeDeps(over = {}) {
             save: vi.fn(async (next) => { meta = next; }),
             clear: async () => { meta = null; },
         },
-        sessionBackend: { save: vi.fn(async () => {}) },
-        signingSecretBackend: { save: vi.fn(async () => {}) },
+        sessionBackend: {
+            save: vi.fn(async () => {}),
+            clear: vi.fn(async () => {}),
+        },
+        signingSecretBackend: {
+            save: vi.fn(async () => {}),
+            clear: vi.fn(async () => {}),
+        },
         chainRegistry: {},
         sdkRegistry: {},
         ...over,
@@ -163,6 +169,14 @@ describe('pre-host onboarding leaves no half-written wallet behind', () => {
             await expect(lane.call(deps)).rejects.toThrow('session store refused');
             expect(await deps.storageBackend.load()).toBeNull();
             expect(await deps.metaBackend.load()).toBeNull();
+        });
+
+        it(`${lane.name}: a refused signing-secret save clears both session slots`, async () => {
+            const deps = makeDeps();
+            deps.signingSecretBackend.save.mockRejectedValue(new Error('secret store refused'));
+            await expect(lane.call(deps)).rejects.toThrow('secret store refused');
+            expect(deps.sessionBackend.clear).toHaveBeenCalledOnce();
+            expect(deps.signingSecretBackend.clear).toHaveBeenCalledOnce();
         });
 
         it(`${lane.name}: a flow that throws after its first write discards the blob`, async () => {

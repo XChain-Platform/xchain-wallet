@@ -29,6 +29,7 @@ const messages = {
     'airdrop.summary.addresses': '{count} {count, plural, one {address} other {addresses}}',
     'airdrop.summary.each': '{amount} {tick} each',
     'airdrop.action.reviewRecipients': 'Review Recipients',
+    'airdrop.otherChain.notice': "Before you approve: {count, plural, one {# address} other {# addresses}} on this list {count, plural, one {belongs} other {belong}} to another coin network, so the airdrop can't deliver to {count, plural, one {it} other {them}}.",
     'airdrop.from.networkHelp': 'The chain the airdrop is recorded on. Your From address, token, recipients, and fees are on this network.',
     'airdrop.from.addressHelp': 'The address that sends the airdrop. It must hold the token and pays the fees.',
     'airdrop.section.airdrop': 'Airdrop',

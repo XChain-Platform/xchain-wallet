@@ -10,14 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
-const state = vi.hoisted(() => ({ open: false, confirmProps: null }));
+const state = vi.hoisted(() => ({ open: false, confirmProps: null, run: vi.fn() }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useActionConfirmFlow.js', async (importOriginal) => ({
     ...(await importOriginal()),
     useActionConfirmFlow: () => ({
         open: state.open,
         composing: false,
-        run: vi.fn(),
+        run: state.run,
         confirmAction: { phase: state.open ? 'ready' : 'idle' },
     }),
 }));
@@ -39,7 +39,11 @@ const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
     id: 'a1', address: 'bc1qexample', publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', signerId: 's1',
 };
+const HARDWARE_ADDRESS = {
+    id: 'a2', address: 'bc1qhardware', publicKey: '03ab', derivationPath: "m/84'/0'/0'/0/1", source: 'trezor', signerId: 's2',
+};
 const NOTICE = 'Auto pay runs inside this wallet: a match is paid while the wallet is open, even when it\'s locked.';
+const HARDWARE_NOTICE = "Auto pay can't be used with a hardware wallet address. Each payment needs you to connect your device and approve it.";
 
 const messaging = {
     getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
@@ -65,7 +69,9 @@ function panel(shell) {
 async function mount(shell = 'web') {
     publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' });
     const utils = render(panel(shell));
-    expect(await screen.findByRole('switch', { name: 'Auto pay' })).toBeChecked();
+    const autoPay = await screen.findByRole('switch', { name: 'Auto pay' });
+    expect(autoPay).toBeEnabled();
+    expect(autoPay).toBeChecked();
     return {
         openConfirm() {
             state.open = true;
@@ -78,12 +84,27 @@ async function mount(shell = 'web') {
 beforeEach(() => {
     state.open = false;
     state.confirmProps = null;
+    state.run.mockReset();
+    messaging.getAddressesByChain.mockResolvedValue({ [CHAIN]: [ADDRESS] });
+    messaging.getActiveAddresses.mockResolvedValue({ [CHAIN]: ADDRESS.id });
     localStorage.clear();
 });
 
 afterEach(() => { cleanup(); resetWalletModes(); });
 
 describe('PlaceOrderPanel auto-pay notice', () => {
+    it('shows a hardware paying address with Auto pay disabled and off', async () => {
+        messaging.getAddressesByChain.mockResolvedValue({ [CHAIN]: [HARDWARE_ADDRESS] });
+        messaging.getActiveAddresses.mockResolvedValue({ [CHAIN]: HARDWARE_ADDRESS.id });
+        publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' });
+        render(panel('desktop'));
+
+        const autoPay = await screen.findByRole('switch', { name: 'Auto pay' });
+        expect(autoPay).toBeDisabled();
+        expect(autoPay).not.toBeChecked();
+        expect(autoPay.closest('label').nextElementSibling).toHaveTextContent(HARDWARE_NOTICE);
+    });
+
     it('puts no acknowledgement checkbox on the panel', async () => {
         await mount();
         expect(screen.queryByRole('checkbox', { name: /I understand/ })).toBeNull();
@@ -107,5 +128,20 @@ describe('PlaceOrderPanel auto-pay notice', () => {
         const { openConfirm } = await mount('desktop');
         openConfirm();
         expect(state.confirmProps.summary?.notice).toBeUndefined();
+    });
+
+    it('keeps an auto-pay setup failure out of the placed-order message', async () => {
+        state.run.mockResolvedValue({
+            txid: 'abc',
+            autopayArmed: false,
+            autopayConsentError: 'recordAutopayConsent: txid is required',
+        });
+        await mount();
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
+
+        expect(await screen.findByText(/The order was placed, but auto pay couldn't be armed/)).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/recordAutopayConsent|txid is required/);
     });
 });

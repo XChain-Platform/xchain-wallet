@@ -69,6 +69,14 @@ describe('<Button>', () => {
         expect(screen.getByRole('button')).toBeDisabled();
     });
 
+    it('offers the shared disabled palette for a blocking pre-flight finding', () => {
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+        render(<Button disabled disabledAppearance>Approve</Button>);
+
+        expect(screen.getByRole('button')).toHaveClass(styles.disabledAppearance);
+        expect(css).toMatch(/\.disabledAppearance\s*\{[^}]*--xc-control-disabled-bg[^}]*--xc-control-disabled-border[^}]*--xc-control-disabled-text/s);
+    });
+
     it('type defaults to button (no accidental form submits)', () => {
         render(<Button>Harmless</Button>);
         expect(screen.getByRole('button')).toHaveAttribute('type', 'button');

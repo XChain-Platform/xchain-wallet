@@ -74,7 +74,7 @@ const messages = {
     'components.placeOrderPanel.autoPayIsUnavailableIn':
         'Auto pay is unavailable when another phone signs for this wallet; you will be notified when a match needs payment.',
     'components.placeOrderPanel.autoPayIsUnavailableFor':
-        'Auto pay is unavailable for hardware wallets (unattended signing needs a software key); you will be notified when a match needs payment.',
+        "Auto pay can't be used with a hardware wallet address. Each payment needs you to connect your device and approve it.",
     'components.tickItemsEditor.tokens': 'Tokens',
     'components.tickItemsEditor.tokensHelp': 'Put one token per line.',
     'components.tickItemsEditor.tick1Tick2': 'TICK1\nTICK2',

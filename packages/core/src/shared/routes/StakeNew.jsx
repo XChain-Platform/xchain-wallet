@@ -17,6 +17,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { VALIDATOR_LANE_COIN } from '../../registry/actions.js';
 import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { NetworkOptionList } from '../../ui/NetworkPicker.jsx';
 import { t } from '../../i18n/index.js';
@@ -28,9 +29,14 @@ import local from './StakeNew.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Gate both arms on a Bitcoin address as a wallet launch policy; the indexer
-// refuses only the validator arm off Bitcoin, and contract staking is chain-open.
-const STAKING_COIN = 'bitcoin';
+// Each arm gates on its own lane: the validator arm needs an address on the
+// validator coin's chain (the indexer refuses it anywhere else), and the
+// contract arm needs an address on any chain that advertises STAKE, since
+// contract staking is chain-open.
+const hasStakeAction = (chainId) => {
+    const actions = chainRegistry.get(chainId)?.supportedActions;
+    return Array.isArray(actions) && actions.includes('STAKE');
+};
 
 /**
  * New-stake chooser: the staking list's "+" lands here. Two paths:
@@ -52,8 +58,8 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const btcChainIds = useMemo(
-        () => chainRegistry.byCoin(STAKING_COIN).map((d) => d.id),
+    const validatorChainIds = useMemo(
+        () => chainRegistry.byCoin(VALIDATOR_LANE_COIN).map((d) => d.id),
         [],
     );
 
@@ -79,12 +85,17 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    const stakingChains = useMemo(() => {
+    const heldChains = useMemo(() => {
         if (!addressesByChain) return [];
-        return btcChainIds.filter((cid) =>
+        return Object.keys(addressesByChain).filter((cid) =>
             Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0,
         );
-    }, [btcChainIds, addressesByChain]);
+    }, [addressesByChain]);
+    const stakingChains = useMemo(
+        () => validatorChainIds.filter((cid) => heldChains.includes(cid)),
+        [validatorChainIds, heldChains],
+    );
+    const canStakeContract = useMemo(() => heldChains.some(hasStakeAction), [heldChains]);
 
     const header = (
         <PageHeader
@@ -155,7 +166,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                     description={t('stakeNew.validatorDescription')}
                 />
                 <ActionListItem
-                    disabled={noStakingChain}
+                    disabled={!canStakeContract}
                     onClick={() => onPickContract()}
                     icon={<Icon.ContractIcon />}
                     title={t('stakeNew.contractTitle')}

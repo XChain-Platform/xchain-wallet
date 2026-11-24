@@ -35,6 +35,29 @@
     overflow-wrap: anywhere;
 }
 
+.attentionRow {
+    position: relative;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, var(--xc-surface));
+}
+
+.attentionRow::before {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 3px;
+    background: var(--xc-accent-primary);
+    content: '';
+    pointer-events: none;
+}
+
+.attentionCopy {
+    display: block;
+    margin-top: var(--xc-space-1);
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
 /* "Buying" with a placeholder in the amount's place while the bought side loads. */
 .titleLoading {
     display: inline-flex;

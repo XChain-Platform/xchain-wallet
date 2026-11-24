@@ -109,6 +109,14 @@
    enabled and answers the tap with the form's error notice (G129). The guard
    is test/unit/ui/buttonNeverDisabledLook.test.js. */
 
+/* Show the disabled palette only for a pre-flight finding that blocks signing. */
+.disabledAppearance {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    cursor: not-allowed;
+}
+
 .btn:active:not(:disabled) {
     background: var(--xc-button-hover-bg);
     border-color: var(--xc-button-hover-border);

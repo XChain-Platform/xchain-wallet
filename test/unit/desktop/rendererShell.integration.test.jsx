@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const boot = vi.hoisted(() => ({
     installErrorCapture: vi.fn(),
     installFiatRateSource: vi.fn(),
+    installReleaseFeedSource: vi.fn(),
     setShellCapabilities: vi.fn(),
     homeMounts: 0,
     autoLockOpts: null,
@@ -27,6 +28,9 @@ vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
 }));
 vi.mock('../../../packages/desktop/renderer/fiatRateSource.js', () => ({
     installDesktopFiatRateSource: boot.installFiatRateSource,
+}));
+vi.mock('../../../packages/desktop/renderer/releaseFeedSource.js', () => ({
+    installDesktopReleaseFeedSource: boot.installReleaseFeedSource,
 }));
 vi.mock('@xchain-wallet/core/shared/shellCapabilities.js', () => ({
     setShellCapabilities: boot.setShellCapabilities,

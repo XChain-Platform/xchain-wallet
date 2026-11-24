@@ -48,7 +48,7 @@
 // round-trip; the authoritative check still runs in the SDK at compose
 // time.
 
-import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
+import { assertNestedActionsAllowedOnChain } from '../registry/actions.js';
 import { assertDestroyAllowedOnChain } from '../registry/destroyPolicy.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
@@ -360,29 +360,6 @@ export async function buildBatchCommand({ sdkRegistry, chainRegistry, chainId, s
     }
     const command = actionString.slice(prefix.length);
     const subStrings = command.split(';');
-    if (chainRegistry) assertNestedActionsAllowedOnChain(chainRegistry, chainId, subStrings);
+    if (chainRegistry) assertNestedActionsAllowedOnChain(chainRegistry, chainId, subStrings, 'buildBatchCommand');
     return { command, subStrings };
-}
-
-/**
- * Apply the per-chain action gate to every nested sub-action, reading the
- * action name and version from its canonical wire string (ACTION|VERSION|...),
- * the form the indexer judges. A chain-gated action whose version cannot be
- * read is refused rather than let through.
- *
- * @param {import('../registry/index.js').ChainRegistry} chainRegistry
- * @param {string} chainId
- * @param {string[]} subStrings
- */
-function assertNestedActionsAllowedOnChain(chainRegistry, chainId, subStrings) {
-    for (const sub of subStrings) {
-        const [rawAction, rawVersion] = sub.split('|');
-        const action = String(rawAction || '').trim().toUpperCase();
-        if (!CHAIN_GATED_ACTIONS.includes(action)) continue;
-        const version = Number(rawVersion);
-        if (rawVersion === undefined || rawVersion === '' || !Number.isInteger(version)) {
-            throw new Error(`buildBatchCommand: ${action} version is unreadable in a nested sub-action`);
-        }
-        assertActionAllowedOnChain(chainRegistry, chainId, action, version, 'buildBatchCommand');
-    }
 }

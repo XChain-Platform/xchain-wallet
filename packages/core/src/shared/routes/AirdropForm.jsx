@@ -532,6 +532,33 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return () => { cancelled = true; };
     }, [sourceMode, listActionIndex, chainId, messaging]);
 
+    // The picked address list's members that this chain's coin and network can't
+    // receive. Large lists are classified in bounded chunks.
+    const [existingChainCheck, setExistingChainCheck] = useState(
+        /** @type {{ items: string[], coin: string, network: string, invalid: string[] } | null} */
+        (null),
+    );
+    useEffect(() => {
+        const detail = existingListDetail;
+        if (sourceMode !== 'existing' || detail?.kind !== 'address' || detail.loading
+            || !recipientCoin || !recipientNetwork) {
+            setExistingChainCheck(null);
+            return undefined;
+        }
+        const items = detail.items;
+        let cancelled = false;
+        classifyRecipientEntriesAsync(
+            items.map((value, index) => ({ value, line: index + 1 })),
+            { coin: recipientCoin, network: recipientNetwork },
+            { shouldCancel: () => cancelled },
+        ).then((next) => {
+            if (!cancelled && next) {
+                setExistingChainCheck({ items, coin: recipientCoin, network: recipientNetwork, invalid: next.invalid });
+            }
+        });
+        return () => { cancelled = true; };
+    }, [sourceMode, existingListDetail, recipientCoin, recipientNetwork]);
+
     // Best-effort holder-count preview for whichever tick set is in
     // play right now: typed directly in 'holders' mode, or read off an
     // 'existing' TYPE=1 list's current members. Debounced like
@@ -994,6 +1021,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         + `balance check still cover all ${recipientPreview.listedCount} listed addresses. The excluded `
                         + `${excludedRecipients.length === 1 ? 'address' : 'addresses'}: ${excludedRecipients.join(', ')}.`
                     : null;
+
+    // Count the picked list's members this chain can't receive. The confirm page
+    // states the result once as a neutral notice.
+    const otherChainNotice = useMemo(() => {
+        const check = existingChainCheck;
+        if (sourceMode !== 'existing' || !check || check.items !== existingListDetail?.items
+            || check.coin !== recipientCoin || check.network !== recipientNetwork) return null;
+        return check.invalid.length > 0
+            ? t('airdrop.otherChain.notice', { count: check.invalid.length })
+            : null;
+    }, [sourceMode, existingChainCheck, existingListDetail, recipientCoin, recipientNetwork]);
 
     const listReviewDecoded = useMemo(() => {
         if (!listDecoded) return null;
@@ -1685,6 +1723,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             direction: listLeg ? 'none' : 'out',
             chainId,
             address: fromAddress?.address,
+            ...(!listLeg && otherChainNotice ? { notice: otherChainNotice } : {}),
         };
         return (
             <ActionConfirmScreen
@@ -1852,6 +1891,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     direction: 'out',
                     chainId,
                     address: fromAddress?.address,
+                    ...(otherChainNotice ? { notice: otherChainNotice } : {}),
                     facts: [
                         {
                             label: recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients',

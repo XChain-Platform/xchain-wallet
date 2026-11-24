@@ -116,6 +116,7 @@ import { claimedDeepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
 import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { canApplyNativeIntent, useNativeAppLifecycle } from './platform/nativeAppLifecycle.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
+import { IosInstallHint, usePwaInstall } from './components/PwaInstall.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import devShellStyles from './DevVariantShell.module.css';
@@ -322,6 +323,7 @@ export function App() {
     }
     const { variant, source } = variantState;
     const shell = shellForVariant(variant);
+    const pwaInstall = usePwaInstall();
     // Pick the page-level wrapper. Four cases:
     //   sidebar              → simulate Chrome's side panel (right-edge column)
     //   extension            → simulate the Chrome extension toolbar popup (360×600 fixed)
@@ -341,7 +343,7 @@ export function App() {
                     <ToastHost>
                         <ExtensionBanner />
                         <RouteErrorBoundary>
-                            <AppInner />
+                            <AppInner pwaInstall={pwaInstall} />
                         </RouteErrorBoundary>
                     </ToastHost>
                 </div>
@@ -402,7 +404,7 @@ function SiteRequestRun({ request, onDone }) {
     );
 }
 
-function AppInner() {
+function AppInner({ pwaInstall }) {
     // No variant read here any more. Navigation surfaces are chosen
     // by <FullLayoutWithNav> from its measured container width; the variant
     // only decides the dev-preview frame and the messaging shell, both of
@@ -3215,6 +3217,7 @@ function AppInner() {
                         onNavigateToAdvanced={() => setUnlockedView('advanced')}
                         onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}
                         onPairAnotherPhone={() => setUnlockedView('pair-partner')}
+                        pwaInstall={pwaInstall}
                     />
                 );
             }
@@ -3682,6 +3685,12 @@ function AppInner() {
                             <>
                                 {/* A second tab's lock screen can schedule the erase; it shows first. */}
                                 <EraseScheduledNotice />
+                                <IosInstallHint
+                                    show={pwaInstall.showIosHint}
+                                    currentView={unlockedView}
+                                    browser={pwaInstall.iosBrowser}
+                                    onDismiss={pwaInstall.dismissIosHint}
+                                />
                                 {waitingLinkDropped.node}
                                 <LockedSendOutcomeNotice walletId={activeWalletId} routeKey={unlockedView} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
@@ -3805,6 +3814,7 @@ function AppInner() {
                                     onSelect: handleMenuSelect,
                                     onOpenSettings: handleOpenSettings,
                                     onLock: handleNavLock,
+                                    onInstall: pwaInstall.install,
                                 }}
                             />
                         </Suspense>

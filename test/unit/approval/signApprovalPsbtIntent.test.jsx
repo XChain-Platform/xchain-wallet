@@ -132,7 +132,7 @@ afterEach(() => {
 });
 
 describe('SignApproval signPsbt intent', () => {
-    it('renders every bare-payment recipient in the shared confirm and leaves change out', async () => {
+    it('summarizes a many-recipient bare payment without recipient rows or change', async () => {
         const recipientA = 'bcrt1qrecipientaaaaaaaaaaaaaaaaaaaaaaaaaa';
         const recipientB = 'bcrt1qrecipientbbbbbbbbbbbbbbbbbbbbbbbbbb';
         messaging.parsePsbt.mockResolvedValue({
@@ -166,10 +166,15 @@ describe('SignApproval signPsbt intent', () => {
         await waitFor(() => expect(screen.getByTestId('confirm-sentence'))
             .toHaveTextContent('Send 0.0014 BTC to 2 recipients'));
         const facts = screen.getByTestId('confirm-facts');
-        expect(facts).toHaveTextContent(recipientA);
-        expect(facts).toHaveTextContent(recipientB);
-        expect(facts).toHaveTextContent('0.0012 BTC');
-        expect(facts).toHaveTextContent('0.0002 BTC');
+        expect([...facts.querySelectorAll('dt')].map((node) => node.textContent)).toEqual([
+            'Signing with',
+            'Network',
+            'Network fee',
+        ]);
+        expect(facts).not.toHaveTextContent(recipientA);
+        expect(facts).not.toHaveTextContent(recipientB);
+        expect(facts).not.toHaveTextContent('0.0012 BTC');
+        expect(facts).not.toHaveTextContent('0.0002 BTC');
         expect(facts).toHaveTextContent('0.00005 BTC');
         expect(facts).not.toHaveTextContent('bcrt1qownaddressownaddress');
         expect(screen.queryByTestId('psbt-input')).toBeNull();
@@ -275,14 +280,18 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        expect(await screen.findByText('The action would exceed the available balance.'))
-            .toBeTruthy();
-        // G130: Approve keeps its colour; the tap says why at the top and
-        // resolves nothing.
+        await screen.findByText('The checks found a problem with this action.');
+        const status = screen.getByTestId('confirm-status');
+        const bullets = [...status.querySelectorAll('[data-notice-list] > li')];
+        expect(bullets.map((bullet) => bullet.textContent)).toEqual([
+            'The checks found a problem with this action.',
+        ]);
+        expect(status).not.toHaveTextContent('The action would exceed the available balance.');
+        expect(status).not.toHaveTextContent("Approve won't send this while it fails.");
         const approve = screen.getByRole('button', { name: /Approve/i });
-        expect(approve.disabled).toBe(false);
+        expect(approve.disabled).toBe(true);
         fireEvent.click(approve);
-        expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
 
@@ -483,7 +492,7 @@ describe('SignApproval 360x600 layout', () => {
         expect(signCss).toMatch(/\.footer\s*\{[^}]*flex-direction:\s*column;[^}]*min-width:\s*0/s);
     });
 
-    it('renders many recipients in one facts card without restoring raw output rows', async () => {
+    it('keeps a many-recipient transaction to its decoded summary without raw output rows', async () => {
         setApprovalViewport();
         const outputs = Array.from({ length: 24 }, (_, index) => ({
             address: `bcrt1q${String(index).padStart(2, '0')}${'destination'.repeat(16)}`,
@@ -513,7 +522,13 @@ describe('SignApproval 360x600 layout', () => {
         await waitFor(() => expect(screen.getByTestId('confirm-sentence'))
             .toHaveTextContent('24 recipients'));
         const facts = screen.getByTestId('confirm-facts');
-        expect(facts.querySelectorAll('dt')).toHaveLength(27);
+        expect([...facts.querySelectorAll('dt')].map((node) => node.textContent)).toEqual([
+            'Signing with',
+            'Network',
+            'Network fee',
+        ]);
+        expect(facts).not.toHaveTextContent(outputs[0].address);
+        expect(facts).not.toHaveTextContent(outputs[23].address);
         expect(screen.queryByTestId('psbt-input')).toBeNull();
         expect(screen.queryByTestId('psbt-output')).toBeNull();
 

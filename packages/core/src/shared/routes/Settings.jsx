@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
-import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, PageNoticeHostContext, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, Notice, PageHeader, PageNoticeHostContext, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 // The standard list card for the grouped landing.
 import groupListStyles from './CoSignerAccountList.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -65,6 +65,7 @@ import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/watch.js';
+import '../../i18n/locales/en/pwaInstall.js';
 
 import { NotificationsSection, soundPickerSectionFor } from '../components/settings/NotificationsSection.jsx';
 import { WatchSection } from '../components/settings/WatchSection.jsx';
@@ -437,6 +438,7 @@ function searchRowPage(sectionId, title) {
  * @param {() => void} [props.onNavigateToActionQueue]
  * @param {() => void} [props.onOpenBackupInTab]
  * @param {() => void} [props.onPairAnotherPhone]   Advanced's "Use another phone as a signer" row: opens the two-phone pairing page
+ * @param {{ standalone?: boolean, install?: () => void | Promise<void>, iosBrowser?: 'safari'|'chrome'|null }} [props.pwaInstall]
  * @param {() => void} [props.reload]
  */
 export function Settings({
@@ -455,6 +457,7 @@ export function Settings({
     onNavigateToActionQueue,
     onOpenBackupInTab,
     onPairAnotherPhone,
+    pwaInstall,
     reload = reloadPage,
 }) {
     const { messaging, shell } = useMessaging();
@@ -842,10 +845,11 @@ export function Settings({
             onClosePage: closeSubpage,
             onReturnTo: returnToPage,
             onOpenToken,
+            pwaInstall,
             // Hide Small Balances previews this wallet and account's balances.
             balancesScope: { walletId: activeWallet?.id || null, accountId: activeAccount?.id || null },
         });
-    }, [sections, activeWallet, activeAccount, reload, onOpenBackupInTab, onNavigateToAdvanced, onNavigateToActionQueue, onPairAnotherPhone, siteCount, blockedCount, shell, messaging, openChildPage, closeSubpage, returnToPage, onOpenToken]);
+    }, [sections, activeWallet, activeAccount, reload, onOpenBackupInTab, onNavigateToAdvanced, onNavigateToActionQueue, onPairAnotherPhone, siteCount, blockedCount, shell, messaging, openChildPage, closeSubpage, returnToPage, onOpenToken, pwaInstall]);
     // Every row anywhere on a group page, including the rows of a page a row
     // opens (Developer options).
     const allRows = useMemo(() => {
@@ -1778,7 +1782,7 @@ const safeRead = (read) => { try { return read(); } catch { return null; } };
  * page renders, and a summary read from settings when the list renders. A row
  * with `navigate` opens a page outside Settings instead of a Settings page.
  */
-function settingsRowGroups({ password, backup, sections = new Map(), onNavigateToAdvanced, onNavigateToActionQueue, onPairAnotherPhone, sitesSummary = '-', shell = 'web', holdAvailable = false, onOpen = () => {}, onClosePage = () => {}, onReturnTo = () => {}, onOpenToken, balancesScope = null }) {
+function settingsRowGroups({ password, backup, sections = new Map(), onNavigateToAdvanced, onNavigateToActionQueue, onPairAnotherPhone, pwaInstall, sitesSummary = '-', shell = 'web', holdAvailable = false, onOpen = () => {}, onClosePage = () => {}, onReturnTo = () => {}, onOpenToken, balancesScope = null }) {
     const row = (id, title, icon, Component, props, summary) => ({ id, title, icon, Component, props, summary });
     const navRow = (id, title, icon, navigate, summary) => ({ id, title, icon, navigate, summary: () => summary });
     const sectionProps = (id) => sections.get(id)?.props || {};
@@ -1844,6 +1848,24 @@ function settingsRowGroups({ password, backup, sections = new Map(), onNavigateT
                 ...(typeof onNavigateToActionQueue === 'function' ? [navRow('advanced-queue', t('settings.developer.actionQueue'), Icon.ListIcon, onNavigateToActionQueue, 'Compose actions across networks')] : []),
             ] },
             { label: 'App', rows: [
+                ...(pwaInstall && pwaInstall.standalone !== true ? [(
+                    typeof pwaInstall.install === 'function'
+                        ? navRow(
+                            'app-install',
+                            t('pwaInstall.addToHomeScreen'),
+                            Icon.DownloadIcon,
+                            pwaInstall.install,
+                            t('pwaInstall.addToHomeScreenSummary'),
+                        )
+                        : row(
+                            'app-install',
+                            t('pwaInstall.addToHomeScreen'),
+                            Icon.DownloadIcon,
+                            AddToHomeScreenInstructions,
+                            { browser: pwaInstall.iosBrowser },
+                            () => t('pwaInstall.manualStepsSummary'),
+                        )
+                )] : []),
                 ...(sections.has('keyboard') ? [row('keyboard', 'Keyboard shortcuts', Icon.GridIcon, KeyboardSection, {}, keyboardSummary)] : []),
             ] },
         ].filter((grp) => grp.rows.length > 0),
@@ -1851,6 +1873,17 @@ function settingsRowGroups({ password, backup, sections = new Map(), onNavigateT
         'g-backup': backupRowGroups({ backup, row }),
         'g-privacy': privacyRowGroups({ sections, sitesSummary, onClosePage }),
     };
+}
+
+function AddToHomeScreenInstructions({ browser }) {
+    let stepsKey = 'pwaInstall.otherBrowserSteps';
+    if (browser === 'chrome') stepsKey = 'pwaInstall.iosChromeSteps';
+    if (browser === 'safari') stepsKey = 'pwaInstall.iosSafariSteps';
+    return (
+        <Notice tone="info" title={t('pwaInstall.iosTitle')}>
+            {t(stepsKey)}
+        </Notice>
+    );
 }
 
 // The nine wallet-event switches, each with its short line and icon; the

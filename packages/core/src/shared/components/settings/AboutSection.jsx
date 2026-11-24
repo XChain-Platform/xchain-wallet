@@ -42,6 +42,7 @@ import {
     isUpdateNoticeEnabled,
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
+import { getReleaseFeedSource } from '../../../flows/releaseFeedSource.js';
 import { ToggleRow, formatByteSize } from './_settingsPrimitives.jsx';
 import styles from './AboutSection.module.css';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
@@ -462,7 +463,9 @@ export async function detectRunningChannel(shell, env = globalThis) {
     return 'web';
 }
 
-async function fetchReleaseFeed(env) {
+async function readReleaseFeedText(env) {
+    const hostedSource = getReleaseFeedSource();
+    if (hostedSource) return hostedSource();
     if (typeof env.fetch !== 'function') throw new Error('update feed unavailable');
     const response = await env.fetch(WALLET_RELEASE_FEED_URL, {
         method: 'GET',
@@ -472,7 +475,11 @@ async function fetchReleaseFeed(env) {
         referrerPolicy: 'no-referrer',
     });
     if (!response?.ok) throw new Error('update feed unavailable');
-    const text = await response.text();
+    return response.text();
+}
+
+async function fetchReleaseFeed(env) {
+    const text = await readReleaseFeedText(env);
     if (typeof text !== 'string' || text.length > UPDATE_FEED_MAX_BYTES) {
         throw new Error('invalid update feed');
     }
@@ -481,11 +488,14 @@ async function fetchReleaseFeed(env) {
 
 function updateActionFor(channel, url, env) {
     if (channel === 'desktop-direct') {
-        return () => {
+        return async () => {
             if (typeof env.xchainWalletUpdater?.install !== 'function') {
                 throw new Error('desktop updater unavailable');
             }
-            return env.xchainWalletUpdater.install('download');
+            // Main's download step runs its own update check first, so one call
+            // is the whole update; a refusal comes back as ok false, not a throw.
+            const outcome = await env.xchainWalletUpdater.install('download');
+            if (outcome?.ok === false) throw new Error('desktop update failed');
         };
     }
     return () => openExternal(url, env);

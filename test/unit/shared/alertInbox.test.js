@@ -47,4 +47,15 @@ describe('alertInbox', () => {
 
         expect(await createAlertInbox(storage).list()).toEqual([{ ...alert('saved', 10), read: true }]);
     });
+
+    it('keeps the recognized Payment due attention marker and drops unknown markers', async () => {
+        const inbox = createAlertInbox(memoryStorage());
+        await inbox.record({ ...alert('pay'), type: 'payments', attention: 'autopay-cannot-sign' });
+        await inbox.record({ ...alert('other'), attention: 'unknown-marker' });
+
+        expect(await inbox.list()).toEqual([
+            alert('other'),
+            { ...alert('pay'), type: 'payments', attention: 'autopay-cannot-sign' },
+        ]);
+    });
 });

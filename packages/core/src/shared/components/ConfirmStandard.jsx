@@ -19,7 +19,7 @@
 //      file's), then the action in one short centred sentence;
 //   4. one facts card holding every detail: the labelled address first, then
 //      the action's own rows, signing wallet, network and each fee;
-//   5. the short warning (a title plus one line) after the details;
+//   5. a form's neutral note, then the short warning after the details;
 // then whatever the signer needs (the verbatim message, the PSBT's inputs and
 // outputs, the password or device). Reject and Approve are docked in Screen's
 // footer, half the width each, 8px between and around them, always in full
@@ -30,7 +30,8 @@
 
 import { AddressText, Button, Checkbox, Icon, Notice, NoticeList } from '@xchain-wallet/core/ui';
 import factStyles from '../routes/FactRows.module.css';
-import { preflightFindingKey, consensusRefusalMessage } from '../utils/preflightFindingKey.js';
+import { preflightFindingKey } from '../utils/preflightFindingKey.js';
+import { errorText } from '../utils/preflightFindingCopy.js';
 import { unknownActionStatus, withAddressFact, withNetworkFact } from '../utils/confirmStandardModel.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import styles from './ConfirmStandard.module.css';
@@ -158,9 +159,9 @@ function pointContent(point) {
  * (U101), a single issue as a plain line, with a `lead` sentence above them
  * and an `after` line under them kept plain.
  *
- * @param {{ points: Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>, testId?: string }} props
+ * @param {{ points: Array<{ key: string, text: string, detail?: string|null, place?: 'lead'|'after' }>, testId?: string, bulleted?: boolean }} props
  */
-function Points({ points, testId }) {
+function Points({ points, testId, bulleted = false }) {
     if (points.length === 0 && !testId) return null;
     const line = (point) => (
         <p key={point.key} data-testid="confirm-warning-point">{pointContent(point)}</p>
@@ -170,6 +171,7 @@ function Points({ points, testId }) {
         <div className={styles.points} data-testid={testId || undefined}>
             {points.filter((point) => point.place === 'lead').map(line)}
             <NoticeList
+                forceList={bulleted}
                 items={issues.map((point) => ({
                     key: point.key,
                     content: pointContent(point),
@@ -213,7 +215,7 @@ export function ConfirmStatusNotice({ status, acknowledged, onAcknowledge, statu
                 testId="confirm-status"
                 data-state={status.state}
             >
-                {status.points.length > 0 ? <Points points={status.points} /> : null}
+                {status.points.length > 0 ? <Points points={status.points} bulleted={status.state === 'fail'} /> : null}
                 {status.overrides.map((finding, index) => {
                     const key = preflightFindingKey(finding);
                     return (
@@ -221,7 +223,7 @@ export function ConfirmStatusNotice({ status, acknowledged, onAcknowledge, statu
                             key={`${key}-${index}`}
                             label={t('components.preflightPanel.signAnyway')}
                             help={status.overrides.length > 1
-                                ? (consensusRefusalMessage(finding) || finding.message)
+                                ? errorText(finding).headline
                                 : t('components.preflightPanel.signAnywayHelp')}
                             checked={Boolean(acknowledged?.has(key))}
                             onChange={() => onAcknowledge?.(key)}
@@ -259,22 +261,21 @@ export function ConfirmWarningSlot({ warning }) {
 
 /**
  * Reject (red, thumbs down) and Approve (green, thumbs up), each half the
- * width and 8px apart, at every width. Approve never looks disabled (G130):
- * while a request is in flight it shows its spinner and ignores repeat taps,
- * and a tap that cannot go ahead yet is answered by the caller with the
- * reason at the top of the page.
+ * width and 8px apart, at every width. A blocking pre-flight finding disables
+ * Approve; other incomplete steps continue to answer a tap with their reason.
  *
  * @param {{
  *   onReject: (e?: any) => void,
  *   onApprove: (e?: any) => void,
  *   rejectDisabled?: boolean,     both exits lock while a signature is in flight
+ *   approveDisabled?: boolean,    a blocking pre-flight finding holds approval
  *   approveLoading?: boolean,
  *   approveLabel?: string,
  *   approveSettled?: boolean,
  * }} props
  */
 export function ConfirmButtons({
-    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel, approveSettled,
+    onReject, onApprove, rejectDisabled = false, approveDisabled = false, approveLoading = false, approveLabel, approveSettled,
 }) {
     const approve = approveLabel || t('extension.connect.approve');
     return (
@@ -291,9 +292,11 @@ export function ConfirmButtons({
             </Button>
             <Button
                 variant="success"
-                className={styles.button}
+                className={[styles.button, approveDisabled ? styles.disabled : null].filter(Boolean).join(' ')}
                 icon={<Icon.ThumbsUpIcon />}
                 onClick={onApprove}
+                disabled={approveDisabled}
+                disabledAppearance={approveDisabled}
                 loading={approveLoading}
                 data-testid="confirm-approve"
                 data-settled={approveSettled}
@@ -313,7 +316,7 @@ export function ConfirmButtons({
  * window's footer included, since that one holds ConfirmButtons too.
  */
 export function ConfirmDecisionFooter({
-    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel, approveSettled,
+    onReject, onApprove, rejectDisabled = false, approveDisabled = false, approveLoading = false, approveLabel, approveSettled,
 }) {
     return (
         <div className={styles.decision} data-testid="confirm-decision">
@@ -321,6 +324,7 @@ export function ConfirmDecisionFooter({
                 onReject={onReject}
                 onApprove={onApprove}
                 rejectDisabled={rejectDisabled}
+                approveDisabled={approveDisabled}
                 approveLoading={approveLoading}
                 approveLabel={approveLabel}
                 approveSettled={approveSettled}
@@ -346,7 +350,7 @@ export function ConfirmDecisionFooter({
  * @param {import('react').ReactNode} [props.afterAddress]   the requesting site, after the sentence
  * @param {import('../utils/confirmStandardModel.js').ConfirmFact[]} [props.facts]
  * @param {boolean} [props.preserveFactOrder]             facts already include the address and network in their required order
- * @param {string} [props.note]                         a fact the form moved off its page, one plain line
+ * @param {string} [props.information]                  a form's informational note, wrapped in a neutral notice
  * @param {string} [props.messageText]                  the signed message, verbatim
  * @param {import('react').ReactNode} [props.children]  what the signer needs: the PSBT panel, the password, the device
  * @param {boolean} [props.checking]                    the network check is still running (when no status is passed)
@@ -359,10 +363,10 @@ export function ConfirmStandard({
     status = null, statusRef, top = null, mark = null, icon = 'check', name = '', sentence, address = null, chainName = '',
     actionCode = '',
     addressIsSource = false, addressLabel = '', afterAddress = null,
-    facts = [], preserveFactOrder = false, note = '', messageText, children = null,
+    facts = [], preserveFactOrder = false, information = '', messageText, children = null,
     checking = false, warning = null, acknowledged, onAcknowledge, label,
 }) {
-    const noteText = String(note || '').trim();
+    const noteText = String(information || '').trim();
     const nameText = String(name || '').trim();
     const unknownCode = String(actionCode || '').trim().toUpperCase();
     const actionFacts = unknownCode ? [{
@@ -395,7 +399,11 @@ export function ConfirmStandard({
             <p className={styles.sentence} data-testid="confirm-sentence">{sentence}</p>
             {afterAddress}
             <ConfirmFacts facts={shownFacts} preserveOrder={preserveFactOrder} />
-            {noteText ? <p className={styles.note} data-testid="confirm-summary-notice">{noteText}</p> : null}
+            {noteText ? (
+                <Notice tone="info" role="note" flush testId="confirm-summary-notice" className={styles.note}>
+                    {noteText}
+                </Notice>
+            ) : null}
             {messageText !== undefined ? (
                 <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
                     <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>

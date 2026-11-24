@@ -124,3 +124,33 @@ describe('SoftwareSigner signing input validation', () => {
         await expect(makeSigner().signMultisigClassical(params)).rejects.toThrow(message);
     });
 });
+
+describe('SoftwareSigner sighash override contract', () => {
+    it.each([0x81, 0x02, 3, 0])('refuses a signingPaths sighashType of %i without reaching the SDK', async (sighashType) => {
+        const signPsbt = vi.fn(() => ({ signedPsbtHex: 'aa', txHex: 'bb', txid: 'cc' }));
+        const signer = makeSigner({ sdk: { wallet: { signPsbt } } });
+        await expect(signer.signPsbt({
+            psbtHex: '00', chainId: 'bitcoin', signingPaths: [{ inputIndex: 0, path: PATH, sighashType }],
+        })).rejects.toThrow(`cannot sign under sighashType ${sighashType}`);
+        expect(signPsbt).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, null, 1])('signs normally when sighashType is %j', async (sighashType) => {
+        const signPsbt = vi.fn(() => ({ signedPsbtHex: 'aa', txHex: 'bb', txid: 'cc' }));
+        const signer = makeSigner({ sdk: { wallet: { signPsbt } } });
+        const out = await signer.signPsbt({
+            psbtHex: '00', chainId: 'bitcoin', signingPaths: [{ inputIndex: 0, path: PATH, sighashType }],
+        });
+        expect(out.txid).toBe('cc');
+        expect(signPsbt).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a non-default sighashType on the multisig lane too', async () => {
+        const signMultisigPsbt = vi.fn();
+        const signer = makeSigner({ sdk: { wallet: { signMultisigPsbt } } });
+        await expect(signer.signMultisigPsbt({
+            chainId: 'bitcoin', psbtHex: '00', signingPaths: [{ inputIndex: 0, path: PATH, sighashType: 0x81 }],
+        })).rejects.toThrow('cannot sign under sighashType 129');
+        expect(signMultisigPsbt).not.toHaveBeenCalled();
+    });
+});

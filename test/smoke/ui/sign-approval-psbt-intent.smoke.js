@@ -97,13 +97,17 @@ assert.match(signSrc, /psbtDecodePending\s*=\s*\n?\s*kind === 'signPsbt' &&[\s\S
     'holds approval while the PSBT decode is still in flight');
 assert.match(signSrc, /psbtApprovalBlocked = psbtDecodeFailed \|\| psbtDecodePending/,
     'combines the failed and pending gates');
-// G130: Approve is never disabled; the handler answers a blocked tap with
-// the reason at the top of the window and sends nothing.
+// Operator ruling 2026-11-23: blocking pre-flight findings disable Approve;
+// every other gate answers a blocked tap with the reason and sends nothing.
 assert.match(signSrc, /if \(psbtApprovalBlocked \|\| coSignApprovalBlocked\) \{[\s\S]{0,300}?return/,
     'the Approve handler refuses while the decode gate is blocked');
 assert.match(signSrc, /const blocked = approveBlockReason\(\);\s*if \(blocked\) \{[\s\S]{0,500}?return;/,
     'a blocked tap says why and sends nothing');
-assert.doesNotMatch(signSrc, /approveDisabled=/, 'the Approve button is never disabled (G130)');
+assert.deepEqual(
+    signSrc.match(/approveDisabled=\{[^}\n]*\}/g) || [],
+    ["approveDisabled={confirmationStatus?.state === 'fail' && preflightBlocked}"],
+    'Approve is disabled only for a blocking pre-flight finding',
+);
 
 // --- 7. Co-sign approvals get the same gate (WYSIWYS parity) -------------
 // A coSign request the wallet already knows is undecodable or out-of-policy

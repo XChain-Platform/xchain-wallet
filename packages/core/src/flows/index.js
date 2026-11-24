@@ -69,6 +69,14 @@ export {
     summarizeSendLegs,
     totalsByTick,
 } from './sendLegs.js';
+export {
+    NativeAmountPrecisionError,
+    assertNativeAmountPrecision,
+    nativePaymentOutput,
+    isBareNativePayment,
+    withNativePaymentOutput,
+    hasNativePaymentOutput,
+} from './nativePayment.js';
 export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { createReservationLedger } from './reservationLedger.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
@@ -263,6 +271,7 @@ export {
     RbfInvalidEntryError,
 } from './rbfReplace.js';
 export { planRbfReplacement, RbfPlanError } from './rbfPlan.js';
+export { configureReleaseFeedSource } from './releaseFeedSource.js';
 export {
     getFiatRate,
     refreshFiatRates,
@@ -769,7 +778,8 @@ export {
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
 export {
-    INPUTS_ALREADY_SPENT_NAME, NAME_SALE_IN_FLIGHT_NAME, checkInputLiveness, inputAddresses, livenessMessage, nameSaleInFlightMessage,
+    BROADCAST_QUEUE_UNAVAILABLE_NAME, INPUTS_ALREADY_SPENT_NAME, NAME_SALE_IN_FLIGHT_NAME,
+    broadcastQueueUnavailableMessage, checkInputLiveness, inputAddresses, livenessMessage, nameSaleInFlightMessage,
 } from './inputLiveness.js';
 // Which transaction carries the native-coin protocol fee.
 export {

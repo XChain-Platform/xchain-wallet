@@ -237,7 +237,7 @@ describe('dispenser owner actions sign through the confirm page', () => {
         await approve(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
-        expect(approveButton(utils), 'Approve remains visible on a hard refusal').toBeEnabled();
+        expect(approveButton(utils), 'a hard refusal disables Approve').toBeDisabled();
         await step(() => fireEvent.click(approveButton(utils)));
         expect(signCalls(calls)).toHaveLength(0);
     });

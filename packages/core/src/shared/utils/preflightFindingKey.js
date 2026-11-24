@@ -43,7 +43,7 @@ const CONSENSUS_INVALID = /^\s*invalid:\s*(.+?)\s*\.?\s*$/i;
 const CONSENSUS_REFUSAL_COPY = [
     [
         /^trailing data after batch signatures$/i,
-        'This price batch would be refused because it contains extra data after its signatures.',
+        'The price batch has extra data after its signatures.',
     ],
 ];
 const UNINFORMATIVE_REFUSAL = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal|.* wording))$/i;

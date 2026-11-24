@@ -18,6 +18,7 @@ vi.mock('../../../packages/core/src/flows/sendToken.js', () => ({
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 import { deployChunkedRun } from '../../../packages/core/src/flows/deployChunked.js';
+import { TamperDetectedError } from '../../../packages/core/src/flows/confirmChecks.js';
 
 const FROM = {
     address: 'address-1',
@@ -109,6 +110,14 @@ describe('chunked deploy compose reservations', () => {
         submitAction.mockRejectedValue(failure);
 
         await expect(run()).rejects.toBe(failure);
+        expect(releaseEncoderInputs).toHaveBeenCalledOnce();
+    });
+
+    it('refuses to sign a leg whose compose did not tamper-check it, and releases it', async () => {
+        composeActionForConfirm.mockResolvedValue({ psbt: 'psbt', releaseEncoderInputs });
+
+        await expect(run()).rejects.toBeInstanceOf(TamperDetectedError);
+        expect(submitAction).not.toHaveBeenCalled();
         expect(releaseEncoderInputs).toHaveBeenCalledOnce();
     });
 });

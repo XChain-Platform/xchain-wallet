@@ -2024,7 +2024,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: 'Balances could not be loaded. Check your connection and try again.',
+                    error: true,
                     sdkShape: null,
                 });
             });
@@ -2813,6 +2813,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // unavailable; then its amount is unknown, not zero.
     const sourceHalfUnavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
         && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
+    const sourcePendingUnknown = isNativeSend && !sourceHalfUnavailable
+        && previewBalances.sdkShape?.native?.pendingUnknown === true;
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || sourceHalfUnavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
@@ -4560,10 +4562,38 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                 ? { label: t('send.useMax'), onAction: onMax, icon: <Icon.MaxIcon /> }
                 : undefined}
-            onChangeCapture={() => {
+            onClickCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onChangeCapture={(event) => {
+                if (confirmBusy) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
                 if (submitError) setSubmitError(null);
                 if (submitFieldError) setSubmitFieldError(null);
             }}
+            onDropCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onPasteCapture={(event) => {
+                if (!confirmBusy) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            onKeyDownCapture={(event) => {
+                // Enter inside a recipient editor commits a row without a click,
+                // so it needs its own refusal while the request is composing.
+                if (!confirmBusy || event.key !== 'Enter') return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
+            aria-busy={confirmAction.composing || undefined}
             /*
               * State the signing freeze at the TOP of the form, so a duress observer
               * never watches a transaction get composed first. Duress-armed freezes
@@ -4831,7 +4861,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     previewBalances.loading
                         ? ((balanceGateWaived || balanceGateSettledRef.current) ? t('send.balance.unknown') : t('common.loading'))
                         : previewBalances.error
-                            ? t('send.balance.unavailable', { error: previewBalances.error })
+                            ? t('send.balance.unknown')
                             : networkOffline && !isDemo && !previewBalances.sdkShape
                                 ? t('send.balance.unknown')
                                 : sourceHalfUnavailable
@@ -4849,6 +4879,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             />
             {maxNote ? (
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
+            {sourcePendingUnknown && !previewBalances.loading && !previewBalances.error ? (
+                <p className={styles.balanceHint} role="status" data-testid="send-pending-unknown">
+                    {t('send.balance.pendingUnknown')}
+                </p>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already put the same sentence in the error map,

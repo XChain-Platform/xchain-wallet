@@ -150,12 +150,11 @@
     white-space: nowrap;
 }
 
-/* --- plain lines and the signed message --- */
+/* --- notice text and the signed message --- */
 
 .note {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .messageBox {
@@ -217,6 +216,11 @@
 .button {
     flex: 1 1 0;
     min-width: 0;
+}
+
+/* Mark the pre-flight-disabled action without painting a control outside the kit. */
+.button.disabled {
+    cursor: not-allowed;
 }
 
 /* The docked footer that holds Reject and Approve pads 8px all round (left,

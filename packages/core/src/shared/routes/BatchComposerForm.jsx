@@ -77,6 +77,7 @@ import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import { t } from '../../i18n/index.js';
+import { tickAmountOf } from '../utils/walletBalanceShape.js';
 import '../../i18n/locales/en/batch.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
@@ -704,15 +705,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     const balance = balances.find(
                         (entry) => String(entry.tick || '').trim().toUpperCase() === total.tick,
                     );
-                    if (compareDecimalStrings(total.amount, String(balance?.amount ?? '0')) === 1) {
+                    const held = tickAmountOf({ balances: fresh }, balance);
+                    if (held === null) throw new Error('balance unavailable');
+                    if (compareDecimalStrings(total.amount, held) === 1) {
                         setPreReviewTxId(txList[i].id);
                         setPreReviewError(inTx(
                             i,
-                            `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
+                            `These steps send ${total.amount} ${total.tick} in total, more than the ${held} ${total.tick} this address holds.`,
                         ));
                         composeFormErrors.fail(inTx(
                             i,
-                            `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
+                            `These steps send ${total.amount} ${total.tick} in total, more than the ${held} ${total.tick} this address holds.`,
                         ), 'form:balance');
                         setValidatingRows(false);
                         return;

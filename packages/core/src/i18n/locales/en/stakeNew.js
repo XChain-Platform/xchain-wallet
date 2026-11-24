@@ -20,7 +20,7 @@ const messages = {
     'stakeNew.title': 'New Stake',
     'stakeNew.chooseNetwork': 'Choose the network to stake on.',
     'stakeNew.bitcoinOnly':
-        'Staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',
+        'Validator staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',
     'stakeNew.validatorTitle': 'Validator staking',
     'stakeNew.validatorDescription':
         'Stake XCHAIN to help secure the network and earn rewards.',

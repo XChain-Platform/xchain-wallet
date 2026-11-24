@@ -6,11 +6,13 @@
 // first (green only on the indexer's own approval), one hero icon, the address
 // once, one facts card holding the network, the signing wallet and every fee
 // row, no Total block, the short warning after the details, and Reject and
-// Approve docked, never disabled (G130).
+// Approve docked, disabled only while a pre-flight finding blocks.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import { ActionWarningsCard, ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
+import confirmStyles from '../../../packages/core/src/shared/components/ConfirmStandard.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     CONFIRM_KINDS,
     confirmHeadline,
@@ -77,6 +79,18 @@ const KINDS = {
 function decodedFor(kind) {
     const [, summary, details] = KINDS[kind];
     return { summary, details: details.map(([label, value]) => ({ label, value })), warnings: [] };
+}
+
+// The decode of a multi-send whose composed legs are exactly these recipients.
+function decodedLegs(recipients) {
+    return {
+        summary: `Send to ${recipients.length} recipients`,
+        details: recipients.map((row, index) => ({
+            label: `Recipient ${index + 1}`,
+            value: `${row.amount} ${row.tick} to ${row.to}`,
+        })),
+        warnings: [],
+    };
 }
 
 function props(kind, overrides = {}) {
@@ -163,7 +177,7 @@ function expectStandard(container) {
     expect(buttons).toHaveLength(2);
     expect(buttons[0].getAttribute('data-testid')).toBe('confirm-reject');
     expect(buttons[1].getAttribute('data-testid')).toBe('confirm-approve');
-    // Approve never looks or acts disabled while the page is ready (G130).
+    // A ready confirmation with no blocking finding keeps Approve enabled.
     expect(buttons[1].disabled).toBe(false);
 }
 
@@ -240,7 +254,7 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['3000 PEPE'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 3,000 PEPE to 75 recipients');
         const rows = container.querySelectorAll('[data-testid="confirm-asset-summary"]');
         expect(rows).toHaveLength(1);
@@ -265,7 +279,7 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['52 PEPE', '75 DANK', '9 WOW'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 3 assets to 6 recipients');
         const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
         expect(rows.map((row) => row.previousElementSibling.querySelector('[data-testid="confirm-asset-label"]').textContent))
@@ -288,10 +302,11 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['500 PEPE', '500 DANK'],
         };
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         expect(getByTestId('confirm-sentence').textContent).toBe('Send 2 assets to 1,000 recipients');
         expect(container.querySelectorAll('[data-testid="confirm-asset-summary"]')).toHaveLength(2);
         expect(container.querySelectorAll('[data-testid="confirm-recipient"]')).toHaveLength(0);
+        expect([...container.querySelectorAll('dt')].some((row) => /^Recipient \d+$/.test(row.textContent))).toBe(false);
         expect(container.textContent).not.toContain('recipient-999');
     });
 
@@ -307,12 +322,40 @@ describe('Confirm Standard, every mapped kind', () => {
             recipients,
             totals: ['9007199254741000 PEPE', '0.3 DANK'],
         };
-        const { container } = render(<ConfirmActionModal {...props('multiSend', { summary })} />);
+        const { container } = render(<ConfirmActionModal {...props('multiSend', { summary, decoded: decodedLegs(recipients) })} />);
         const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
         expect(rows.map((row) => row.textContent)).toEqual([
             '9,007,199,254,741,000 to 1 recipient',
             '0.3 to 2 recipients',
         ]);
+    });
+
+    it('draws a multi-send from the legs the host decoded when the form holds others', () => {
+        const form = props('multiSend').summary;
+        const composedLegs = [
+            { to: ADDR, tick: 'PEPE', amount: '5' },
+            { to: FROM, tick: 'PEPE', amount: '7' },
+            { to: 'bc1qthird', tick: 'DANK', amount: '2' },
+        ];
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('multiSend', {
+            summary: form, decoded: decodedLegs(composedLegs),
+        })} />);
+        expect(getByTestId('confirm-sentence').textContent).toBe('Send 2 assets to 3 recipients');
+        const rows = [...container.querySelectorAll('[data-testid="confirm-asset-summary"]')];
+        expect(rows.map((row) => row.textContent)).toEqual(['12 to 2 recipients', '2 to 1 recipient']);
+        expect([...container.querySelectorAll('dt')].some((row) => /^Recipient \d+$/.test(row.textContent))).toBe(false);
+        expect(container.textContent).not.toContain('bc1qthird');
+        expect(container.textContent).not.toContain('30 XCHAIN');
+    });
+
+    it('keeps the per-asset rows alone when the form and the decode name the same legs', () => {
+        const recipients = [{ to: ADDR, tick: 'PEPE', amount: '5' }, { to: FROM, tick: 'PEPE', amount: '7' }];
+        const { container } = render(<ConfirmActionModal {...props('multiSend', {
+            summary: { ...props('multiSend').summary, recipients, totals: ['12 PEPE'] },
+            decoded: decodedLegs(recipients),
+        })} />);
+        expect(container.querySelectorAll('[data-testid="confirm-asset-summary"]')).toHaveLength(1);
+        expect(container.textContent).not.toContain('Recipient 1');
     });
 
     it('signs a message with the same body and no status claim either way', () => {
@@ -345,7 +388,8 @@ describe('Confirm Standard, every mapped kind', () => {
         // The decoded rows are the panel's, not repeated in the facts card.
         expect(container.querySelector('[data-testid="confirm-facts"]')?.textContent || '').not.toContain('Token');
         const notice = container.querySelector('[data-testid="confirm-status"]');
-        expect(notice.textContent).toContain('You hold 200 XYZ');
+        expect(notice.textContent).toContain('The checks found a problem with this action.');
+        expect(notice.textContent).not.toContain('You hold 200 XYZ');
         expect(notice.textContent).not.toMatch(/Approve won't|Sign anyway/);
         expect(container.querySelector('[data-testid="confirm-approve"]').disabled).toBe(false);
     });
@@ -476,7 +520,7 @@ describe('Confirm Standard, list transfer', () => {
     it('puts the list name on its own line over "Transfer list to the new owner" and the new owner, never the From address', () => {
         const { container, getByTestId, queryByTestId } = render(<ConfirmActionModal {...props('listTransfer', {
             decoded: null,
-            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'] },
+            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'], protocolFeeKnownFree: true },
             networkFee: { amount: '0.000015', ticker: 'BTC', estimate: true },
             summary: transferSummary(),
         })} />);
@@ -502,6 +546,16 @@ describe('Confirm Standard, list transfer', () => {
         expect(getByTestId('confirm-fee-network').textContent).toBe('0.000015 BTC');
         expect(container.querySelector('[data-testid^="confirm-total"]')).toBeNull();
         expect(container.textContent).not.toMatch(/protocol fee/i);
+    });
+
+    it('names the protocol fee as not known when the transfer quote gave no free answer', () => {
+        const { getByTestId } = render(<ConfirmActionModal {...props('listTransfer', {
+            decoded: null,
+            composed: { chainId: CHAIN, action: 'LIST', actionWarnings: ['LIST_TRANSFER'] },
+            networkFee: { amount: '0.000015', ticker: 'BTC', estimate: true },
+            summary: transferSummary(),
+        })} />);
+        expect(getByTestId('confirm-fee-protocol').textContent).toBe('Not known yet');
     });
 
     it('says "this list" without a name and never repeats List or shows the id as a name', () => {
@@ -561,32 +615,80 @@ describe('Confirm Standard, list transfer', () => {
 });
 
 describe('Confirm Standard status notice and short warning', () => {
-    it('a failed check says why in one alert at the top; Approve stays live and a tap sends nothing', () => {
-        const onApprove = vi.fn();
-        const { container, getByTestId } = render(<ConfirmActionModal {...props('order', { report: FAIL, canApprove: false, onApprove })} />);
+    it('renders two blocking findings as two bullets and disables Approve without the removed sentence', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'FUTURE_ERROR_A', severity: 'error', overridable: false, message: 'First SDK diagnostic.' },
+                { code: 'FUTURE_ERROR_B', severity: 'error', overridable: false, message: 'Second SDK diagnostic.' },
+            ],
+            unverified: [],
+        };
+        const { container, getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false })} />);
         const notice = getByTestId('confirm-status');
         expect(notice.getAttribute('role')).toBe('alert');
         expect(notice.textContent).toContain('This will fail');
-        expect(notice.textContent).toContain('You hold 200 XYZ');
+        const bullets = [...notice.querySelectorAll('[data-notice-list] > li')];
+        expect(bullets).toHaveLength(2);
+        expect(bullets.map((bullet) => bullet.textContent)).toEqual([
+            'The checks found a problem with this action.',
+            'The checks found a problem with this action.',
+        ]);
+        expect(bullets.every((bullet) => bullet.textContent.length < 60)).toBe(true);
+        expect(bullets.every((bullet) => /^[^.!?]+[.!?]$/.test(bullet.textContent))).toBe(true);
+        expect(bullets.every((bullet) => bullet.querySelector(`.${confirmStyles.pointDetail}`) === null)).toBe(true);
+        expect(notice.textContent).not.toContain('SDK diagnostic');
+        expect(notice.textContent).not.toContain("Approve won't send this while it fails.");
         expect(container.querySelector('[data-testid="confirm-modal"]').firstElementChild)
             .toBe(getByTestId('confirm-status-slot'));
-        const approve = getByTestId('confirm-approve');
-        expect(approve.disabled).toBe(false);
-        fireEvent.click(approve);
-        expect(onApprove).not.toHaveBeenCalled();
-        expect(getByTestId('confirm-blocked').textContent).toBe("This will fail, so Approve won't send it.");
+        expect(getByTestId('confirm-approve')).toBeDisabled();
+        expect(getByTestId('confirm-approve')).toHaveClass(buttonStyles.btn, confirmStyles.disabled);
     });
 
-    it('an overridable failure carries its Sign anyway box in the status notice', () => {
-        const report = { verdict: 'fail', findings: [{ code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' }], unverified: [] };
+    it('all-overridable findings keep Sign anyway and release Approve only after every acknowledgement', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' },
+                { code: 'DRYRUN_SECOND', severity: 'error', overridable: true, message: 'network also says no' },
+            ],
+            unverified: [],
+        };
         const toggled = [];
-        const { getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false, onAcknowledge: (k) => toggled.push(k) })} />);
+        const base = props('order', { report, canApprove: false, onAcknowledge: (k) => toggled.push(k) });
+        const { getAllByRole, getByTestId, rerender } = render(<ConfirmActionModal {...base} />);
+        expect(getAllByRole('checkbox', { name: 'Sign anyway' })).toHaveLength(2);
+        expect(getByTestId('confirm-approve').disabled).toBe(true);
         const box = getByTestId('confirm-status').querySelector('[data-testid="ack-DRYRUN_INVALID"] input, input[data-testid="ack-DRYRUN_INVALID"]')
             || getByTestId('ack-DRYRUN_INVALID');
         fireEvent.click(box);
         expect(toggled).toEqual(['DRYRUN_INVALID']);
-        fireEvent.click(getByTestId('confirm-approve'));
-        expect(getByTestId('confirm-blocked').textContent).toBe('Tick Sign anyway at the top to approve it.');
+        rerender(<ConfirmActionModal
+            {...base}
+            acknowledged={new Set(['DRYRUN_INVALID', 'DRYRUN_SECOND'])}
+            canApprove
+        />);
+        expect(getByTestId('confirm-approve').disabled).toBe(false);
+    });
+
+    it('hides Sign anyway when any error finding is not overridable', () => {
+        const report = {
+            verdict: 'fail',
+            findings: [
+                { code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' },
+                { code: 'HARD_FAILURE', severity: 'error', overridable: false, message: 'hard stop' },
+            ],
+            unverified: [],
+        };
+        const { queryByRole, getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: false })} />);
+        expect(queryByRole('checkbox', { name: 'Sign anyway' })).toBeNull();
+        expect(getByTestId('confirm-approve').disabled).toBe(true);
+    });
+
+    it('leaves Approve enabled when the report has no findings', () => {
+        const report = { verdict: 'pass', findings: [], unverified: [] };
+        const { getByTestId } = render(<ConfirmActionModal {...props('order', { report, canApprove: true })} />);
+        expect(getByTestId('confirm-approve').disabled).toBe(false);
     });
 
     it('an approved mint whose only gap is checked at settlement shows one blue note', () => {
@@ -625,6 +727,18 @@ describe('Confirm Standard status notice and short warning', () => {
         expect(status.tone).toBe('danger');
         expect(status.state).toBe('partial');
         expect(status.points.map((p) => p.key)).toContain('oracle-owed');
+    });
+
+    it('keeps each failure as one short sentence without its SDK detail', () => {
+        const findings = ['first internal diagnostic', 'second internal diagnostic'].map((message) => ({
+            code: 'FUTURE_ERROR', severity: 'error', source: 'client', message, data: {},
+        }));
+        const status = confirmStatus({ report: { ...PASS, verdict: 'fail', findings } });
+        const failures = status.points.filter((point) => point.key.startsWith('fail-'));
+        expect(failures).toHaveLength(2);
+        expect(failures.every((point) => point.detail == null)).toBe(true);
+        expect(failures.every((point) => point.text === 'The checks found a problem with this action.')).toBe(true);
+        expect(failures.every((point) => point.text.length < 60)).toBe(true);
     });
 
     it('a partly checked batch and a warning verdict each show one red status', () => {
@@ -689,7 +803,7 @@ describe('Confirm Standard status notice and short warning', () => {
     });
 });
 
-describe('Confirm Standard Approve never looks disabled (G130)', () => {
+describe('Confirm Standard Approve gating', () => {
     it('never shows the green status on a PSBT that carries no XChain action', () => {
         // An ordinary payment PSBT has no chain state to check; even a pass
         // report must not claim it "will go through".

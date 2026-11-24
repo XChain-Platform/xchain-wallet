@@ -168,6 +168,54 @@ describe('handleWalletUnlock: the slot receives the password ALONE', () => {
         await expect(handleWalletUnlock({ password: 'hunter2' }, deps(undefined)))
             .resolves.toMatchObject({ unlocked: true });
     });
+
+    // A master key left in the session slot after a refused secret save would
+    // let a keepalive rebuild the host with no auto-lock record behind it.
+    it('rolls back both slots and pooled signers when the secret save fails', async () => {
+        const original = new Error('secret save refused');
+        const sessionBackend = {
+            save: vi.fn(async () => {}),
+            clear: vi.fn(async () => {}),
+        };
+        const signingSecretBackend = {
+            save: vi.fn(async () => { throw original; }),
+            clear: vi.fn(async () => {}),
+        };
+        const signerPool = {
+            populate: vi.fn(async () => ({ passphraseCaptureNeeded: [] })),
+            lockAll: vi.fn(),
+        };
+        const onUnlocked = vi.fn();
+
+        await expect(handleWalletUnlock({ password: 'hunter2' }, deps(signingSecretBackend, {
+            sessionBackend, signerPool, chainRegistry: {}, sdkRegistry: {}, onUnlocked,
+        }))).rejects.toBe(original);
+        expect(sessionBackend.clear).toHaveBeenCalledOnce();
+        expect(signingSecretBackend.clear).toHaveBeenCalledOnce();
+        expect(signerPool.lockAll).toHaveBeenCalledOnce();
+        expect(onUnlocked).not.toHaveBeenCalled();
+    });
+
+    it('keeps the original save error when every rollback also fails', async () => {
+        const original = new Error('secret save refused');
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await expect(handleWalletUnlock({ password: 'hunter2' }, deps({
+            save: vi.fn(async () => { throw original; }),
+            clear: vi.fn(async () => { throw new Error('secret clear refused'); }),
+        }, {
+            sessionBackend: {
+                save: vi.fn(async () => {}),
+                clear: vi.fn(async () => { throw new Error('session clear refused'); }),
+            },
+            signerPool: {
+                populate: vi.fn(async () => ({ passphraseCaptureNeeded: [] })),
+                lockAll: vi.fn(() => { throw new Error('pool clear refused'); }),
+            },
+            chainRegistry: {},
+            sdkRegistry: {},
+        }))).rejects.toBe(original);
+        consoleError.mockRestore();
+    });
 });
 
 // The MV3 worker-restart path. This mirrors background.js's ensureHost

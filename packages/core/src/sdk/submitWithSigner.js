@@ -186,6 +186,13 @@ export class EnvelopeConfirmLaneError extends Error {
     }
 }
 
+// A TAPROOT label in any case marks a pair, so a label the completeness gate
+// below would not accept as written is refused there rather than signed as a
+// plain transaction with no reveal. Completeness itself keeps the exact label.
+function isTaprootLabel(encoding) {
+    return typeof encoding === 'string' && encoding.toUpperCase() === 'TAPROOT';
+}
+
 /**
  * Whether an encoder answer (or a prebuilt PSBT) is a TAPROOT commit/reveal pair.
  *
@@ -194,7 +201,7 @@ export class EnvelopeConfirmLaneError extends Error {
  */
 export function isEnvelopePair(built) {
     if (!built || typeof built !== 'object') return false;
-    return built.encoding === 'TAPROOT' || Boolean(built.revealPsbt) || Boolean(built.envelope);
+    return isTaprootLabel(built.encoding) || Boolean(built.revealPsbt) || Boolean(built.envelope);
 }
 
 /**
@@ -587,7 +594,9 @@ export async function submitWithSigner({
     // is refused here with a typed error instead of failing there after the
     // user approved the commit: the pre-dispatch check
     // Signer.js#assertCannotSignEnvelopeReveal says belongs in this file.
-    const needsPhase2 = encoded.encoding === 'P2SH' || encoded.encoding === 'P2WSH';
+    // Same reading as the fee placement above: a chunk label in any case is a
+    // two-transaction action, so its commit never goes out without the reveal.
+    const needsPhase2 = isChunkEncoding(encoded.encoding);
     if (needsPhase2 && !signerSupportsChunkReveal(signer)) {
         let signerKind;
         try { signerKind = signer.kind; } catch { signerKind = undefined; }

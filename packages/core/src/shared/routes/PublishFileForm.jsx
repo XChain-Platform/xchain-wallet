@@ -279,6 +279,15 @@ export function PublishFileForm({ walletId, onBack }) {
         setRefusalCount((n) => n + 1);
         setFormError(message);
     };
+    const fileNameReservedError = /[|;]/.test(fileMeta?.name || '')
+        ? t('publishFile.fileNameBadCharacters')
+        : undefined;
+    const titleReservedError = /[|;]/.test(title)
+        ? t('publishFile.titleBadCharacters')
+        : undefined;
+    const memoReservedError = /[|;]/.test(memo)
+        ? t('publishFile.memoBadCharacters')
+        : undefined;
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -560,9 +569,14 @@ export function PublishFileForm({ walletId, onBack }) {
         // section reopens on every attempt.
         if (!fileMeta) { refuse('file', t('publishFile.pickFile')); return; }
         if (!fromAddress) { refuse('from', t('publishFile.noSigner')); return; }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            refuse(memo && /[|;]/.test(memo) && !/[|;]/.test(title || '') && !/[|;]/.test(fileMeta.name) ? 'memo' : 'file',
-                t('publishFile.badCharacters'));
+        // Keep reserved metadata errors on their fields instead of adding a
+        // second copy in the form's status slot.
+        if (fileNameReservedError || titleReservedError || memoReservedError) {
+            const section = memoReservedError && !fileNameReservedError && !titleReservedError ? 'memo' : 'file';
+            setErrorSection(section);
+            setRefusalCount((n) => n + 1);
+            setFormError(null);
+            formSections.setOpen(section, true);
             return;
         }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
@@ -1117,6 +1131,8 @@ export function PublishFileForm({ walletId, onBack }) {
                         label={t('gatedPublish.titleField')}
                         optional
                         help={t('publishFile.titleField.help')}
+                        error={titleReservedError}
+                        errorKey={title}
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         autoComplete="off"
@@ -1128,6 +1144,8 @@ export function PublishFileForm({ walletId, onBack }) {
                         label={t('publishFile.fileField.label', { cap: formatBytes(capHint, { limit: true }) })}
                         inputLabel={t('gatedPublish.fileToPublish')}
                         fileName={fileMeta?.name || ''}
+                        error={fileNameReservedError}
+                        errorKey={fileMeta?.name}
                         onFile={handlePickFile}
                         onClear={handleClearFile}
                         help={`${t('publishFile.fileField.help', { cap: formatBytes(capHint, { limit: true }) })} ${
@@ -1167,6 +1185,8 @@ export function PublishFileForm({ walletId, onBack }) {
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey('memo')}
                 maxLength={MAX_MEMO_LENGTH}
+                error={memoReservedError}
+                errorKey={memo}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />

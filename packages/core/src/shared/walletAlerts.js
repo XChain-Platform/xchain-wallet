@@ -66,6 +66,7 @@ export function buildPendingNoticeAlerts({ pendingCoinpays = [], coinpaysIncompl
                 id: `payment-due:${rec.chainId}:${rec.orderMatchActionIndex}`,
                 type: 'payments',
                 severity: 'info',
+                ...(rec.attention ? { attention: rec.attention } : {}),
                 ...paymentDueCopy({ amount: rec.coinAmount, ticker, order: rec.orderMatchActionIndex, watcher: isWatcherMode }),
                 at,
                 read: false,

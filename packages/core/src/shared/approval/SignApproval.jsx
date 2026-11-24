@@ -700,7 +700,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         ? t('extension.sign.loginTitle')
         : KIND_TITLE[kind] ?? 'Approve Request';
     const showSavePermanent =
-        kind === 'signAction' ||
+        (kind === 'signAction' && !payload?.payload?.alreadyGranted) ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
 
     // Approve / Reject, thumbs up and thumbs down, matching the in-wallet confirm
@@ -896,9 +896,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
-    // Why Approve cannot go ahead yet, or null. Approve never looks disabled
-    // (G130): the tap says why at the top of the window (G129) and sends
-    // nothing; a missing password also marks the password field.
+    // Why Approve cannot go ahead yet, or null. A blocking pre-flight finding
+    // disables Approve; other incomplete steps say why at the top of the
+    // window (G129), and a missing password also marks the password field.
     function approveBlockReason() {
         if (linkMode && !answerOrigin) return { key: 'linkTargets', text: t('extension.approval.invalidLinkTargets') };
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
@@ -1225,6 +1225,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             onReject={onReject}
                             onApprove={handleApprove}
                             rejectDisabled={busy}
+                            approveDisabled={confirmationStatus?.state === 'fail' && preflightBlocked}
                             approveLoading={busy}
                             approveLabel={approveLabel}
                         />

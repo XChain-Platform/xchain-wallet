@@ -65,6 +65,11 @@ describe('rbfFailureMessage', () => {
         expect(rbfFailureMessage(refused, FALLBACK)).not.toBe(RBF_REPLACEMENT_QUEUED_MESSAGE);
     });
 
+    it('words the queued result as uncertain, since a missing or different txid also queues it', () => {
+        expect(RBF_REPLACEMENT_QUEUED_MESSAGE).toMatch(/^Your replacement is signed but may not have reached the network\./);
+        expect(RBF_REPLACEMENT_QUEUED_MESSAGE).not.toMatch(/couldn't reach the network/);
+    });
+
     it('swaps runtime internals and empty errors for the fallback', () => {
         expect(rbfFailureMessage(new Error('Cannot read properties of undefined'), FALLBACK)).toBe(FALLBACK);
         expect(rbfFailureMessage(null, FALLBACK)).toBe(FALLBACK);

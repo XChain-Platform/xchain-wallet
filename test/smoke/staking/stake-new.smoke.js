@@ -39,8 +39,10 @@ assert.ok(/onPickValidator/.test(src) && /onPickContract/.test(src),
     'StakeNew exposes both arm callbacks');
 
 // 2. BTC-only gate + inline chain step when several BTC chains qualify.
-assert.ok(/STAKING_COIN\s*=\s*['"]bitcoin['"]/.test(src),
-    'StakeNew pins STAKING_COIN=bitcoin');
+assert.ok(/chainRegistry\.byCoin\(VALIDATOR_LANE_COIN\)/.test(src),
+    'StakeNew gates the validator arm on the validator lane coin');
+assert.ok(/disabled=\{!canStakeContract\}/.test(src) && !/STAKING_COIN/.test(src),
+    'StakeNew gates the contract arm on a held chain that advertises STAKE, not on Bitcoin');
 assert.ok(/t\('stakeNew\.bitcoinOnly'\)/.test(src),
     'StakeNew explains the BTC-only gate when no address qualifies');
 assert.ok(/stakingChains\.length === 1\s*\)\s*onPickValidator\(stakingChains\[0\]\)/.test(src),

@@ -21,6 +21,7 @@
 
 import { clearSigningSecret } from './signingSecretSession.js';
 import { AUTO_LOCK_REQUEST_CEILING_MS } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
+import { createPersistentLockBackstop } from './lock/backstop.js';
 
 /**
  * Raised when any step of the lock sequence failed. Every other step still
@@ -218,6 +219,7 @@ export function createUiRequestTracker(opts = {}) {
  * @property {() => Promise<unknown>} readAutoLockState
  * @property {() => Promise<void>} clearAutoLockState
  * @property {(state: unknown, now: number) => boolean} shouldAutoLock
+ * @property {{ load: () => Promise<boolean>, save: (pending: boolean) => Promise<void> }} [pendingStore]   where the failed-clear marker outlives the worker
  * @property {() => number} [now]
  * @property {{ log: Function, error: Function }} [logger]
  * @property {typeof handleWalletLock} [lock]               seam for tests; defaults to the real handler
@@ -243,109 +245,23 @@ export function createUiRequestTracker(opts = {}) {
  * While a clear is pending the session key may still be in storage, so the
  * worker must read as locked: a host build reads `cleanupPending` and builds
  * nothing from that key, and the next tick retries the clear whether or not
- * an idle deadline is due.
+ * an idle deadline is due. With a `pendingStore` the flag outlives the worker,
+ * so an eviction before the retry cannot forget the clear (lock/backstop.js).
  *
  * @param {LockBackstopDeps} deps
  */
 export function createLockBackstop(deps) {
-    const now = deps.now ?? Date.now;
-    const logger = deps.logger ?? console;
-    const lock = deps.lock ?? handleWalletLock;
-
-    // Set when a lock attempt failed to clear a secret; see above.
-    let cleanupPending = false;
-
-    async function lockWalletNow() {
-        const { sessionBackend, signingSecretBackend } = deps.lockDeps();
-        try {
-            await lock(null, {
-                sessionBackend,
-                signingSecretBackend,
-                onLocked: () => deps.tearDownHost(),
-            });
-        } catch (err) {
-            cleanupPending = true;
-            throw err;
-        }
-        cleanupPending = false;
-        await deps.clearAutoLockState();
-    }
-
-    // Retry a clear a failed lock left behind. The host is already torn down,
-    // so no deadline or in-flight request has anything left to hold open.
-    async function retryPendingClear() {
-        if (!cleanupPending) return 'skipped';
-        logger.log('[xchain] auto-lock: retrying the secret clear a failed lock left behind');
-        try {
-            await lockWalletNow();
-            return 'locked';
-        } catch (err) {
-            logger.error('[xchain] auto-lock clear retry failed:', err);
-            return 'failed';
-        }
-    }
-
     const checkRestoreDeadline = () => checkAutoLockDeadline({
         readAutoLockState: deps.readAutoLockState,
         shouldAutoLock: deps.shouldAutoLock,
-        now,
+        now: deps.now ?? Date.now,
     });
-
-    async function maybeAutoLock() {
-        if (cleanupPending) return retryPendingClear();
-        // Already locked; nothing to do.
-        if (!deps.isUnlocked()) {
-            return 'skipped';
-        }
-        // A record storage cannot read is a deadline this worker cannot
-        // enforce, so it locks rather than leaving the session open for good.
-        const deadline = await checkRestoreDeadline();
-        if (deadline === 'valid') return 'skipped';
-        // A due lock waits for in-flight signing work. The request tracker
-        // stops counting a request after its ceiling, so a hung one cannot
-        // hold the wallet open for good.
-        if (deps.isRequestActive?.()) return 'deferred';
-        logger.log(deadline === 'unreadable'
-            ? '[xchain] auto-lock: record unreadable, locking wallet'
-            : '[xchain] auto-lock: idle timeout reached, locking wallet');
-        try {
-            await lockWalletNow();
-            return 'locked';
-        } catch (err) {
-            logger.error('[xchain] auto-lock lock failed:', err);
-            return 'failed';
-        }
-    }
-
-    // The dispatcher's own lock path (a popup-driven `wallet.lock`) reports
-    // the same outcome, so it keeps the record on the same condition.
-    function onLocked(result) {
-        if (result?.secretsCleared === false) {
-            cleanupPending = true;
-        } else {
-            cleanupPending = false;
-            deps.clearAutoLockState().catch(() => { /* best-effort */ });
-        }
-        // Returned so the lock reply waits for the teardown, which may first
-        // hand armed auto pay to its locked session (PC-16 Phase B).
-        return deps.tearDownHost();
-    }
-
-    // A session is legitimately live again, so any secret a previous failed
-    // lock left behind is no longer something to chase.
-    function noteUnlocked() {
-        cleanupPending = false;
-    }
-
-    return {
+    return createPersistentLockBackstop(
+        deps,
+        deps.lock ?? handleWalletLock,
+        AUTO_LOCK_REQUEST_CEILING_MS,
         checkRestoreDeadline,
-        lockWalletNow,
-        maybeAutoLock,
-        onLocked,
-        noteUnlocked,
-        retryPendingClear,
-        get cleanupPending() { return cleanupPending; },
-    };
+    );
 }
 
 /**

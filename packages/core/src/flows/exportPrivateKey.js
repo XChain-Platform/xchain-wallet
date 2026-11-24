@@ -317,7 +317,7 @@ function passwordProbeError(err) {
     return err;
 }
 
-async function addressBelongsToWallet(vault, address, wallet) {
+export async function addressBelongsToWallet(vault, address, wallet) {
     if (address.source === 'imported-wif') {
         return wallet.importedKeys.some((entry) => entry.addressId === address.id)
             && (address.signerId == null || address.signerId === wallet.id);

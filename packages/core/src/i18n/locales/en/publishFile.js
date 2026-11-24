@@ -30,7 +30,9 @@ const messages = {
     'publishFile.quote.wait': 'Wait for the wallet to work out the parts and the fee.',
     'publishFile.quote.failed': "The wallet couldn't work out the parts and the fee. Choose the file again.",
     'publishFile.noSigner': 'No signing address available on this network.',
-    'publishFile.badCharacters': "File name, title, and memo can't contain | or ; characters.",
+    'publishFile.fileNameBadCharacters': "File name can't contain | or ;",
+    'publishFile.titleBadCharacters': "Title can't contain | or ;",
+    'publishFile.memoBadCharacters': "Memo can't contain | or ;",
     'publishFile.signOnConfirm': 'Publishing is signed on the confirm screen. Go back and select Publish File again.',
     'publishFile.failed': 'Publish failed.',
     'publishFile.publishAs.legend': 'Publish as',
@@ -61,6 +63,7 @@ const messages = {
     'publishFile.details.size': 'Size',
     'publishFile.details.bytes': '{bytes}',
     'publishFile.multipartFallback': "The multi-part upload couldn't continue. Try again or use Unfinished uploads.",
+    'publishFile.multipartStopped': "The multi-part upload couldn't continue.",
 };
 
 addEnglish(messages);

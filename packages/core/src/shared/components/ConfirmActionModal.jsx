@@ -21,10 +21,9 @@
 // back/reject; the header back arrow rejects the request. Both exits stay
 // reachable however long the intent is (§5.2.7 - a safety property, not
 // cosmetic). Once a signature exists both exits lock until a terminal state.
-// Approve never looks disabled (G130): it goes busy synchronously in the
-// click handler's tick, before any await, and a tap that cannot go ahead yet
-// (no password, a failing check, a refusal) sends nothing and says why at the
-// top of the page (G129).
+// Approve goes busy synchronously in the click handler's tick, before any
+// await. A blocking pre-flight finding disables it; other incomplete steps
+// answer a tap with the reason at the top of the page (G129).
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import { Notice, NoticeList, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
@@ -44,6 +43,7 @@ import {
     confirmHeadline,
     confirmStatus,
     confirmWarning,
+    composedRecipients,
     decodedFacts,
     feeFacts,
     recipientFacts,
@@ -657,7 +657,8 @@ export function ConfirmActionModal({
         });
         // The protocol fee as the screen knows it: the XCHAIN lane from the
         // pre-flight quote, the native lane from the composed output, else
-        // the form's own figure; a known-free action has no row.
+        // the form's own positive figure. Only the confirmation data can show
+        // an action is free, so a form's zero never hides the unknown row.
         const formProtocolFee = summary?.protocolFee?.amount ? summary.protocolFee : null;
         const protocolLabel = t('execute.protocolFee');
         if (protocolFee) {
@@ -671,7 +672,7 @@ export function ConfirmActionModal({
                 ? (typeof formatNativeFee === 'function' ? formatNativeFee(formProtocolFee.amount) : null)
                 : (typeof formatProtocolFee === 'function' ? formatProtocolFee(formProtocolFee.amount) : null);
             fees.push({ key: 'protocol', label: protocolLabel, amount: String(formProtocolFee.amount), ticker: tick, fiat });
-        } else if (protocolFeeUnavailable && !formProtocolFee) {
+        } else if (protocolFeeUnavailable) {
             fees.push({ key: 'protocol', label: protocolLabel, amount: null, ticker: 'XCHAIN' });
         }
         if (oracleFee) {
@@ -697,7 +698,11 @@ export function ConfirmActionModal({
     // --- the one facts card: the action's rows, who signs, the network and each fee ---
     // There is no Total block (G127 revised 2026-11-16): the sentence says
     // what the action moves and each fee is its own row with its fiat value.
-    const recipients = Array.isArray(form?.recipients) ? form.recipients.filter((row) => row && row.to) : [];
+    const formRecipients = Array.isArray(form?.recipients) ? form.recipients.filter((row) => row && row.to) : [];
+    // A multi-send's per-asset rows come from the legs the host decoded out of
+    // the composed bytes. The form's rows only stand in without a full decode.
+    const composedLegs = variant === 'action' && head.kind === 'multiSend' ? composedRecipients(decoded) : null;
+    const recipients = composedLegs || formRecipients;
     const feeLabels = new Set(fees.map((fee) => fee.label));
     // A caller's PSBT shows its decoded action in its own panel
     // (PsbtIntentPanel), so only the action variant draws the decode here.
@@ -743,14 +748,6 @@ export function ConfirmActionModal({
         ...sentFact,
         ...composedFacts,
         ...formFacts,
-        ...(variant === 'action' && String(summary?.notice || '').trim()
-            ? [{
-                key: 'notice',
-                label: t('confirmStandard.facts'),
-                value: String(summary.notice).trim(),
-                testId: 'confirm-summary-notice',
-            }]
-            : []),
         // #40: the page names the spender. When the one address line shows
         // something else (a send's recipient), the source is a From row, so
         // each address still shows once. A caller's PSBT lists its inputs,
@@ -797,13 +794,14 @@ export function ConfirmActionModal({
         ],
         testId: warningTestId,
     });
-    // Reject and Approve, docked. Approve is busy while a request is in
-    // flight and otherwise always live (G130).
+    // Reject and Approve, docked. A failed gated pre-flight holds Approve
+    // until every permitted override is acknowledged.
     const footer = (
         <ConfirmDecisionFooter
             onReject={handleReject}
             onApprove={handleApprove}
             rejectDisabled={exitsLocked}
+            approveDisabled={variant === 'action' && status?.state === 'fail' && !canApprove}
             approveLoading={approveInFlight || signaturePhase}
             approveSettled={approveSettled}
         />
@@ -867,6 +865,7 @@ export function ConfirmActionModal({
                 )}
                 facts={messageFacts || facts}
                 preserveFactOrder={variant === 'message'}
+                information={variant === 'action' ? summary?.notice : ''}
                 messageText={variant === 'message' ? messageText : undefined}
                 warning={warning}
             >

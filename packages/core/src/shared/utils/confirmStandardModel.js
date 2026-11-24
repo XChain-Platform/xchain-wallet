@@ -31,8 +31,8 @@ import {
     networkApprovalIsPartial,
     preflightCheckState,
 } from './preflightCheckState.js';
-import { consensusRefusalMessage, isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
-import { unverifiedText, warningText } from './preflightFindingCopy.js';
+import { isHardPreflightFinding, preflightFindingKey } from './preflightFindingKey.js';
+import { errorText, unverifiedText, warningText } from './preflightFindingCopy.js';
 import { formatDisplayAmount, sumDecimalStrings } from './amountFormat.js';
 import { neutralizeControlText } from './textHardening.js';
 import { t } from '../../i18n/index.js';
@@ -48,6 +48,13 @@ const DRYRUN_ORACLE_FEES_OWED = 'DRYRUN_ORACLE_FEES_OWED';
 function warningPoint(f, key) {
     const { headline, detail } = warningText(f);
     return { key, text: headline, detail: detail || null };
+}
+
+function failurePoints(errors) {
+    return errors.map((f, index) => {
+        const { headline } = errorText(f);
+        return { key: `fail-${index}`, text: headline };
+    });
 }
 
 /** No network verdict: true whether it was unreachable or declined, with its reason beneath. */
@@ -248,11 +255,16 @@ export const CONFIRM_KINDS = Object.freeze({
         icon: 'target',
         address: 'source',
         name: ({ decoded }) => (/^open a prediction market\b/i.test(String(decoded?.summary || '')) ? detailOf(decoded, /^market$/i) : ''),
-        sentence: ({ summary }) => {
-            const amount = summary.amount ? formatDisplayAmount(String(summary.amount)) : '';
+        sentence: ({ decoded, summary }) => {
+            const stake = detailOf(decoded, /^stake$/i);
+            const rawOutcome = detailOf(decoded, /^outcome$/i);
+            const annotated = /^(\d+)\s+\("([\s\S]+)"\)$/.exec(rawOutcome);
+            const outcome = annotated
+                ? `${neutralizeControlText(annotated[2], { maxLength: 60 })} (outcome ${annotated[1]})`
+                : rawOutcome ? `outcome ${neutralizeControlText(rawOutcome, { maxLength: 60 })}` : '';
             const tick = String(summary.ticker || '').trim().toUpperCase();
-            const target = neutralizeControlText(String(summary.target || '').trim(), { maxLength: 80 });
-            return amount && tick && target ? `Buy ${amount} ${tick} of ${target}` : null;
+            const figure = [formatDisplayAmount(stake), tick].filter(Boolean).join(' ');
+            return figure && outcome ? `Buy ${figure} of ${outcome}` : null;
         },
     },
     bridge: { icon: 'migrate', address: 'recipient' },
@@ -382,6 +394,32 @@ function recipientsOf(summary) {
     return Array.isArray(summary?.recipients) ? summary.recipients.filter((row) => row && row.to) : [];
 }
 
+// A decoded multi-send leg reads "<amount> <tick> to <destination>", then an
+// optional quoted memo.
+const DECODED_LEG = /^(\S+) (\S+) to (\S+)(?: \(memo: "[\s\S]*"\))?$/;
+
+/**
+ * The recipient legs the host decoded from the composed bytes, read back from
+ * the decode's "Recipient N" rows. Null unless there are at least two rows and
+ * every one reads as a full leg, so a half-read set is never shown as the
+ * composed truth.
+ *
+ * @param {{ details?: Array<{label?: string, value?: unknown}> } | null | undefined} decoded
+ * @returns {Array<{ to: string, tick: string, amount: string }> | null}
+ */
+export function composedRecipients(decoded) {
+    const rows = (Array.isArray(decoded?.details) ? decoded.details : [])
+        .filter((detail) => /^recipient \d+$/i.test(String(detail?.label || '').trim()));
+    if (rows.length < 2) return null;
+    const legs = [];
+    for (const row of rows) {
+        const leg = DECODED_LEG.exec(String(row?.value ?? '').trim());
+        if (!leg || leg[1] === '?' || leg[2] === '?') return null;
+        legs.push({ amount: leg[1], tick: leg[2].toUpperCase(), to: leg[3] });
+    }
+    return legs;
+}
+
 /**
  * The page's top model: the kind, icon, sentence and address for the first fact.
  *
@@ -398,7 +436,11 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     const form = summary || {};
     const kind = confirmKindFor({ variant, actionName, decoded, summary: form });
     const spec = CONFIRM_KINDS[kind];
-    const recipients = recipientsOf(form);
+    // A multi-send's sentence and counts come from the legs the host decoded
+    // from the composed bytes; the form's rows and totals only stand in when
+    // the decode carries none.
+    const composed = kind === 'multiSend' ? composedRecipients(decoded) : null;
+    const recipients = composed || recipientsOf(form);
     const decodedRecipient = bareValue((Array.isArray(decoded?.details) ? decoded.details : [])
         .find((detail) => ADDRESS_LABEL.test(String(detail?.label || '')))?.value);
     const source = form.address || sourceAddress || null;
@@ -406,7 +448,7 @@ export function confirmHeadline({ variant = 'action', actionName = '', decoded =
     if (spec.address === 'recipient') address = form.recipient || decodedRecipient || source;
     else if (spec.address === 'recipientOnly') address = form.recipient || decodedRecipient || null;
     else if (spec.address === 'source') address = source;
-    const ctx = { decoded, summary: form, recipients };
+    const ctx = { decoded, summary: composed ? { ...form, totals: [] } : form, recipients };
     const fromKind = spec.sentence ? spec.sentence(ctx) : null;
     const fromDecoder = plainSentence(decoded?.summary, { chainName, address });
     // With no decode at all, the form's own words: verb, amount, what it
@@ -508,7 +550,7 @@ export function lockChips(value) {
  *
  * @param {{ decoded?: any, sentence: string, name?: string, address?: string|null, recipientsShown?: boolean, kind?: string|null, summary?: any }} args
  *   name: the name line above the sentence, never repeated as a row;
- *   recipientsShown: the form's own recipient rows are on the card, so the
+ *   recipientsShown: the per-asset recipient rows are on the card, so the
  *   decoder's "Recipient N" rows would say each one twice; kind: a
  *   CONFIRM_KINDS key whose decodedFact keeps the card short
  * @returns {ConfirmFact[]}
@@ -539,7 +581,9 @@ export function decodedFacts({ decoded, sentence, name = '', address = null, rec
             facts.push({ key: `decoded-${index}`, label: t('confirmStandard.fact.locks'), value, chips: lockChips(value), testId: 'confirm-locks' });
             return;
         }
-        if (recipientsShown && /^recipient \d+$/i.test(label)) return;
+        // Keep multi-send confirms bounded by assets even if a malformed leg
+        // prevents the decoded aggregate from replacing the form fallback.
+        if ((kind === 'multiSend' || recipientsShown) && /^recipient \d+$/i.test(label)) return;
         if (pick) {
             const kept = pick({ label, value, summary: summary || {} });
             if (kept) facts.push({ key: `decoded-${index}`, label: kept.label, value: kept.value, address: Boolean(kept.address) });
@@ -751,27 +795,24 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
     if (state === S.FAIL) {
         title = t('confirmStandard.warning.fail');
         const errors = findings.filter((f) => f?.severity === 'error');
-        const reasons = [...new Set(errors
-            .map((f) => consensusRefusalMessage(f) || String(f?.message || '').trim())
-            .filter(Boolean))];
-        reasons.forEach((text, i) => points.push({ key: `fail-${i}`, text }));
-        if (reasons.length === 0) points.push({ key: 'fail-unexplained', text: t('confirmStandard.warning.failUnexplained') });
+        const failures = failurePoints(errors);
+        points.push(...failures);
+        if (failures.length === 0) points.push({ key: 'fail-unexplained', text: t('confirmStandard.warning.failUnexplained') });
         // A warning or an unanswered network check beside the failure is
         // still said, in the same notice.
         findings.filter((f) => f?.severity === 'warning').forEach((f, i) => points.push(warningPoint(f, `fail-warn-${i}`)));
         if (unavailable) points.push(unreachedPoint(unavailable, 'fail-unreached'));
-        for (const f of errors) {
-            if (approveGated && f?.overridable && !isHardPreflightFinding(f)) overrides.push(f);
-        }
-        const hard = errors.length === 0 || errors.some((f) => !(f?.overridable && !isHardPreflightFinding(f)));
+        const allOverridable = errors.length > 0
+            && errors.every((f) => f?.overridable && !isHardPreflightFinding(f));
+        if (approveGated && allOverridable) overrides.push(...errors);
         // Said only while the check really holds Approve: a caller's PSBT is
         // report-only (§5.5), and ticking every Sign anyway box releases it.
         const allTicked = overrides.length > 0
             && overrides.every((f) => acknowledged?.has?.(preflightFindingKey(f)));
-        if (approveGated && (hard || !allTicked)) {
+        if (approveGated && allOverridable && !allTicked) {
             points.push({
                 key: 'fail-approve',
-                text: hard ? t('confirmStandard.warning.approveOff') : t('confirmStandard.warning.signAnyway'),
+                text: t('confirmStandard.warning.signAnyway'),
                 // What Approve does about the failure, not one more reason.
                 place: 'after',
             });

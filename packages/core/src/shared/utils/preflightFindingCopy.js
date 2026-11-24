@@ -23,6 +23,8 @@
 
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/preflightCopy.js';
+import '../../i18n/locales/en/batch.js';
+import { consensusRefusalMessage } from './preflightFindingKey.js';
 
 // The demotion the SDK stamps when the network accepted the action but a local
 // projection over the sender's other unconfirmed actions still flags the balance
@@ -74,6 +76,63 @@ export function warningText(f) {
         ? f.message
         : null;
     return { headline, detail };
+}
+
+// A plain object, so the key audit can read it.
+const ERROR_FIELD_KEYS = {
+    FEE: 'batch.feeWord',
+    VALUE: 'preflightCopy.fieldName.value',
+    DECIMALS: 'preflightCopy.fieldName.decimals',
+    CALLBACK_BLOCK: 'preflightCopy.fieldName.callbackBlock',
+    MINT_START_BLOCK: 'preflightCopy.fieldName.mintStartBlock',
+    MINT_STOP_BLOCK: 'preflightCopy.fieldName.mintStopBlock',
+    BRIDGE_CHAINS: 'preflightCopy.fieldName.bridgeChains',
+    LOCK_BRIDGE: 'preflightCopy.fieldName.bridgeLock',
+    MIN_DEPTH: 'preflightCopy.fieldName.minimumDepth',
+    DISPENSER_ACTION_INDEX: 'preflightCopy.fieldName.dispenserAction',
+    ORDER_ACTION_INDEX: 'preflightCopy.fieldName.orderAction',
+    SWAP_ACTION_INDEX: 'preflightCopy.fieldName.swapAction',
+    FEED_ACTION_INDEX: 'preflightCopy.fieldName.feedAction',
+    SIGNING_PUBKEY: 'preflightCopy.fieldName.signingKey',
+    EXPIRATION: 'preflightCopy.fieldName.expiration',
+    DEADLINE: 'preflightCopy.fieldName.deadline',
+    REFUND_WINDOW: 'preflightCopy.fieldName.refundWindow',
+    OUTCOME: 'preflightCopy.fieldName.outcome',
+    COIN1_ACTION_INDEX: 'preflightCopy.fieldName.firstLinkedAction',
+    COIN2_ACTION_INDEX: 'preflightCopy.fieldName.secondLinkedAction',
+    TARGET_CONTRACT_INDEX: 'preflightCopy.fieldName.targetContract',
+};
+
+function errorFieldLabel(field) {
+    return t(ERROR_FIELD_KEYS[field] || 'preflightCopy.fieldName.value');
+}
+
+/**
+ * Resolve an error into signer-facing copy while retaining the producer's
+ * diagnostic only as secondary detail.
+ *
+ * @param {{ code?: string, message?: string, data?: Record<string, unknown> }} f
+ * @returns {{ headline: string, detail: string | null }}
+ */
+export function errorText(f) {
+    const consensus = consensusRefusalMessage(f);
+    if (consensus) return { headline: consensus, detail: null };
+    const data = f?.data || {};
+    const field = errorFieldLabel(data.field);
+    let headline = t('preflightCopy.error.fallback');
+    if (f?.code === 'VALIDATOR_SEMANTICS' && data.haltClass === true) {
+        if (Number.isFinite(data.width) && Number.isFinite(data.limit)) {
+            headline = t('preflightCopy.error.tooLong', { field });
+        } else if (typeof data.value === 'string' && /^[-+]?0[xbo]/i.test(data.value.trim())) {
+            headline = t('preflightCopy.error.prefixedNumber', { field });
+        } else if (data.value === '') {
+            headline = t('preflightCopy.error.required', { field });
+        } else if (data.value !== undefined) {
+            headline = t('preflightCopy.error.invalidReference', { field });
+        }
+    }
+    const message = typeof f?.message === 'string' ? f.message.trim() : '';
+    return { headline, detail: message && message !== headline ? message : null };
 }
 
 // Each entry names WHAT was not checked, so it stays true whatever the reason

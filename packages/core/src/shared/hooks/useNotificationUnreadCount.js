@@ -6,14 +6,12 @@
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { isActionRequiredAlert, withoutDeadNoticeAlerts } from '../walletAlerts.js';
+import {
+    NOTIFICATIONS_CHANGED_EVENT,
+    announceNotificationsChanged,
+} from '../alertInbox.js';
 
-/** Fired after a notification is read or recorded, so every counter refreshes at once. */
-export const NOTIFICATIONS_CHANGED_EVENT = 'xc:notifications-changed';
-
-/** Tells every unread counter to re-read the inbox now. */
-export function announceNotificationsChanged() {
-    try { globalThis.dispatchEvent?.(new Event(NOTIFICATIONS_CHANGED_EVENT)); } catch { /* no window */ }
-}
+export { NOTIFICATIONS_CHANGED_EVENT, announceNotificationsChanged };
 
 /**
  * Counts unread notifications the way the Notifications page shows them: the

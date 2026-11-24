@@ -244,6 +244,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         setFormError(message);
         setFormErrorSection(section);
     };
+    const fileNameReservedError = /[|;]/.test(fileMeta?.name || '')
+        ? t('publishFile.fileNameBadCharacters')
+        : undefined;
+    const titleReservedError = /[|;]/.test(title)
+        ? t('publishFile.titleBadCharacters')
+        : undefined;
+    const memoReservedError = /[|;]/.test(memo)
+        ? t('publishFile.memoBadCharacters')
+        : undefined;
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -635,9 +644,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ? `This wallet does not hold the owner address for ${gateTick}; only the token owner can publish gated files.`
                 : 'No signing address available on this network.'];
         }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            return [memo && /[|;]/.test(memo) ? 'memo' : 'file', 'File name, title, and memo cannot contain | or ; characters.'];
-        }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
             || actionTextSafetyError(title, 'Title');
         if (unsafeMetadata) return ['file', unsafeMetadata];
@@ -706,6 +712,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!gateTick) {
             setTokenMissing(true);
             setFormErrorSection('file');
+            return;
+        }
+        // Keep reserved metadata errors on their fields instead of adding a
+        // second copy in the form's status slot.
+        if (fileNameReservedError || titleReservedError || memoReservedError) {
+            const section = memoReservedError && !fileNameReservedError && !titleReservedError ? 'memo' : 'file';
+            setFormError(null);
+            setFormErrorSection(section);
+            formSections.setOpen(section, true);
             return;
         }
         const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
@@ -1217,6 +1232,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 optional
                 enterKeyHint="next"
                 aria-label={t('gatedPublish.titleField')}
+                error={titleReservedError}
+                errorKey={title}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={120}
@@ -1247,6 +1264,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 )}
                 inputLabel={t('gatedPublish.fileToPublish')}
                 fileName={fileMeta?.name || ''}
+                error={fileNameReservedError}
+                errorKey={fileMeta?.name}
                 onFile={handlePickFile}
                 onClear={handleClearFile}
                 disabled={ownerMissing || multipartUpload.running}
@@ -1288,6 +1307,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 type="text"
                 enterKeyHint={thresholdActive ? 'next' : 'go'}
                 value={memo}
+                error={memoReservedError}
+                errorKey={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={MAX_MEMO_LENGTH}
                 disabled={ownerMissing}

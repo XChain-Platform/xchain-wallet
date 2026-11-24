@@ -197,6 +197,58 @@ export function assertActionAllowedOnChain(chainRegistry, chainId, action, versi
 }
 
 /**
+ * Apply the per-chain action gate to every BATCH leg, reading the action name
+ * and version from the leg's wire string (ACTION|VERSION|...), the form the
+ * indexer judges. A chain-gated leg whose version cannot be read is refused
+ * rather than let through, and a pasted BATCH|<version>| prefix is skipped so it
+ * cannot hide the leg behind it.
+ *
+ * @param {{ get(chainId: string): ({ coin?: string } | undefined) }} chainRegistry
+ * @param {string} chainId
+ * @param {string[]} legs
+ * @param {string} who  composer name for the error prefix
+ */
+export function assertNestedActionsAllowedOnChain(chainRegistry, chainId, legs, who) {
+    for (const leg of legs) {
+        const fields = String(leg).split('|').map((f) => f.replace(/["'\s]/g, ''));
+        while (String(fields[0] ?? '').toUpperCase() === 'BATCH') fields.splice(0, 2);
+        const action = String(fields[0] || '').toUpperCase();
+        if (!CHAIN_GATED_ACTIONS.includes(action)) continue;
+        const rawVersion = fields[1];
+        const version = Number(rawVersion);
+        if (rawVersion === undefined || rawVersion === '' || !Number.isInteger(version)) {
+            throw new Error(`${who}: ${action} version is unreadable in a nested sub-action`);
+        }
+        assertActionAllowedOnChain(chainRegistry, chainId, action, version, who);
+    }
+}
+
+/**
+ * The per-chain gate for one composed action as a signing or unsigned-PSBT lane
+ * is about to encode it: a chain-gated action is checked at the version the SDK
+ * resolves for its params, and a raw BATCH has every string param read as a
+ * COMMAND whose legs are each checked, so a spelling the composer did not
+ * expect still fails closed.
+ *
+ * @param {{ chainRegistry: { get(chainId: string): ({ coin?: string } | undefined) }, sdkRegistry: { get(chainId: string): any }, chainId: string, actionData: { action?: string, params?: Record<string, unknown> }, who: string }} args
+ */
+export function assertActionDataAllowedOnChain({ chainRegistry, sdkRegistry, chainId, actionData, who }) {
+    const name = String(actionData?.action || '').trim().toUpperCase();
+    const params = actionData?.params || {};
+    if (CHAIN_GATED_ACTIONS.includes(name)) {
+        const sdk = sdkRegistry.get(chainId);
+        const { version } = sdk.actions.composeActionString({ action: name, params }, { validate: false });
+        assertActionAllowedOnChain(chainRegistry, chainId, name, Number(version), who);
+    }
+    if (name === 'BATCH') {
+        const texts = Object.values(params).flat().filter((v) => typeof v === 'string');
+        for (const text of texts) {
+            assertNestedActionsAllowedOnChain(chainRegistry, chainId, text.split(';'), who);
+        }
+    }
+}
+
+/**
  * Whether a composer picker should list `action` for this chain at all: false
  * only for an action refused there at every version (COLLECT off Bitcoin).
  *

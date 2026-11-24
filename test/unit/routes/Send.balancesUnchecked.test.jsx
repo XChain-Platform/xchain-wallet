@@ -41,13 +41,15 @@ const { ReachabilityBanner } = await import('../../../packages/core/src/shared/c
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 
-function makeMessaging(quantity, { balances: balancesOverride } = {}) {
+function makeMessaging(quantity, { balances: balancesOverride, addressBalanceError = null } = {}) {
     const balances = balancesOverride || { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{ id: 'addr-1', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' }],
         }),
-        getAddressBalances: vi.fn().mockResolvedValue(balances),
+        getAddressBalances: addressBalanceError
+            ? vi.fn().mockRejectedValue(addressBalanceError)
+            : vi.fn().mockResolvedValue(balances),
         getWalletBalances: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{ address: FROM, balances, error: null }],
         }),
@@ -66,8 +68,8 @@ function makeMessaging(quantity, { balances: balancesOverride } = {}) {
     });
 }
 
-function mount(quantity, { inShell = false, balances } = {}) {
-    const messaging = makeMessaging(quantity, { balances });
+function mount(quantity, { inShell = false, balances, addressBalanceError = null } = {}) {
+    const messaging = makeMessaging(quantity, { balances, addressBalanceError });
     const onReceive = vi.fn();
     const send = React.createElement(Send, { walletId: 'w', onBack() {}, onReceive });
     const tree = inShell
@@ -103,6 +105,15 @@ describe('Send empty state and the balance check', () => {
         expect(screen.queryByText('0 BTC available')).toBeNull();
         expect(screen.queryByText(/This address holds no BTC/)).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
+    });
+
+    it('keeps a failed address-balance read to the short balance label', async () => {
+        mount('100000000', {
+            addressBalanceError: new Error('read refused'),
+        });
+
+        expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
+        expect(screen.queryByText(/Balance unavailable \(/)).toBeNull();
     });
 
     it('shows one unchecked-balances state when balances could not be checked', async () => {

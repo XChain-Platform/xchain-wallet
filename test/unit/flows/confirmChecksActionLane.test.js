@@ -97,4 +97,16 @@ describe('assertBuiltActionMatchesIntent refuses an action lane it cannot verify
         expect(() => assertBuiltActionMatchesIntent(args('TAPROOT', [PAYEE, CHANGE])))
             .toThrow(expect.objectContaining({ details: expect.objectContaining({ reason: 'envelope-incomplete' }) }));
     });
+
+    it.each(['FOO', 'AUTO', 'taproot', 'op_return'])('refuses an answer labelled %j, since lanes match by exact case', (encoding) => {
+        expect(() => assertBuiltActionMatchesIntent(args(encoding, [PAYEE, CHANGE])))
+            .toThrow(/does not match what you approved/);
+    });
+
+    it('refuses a reveal pair that arrives under a label other than TAPROOT', () => {
+        const built = args('OP_RETURN', [PAYEE, CHANGE]);
+        built.encoded = { ...built.encoded, revealPsbt: 'R', envelope: { commitAddress: 'a', commitValue: 1 } };
+        expect(() => assertBuiltActionMatchesIntent(built))
+            .toThrow(expect.objectContaining({ details: expect.objectContaining({ reason: 'envelope-label-mismatch' }) }));
+    });
 });

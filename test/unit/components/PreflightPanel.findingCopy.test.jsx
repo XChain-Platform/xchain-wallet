@@ -14,10 +14,12 @@ import { PreflightPanel } from '../../../packages/core/src/shared/components/Pre
 import {
     UNVERIFIED_COPY,
     WARNING_COPY,
+    errorText,
     unverifiedText,
     warningText,
 } from '../../../packages/core/src/shared/utils/preflightFindingCopy.js';
 import { t } from '../../../packages/core/src/i18n/index.js';
+import preflightCopyMessages from '../../../packages/core/src/i18n/locales/en/preflightCopy.js';
 
 const preflightConstants = sdkInstalled() ? requireSdkDeep('preflightConstants') : null;
 
@@ -56,6 +58,61 @@ const DISPENSER_GIVE_AMOUNT = {
 };
 
 describe('PreflightPanel warning copy (§5.2.4)', () => {
+    it('keeps every mapped error reason to one sentence under 60 characters', () => {
+        const fieldNames = Object.entries(preflightCopyMessages)
+            .filter(([key]) => key.startsWith('preflightCopy.fieldName.'))
+            .map(([, value]) => value);
+        const longestField = fieldNames.reduce((longest, field) => (
+            field.length > longest.length ? field : longest
+        ), '');
+        const reasons = Object.entries(preflightCopyMessages)
+            .filter(([key]) => key.startsWith('preflightCopy.error.'))
+            .map(([, value]) => value.replace('{field}', longestField));
+
+        expect(reasons).toHaveLength(5);
+        for (const reason of reasons) {
+            expect(reason.length, reason).toBeLessThan(60);
+            expect(reason, reason).toMatch(/^[^.!?]+[.!?]$/);
+        }
+    });
+
+    it('keeps SDK validation diagnostics beneath signer-facing error copy', () => {
+        const finding = {
+            code: 'VALIDATOR_SEMANTICS', severity: 'error',
+            message: 'FEE is 12 characters, wider than the 11-character column that stores it; the indexer can halt.',
+            data: { field: 'FEE', width: 12, limit: 11, verdict: 'invalid: FEE (length)', haltClass: true },
+        };
+        expect(errorText(finding)).toEqual({
+            headline: 'The fee is too long for the network.',
+            detail: finding.message,
+        });
+        mount(reportWith({ verdict: 'fail', findings: [finding] }));
+        const row = screen.getByText(errorText(finding).headline).closest('li');
+        expect(row.querySelectorAll('span')[1].textContent).toBe(finding.message);
+    });
+
+    it('maps required and prefixed validation shapes without exposing wire field names', () => {
+        expect(errorText({
+            code: 'VALIDATOR_SEMANTICS', severity: 'error', message: 'SIGNING_PUBKEY is missing',
+            data: { field: 'SIGNING_PUBKEY', value: '', haltClass: true },
+        }).headline).toBe('The signing public key is required.');
+        expect(errorText({
+            code: 'VALIDATOR_SEMANTICS', severity: 'error', message: 'OUTCOME (0x10) uses a prefix',
+            data: { field: 'OUTCOME', value: '0x10', haltClass: true },
+        }).headline).toBe('The outcome number must use decimal digits.');
+    });
+
+    it('keeps consensus error copy unchanged and hides its duplicate detail', () => {
+        const finding = {
+            code: 'DRYRUN_INVALID', severity: 'error', message: 'technical duplicate',
+            data: { status: 'invalid: trailing data after batch signatures' },
+        };
+        expect(errorText(finding)).toEqual({
+            headline: 'The price batch has extra data after its signatures.',
+            detail: null,
+        });
+    });
+
     it('shows the checked block height ungrouped (G123)', () => {
         mount({ ...reportWith(), stateHeight: 1234567 });
         expect(screen.getByText('Checked at block 1234567')).toBeTruthy();

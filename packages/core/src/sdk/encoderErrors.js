@@ -41,6 +41,7 @@
 // subject differs ("The transaction service").
 import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors.js';
 import { encoderFieldError } from './encoderFieldErrors.js';
+import { ENCODER_CATCH_ALL_REASON } from './encoderCatchAll.js';
 import { WALLET_BUG_CODES, encoderErrorCode, hasWalletEncoderCopy } from './encoderErrorCode.js';
 
 export { encoderErrorCode, hasWalletEncoderCopy };
@@ -148,6 +149,9 @@ function encoderServiceMessage(code, err) {
 
 /** A JSON-RPC service failure, not a protocol verdict the person can act on. */
 function isInternalRpcFailure(err, reason) {
+    // The encoder's catch-all is excluded before the -32603 rule below so the
+    // same sentence shows whether or not the RPC details survived messaging.
+    if (ENCODER_CATCH_ALL_REASON.test(String(reason || ''))) return false;
     if (INTERNAL_RPC_FAILURE.test(String(reason || ''))) return true;
     const e = /** @type {any} */ (err || {});
     const rpcError = e.details?.rpcError || e.rpcError;
