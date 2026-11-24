@@ -19,6 +19,8 @@
 //   5. nothing scrolls the page sideways;
 //   6. content reaches the page gutter on both sides.
 
+import { readFileSync } from 'node:fs';
+
 import {
     dismissIntroCarousel,
     expect,
@@ -27,9 +29,10 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet, overflowingElements } from '../../fixtures/responsive.js';
+import { DUO_MEASURED_PATH } from '../../fixtures/duoMeasured.js';
+import { duoWidths, enterDemoWallet, overflowingElements } from '../../fixtures/responsive.js';
 
-const VIEWPORTS = [
+const BASE_VIEWPORTS = [
     { width: 320, height: 640 },
     { width: 375, height: 667 },
     { width: 600, height: 900 },
@@ -42,6 +45,12 @@ const VIEWPORTS = [
     { width: 1280, height: 720 },
     { width: 1920, height: 1080 },
 ];
+
+// Duo widths join the sweep unless a base width already covers the size.
+const DUO = duoWidths().filter(
+    (d) => !BASE_VIEWPORTS.some((b) => b.width === d.width && b.height === d.height),
+);
+const VIEWPORTS = [...BASE_VIEWPORTS, ...DUO.map(({ width, height }) => ({ width, height }))];
 
 // Navigation labels as the sidebar and wallet menu show them, with the route id
 // the registry lists them under. gotoSection opens each one as a history root.
@@ -340,3 +349,35 @@ test('the app header keeps only its logo and controls in one row at every width'
         expect.soft(result.docOverflow, at('page does not scroll sideways')).toBeLessThanOrEqual(0);
     }
 });
+
+const DUO_STATES = [
+    { state: 'closed-portrait', label: 'outer portrait' },
+    { state: 'closed-landscape', label: 'outer landscape' },
+    { state: 'open-portrait', label: 'Book' },
+    { state: 'open-landscape', label: 'rotated' },
+];
+
+const MEASURED = JSON.parse(readFileSync(DUO_MEASURED_PATH, 'utf8'));
+
+for (const { state, label } of DUO_STATES) {
+    test(`Duo ${label} (${state}) is swept or recorded unreachable`, () => {
+        const raw = MEASURED.states?.[state];
+        expect(raw, `measured-widths.json carries a ${state} entry`).toBeTruthy();
+
+        const reached = duoWidths().filter((d) => d.state === state);
+        if (reached.length === 0) {
+            expect(typeof raw.unreachable, `${state} has no measured size, so it must say why`).toBe('string');
+            expect(raw.unreachable.trim().length, `${state} unreachable reason`).toBeGreaterThan(0);
+            return;
+        }
+
+        expect(reached, `${state} appears once`).toHaveLength(1);
+        const [d] = reached;
+        expect({ width: d.width, height: d.height }, `${state} size matches the measurement`)
+            .toEqual({ width: Math.round(raw.width), height: Math.round(raw.height) });
+        expect(
+            VIEWPORTS.some((v) => v.width === d.width && v.height === d.height),
+            `${state} ${d.width}x${d.height} is in the sweep`,
+        ).toBe(true);
+    });
+}
