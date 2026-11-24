@@ -20,8 +20,10 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
@@ -66,6 +68,13 @@ public final class BackgroundActivityWorker extends Worker {
                 BackgroundActivityWorker.class, REPEAT_HOURS, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build();
+    }
+
+    public static void enqueue(Context context) {
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                ActivityCheckStore.WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicRequest());
     }
 
     @NonNull
