@@ -57,16 +57,18 @@ class WatchListenerServiceTest {
     }
 
     @Test
-    fun channelPayloadsAreStoredWithoutRefreshingGlances() {
+    fun channelPayloadsAreStoredAndRefreshGlances() {
         val detail = fixture("detail-cached.json")
         val hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
         service.receive("/xc/detail/bitcoin-mainnet:XC", detail)
+        assertEquals(1, refreshes)
+
         service.receive("/xc/image/$hash", byteArrayOf(1, 2, 3))
+        assertEquals(2, refreshes)
 
         assertArrayEquals(detail, service.filesDir.resolve("watch/details/bitcoin-mainnet:XC").readBytes())
         assertArrayEquals(byteArrayOf(1, 2, 3), service.filesDir.resolve("watch/images/$hash").readBytes())
-        assertEquals(0, refreshes)
     }
 
     private fun fixture(name: String): ByteArray =

@@ -43,7 +43,7 @@ class WatchListenerService : WearableListenerService() {
             WatchPaths.Kind.IMAGE -> ImageCache(file("images")).receive(path, data)
             WatchPaths.Kind.STATE -> return
         }
-        if (incoming.kind == WatchPaths.Kind.SNAPSHOT) refresh(this)
+        refresh(this)
     }
 
     internal fun receiveState(enabled: Boolean, builtAt: Long) {
