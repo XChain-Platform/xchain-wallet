@@ -6,15 +6,18 @@ package io.xchain.wallet.android.wear
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.Text
 import io.xchain.wallet.android.wear.data.Snapshot
 import io.xchain.wallet.android.wear.data.WatchDisplayRules.UnitsMode
 import io.xchain.wallet.android.wear.nav.BalancesDestination
 import io.xchain.wallet.android.wear.nav.WatchNavActions
+import io.xchain.wallet.android.wear.nav.WatchNavGraph
 import io.xchain.wallet.android.wear.nav.WatchNavRoutes
 import io.xchain.wallet.android.wear.nav.WatchScreenGraph
 import io.xchain.wallet.android.wear.nav.WatchScreenGraph.Screen
@@ -87,6 +90,60 @@ class WatchNavTest {
         assertEquals("request/42", WatchNavRoutes.argument(routes[2], Screen.ALERT_DETAIL))
         assertEquals(Screen.RECEIVE.route(), routes[3])
         assertEquals(Screen.STATUS.route(), routes[4])
+    }
+
+    @Test
+    fun swipeDismissableGraphHostsEveryPushDestination() {
+        lateinit var actions: WatchNavActions
+        activity.setContent {
+            MaterialTheme {
+                WatchNavGraph(
+                    startDestination = Screen.BALANCES.route(),
+                    balances = {
+                        actions = it
+                        Text("balances destination")
+                    },
+                    tokenDetail = { Text("token destination $it") },
+                    alerts = { Text("alerts destination") },
+                    alertDetail = { Text("alert destination $it") },
+                    receive = { Text("receive destination") },
+                    status = { Text("status destination") },
+                    notSetUp = { Text("not set up destination") },
+                )
+            }
+        }
+
+        compose.onNodeWithText("balances destination").assertIsDisplayed()
+        compose.runOnIdle { actions.tokenDetail("bitcoin-mainnet:T01") }
+        compose.onNodeWithText("token destination bitcoin-mainnet:T01").assertIsDisplayed()
+        compose.runOnIdle { actions.alerts() }
+        compose.onNodeWithText("alerts destination").assertIsDisplayed()
+        compose.runOnIdle { actions.alertDetail("request/42") }
+        compose.onNodeWithText("alert destination request/42").assertIsDisplayed()
+        compose.runOnIdle { actions.receive() }
+        compose.onNodeWithText("receive destination").assertIsDisplayed()
+        compose.runOnIdle { actions.status() }
+        compose.onNodeWithText("status destination").assertIsDisplayed()
+    }
+
+    @Test
+    fun swipeDismissableGraphHostsNotSetUpRoot() {
+        activity.setContent {
+            MaterialTheme {
+                WatchNavGraph(
+                    startDestination = Screen.NOT_SET_UP.route(),
+                    balances = {},
+                    tokenDetail = {},
+                    alerts = {},
+                    alertDetail = {},
+                    receive = {},
+                    status = {},
+                    notSetUp = { Text("not set up destination") },
+                )
+            }
+        }
+
+        compose.onNodeWithText("not set up destination").assertIsDisplayed()
     }
 
     @Test
