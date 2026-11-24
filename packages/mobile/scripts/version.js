@@ -239,7 +239,8 @@ export function versionXcconfigFor(tag) {
 // CLI: `node scripts/version.js v0.333.1` prints `<storeVersion> <versionName>`,
 // which is what the ceremony and the CI workflow read. Exactly two fields, since
 // both read it with a bare shell `read`; `--artifact` prints the artifact-name
-// version alone rather than adding a third field that a two-variable `read`
+// version alone and `--wear` prints the Wear versionCode alone rather than
+// adding a third field that a two-variable `read`
 // would silently glue onto the second. Kept here rather than in its own file so
 // the printed numbers cannot drift from the exported ones.
 // Both sides are resolved through realpath before comparing, and that is not
@@ -265,15 +266,18 @@ if (invokedPath) {
 if (isEntryPoint) {
     const args = process.argv.slice(2);
     const artifactOnly = args.includes('--artifact');
+    const wearOnly = args.includes('--wear');
     const tag = args.find((a) => !a.startsWith('--'));
     if (!tag) {
-        console.error('usage: node scripts/version.js <tag> [--artifact]   e.g. v0.333.1');
+        console.error('usage: node scripts/version.js <tag> [--artifact|--wear]   e.g. v0.333.1');
         process.exit(2);
     }
     try {
         console.log(artifactOnly
             ? artifactVersionFromTag(tag)
-            : `${storeVersionFromTag(tag)} ${versionNameFromTag(tag)}`);
+            : wearOnly
+                ? wearVersionCodeFromTag(tag)
+                : `${storeVersionFromTag(tag)} ${versionNameFromTag(tag)}`);
     } catch (err) {
         console.error(err.message);
         process.exit(1);

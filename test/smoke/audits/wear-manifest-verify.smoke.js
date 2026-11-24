@@ -33,8 +33,11 @@ const manifest = ({
     standalone = 'false',
     components = EXPECTED_COMPONENTS,
     permissions = EXPECTED_PERMISSIONS,
+    versionCode = '1003330150',
 } = {}) => [
-    '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+    `<manifest xmlns:android="http://schemas.android.com/apk/res/android"${
+        versionCode === null ? '' : ` android:versionCode="${versionCode}"`
+    }>`,
     ...permissions.map((name) => `  <uses-permission android:name="${name}" />`),
     `  ${feature}`,
     '  <application>',
@@ -46,14 +49,18 @@ const manifest = ({
     '</manifest>',
 ].join('\n');
 
-const run = (xml) => {
+const run = (xml, args = []) => {
     const path = join(directory, 'AndroidManifest.xml');
     writeFileSync(path, xml);
     try {
-        return { ok: true, output: execFileSync('node', [verifier, path],
+        return { ok: true, status: 0, output: execFileSync('node', [verifier, path, ...args],
             { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
     } catch (error) {
-        return { ok: false, output: `${error.stdout ?? ''}${error.stderr ?? ''}` };
+        return {
+            ok: false,
+            status: error.status,
+            output: `${error.stdout ?? ''}${error.stderr ?? ''}`,
+        };
     }
 };
 
@@ -68,6 +75,22 @@ try {
     assert.equal(clean.ok, true, clean.output);
     assert.match(clean.output, /PASS feature android\.hardware\.type\.watch is required/);
     assert.match(clean.output, /PASS metadata com\.google\.android\.wearable\.standalone is "false"/);
+
+    const matchingVersion = run(manifest(), ['--version-code', '1003330150']);
+    assert.equal(matchingVersion.ok, true, matchingVersion.output);
+    assert.match(matchingVersion.output, /PASS versionCode is 1003330150, which is what the tag derives/);
+
+    const mismatchedVersion = run(manifest(), ['--version-code', '1003330151']);
+    assert.equal(mismatchedVersion.ok, false, 'verifier accepted the wrong Wear versionCode');
+    assert.match(mismatchedVersion.output, /versionCode is 1003330150, not the 1003330151/);
+
+    const absentVersion = run(manifest({ versionCode: null }), ['--version-code', '1003330150']);
+    assert.equal(absentVersion.ok, false, 'verifier accepted an absent Wear versionCode');
+    assert.match(absentVersion.output, /versionCode is undefined, not the 1003330150/);
+
+    const extraArgument = run(manifest(), ['--version-code', '1003330150', 'unexpected']);
+    assert.equal(extraArgument.status, 2, 'a third argument must be a usage error');
+    assert.match(extraArgument.output, /Usage: .*\[--version-code N\]/);
 
     mustFail('missing watch feature', manifest({ feature: '' }), /watch is missing/);
     mustFail('optional watch feature', manifest({
@@ -90,7 +113,7 @@ try {
         permissions: [...EXPECTED_PERMISSIONS, 'android.permission.CAMERA'],
     }), /android\.permission\.CAMERA is not expected/);
 
-    console.log('wear-manifest-verify: 10 checks passed');
+    console.log('wear-manifest-verify: 14 checks passed');
 } finally {
     rmSync(directory, { recursive: true, force: true });
 }

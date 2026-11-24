@@ -19,7 +19,12 @@ assert.match(
 assert.match(ceremony, /WEAR_AAB_NAME="xchain-wallet-wear-v\$\{ARTIFACT_VERSION\}\.aab"/);
 assert.match(
     ceremony,
-    /verify-wear-manifest\.mjs" \\\n+\s+"\$WORK_DIR\/wear-merged-manifest\.xml"/,
+    /WEAR_VERSION_CODE="\$\(node "\$MOBILE_DIR\/scripts\/version\.js" "\$TAG" --wear\)"/,
+);
+assert.match(ceremony, /could not derive a Wear versionCode from \$TAG/);
+assert.match(
+    ceremony,
+    /verify-wear-manifest\.mjs" \\\n+\s+"\$WORK_DIR\/wear-merged-manifest\.xml" \\\n+\s+--version-code "\$WEAR_VERSION_CODE"/,
 );
 
 const wearVerify = ceremony.indexOf('verify-wear-manifest.mjs');
@@ -62,4 +67,4 @@ assert.match(
     /^android-full\s+SHIPPED\s+store-only\s+xchain-wallet-v\*-full\.apk$/m,
 );
 
-console.log(`android-ceremony-wear: 16 checks passed (${root})`);
+console.log(`android-ceremony-wear: 18 checks passed (${root})`);
