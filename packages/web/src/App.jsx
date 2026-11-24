@@ -369,6 +369,7 @@ function GatedDevVariantBadge({ state }) {
 // screen answers it, and the runner delivers the result and follows return.
 function SiteRequestRun({ request, onDone }) {
     const [entry, setEntry] = useState(null);
+    const [finished, setFinished] = useState(false);
     const handle = useRef(null);
     const doneRef = useRef(onDone);
     doneRef.current = onDone;
@@ -377,7 +378,7 @@ function SiteRequestRun({ request, onDone }) {
         let alive = true;
         import('./hostBridge.js').then(({ runSiteRequest }) => runSiteRequest(request, {
             onApproval: (parked) => { if (alive) setEntry(parked); },
-            onDone: () => { if (alive) doneRef.current(); },
+            onDone: () => { if (alive) { setFinished(true); doneRef.current(); } },
         })).then((started) => {
             if (alive) handle.current = started;
             else started.cancel();
@@ -388,6 +389,7 @@ function SiteRequestRun({ request, onDone }) {
         };
     }, [request]);
 
+    if (finished) return null;
     if (!entry) return <SiteRequestApproval request={request} onReject={() => handle.current?.cancel()} />;
     return (
         <SignApproval
@@ -1503,7 +1505,7 @@ function AppInner() {
                 return (
                     <SiteRequestRun
                         request={siteRequestRoute.request}
-                        onDone={() => { setSiteRequestRoute(null); goBack(); }}
+                        onDone={() => { launchRouteState.current.clear(); setSiteRequestRoute(null); resetNav('home'); }}
                     />
                 );
             }

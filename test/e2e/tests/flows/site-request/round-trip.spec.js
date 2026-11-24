@@ -513,7 +513,9 @@ webTest.describe('web wallet round trip', () => {
         await walletExpect(approve.or(boundary).first()).toBeVisible({ timeout: 30_000 });
         expect(await boundary.isVisible(), `the approval route crashed: ${pageErrors[0] ?? 'no page error'}`).toBe(false);
 
+        await walletExpect(page.getByText(new URL(envelope.return).host).first()).toBeVisible();
         await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
+        await walletExpect(approve).toBeEnabled();
         await approve.click();
         await walletExpect(approve).toBeHidden({ timeout: 30_000 });
         await page.waitForTimeout(1000);
