@@ -483,6 +483,37 @@ export function wearScreenshotProblems(header) {
     return problems;
 }
 
+const WEAR_README_PHRASES = [
+    'Your balances and wallet alerts on your wrist. Your phone keeps your keys and signs everything.',
+    'Tile',
+    'complication',
+    'QR',
+    'Hide amounts',
+    'XChain Wallet Android app',
+];
+
+export function wearListingProblems({ readme, screenshots }) {
+    const problems = [];
+
+    if (readme === null) {
+        problems.push('README.md missing');
+    } else {
+        for (const phrase of WEAR_README_PHRASES) {
+            if (!readme.includes(phrase)) problems.push(`README.md lacks: ${phrase}`);
+        }
+        if (readme.includes('\u2014')) problems.push('README.md holds an em-dash');
+    }
+
+    if (screenshots.length === 0) problems.push('no screenshot');
+    for (const { name, header } of screenshots) {
+        for (const problem of wearScreenshotProblems(header)) {
+            problems.push(`${name}: ${problem}`);
+        }
+    }
+
+    return problems;
+}
+
 /** PNG dimensions straight out of the IHDR, no image library needed. */
 function pngSize(buf) {
     if (buf.length < 24 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
