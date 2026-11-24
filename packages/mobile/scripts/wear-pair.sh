@@ -74,7 +74,13 @@ adb_for "$phone_serial" shell pm path com.google.android.wearable.app >/dev/null
     || die 'missing Wear OS companion app'
 adb_for "$phone_serial" shell dumpsys account 2>/dev/null | awk '
     /^[[:space:]]*Accounts: [0-9]+/ { accounts = 1; next }
-    accounts && /^[[:space:]]+Account [{]/ { if ($0 ~ /type=com[.]google[},]/) found = 1; next }
+    accounts && /^[[:space:]]+/ {
+        entry = $0
+        sub(/^[[:space:]]+/, "", entry)
+        if (index(entry, "Account {") != 1) exit !found
+        if ($0 ~ /type=com[.]google[},]/) found = 1
+        next
+    }
     accounts { exit !found }
     END { exit !found }
 ' || die "missing Google sign-in on $phone_serial"
