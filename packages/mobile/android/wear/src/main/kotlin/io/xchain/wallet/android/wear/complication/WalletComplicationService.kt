@@ -51,7 +51,7 @@ class WalletComplicationService : ComplicationDataSourceService() {
 
     internal companion object {
         const val PREVIEW_TEXT = "$0.00"
-        internal var refresher = TileRefresher(
+        internal var refresher: TileRefresher = TileRefresher(
             now = System::currentTimeMillis,
             schedule = { delayMs, task -> Handler(Looper.getMainLooper()).postDelayed(task, delayMs) },
         )
