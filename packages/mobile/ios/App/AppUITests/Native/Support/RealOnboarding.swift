@@ -8,15 +8,15 @@ enum RealOnboarding {
         timeout: TimeInterval = 90
     ) -> [String]? {
         guard acceptTerms(app, timeout: timeout) else {
-            return failed("license acceptance")
+            return failed("license acceptance", app: app)
         }
         guard advanceIntro(app, timeout: timeout) else {
-            return failed("intro carousel")
+            return failed("intro carousel", app: app)
         }
 
         let create = button(app, named: "Create new wallet")
         guard waitUntilHittable(create, timeout: timeout) else {
-            return failed("Create new wallet")
+            return failed("Create new wallet", app: app)
         }
         create.tap()
 
@@ -31,42 +31,42 @@ enum RealOnboarding {
             comparison: "CONTAINS[c]"
         )
         guard waitUntilHittable(passwordField, timeout: timeout) else {
-            return failed("Password field")
+            return failed("Password field", app: app)
         }
         passwordField.tap()
         passwordField.typeText(password)
         guard scrollAndTap(confirmField, in: app, timeout: timeout) else {
-            return failed("confirm password field")
+            return failed("confirm password field", app: app)
         }
         confirmField.typeText(password)
 
         let passwordNext = button(app, named: "Next")
         guard scrollAndTap(passwordNext, in: app, timeout: timeout) else {
-            return failed("password submission")
+            return failed("password submission", app: app)
         }
 
         let reveal = button(app, named: "Reveal Recovery Phrase")
         guard scrollAndTap(reveal, in: app, timeout: timeout) else {
-            return failed("recovery phrase reveal")
+            return failed("recovery phrase reveal", app: app)
         }
         guard let words = recoveryWords(app, timeout: timeout) else {
-            return failed("12 recovery phrase words")
+            return failed("12 recovery phrase words", app: app)
         }
 
         guard tickSavedPhrase(app, timeout: timeout) else {
-            return failed("saved recovery phrase acknowledgement")
+            return failed("saved recovery phrase acknowledgement", app: app)
         }
         let verify = button(app, named: "Verify Recovery Phrase")
         guard scrollAndTap(verify, in: app, timeout: timeout) else {
-            return failed("Verify Recovery Phrase")
+            return failed("Verify Recovery Phrase", app: app)
         }
         guard answerRecoveryQuiz(app, words: words, timeout: timeout) else {
-            return failed("recovery phrase verification fields")
+            return failed("recovery phrase verification fields", app: app)
         }
 
         let createWallet = button(app, named: "Create Wallet")
         guard scrollAndTap(createWallet, in: app, timeout: timeout) else {
-            return failed("Create Wallet")
+            return failed("Create Wallet", app: app)
         }
 
         let donations = namedElement(
@@ -75,11 +75,11 @@ enum RealOnboarding {
             comparison: "=="
         )
         guard donations.waitForExistence(timeout: timeout) else {
-            return failed("Automatic Donations notice")
+            return failed("Automatic Donations notice", app: app)
         }
         let continueButton = button(app, named: "Continue")
         guard scrollAndTap(continueButton, in: app, timeout: timeout) else {
-            return failed("Automatic Donations Continue")
+            return failed("Automatic Donations Continue", app: app)
         }
 
         let onboardingChoice = button(app, named: "Create new wallet")
@@ -88,12 +88,13 @@ enum RealOnboarding {
         guard waitUntil(timeout: timeout, condition: {
             !onboardingChoice.exists && (home.isHittable || balances.isHittable)
         }) else {
-            return failed("Home or Balances after wallet creation")
+            return failed("Home or Balances after wallet creation", app: app)
         }
         return words
     }
 
     private static func acceptTerms(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        guard app.staticTexts.firstMatch.waitForExistence(timeout: 25) else { return false }
         let accept = button(app, named: "Accept and continue")
         guard accept.waitForExistence(timeout: timeout) else { return false }
 
@@ -271,7 +272,7 @@ enum RealOnboarding {
     }
 
     private static func button(_ app: XCUIApplication, named label: String) -> XCUIElement {
-        namedElement(app.buttons, label: label, comparison: "==")
+        namedElement(app.buttons, label: label, comparison: "CONTAINS[c]")
     }
 
     private static func namedElement(
@@ -303,8 +304,10 @@ enum RealOnboarding {
         return condition()
     }
 
-    private static func failed(_ step: String) -> [String]? {
-        XCTContext.runActivity(named: "Real onboarding could not reach: \(step)") { _ in }
+    private static func failed(_ step: String, app: XCUIApplication) -> [String]? {
+        XCTContext.runActivity(named: "Real onboarding could not reach: \(step)") { _ in
+            XCTContext.runActivity(named: app.debugDescription) { _ in }
+        }
         return nil
     }
 }
