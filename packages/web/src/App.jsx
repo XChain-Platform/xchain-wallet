@@ -817,7 +817,9 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
-    const [siteRequest, setSiteRequest] = useState(/** @type {Record<string, unknown> | null} */ (null));
+    const [siteRequestRoute, setSiteRequestRoute] = useState(
+        /** @type {{ view?: string, request?: Record<string, unknown> } | null} */ (null),
+    );
     // The launch guard keeps a URI authoritative through both unlock and the
     // later per-wallet last-view restore.
     const launchRouteState = useRef(createLaunchRouteState());
@@ -906,7 +908,7 @@ function AppInner() {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
-        setSiteRequest(null);
+        setSiteRequestRoute(null);
         setMultisigInitialLink(null);
         setGlobalScannerOpen(false);
         launchRouteState.current.clear();
@@ -966,7 +968,9 @@ function AppInner() {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
             }
-            if (route.view === 'site-request-approval') setSiteRequest(route.request);
+            if (route.view === 'site-request-approval' || route.view === 'newer-wallet-needed') {
+                setSiteRequestRoute(route);
+            }
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             // The launch guard holds a locked-session link through unlock and the
             // later last-view restore. A link that arrives while a native shell
@@ -1459,16 +1463,20 @@ function AppInner() {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
-            if (unlockedView === 'site-request-approval' && siteRequest) {
+            if (siteRequestRoute?.view === 'site-request-approval' && siteRequestRoute.request) {
                 return (
                     <SiteRequestApproval
-                        request={siteRequest}
-                        onReject={() => { setSiteRequest(null); goBack(); }}
+                        request={siteRequestRoute.request}
+                        onReject={() => { setSiteRequestRoute(null); goBack(); }}
                     />
                 );
             }
-            if (unlockedView === 'newer-wallet-needed') {
-                return <NewerWalletNeeded onBack={goBack} />;
+            if (siteRequestRoute?.view === 'newer-wallet-needed') {
+                return (
+                    <NewerWalletNeeded
+                        onBack={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
             }
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (

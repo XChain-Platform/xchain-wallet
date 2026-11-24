@@ -5,6 +5,7 @@
 
 import { lazy } from 'react';
 import { EmptyState, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { ListPage } from '@xchain-wallet/core/ui/ListPage.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/siteRequest.js';
 
@@ -68,11 +69,13 @@ export function NewerWalletNeeded({ variant, onBack }) {
             variant={variant}
             header={<PageHeader onBack={onBack} title={null} />}
         >
-            <EmptyState
-                showWhileUnavailable
-                title={t('siteRequest.newerWallet.title')}
-                body={t('siteRequest.newerWallet.body')}
-            />
+            <ListPage>
+                <EmptyState
+                    showWhileUnavailable
+                    title={t('siteRequest.newerWallet.title')}
+                    body={t('siteRequest.newerWallet.body')}
+                />
+            </ListPage>
         </Screen>
     );
 }
