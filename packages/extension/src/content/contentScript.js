@@ -68,6 +68,7 @@
         'bridge.signAction',
         'bridge.signPsbt',
         'bridge.coSign',
+        'bridge.login',
         'bridge.signIn',
         'bridge.parallel',
     ]);
@@ -372,7 +373,7 @@
         // Post exactly one envelope on every path out of this listener: the
         // injected provider parks a promise per request with no deadline, so
         // a silent path hangs the dApp call and leaks its pending entry.
-        if (data.type === 'bridge.connect') {
+        if (data.type === 'bridge.connect' || data.type === 'bridge.login') {
             const pendingIcon = captureSiteIcon(request.appIcon);
             if (pendingIcon) {
                 pendingIcon
