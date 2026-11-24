@@ -7,13 +7,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import io.xchain.wallet.android.wear.data.MarkReadIntent
 import io.xchain.wallet.android.wear.data.SnapshotInboxItem
+import io.xchain.wallet.android.wear.ui.AlertDisplay
 import io.xchain.wallet.android.wear.ui.AlertsDisplay
 import io.xchain.wallet.android.wear.ui.AlertsPresenter
 import io.xchain.wallet.android.wear.ui.AlertsScreen
@@ -71,10 +75,30 @@ class AlertsScreenTest {
     }
 
     @Test
+    fun capsRenderedRowsAtTwentyAndShowsUnreadDot() {
+        val rows = List(21) { index ->
+            AlertDisplay(
+                id = "alert-$index",
+                family = "messages",
+                title = "Alert $index",
+                body = "Body $index",
+                at = NOW - index,
+                unread = index == 0,
+            )
+        }
+        show(AlertsDisplay(rows, emptyTextKey = null, request = null))
+
+        compose.onNodeWithTag("alertUnreadDot", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Alert 19"))
+        compose.onNodeWithText("Alert 19").assertIsDisplayed()
+        compose.onNodeWithText("Alert 20").assertDoesNotExist()
+    }
+
+    @Test
     fun clickingRowMarksItReadThenOpensItExactlyOnce() {
         val events = mutableListOf<String>()
         val display = AlertsPresenter.present(
-            listOf(inbox("alert-1", "Payment due", NOW, read = true)),
+            listOf(inbox("alert-1", "Payment due", NOW)),
             request = null,
             now = NOW,
         )

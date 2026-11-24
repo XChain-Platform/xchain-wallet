@@ -40,7 +40,7 @@ internal fun AlertsScreen(
         item { Text(text("w3.title")) }
         display.emptyTextKey?.let { key ->
             item { Text(text(key)) }
-        } ?: items(display.rows, key = { it.id }) { alert ->
+        } ?: items(display.rows.take(MAX_ALERT_ROWS), key = { it.id }) { alert ->
             AlertRow(
                 alert = alert,
                 now = now,
@@ -53,6 +53,8 @@ internal fun AlertsScreen(
         }
     }
 }
+
+private const val MAX_ALERT_ROWS = 20
 
 @Composable
 private fun alertsText(key: String): String = stringResource(
