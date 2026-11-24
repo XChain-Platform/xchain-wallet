@@ -896,6 +896,16 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
+    function preflightBlockReason() {
+        if (preflightState.actionString !== preflightActionString || preflightState.loading) {
+            return { key: 'checking', text: t('confirmStandard.blocked.checking') };
+        }
+        const errors = (preflightState.report?.findings || []).filter((f) => f?.severity === 'error');
+        return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length
+            ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') }
+            : { key: 'fails', text: t('confirmStandard.blocked.fails') };
+    }
+
     // Why Approve cannot go ahead yet, or null. Approve never looks disabled
     // (G130): the tap says why at the top of the window (G129) and sends
     // nothing; a missing password also marks the password field.
@@ -905,20 +915,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
-        if (preflightBlocked) {
-            if (preflightState.actionString !== preflightActionString || preflightState.loading) {
-                return { key: 'checking', text: t('confirmStandard.blocked.checking') };
-            }
-            const errors = (preflightState.report?.findings || []).filter((f) => f?.severity === 'error');
-            return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length
-                ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') }
-                : { key: 'fails', text: t('confirmStandard.blocked.fails') };
-        }
         if (psbtApprovalBlocked || coSignApprovalBlocked) {
+            if (preflightBlocked) return preflightBlockReason();
             return (psbtDecodePending || coSignPreview.loading)
                 ? { key: 'checking', text: t('confirmStandard.blocked.checking') }
                 : { key: 'refusal', text: t('confirmStandard.blocked.fails') };
         }
+        if (preflightBlocked) return preflightBlockReason();
         if (signInBlocked) return { key: 'signIn', text: t('confirmStandard.blocked.signInAddress') };
         if (!walletId) return { key: 'wallet', text: t('confirmStandard.blocked.wallet') };
         if (password.length === 0) return { key: 'credentials', text: t('confirmStandard.blocked.password') };
@@ -1166,8 +1169,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
         extraWarnings,
     });
     const currentBlock = blockedTap ? approveBlockReason() : null;
-    const shownBlock = currentBlock && currentBlock.key === blockedTap ? currentBlock : null;
     const anotherDeviceLogin = linkMode && Boolean(origin) && isAnotherDeviceLogin(linkRequest);
+    const shownApprovalBlock = currentBlock && currentBlock.key === blockedTap ? currentBlock : null;
+    const shownBlock = shownApprovalBlock || anotherDeviceLogin;
     const signInAsLabel = linkMode
         ? t('extension.sign.signInAs')
         : t('extension.sign.providerSignInAs');
@@ -1255,27 +1259,28 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 ) : null}
                 <ConfirmStandard
                     label={title}
-                    status={confirmationStatus}
-                    warning={confirmationWarning}
-                    acknowledged={acknowledged}
-                    onAcknowledge={acknowledge}
-                    top={panicFrozen || shownBlock || anotherDeviceLogin ? (
+                    facts={confirmationFacts}
+                    top={panicFrozen || shownBlock ? (
                         <>
+                            {panicFrozen ? (
+                                <PanicSignStatus notice={panicNotice} testId="approval-panic-freeze" role="alert" />
+                            ) : null}
                             {anotherDeviceLogin ? (
                                 <Notice tone="warning" role="note" testId="another-device-login" flush>
                                     {t('extension.sign.anotherDevice', { origin })}
                                 </Notice>
                             ) : null}
-                            {shownBlock ? (
-                                <Notice tone="danger" role="alert" testId="confirm-blocked" data-reason={shownBlock.key} flush>
-                                    {shownBlock.text}
+                            {shownApprovalBlock ? (
+                                <Notice tone="danger" role="alert" testId="confirm-blocked" data-reason={shownApprovalBlock.key} flush>
+                                    {shownApprovalBlock.text}
                                 </Notice>
-                            ) : null}
-                            {panicFrozen ? (
-                                <PanicSignStatus notice={panicNotice} testId="approval-panic-freeze" role="alert" />
                             ) : null}
                         </>
                     ) : null}
+                    status={confirmationStatus}
+                    warning={confirmationWarning}
+                    acknowledged={acknowledged}
+                    onAcknowledge={acknowledge}
                     mark={(kind === 'signAction' || kind === 'signPsbt') && baseHead.heroTick && descriptor ? (
                         <TickerIcon chainId={descriptor.id} tick={baseHead.heroTick} context="hero" />
                     ) : null}
@@ -1297,7 +1302,6 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             testId="confirm-request-origin"
                         />
                     ) : null}
-                    facts={confirmationFacts}
                     preserveFactOrder={kind === 'signMessage'}
                     messageText={kind === 'signMessage' ? displayedSignedText : undefined}
                 >
