@@ -145,17 +145,8 @@ struct BalancesHeaderButton: View {
 }
 
 struct BalancesToolbar: ToolbarContent {
-    let controls: [BalancesToolbarRules.Control]
-    let iconNames: [String]
     let unread: Int
     let open: (WatchScreen) -> Void
-
-    init(unread: Int, open: @escaping (WatchScreen) -> Void) {
-        controls = BalancesToolbarRules.controls
-        iconNames = [unread > 0 ? "bell.badge" : "bell", "qrcode", "info.circle"]
-        self.unread = unread
-        self.open = open
-    }
 
     var body: some ToolbarContent {
         ToolbarItemGroup {

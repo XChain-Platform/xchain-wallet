@@ -15,11 +15,7 @@ final class BalancesScreenTests: XCTestCase {
         XCTAssertTrue(content.typeNames.contains { $0.contains("BalancesHeaderButton") })
         XCTAssertTrue(content.typeNames.contains { $0.contains("NavigationLink") })
         XCTAssertTrue(content.typeNames.contains { $0.contains("HandGestureShortcut") })
-        XCTAssertEqual(Set(content.controls.map(String.init(describing:))), ["bell", "qr", "status"])
         XCTAssertEqual(Set(content.selections.map(\.id)), ["r1", "r2"])
-        XCTAssertTrue(content.strings.contains("bell.badge"))
-        XCTAssertTrue(content.strings.contains("qrcode"))
-        XCTAssertTrue(content.strings.contains("info.circle"))
         XCTAssertEqual(BalancesScreen.crownStep, 1)
         XCTAssertEqual(screen.crownUpperBound, 1)
     }
@@ -43,12 +39,19 @@ final class BalancesScreenTests: XCTestCase {
         XCTAssertEqual(recorded, .fiat)
     }
 
-    func testToolbarButtonsOpenTheirRenderedDestinations() {
+    func testToolbarButtonsOpenTheirRenderedDestinations() throws {
         var opened: [WatchScreen] = []
-        let toolbar = make(open: { opened.append($0) }).toolbarContent
+        let screen = make(open: { opened.append($0) })
+        let toolbar = try XCTUnwrap(firstValue(of: BalancesToolbar.self, in: screen.body))
+        let buttons = renderedButtons(in: toolbar.body)
 
-        for control in toolbar.controls {
-            XCTAssertTrue(invokeAction(in: toolbar.controlButton(control)))
+        XCTAssertEqual(buttons.count, 3)
+        XCTAssertEqual(
+            Set(buttons.flatMap { renderedContent(in: $0).strings }),
+            ["bell", "qrcode", "info.circle"]
+        )
+        for button in buttons {
+            XCTAssertTrue(invokeAction(in: button))
         }
 
         XCTAssertEqual(opened, [.alerts, .receive, .status])
@@ -68,7 +71,11 @@ final class BalancesScreenTests: XCTestCase {
         ])
 
         XCTAssertEqual(screen.unread, 2)
-        XCTAssertEqual(screen.toolbarContent.iconNames.first, "bell.badge")
+        XCTAssertTrue(
+            renderedButtons(in: screen.toolbarContent.body)
+                .flatMap { renderedContent(in: $0).strings }
+                .contains("bell.badge")
+        )
     }
 
     func testDisplayFollowsModeAndUsesSharedPresenterTypes() {
@@ -112,12 +119,10 @@ final class BalancesScreenTests: XCTestCase {
 
     private func renderedContent(in value: Any) -> (
         strings: Set<String>,
-        controls: [BalancesToolbarRules.Control],
         selections: [BalanceSelection],
         typeNames: Set<String>
     ) {
         var strings = Set<String>()
-        var controls: [BalancesToolbarRules.Control] = []
         var selections: [BalanceSelection] = []
         var typeNames = Set<String>()
         var visited = Set<ObjectIdentifier>()
@@ -126,7 +131,6 @@ final class BalancesScreenTests: XCTestCase {
             guard depth < 50 else { return }
             typeNames.insert(String(reflecting: type(of: value)))
             if let string = value as? String { strings.insert(string) }
-            if let control = value as? BalancesToolbarRules.Control { controls.append(control) }
             if let selection = value as? BalanceSelection { selections.append(selection) }
 
             let mirror = Mirror(reflecting: value)
@@ -138,7 +142,36 @@ final class BalancesScreenTests: XCTestCase {
         }
 
         visit(value, depth: 0)
-        return (strings, controls, selections, typeNames)
+        return (strings, selections, typeNames)
+    }
+
+    private func renderedButtons(in value: Any) -> [Any] {
+        var buttons: [Any] = []
+
+        func visit(_ value: Any, depth: Int) {
+            guard depth < 40 else { return }
+            if String(reflecting: type(of: value)).hasPrefix("SwiftUI.Button<") {
+                buttons.append(value)
+                return
+            }
+            for child in Mirror(reflecting: value).children {
+                visit(child.value, depth: depth + 1)
+            }
+        }
+
+        visit(value, depth: 0)
+        return buttons
+    }
+
+    private func firstValue<T>(of type: T.Type, in value: Any, depth: Int = 0) -> T? {
+        if let match = value as? T { return match }
+        guard depth < 40 else { return nil }
+        for child in Mirror(reflecting: value).children {
+            if let match = firstValue(of: type, in: child.value, depth: depth + 1) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func make(
