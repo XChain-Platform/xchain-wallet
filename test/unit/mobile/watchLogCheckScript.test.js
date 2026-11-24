@@ -1,7 +1,9 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -25,11 +27,22 @@ describe('watch-log-check.sh', () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toBe('watch log: snapshot v1 and W1 seen\n');
+        expect(result.stderr).toContain('watch-log-check: captured 2 entries');
         expect(calls).toHaveLength(1);
         expect(calls[0]).toContain('simctl spawn WATCH-UDID log show');
         expect(calls[0]).toContain('--style ndjson');
         expect(calls[0]).toContain('--start 2026-11-24 10:00:00');
         expect(calls[0]).toContain('--predicate subsystem == "io.xchain.wallet.ios.watch"');
+    });
+
+    it('adds the ndjson suffix after BSD mktemp fills trailing placeholders', () => {
+        const fixture = makeFixture(logEntries());
+        const result = run(fixture, requiredArgs);
+
+        expect(result.status).toBe(0);
+        expect(readdirSync(join(fixture.root, 'tmp/watch-log-check'))).toEqual([
+            'log.ABCDEF.ndjson',
+        ]);
     });
 
     it('names the missing screen line when only the snapshot was logged', () => {
@@ -110,6 +123,15 @@ function makeFixture(log) {
     put(join(root, 'package.json'), '{"type":"module"}\n');
     put(calls, '');
     put(cannedLog, log);
+    put(join(bin, 'mktemp'), `#!/usr/bin/env bash
+template="$1"
+case "$template" in
+    *XXXXXX) path="\${template%XXXXXX}ABCDEF" ;;
+    *) path="$template" ;;
+esac
+: > "$path"
+printf '%s\\n' "$path"
+`, 0o755);
     put(join(bin, 'xcrun'), `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_XCRUN_CALLS"
 [ "\${FAKE_XCRUN_FAIL:-}" = 1 ] && exit 1
