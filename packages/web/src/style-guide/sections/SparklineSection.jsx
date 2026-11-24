@@ -19,7 +19,7 @@ export function SparklineSection() {
         >
             <Guidance
                 what={<><code>Sparkline</code> draws <code>series</code> as an SVG line with an optional area fill. It carries an accessible label and range description.</>}
-                when={<>Token rows and token detail pages.</>}
+                when={<>Token detail, the Markets lists and detail, stake detail, and behind the Home portfolio chart.</>}
                 whenNot={<>The wallet total, which has range tabs (PortfolioChart).</>}
                 sizing={<>Height 80 by default; <code>edgeToEdge</code> runs the line to both edges of its container.</>}
                 doRule={<>✓ Pass <code>label</code> and <code>rangeLabel</code> so a screen reader hears the trend</>}

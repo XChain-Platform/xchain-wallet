@@ -293,3 +293,46 @@ export function kotlinSerialFields(source) {
 
     return fields;
 }
+
+export function contractParityFailures({ pairs, swiftSource, kotlinSource }) {
+    if (!Array.isArray(pairs) || pairs.length === 0) {
+        throw new TypeError('pairs must be a non-empty array');
+    }
+    for (const pair of pairs) {
+        if (typeof pair?.type !== 'string' || pair.type.trim().length === 0) {
+            throw new TypeError('each pair type must be a non-empty string');
+        }
+        if (pair.schema === null || typeof pair.schema !== 'object' || Array.isArray(pair.schema)) {
+            throw new TypeError('each pair schema must be an object');
+        }
+    }
+    if (typeof swiftSource !== 'string') throw new TypeError('swiftSource must be a string');
+    if (typeof kotlinSource !== 'string') throw new TypeError('kotlinSource must be a string');
+
+    const platformFields = [
+        ['swift', swiftCodableFields(swiftSource)],
+        ['kotlin', kotlinSerialFields(kotlinSource)],
+    ];
+    const failures = [];
+
+    for (const { type, schema } of pairs) {
+        const expected = schemaFields(schema);
+        for (const [platform, types] of platformFields) {
+            if (!Object.hasOwn(types, type)) {
+                failures.push(`${platform}:${type}:absent`);
+                continue;
+            }
+
+            const actual = new Set(types[type]);
+            const expectedSet = new Set(expected);
+            for (const field of expected) {
+                if (!actual.has(field)) failures.push(`${platform}:${type}:missing:${field}`);
+            }
+            for (const field of [...actual].sort()) {
+                if (!expectedSet.has(field)) failures.push(`${platform}:${type}:extra:${field}`);
+            }
+        }
+    }
+
+    return failures;
+}

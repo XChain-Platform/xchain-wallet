@@ -26,16 +26,16 @@ export function ListFilterPopoverSection() {
             id="list-filter-popover"
             title="List filter popover"
             tag="CANONICAL · ListFilterPopover"
-            kicker="One filter icon in the title bar that opens a panel of the page's own list controls, the same trigger and panel Home uses."
+            kicker="No screen uses it; list pages use ListFilterMenu."
         >
             <Guidance
                 what={<><code>ListFilterPopover</code> owns only the open state, outside-click and Escape handling and the dot that says a filter is applied. The host owns the filter values and passes the controls as children, a <code>ListSearchField</code> first.</>}
-                when={<>A list page whose controls are not the standard set <code>ListFilterMenu</code> draws: the inbox, a message thread, payments due, notifications and the dispenser explorer.</>}
+                when={<>Only a list page whose controls are not the standard set <code>ListFilterMenu</code> draws.</>}
                 whenNot={<>A page that needs only search plus the network picker (use <code>ListFilterMenu</code>) and forms.</>}
                 sizing={<><code>size="sm"</code> matches the other icon buttons in a page header's <code>trailing</code> slot; <code>md</code> is for a toolbar row.</>}
                 doRule={<>✓ Pass <code>active</code> whenever a control is off its default · put the search field first</>}
                 dontRule={<>✗ Show the filter controls in the page body as well · give the trigger a visible text label</>}
-                supersedes={<>Source: <code>ListFilterPopover.jsx</code> in <code>shared/components</code>. Reference page: <code>MessagingInbox.jsx</code>.</>}
+                supersedes={<>Source: <code>ListFilterPopover.jsx</code> in <code>shared/components</code>.</>}
             />
             <Markup>
 {`<PageHeader onBack={back} title="Payments Due" trailing={(

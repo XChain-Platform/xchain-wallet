@@ -22,7 +22,7 @@ export function ShellNavigationSection() {
             kicker="The shell uses a catalogue-backed left rail on wide layouts, a five-tab bar on phones, and the wallet menu for the complete destination list."
         >
             <Guidance
-                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The expanded side menu groups Wallet, Trade, Build and Social destinations; its icon rail uses dividers between those groups. The tab bar exposes Home, Send, Receive, History and Settings.</>}
+                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The expanded side menu groups Wallet, Trade, Network, Build and Social destinations; its icon rail uses dividers between those groups. The tab bar exposes Home, Send, Receive, History and Settings.</>}
                 when={<>Mounted once by the shell layout, never by a route.</>}
                 whenNot={<>In-page navigation: Tabs and SegmentedControl.</>}
                 doRule={<>✓ Remove a destination the build lacks instead of disabling it</>}

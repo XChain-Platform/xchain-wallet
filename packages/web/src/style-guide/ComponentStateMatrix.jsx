@@ -42,7 +42,7 @@ const componentSizes = {
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
     RadioGroup: FIXED_SIZE,
-    IconSelect: FIXED_SIZE,
+    IconSelect: ALL_SIZES,
     AddressCombobox: FIELD_SIZES,
     AddressField: FIELD_SIZES,
     ChainBadge: BADGE_SIZES,
@@ -186,7 +186,7 @@ function ComponentPreview({ name, size, state }) {
             />
         );
     case 'IconSelect':
-        return <UI.IconSelect label="Action" value="send" onChange={noop} options={sampleOptions} disabled={disabled} />;
+        return <UI.IconSelect label="Action" value="send" onChange={noop} options={sampleOptions} size={nativeSize} disabled={disabled} />;
     case 'AddressCombobox':
         return <UI.AddressCombobox label="To" value="" onChange={noop} suggestions={sampleSuggestions} size={nativeSize} disabled={disabled} error={error} />;
     case 'AddressField':

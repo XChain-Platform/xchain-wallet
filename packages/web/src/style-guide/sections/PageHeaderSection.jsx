@@ -41,10 +41,11 @@ export function PageHeaderSection() {
             kicker="Sits directly below the App header on every drilled-in screen: back chevron (left), centered text title, optional trailing actions (right). Its edges align with the App header above it."
         >
             <Guidance
-                what={<>A three-column layout: leading slot (back chevron or spacer), centered title (text only), trailing slot (filter / scan / etc., or spacer). The back chevron renders in <code>--xc-accent-primary</code>.</>}
+                what={<>A three-column layout: leading slot (back chevron, or a same-width spacer when the page was opened from the sidebar, tab bar or menu), centered title (text only, with an optional one-line subtitle), trailing slot (filter / scan / etc., or spacer). The back chevron renders in <code>--xc-accent-primary</code>.</>}
                 when={<>Every routed screen below the global App header. Always use <code>&lt;PageHeader /&gt;</code> from <code>@xchain-wallet/core/ui</code>; never roll your own <code>.header</code> / <code>.back</code> / <code>.title</code> CSS.</>}
-                sizing={<>Because the App header and Page header are always stacked, their edges must agree. The chevron's point aligns with the logo's left edge and the trailing slot's right edge aligns with the App header buttons. The chevron carries a small left nudge (<code>--xc-page-header-chevron-nudge</code>) because the glyph sits ~10px inside its own SVG; tune it there if the chevron is swapped.</>}
-                doRule={<>✓ Keep the title to plain text · keep the trailing slot for ONE primary action (multiple actions go in a More menu)</>}
+                sizing={<>Because the App header and Page header are always stacked, their edges must agree. The chevron's point aligns with the logo's left edge and the trailing slot's right edge aligns with the App header buttons. The chevron is drawn in a 32px box at the start edge, with the glyph shifted inside its SVG so the stroke lines up under the logo; adjust it in <code>PageHeader.module.css .back</code>, not with a token.</>}
+                variants={<>Also <code>nested</code>, <code>backDisabled</code>, <code>subtitle</code>, <code>titleId</code> and <code>titleRef</code>.</>}
+                doRule={<>✓ Keep the title to plain text · keep the trailing slot to ONE control: a primary action or one filter menu (several actions go in a More menu)</>}
                 dontRule={<>✗ Roll your own header CSS · pass JSX into <code>title</code> beyond a string (breaks centering math) · put an icon in the title (page titles carry no icon; an icon belongs in the page content)</>}
                 supersedes={<>Per-route header CSS in the picker / form routes still on a bespoke <code>.header</code> (AccountPicker, WalletPicker, the Rename/Sign forms). Source of truth is <code>PageHeader.jsx</code> + <code>PageHeader.module.css</code>.</>}
             />
@@ -83,7 +84,7 @@ export function PageHeaderSection() {
                 </div>
             </LiveExample>
 
-            <LiveExample label="No back (root view): leading slot is a spacer">
+            <LiveExample label="Root view: Back is hidden but the lane keeps its width">
                 <div style={frame}>
                     <div style={{ ...headerSlot, borderTop: 'none' }}>
                         <PageHeader

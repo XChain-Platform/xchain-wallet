@@ -14,6 +14,7 @@ const sourcePaths = [
 ];
 const outputs = [
     ['packages/mobile/ios/App/WatchApp/en.lproj/Localizable.strings', toAppleStrings],
+    ['packages/mobile/ios/App/WatchWidgets/en.lproj/Localizable.strings', toAppleStrings],
     ['packages/mobile/android/wear/src/main/res/values/strings.xml', (strings) => (
         toAndroidStringsXml(Object.fromEntries(sortedEntries(strings).map(([key, value]) => [
             key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
