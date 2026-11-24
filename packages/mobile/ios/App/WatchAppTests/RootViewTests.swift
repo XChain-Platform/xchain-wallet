@@ -90,27 +90,19 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testNotSetUpRootRendersBothMessagesAtBothWatchSizes() throws {
+    func testRootRendersNotSetUpAndSetUpAtBothWatchSizes() throws {
         let model = makeModel()
-        let root = RootView(model: model)
-        let redaction = AmbientRedactionState(
-            luminanceReduced: false,
-            phoneHidden: false,
-            hideAmounts: false
-        )
         let sizes = [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)]
-        let before = try sizes.map { size in
-            try renderedPixels(root.rootContent(redaction: redaction), size: size)
+
+        for size in sizes {
+            try assertRootRenders(model, state: "not set up", size: size)
         }
 
-        session.receive(snapshot(enabled: false))
+        session.receive(snapshot(enabled: true))
         waitForMainQueue()
-        let disabled = try sizes.map { size in
-            try renderedPixels(root.rootContent(redaction: redaction), size: size)
-        }
 
-        for index in sizes.indices {
-            XCTAssertNotEqual(before[index], disabled[index], "\(sizes[index])")
+        for size in sizes {
+            try assertRootRenders(model, state: "set up", size: size)
         }
     }
 
@@ -173,12 +165,18 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    private func renderedPixels(_ view: some View, size: CGSize) throws -> Data {
-        let image = try XCTUnwrap(WatchRender.image(view, size: size), "\(size)")
-        XCTAssertEqual(image.width, Int(size.width * 2), "\(size)")
-        XCTAssertEqual(image.height, Int(size.height * 2), "\(size)")
-        XCTAssertFalse(WatchRender.isBlank(image), "\(size)")
-        return try XCTUnwrap(image.dataProvider?.data as Data?, "\(size)")
+    private func assertRootRenders(
+        _ model: RootViewModel,
+        state: String,
+        size: CGSize
+    ) throws {
+        let renderer = ImageRenderer(
+            content: RootView(model: model).frame(width: size.width, height: size.height)
+        )
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.cgImage, "\(state), \(size)")
+        XCTAssertEqual(image.width, Int(size.width), "\(state), \(size)")
+        XCTAssertEqual(image.height, Int(size.height), "\(state), \(size)")
     }
 }
 

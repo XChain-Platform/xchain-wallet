@@ -160,7 +160,7 @@ struct RootView: View {
             hideAmounts: model.hideAmounts
         ) { redaction in
             NavigationStack(path: $path) {
-                rootContent(redaction: redaction)
+                root(redaction: redaction)
                     .navigationDestination(for: WatchScreen.self) {
                         destination($0, redaction: redaction)
                     }
@@ -176,7 +176,7 @@ struct RootView: View {
     }
 
     @ViewBuilder
-    func rootContent(redaction: AmbientRedactionState) -> some View {
+    private func root(redaction: AmbientRedactionState) -> some View {
         if rootScreen == .balances {
             VStack(spacing: 0) {
                 if model.snapshot?.request.id.isEmpty == false {
