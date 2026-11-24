@@ -42,14 +42,12 @@ public final class WatchAcceptanceDriverTest {
     @Test
     public void balances() throws Exception {
         XChainWatchPlugin plugin = watchPlugin();
-        for (WatchAcceptanceCases.Send send : WatchAcceptanceCases.fixtureSends("balances")) {
-            String json = fixture(send.asset);
-            boolean accepted = "snapshot".equals(send.kind)
-                    ? plugin.sendSnapshotJson(json)
-                    : plugin.sendDetailJson(json);
-            assertTrue(send.asset + " was rejected", accepted);
-            settle();
-        }
+        assertTrue(plugin.sendSnapshotJson(fixture("snapshot-rows50.json")));
+        settle();
+        assertTrue(plugin.sendDetailJson(fixture("detail-native.json")));
+        settle();
+        assertTrue(plugin.sendDetailJson(fixture("detail-cached.json")));
+        settle();
 
         byte[] image = WatchRisk8Payload.png(400);
         assertNotNull(image);
@@ -115,10 +113,10 @@ public final class WatchAcceptanceDriverTest {
     @Test
     public void privacy() throws Exception {
         XChainWatchPlugin plugin = watchPlugin();
-        for (WatchAcceptanceCases.Send send : WatchAcceptanceCases.fixtureSends("privacy")) {
-            assertTrue(send.asset + " was rejected", plugin.sendSnapshotJson(fixture(send.asset)));
-            settle();
-        }
+        assertTrue(plugin.sendSnapshotJson(fixture("snapshot-hidden.json")));
+        settle();
+        assertTrue(plugin.sendSnapshotJson(fixture("snapshot-disabled.json")));
+        settle();
     }
 
     private static XChainWatchPlugin watchPlugin() {
