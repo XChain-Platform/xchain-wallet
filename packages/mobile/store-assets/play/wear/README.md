@@ -1,8 +1,16 @@
 # Wear OS listing assets
 
+## Short description
+
 Your balances and wallet alerts on your wrist. Your phone keeps your keys and signs everything.
 
+Play Console source: `short-description.txt`.
+
+## Full description
+
 The Wear OS Tile and complication show wallet balances and alerts at a glance. Open the receive QR on your watch when someone needs your address, and use Hide amounts when you want to keep balances private. The XChain Wallet Android app is required because the phone keeps the keys and signs every transaction.
+
+Play Console source: `full-description.txt`.
 
 ## Screenshots
 
