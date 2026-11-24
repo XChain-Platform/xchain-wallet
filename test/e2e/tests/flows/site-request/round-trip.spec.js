@@ -18,8 +18,9 @@ import { once } from 'node:events';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { test as walletTest, expect as walletExpect, createWallet, unlockWallet } from '../../../fixtures/wallet.js';
+import { test as walletTest, expect as walletExpect, createWallet, unlockWallet, DEFAULT_PASSWORD } from '../../../fixtures/wallet.js';
 import { chromium, test as base, expect } from '@playwright/test';
+import { XCHAIN_SERVICE_HOSTS } from '../../../fixtures/outboundGuard.js';
 import {
     decodeRequestLink,
     publishedLink,
@@ -408,14 +409,14 @@ const webTest = walletTest.extend({
 });
 
 webTest.describe('web wallet round trip', () => {
-    webTest.use({ baseURL: WEB_URL, outboundLiveHosts: ['127.0.0.1'], ignoreHTTPSErrors: true });
+    webTest.use({ baseURL: WEB_URL, outboundLiveHosts: ['127.0.0.1'], outboundStubHosts: [...XCHAIN_SERVICE_HOSTS], ignoreHTTPSErrors: true });
     let vite;
 
     webTest.beforeAll(async () => {
         vite = spawn('pnpm', ['-C', resolve(WALLET_ROOT, 'packages/web'), 'dev', '--port', String(WEB_PORT), '--strictPort', '--host', '127.0.0.1'], {
             detached: true,
             stdio: 'ignore',
-            env: { ...process.env, VITE_XCHAIN_REAL_SDK: '0' },
+            env: { ...process.env, VITE_XCHAIN_REAL_SDK: '1' },
         });
         const deadline = Date.now() + 120_000;
         for (;;) {
@@ -432,6 +433,7 @@ webTest.describe('web wallet round trip', () => {
     });
 
     webTest('a wallet link opens the approval, and approving returns to the site', async ({ page, dapp }) => {
+        webTest.setTimeout(180_000);
         const dappPage = await page.context().newPage();
         dappPage.__dappUrl = `${dapp.secureOrigin}/`;
         const envelope = await pageRequestLink(dappPage);
@@ -449,14 +451,16 @@ webTest.describe('web wallet round trip', () => {
         expect(await boundary.isVisible(), `the approval route crashed: ${pageErrors.find((message) => /adapter/.test(message)) ?? pageErrors[0] ?? 'no page error'}`).toBe(false);
 
         await walletExpect(page.getByText(new URL(envelope.return).host).first()).toBeVisible();
+        await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
         await approve.click();
         await page.waitForURL(/#xchain=/, { timeout: 30_000 });
         const returned = readReturn(page.url());
-        expect(returned).toMatchObject({ id: envelope.id, ok: true });
+        expect(returned, `the wallet returned ${JSON.stringify(returned)}`).toMatchObject({ id: envelope.id, ok: true });
         expect(page.url().startsWith(envelope.return)).toBe(true);
     });
 
     webTest('a link edited to drop return is approved by the wallet and goes nowhere', async ({ page, dapp }) => {
+        webTest.setTimeout(180_000);
         const dappPage = await page.context().newPage();
         dappPage.__dappUrl = `${dapp.secureOrigin}/`;
         const envelope = await pageRequestLink(dappPage);
@@ -474,6 +478,7 @@ webTest.describe('web wallet round trip', () => {
         await walletExpect(approve.or(boundary).first()).toBeVisible({ timeout: 30_000 });
         expect(await boundary.isVisible(), `the approval route crashed: ${pageErrors[0] ?? 'no page error'}`).toBe(false);
 
+        await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
         await approve.click();
         await walletExpect(approve).toBeHidden({ timeout: 30_000 });
         await page.waitForTimeout(1000);

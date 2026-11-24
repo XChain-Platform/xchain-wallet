@@ -149,7 +149,7 @@ const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVar
 // route, so its EmptyState and ListPage styles stay out of the startup CSS.
 const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
 const NewerWalletNeeded = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'NewerWalletNeeded');
-const SiteRequestApproval = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'SiteRequestApproval');
+const SignApproval = lazyRoute(() => import('@xchain-wallet/core/shared/approval/SignApproval.jsx'), 'SignApproval');
 const loadLinkHandoff = import.meta.glob('./routes/LinkHandoff.jsx')['./routes/LinkHandoff.jsx'];
 const LinkHandoff = loadLinkHandoff ? lazyRoute(loadLinkHandoff, 'LinkHandoff') : null;
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
@@ -361,6 +361,41 @@ function GatedDevVariantBadge({ state }) {
         <Suspense fallback={null}>
             <DevVariantBadge state={state} />
         </Suspense>
+    );
+}
+
+// Runs a site request link: the runner parks the approval, the shared sign
+// screen answers it, and the runner delivers the result and follows return.
+function SiteRequestRun({ request, onDone }) {
+    const [entry, setEntry] = useState(null);
+    const handle = useRef(null);
+    const doneRef = useRef(onDone);
+    doneRef.current = onDone;
+
+    useEffect(() => {
+        let alive = true;
+        import('./hostBridge.js').then(({ runSiteRequest }) => runSiteRequest(request, {
+            onApproval: (parked) => { if (alive) setEntry(parked); },
+            onDone: () => { if (alive) doneRef.current(); },
+        })).then((started) => {
+            if (alive) handle.current = started;
+            else started.cancel();
+        });
+        return () => {
+            alive = false;
+            handle.current?.cancel();
+        };
+    }, [request]);
+
+    if (!entry) return null;
+    return (
+        <SignApproval
+            key={entry.id}
+            id={entry.id}
+            kind={entry.kind}
+            payload={entry.payload}
+            onReject={() => handle.current?.cancel()}
+        />
     );
 }
 
@@ -1465,9 +1500,9 @@ function AppInner() {
             const routeNode = (() => {
             if (siteRequestRoute?.view === 'site-request-approval' && siteRequestRoute.request) {
                 return (
-                    <SiteRequestApproval
+                    <SiteRequestRun
                         request={siteRequestRoute.request}
-                        onReject={() => { setSiteRequestRoute(null); goBack(); }}
+                        onDone={() => { setSiteRequestRoute(null); goBack(); }}
                     />
                 );
             }

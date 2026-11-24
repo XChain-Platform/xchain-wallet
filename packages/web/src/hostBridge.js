@@ -192,6 +192,7 @@ import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import { createInAppApprovals } from '../../core/src/site_request/inAppApprovals.js';
+import { createSiteRequestRunner } from './approvalAdapter.js';
 
 const chainRegistry = defaultRegistry();
 const inAppApprovals = createInAppApprovals();
@@ -2610,6 +2611,14 @@ export async function sendMessage(type, request) {
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
     // with name+message alone dropped them.
     throw hydrateEnvelopeError(response.error);
+}
+
+/**
+ * @param {Record<string, unknown>} request
+ * @param {object} [hooks]
+ */
+export function runSiteRequest(request, hooks) {
+    return createSiteRequestRunner({ send: sendMessage, approvals: inAppApprovals, chainRegistry }).run(request, hooks);
 }
 
 // Settings preview for event sounds (§6 M4.1): the shared section dispatches
