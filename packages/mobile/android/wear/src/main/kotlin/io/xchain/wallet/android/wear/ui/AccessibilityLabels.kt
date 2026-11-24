@@ -13,8 +13,30 @@ object AccessibilityLabels {
             )
         }
 
+    fun requestPinned(display: RequestDisplay, text: (String) -> String): String =
+        display.pinned.spoken(text)
+
+    fun requestLines(
+        display: RequestDisplay,
+        text: (String) -> String,
+        time: (Long) -> String,
+    ): List<String> = display.lines.map { line ->
+        SpokenLabels.lines(
+            line.label?.spoken(text, time),
+            line.value.spoken(text, time),
+        )
+    }
+
     private fun BalanceText.spoken(text: (String) -> String, primary: Boolean = false): String =
         this.text ?: text(
             if (primary && key == "state.hidden") SpokenLabels.HIDDEN_KEY else requireNotNull(key),
         )
+
+    private fun AlertDisplayValue.spoken(text: (String) -> String): String =
+        this.text ?: text(requireNotNull(key))
+
+    private fun AlertDisplayValue.spoken(
+        text: (String) -> String,
+        time: (Long) -> String,
+    ): String = this.text ?: key?.let(text) ?: time(requireNotNull(at))
 }
