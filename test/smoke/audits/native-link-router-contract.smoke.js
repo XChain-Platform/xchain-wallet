@@ -87,9 +87,18 @@ const jsSchemes = /APP_SCHEMES\s*=\s*\[([^\]]+)\]/.exec(intake)?.[1]
 assert.ok(jsSchemes, 'the native JavaScript intake must state its accepted schemes');
 assert.deepEqual(iosSchemes, jsSchemes, 'iOS URL schemes must equal the mobile router intake schemes');
 
-const androidSchemes = [...manifest.matchAll(/<data android:scheme="([^"]+)" \/>/g)]
+const intentFilterBodies = [...manifest.matchAll(/<intent-filter(?:\s[^>]*)?>([\s\S]*?)<\/intent-filter>/g)]
+    .map((match) => match[1]);
+const androidSchemes = intentFilterBodies.flatMap((body) => [...body.matchAll(/<data android:scheme="([^"]+)" \/>/g)])
     .map((m) => `${m[1]}:`).sort();
 assert.deepEqual(androidSchemes, jsSchemes, 'Android custom schemes must equal the mobile router intake schemes');
+const androidQueries = /<queries>([\s\S]*?)<\/queries>/.exec(manifest)?.[1];
+assert.match(
+    androidQueries ?? '',
+    /<intent>\s*<action android:name="android\.intent\.action\.VIEW" \/>\s*<category android:name="android\.intent\.category\.BROWSABLE" \/>\s*<data android:scheme="https" \/>\s*<\/intent>/,
+    'Android must query the https VIEW BROWSABLE handler outside every intent filter',
+);
+assert.ok(intentFilterBodies.every((body) => !body.includes('<queries>')), 'Android queries must be outside every intent filter');
 
 for (const [source, pathConstant, pathCheck, label] of [
     [androidInbox, /PATH_PREFIX_WEB\s*=\s*"([^"]+)"/, 'encodedPath.startsWith(PATH_PREFIX_WEB)', 'Android'],
