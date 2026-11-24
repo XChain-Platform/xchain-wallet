@@ -163,24 +163,41 @@ struct RootView: View {
             hideAmounts: model.hideAmounts
         ) { redaction in
             NavigationStack(path: $path) {
-                root(redaction: redaction)
-                    .navigationDestination(for: WatchScreen.self) {
-                        destination($0, redaction: redaction)
-                    }
-                    .navigationDestination(for: BalanceSelection.self) {
-                        tokenDetail($0.id, redaction: redaction)
-                    }
-                    .navigationDestination(for: AlertSelection.self) {
-                        alertDetail($0.id)
-                    }
+                RootContent(model: model, redaction: redaction) {
+                    path.append($0)
+                }
             }
         }
         .task { model.activate() }
     }
 
+    static func tokenRoute(_ id: String) -> String { "/asset/\(id)" }
+    static func alertRoute(_ id: String) -> String { "/alerts/\(id)" }
+    static func requestRoute(_ id: String) -> String { "/request/\(id)" }
+}
+
+@MainActor
+struct RootContent: View {
+    @ObservedObject var model: RootViewModel
+    let redaction: AmbientRedactionState
+    let open: (WatchScreen) -> Void
+
+    var body: some View {
+        root
+            .navigationDestination(for: WatchScreen.self) {
+                destination($0)
+            }
+            .navigationDestination(for: BalanceSelection.self) {
+                tokenDetail($0.id)
+            }
+            .navigationDestination(for: AlertSelection.self) {
+                alertDetail($0.id)
+            }
+    }
+
     @ViewBuilder
-    private func root(redaction: AmbientRedactionState) -> some View {
-        if rootScreen == .balances {
+    private var root: some View {
+        if WatchScreenGraph.root(hasSnapshot: model.hasSnapshot, enabled: model.enabled) == .balances {
             VStack(spacing: 0) {
                 if model.snapshot?.request.id.isEmpty == false {
                     NavigationLink(value: WatchScreen.alertDetail) {
@@ -188,7 +205,7 @@ struct RootView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-                balances(redaction: redaction)
+                balances
             }
         } else {
             NotSetUpScreen(textKey: WatchScreenGraph.notSetUpTextKey(
@@ -198,23 +215,23 @@ struct RootView: View {
         }
     }
 
-    private func balances(redaction: AmbientRedactionState) -> some View {
+    private var balances: some View {
         BalancesScreen(
             snapshot: redactedSnapshot(redaction.redacted),
             mode: model.mode,
             phoneReachable: model.phoneReachable,
             now: Int64(Date().timeIntervalSince1970 * 1_000),
             setMode: model.setMode,
-            open: { path.append($0) }
+            open: open
         )
         .privacySensitive(redaction.redacted)
     }
 
     @ViewBuilder
-    private func destination(_ screen: WatchScreen, redaction: AmbientRedactionState) -> some View {
+    private func destination(_ screen: WatchScreen) -> some View {
         switch screen {
         case .balances:
-            balances(redaction: redaction)
+            balances
         case .alerts:
             AlertsScreen(
                 inbox: model.snapshot?.inbox ?? [],
@@ -224,7 +241,7 @@ struct RootView: View {
         case .alertDetail:
             if let request = model.snapshot?.request, !request.id.isEmpty {
                 AlertDetailScreen(request: request) {
-                    model.openOnPhone(Self.requestRoute(request.id))
+                    model.openOnPhone(RootView.requestRoute(request.id))
                 }
             }
         case .receive:
@@ -246,7 +263,7 @@ struct RootView: View {
     }
 
     @ViewBuilder
-    private func tokenDetail(_ id: String, redaction: AmbientRedactionState) -> some View {
+    private func tokenDetail(_ id: String) -> some View {
         if let row = model.snapshot?.rows.first(where: { $0.id == id }) {
             let artworkData = model.imageData(for: model.details[id]?.artworkHash)
             let display = TokenDetailPresenter.present(
@@ -260,7 +277,7 @@ struct RootView: View {
             TokenDetailScreen(
                 display: display,
                 imageData: artworkData,
-                onOpenOnPhone: { model.openOnPhone(Self.tokenRoute(id)) }
+                onOpenOnPhone: { model.openOnPhone(RootView.tokenRoute(id)) }
             )
             .onAppear { model.requestDetail(id) }
         }
@@ -270,14 +287,10 @@ struct RootView: View {
     private func alertDetail(_ id: String) -> some View {
         if let item = model.snapshot?.inbox.first(where: { $0.id == id }) {
             AlertDetailScreen(item: item) {
-                model.openOnPhone(Self.alertRoute(id))
+                model.openOnPhone(RootView.alertRoute(id))
             }
         }
     }
-
-    static func tokenRoute(_ id: String) -> String { "/asset/\(id)" }
-    static func alertRoute(_ id: String) -> String { "/alerts/\(id)" }
-    static func requestRoute(_ id: String) -> String { "/request/\(id)" }
 
     private func redactedSnapshot(_ redacted: Bool) -> Snapshot? {
         guard redacted, let snapshot = model.snapshot else { return model.snapshot }

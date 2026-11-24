@@ -101,6 +101,18 @@ final class RootViewTests: XCTestCase {
         }
     }
 
+    func testRootViewSourceWiresNavigationStackToRootContent() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("WatchApp/Screens/RootView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let stackStart = try XCTUnwrap(source.range(of: "NavigationStack(path: $path)"))
+        let stackSource = source[stackStart.lowerBound...].prefix(200)
+
+        XCTAssertTrue(stackSource.contains("RootContent(model: model, redaction: redaction)"))
+    }
+
     @MainActor
     private func makeModel() -> RootViewModel {
         RootViewModel(
@@ -176,7 +188,16 @@ final class RootViewTests: XCTestCase {
             state
         )
         let renderer = ImageRenderer(
-            content: RootView(model: model).frame(width: size.width, height: size.height)
+            content: RootContent(
+                model: model,
+                redaction: AmbientRedactionState(
+                    luminanceReduced: false,
+                    phoneHidden: model.snapshot?.hidden ?? false,
+                    hideAmounts: model.hideAmounts
+                ),
+                open: { _ in }
+            )
+            .frame(width: size.width, height: size.height)
         )
         renderer.scale = 1
         let image = try XCTUnwrap(renderer.cgImage, "\(state), \(size)")
