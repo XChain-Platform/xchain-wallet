@@ -17,55 +17,50 @@ export function AppHeaderSection() {
             id="app-header"
             title="App header"
             tag="CANONICAL persistent top bar"
-            kicker="The wallet's global top strip. The logo and active wallet name anchor the left; lock, pop-out, and the wallet menu sit on the right."
+            kicker="The wallet's global top strip. The logo anchors the left; an optional Notifications bell and the wallet menu button sit on the right."
         >
             <Guidance
-                what={<>A single flex row with the logo, plain wallet name, and optional "Signs on another phone" badge on the left. Lock appears where the sidebar does not provide it, and the pancake toggles the wallet menu. There is no Open in new window control in the bar or the menu.</>}
+                what={<>A single flex row. The logo is on the left. On the right an optional Notifications bell shows an unread count bubble (blue for ordinary items, red when one needs action) beside the wallet menu button. There is no wallet name, badge or Lock in the bar. Props: <code>onMenuToggle</code>, <code>menuOpen</code>, <code>onNotifications</code>, <code>notificationsUnread</code>, <code>notificationsActionRequired</code>, <code>showMenu</code>.</>}
                 when={<>Mounted by the layout wrapper, never by individual routes. It stays visible on every unlocked screen while route screens render <code>PageHeader</code> below it.</>}
-                whenNot={<>Locked, onboarding, and wizard flows that need full-screen focus. Modal overlays do not include it.</>}
-                sizing={<>Bar padding is <code>var(--xc-space-2) var(--xc-space-3)</code>. The logo is 58px wide and action buttons use the medium control tokens.</>}
-                variants={<>The wallet label and Lock button are optional. The pancake is always present and reflects the shared wallet menu state with <code>aria-expanded</code>.</>}
+                whenNot={<>Locked, onboarding, and wizard flows that need full-screen focus. Modal overlays do not include it. Boot and approval pages pass <code>showMenu={false}</code>.</>}
+                sizing={<>Padding is the page gutter (8px, 2px less above, below and at the end). The logo is 58px wide (44px on short landscape screens). Buttons are 44px.</>}
+                variants={<>The Notifications bell appears only when <code>onNotifications</code> is passed. <code>showMenu={false}</code> hides the menu on boot and approval pages.</>}
                 doRule={<>✓ Keep the pancake last · pass the command palette's open state and toggle function · keep every action as one outlined icon button</>}
-                dontRule={<>✗ Add account, network, or wallet pickers to the header · add an unread dot · add a separate overflow menu</>}
+                dontRule={<>✗ Add account, network, or wallet pickers to the header · add a separate overflow menu</>}
                 supersedes={<>The header settings popover and its action-row dropdown. Settings owns wallet, account, and network switching.</>}
             />
 
             <Markup>
-{`<AppHeader
-    activeWallet={{ id: walletId, name: 'Everyday wallet' }}
-    onLock={lock}
-    onMenuToggle={palette.togglePalette}
-    menuOpen={palette.open}
-/>`}
+{`<AppHeader onMenuToggle={toggleMenu} menuOpen={open} onNotifications={openAlerts} notificationsUnread={3} />`}
             </Markup>
 
-            <LiveExample label="Wallet name, lock, and menu">
+            <LiveExample label="Logo and menu">
                 <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
-                    <AppHeader
-                        activeWallet={{ id: 'wallet-example', name: 'Everyday wallet' }}
-                        onLock={() => {}}
-                        onMenuToggle={() => {}}
-                    />
+                    <AppHeader onMenuToggle={() => {}} />
                 </div>
             </LiveExample>
 
-            <LiveExample label="Open wallet menu">
+            <LiveExample label="Bell with unread count">
                 <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
-                    <AppHeader
-                        activeWallet={{ id: 'wallet-example', name: 'Everyday wallet' }}
-                        onMenuToggle={() => {}}
-                        menuOpen
-                    />
+                    <AppHeader onMenuToggle={() => {}} onNotifications={() => {}} notificationsUnread={3} />
                 </div>
             </LiveExample>
 
-            <LiveExample label="Wallet another phone signs for, without lock">
+            <LiveExample label="Bell needing action">
                 <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
-                    <AppHeader
-                        activeWallet={{ id: 'watch-wallet', name: 'Watch wallet' }}
-                        isWatcherMode
-                        onMenuToggle={() => {}}
-                    />
+                    <AppHeader onMenuToggle={() => {}} onNotifications={() => {}} notificationsUnread={3} notificationsActionRequired={1} />
+                </div>
+            </LiveExample>
+
+            <LiveExample label="Menu open">
+                <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
+                    <AppHeader onMenuToggle={() => {}} menuOpen />
+                </div>
+            </LiveExample>
+
+            <LiveExample label="Menu hidden (showMenu={false})">
+                <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
+                    <AppHeader showMenu={false} />
                 </div>
             </LiveExample>
         </Section>
