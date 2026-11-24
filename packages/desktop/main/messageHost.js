@@ -26,7 +26,10 @@
 // the Node-level smoke tests all resolve it the same way.
 import { createFileRefResolver } from '@xchain-wallet/core/flows/fileRefSource.js';
 import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
+import { createInAppApprovals } from '../../core/src/site_request/inAppApprovals.js';
 import { createPickedFileRefKind } from './pickedFileRefKind.js';
+
+const inAppApprovals = createInAppApprovals();
 
 /**
  * @typedef {Object} DesktopHostDeps
@@ -69,6 +72,7 @@ export function createDesktopMessageHost(deps) {
         get(target, property, receiver) {
             if (property === 'fileBlobs') return null;
             if (property === 'resolveFileRef') return resolveFileRef;
+            if (property === 'approvals') return target.approvals ?? inAppApprovals;
             return Reflect.get(target, property, receiver);
         },
     });

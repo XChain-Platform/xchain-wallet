@@ -21,7 +21,9 @@
 //
 //   - `xchainWalletBridge.sendMessage(message)`: request/response for
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
-//     extension popup + web shell wire format.
+//     extension popup + web shell wire format. The `siteRequest.return`
+//     and `siteRequest.callback` types instead use main's fixed delivery
+//     channel, with no Electron shell or fetch object crossing into renderer.
 //
 //   - `xchainWalletBridge.fileTokenOf(file)`. Turns a File the user picked
 //     into an opaque single-use token and its size. The preload reads the
@@ -133,6 +135,7 @@ const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
 const TREZOR_BRIDGE_CALL_CHANNEL = 'xchain:trezor-bridge-call';
 const TREZOR_BRIDGE_CLOSE_CHANNEL = 'xchain:trezor-bridge-close';
+const SITE_REQUEST_CHANNEL = 'xchain:site-request';
 // Matches main/trezorBridgeWindow.js CONNECT_METHODS: a call main refuses
 // throws here instead.
 const TREZOR_CONNECT_METHODS = ['getFeatures', 'getAddress', 'getPublicKey', 'signTransaction', 'signMessage'];
@@ -178,6 +181,33 @@ function validateMessage(args) {
         throw new TypeError(`${method}: type must be a non-empty string`);
     }
     return message;
+}
+
+function siteRequestCommand(message) {
+    if (message.type === 'siteRequest.return') {
+        assertRecord(message.type, message.request);
+        assertAllowedKeys(message.type, message.request, ['url']);
+        if (typeof message.request.url !== 'string' || message.request.url.length === 0) {
+            throw new TypeError(`${message.type}: url must be a non-empty string`);
+        }
+        return { type: 'return', url: message.request.url };
+    }
+    if (message.type === 'siteRequest.callback') {
+        assertRecord(message.type, message.request);
+        assertAllowedKeys(message.type, message.request, ['url', 'body']);
+        if (typeof message.request.url !== 'string' || message.request.url.length === 0) {
+            throw new TypeError(`${message.type}: url must be a non-empty string`);
+        }
+        if (!isRecord(message.request.body)) {
+            throw new TypeError(`${message.type}: body must be an object`);
+        }
+        return {
+            type: 'callback',
+            url: message.request.url,
+            body: message.request.body,
+        };
+    }
+    return null;
 }
 
 function validateOpenDetached(args) {
@@ -283,7 +313,11 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
      * @returns {Promise<import('./main/messageHost.js').IpcResponse>}   type-only: this sandboxed preload may require nothing but electron
      */
     sendMessage(message) {
-        return ipcRenderer.invoke(MESSAGE_CHANNEL, validateMessage(arguments));
+        message = validateMessage(arguments);
+        const command = siteRequestCommand(message);
+        return command === null
+            ? ipcRenderer.invoke(MESSAGE_CHANNEL, message)
+            : ipcRenderer.invoke(SITE_REQUEST_CHANNEL, command);
     },
     /**
      * Clear every wallet store this shell owns under userData (vault

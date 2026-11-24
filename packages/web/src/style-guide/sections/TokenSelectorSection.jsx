@@ -18,16 +18,16 @@ export function TokenSelectorSection() {
             id="token-selector"
             title="Token selector (Send / Receive picker)"
             tag="CANONICAL pick-an-asset page"
-            kicker="The full-page 'pick a coin or token' pattern behind Send and Receive: search, network, and All/Coins/Tokens filters dock above the shared balance list. Selecting a row hands {chainId, tick} to the host."
+            kicker="The full-page 'pick a coin or token' screen behind Send and Receive: the PageHeader carries one filter menu (search, network, and a Coins and tokens / Coins / Tokens dropdown); the shared balance list fills the page and selecting a row hands {chainId, tick} to the host."
         >
             <Guidance
-                what={<>A two-part stack: a toolbar with search, <code>NetworkFilter</code>, and pill segments, followed by the canonical <code>BalanceList</code>. The toolbar filters the list in place; there is no submit. Implemented once in <code>TokenPicker.jsx</code> and reused by Send and Receive via the <code>purpose</code> prop.</>}
-                when={<>Any screen whose only job is choosing one asset from everything the wallet can see. Send lists only spendable balances; Receive adds zero-balance networks and platform-wide token discovery. Keep the toolbar even for short lists so muscle memory holds.</>}
-                whenNot={<>Inline pickers inside a form (use the asset card that opens this page) · lists where rows carry actions other than "select" (balances tab uses the same card but with pin/hide affordances) · filter needs beyond search + kind → this page's toolbar swaps the segments for a network dropdown (see the address list pattern).</>}
-                sizing={<>Toolbar gap <code>--xc-space-2</code>, bottom margin <code>--xc-space-3</code>. Search: <code>--xc-text-sm</code>, padding <code>--xc-space-2 --xc-space-3</code>, <code>--xc-radius-md</code>, <code>--xc-border-strong</code>. Segments: 999px pill, active fill <code>--xc-accent-primary</code>. Rows use the shared balance-list sizing.</>}
+                what={<>A nested <code>PageHeader</code> whose trailing slot holds <code>ListFilterMenu</code> (search, network, asset-kind <code>IconSelect</code>), then the canonical <code>BalanceList</code>. The filter narrows the list in place; there is no submit. Implemented once in <code>TokenPicker.jsx</code>, reused by Send, Receive and token forms through <code>purpose</code> (<code>'send'</code> | <code>'receive'</code>) and <code>rows</code> (a caller's own eligible tokens).</>}
+                when={<>Any screen whose only job is choosing one asset from everything the wallet can see. Send lists only spendable balances; Receive adds zero-balance networks and platform-wide token discovery. Keep the filter menu even for short lists so muscle memory holds.</>}
+                whenNot={<>Inline pickers inside a form (use the asset card that opens this page) · lists where rows carry actions other than "select" (balances tab uses the same card but with pin/hide affordances).</>}
+                sizing={<>No toolbar of its own: the list takes the page gutter. The asset-kind control is an <code>IconSelect</code> size <code>md</code>.</>}
                 doRule={<>✓ Filter as the user types · preserve the user's filters when controlled props are supplied · use <code>kindLocked</code> when the calling action accepts only coins or only tokens · show the empty-filter state inside the list page</>}
-                dontRule={<>✗ Add sort controls (the list is sorted chain-then-asset, pinned first, always) · turn segments into a dropdown when there are only 2-3 kinds · mix selector rows with action rows in one card</>}
-                supersedes={<>The toolbar rules in <code>TokenPicker.module.css</code> (<code>.toolbar</code>/<code>.search</code>/<code>.kindSegments</code>) plus <code>BalanceList</code> for the card. The dispensers list reuses this page shape with a network dropdown in place of the segments.</>}
+                dontRule={<>✗ Add sort controls (the list is sorted chain-then-asset, pinned first, always) · draw your own toolbar above the list · mix selector rows with action rows in one card</>}
+                supersedes={<>The toolbar rules that used to live in <code>TokenPicker.module.css</code>; the filter is the shared <code>ListFilterMenu</code>.</>}
             />
 
             <Markup>

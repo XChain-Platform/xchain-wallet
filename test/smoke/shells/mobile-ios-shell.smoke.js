@@ -54,6 +54,12 @@ for (const rel of [
     'App/App.xcodeproj/project.pbxproj',
     'App/App/Info.plist',
     'App/App/App.entitlements',
+    'App/App/watch/WatchSessionHost.swift',
+    'App/App/notify/XChainNotifyPlugin.swift',
+    'App/App/activity/ActivityCheckStore.swift',
+    'App/App/fold/FoldPublisher.swift',
+    'App/AppTests/Native/NativeSmokeTests.swift',
+    'App/AppUITests/Native/NativeUISmokeTests.swift',
     'App/CapApp-SPM/Package.swift',
     '.gitignore',
 ]) {
@@ -71,6 +77,7 @@ const watchScheme = readFileSync(
 );
 const watchAppSource = readFileSync(join(ios, 'App', 'WatchApp', 'XChainWatchApp.swift'), 'utf8');
 const watchTestsSource = readFileSync(join(ios, 'App', 'WatchAppTests', 'SmokeTests.swift'), 'utf8');
+const nativeTestsSource = readFileSync(join(ios, 'App', 'AppTests', 'Native', 'NativeSmokeTests.swift'), 'utf8');
 const watchSharedSource = readFileSync(join(ios, 'App', 'WatchShared', 'WatchShared.swift'), 'utf8');
 const watchWidgetsSource = readFileSync(join(ios, 'App', 'WatchWidgets', 'WatchWidgetsBundle.swift'), 'utf8');
 const watchAppEntitlements = readFileSync(join(ios, 'App', 'WatchApp', 'WatchApp.entitlements'), 'utf8');
@@ -107,6 +114,12 @@ assert.match(pbxproj, /path = WatchApp;/, 'missing synchronized WatchApp source 
 assert.match(pbxproj, /path = WatchAppTests;/, 'missing synchronized WatchAppTests source group');
 assert.match(pbxproj, /path = WatchShared;/, 'missing synchronized shared watch source group');
 assert.match(pbxproj, /path = WatchWidgets;/, 'missing synchronized widget source group');
+assert.match(pbxproj, /path = App\/watch;/, 'missing synchronized phone watch source group');
+assert.match(pbxproj, /path = App\/notify;/, 'missing synchronized phone notify source group');
+assert.match(pbxproj, /path = App\/activity;/, 'missing synchronized phone activity source group');
+assert.match(pbxproj, /path = App\/fold;/, 'missing synchronized phone fold source group');
+assert.match(pbxproj, /path = AppTests\/Native;/, 'missing synchronized native unit-test source group');
+assert.match(pbxproj, /path = AppUITests\/Native;/, 'missing synchronized native UI-test source group');
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch;/);
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.tests;/);
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.widgets;/);
@@ -126,6 +139,7 @@ assert.match(watchScheme, /BlueprintName = "WatchApp"/);
 assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
 assert.match(watchAppSource, /@main[\s\S]*Open XChain Wallet on your phone/);
 assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
+assert.match(nativeTestsSource, /final class NativeSmokeTests: XCTestCase/);
 assert.match(watchSharedSource, /enum WatchShared/);
 assert.match(watchWidgetsSource, /@main[\s\S]*struct WatchWidgetsBundle: WidgetBundle/);
 for (const watchEntitlements of [watchAppEntitlements, watchWidgetsEntitlements]) {
