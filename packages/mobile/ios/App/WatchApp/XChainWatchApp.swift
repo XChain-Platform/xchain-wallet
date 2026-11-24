@@ -187,7 +187,11 @@ struct XChainWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NotificationRoutingRootView(notifications: appDelegate)
+            if appDelegate.response == nil {
+                RootView()
+            } else {
+                NotificationRoutingRootView(notifications: appDelegate)
+            }
         }
         Self.notificationScenes
     }
