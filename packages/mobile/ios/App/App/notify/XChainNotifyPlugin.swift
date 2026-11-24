@@ -18,12 +18,30 @@ public class XChainNotifyPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     var scheduler = NotifySchedule()
+    private lazy var actions = NotifyActions(
+        readConfig: {
+            guard let store = try? ActivityCheckStore() else { return nil }
+            return ActivityCheckFiles(directory: store.directory).readConfig()
+        },
+        onAction: { [weak self] payload in
+            self?.notifyListeners(
+                NotifyActionEvent.eventName,
+                data: payload,
+                retainUntilConsumed: true
+            )
+        }
+    )
+
+    override public func load() {
+        actions.register()
+    }
 
     @objc func post(_ call: CAPPluginCall) {
         guard let args = NotifyPostArgs.parse(call.options as? [String: Any] ?? [:]) else {
             call.reject("post arguments are invalid")
             return
         }
+        actions.register()
         UNUserNotificationCenter.current().add(NotifyContent.request(args, trigger: nil)) {
             if let error = $0 {
                 call.reject("post failed", nil, error)
@@ -38,6 +56,7 @@ public class XChainNotifyPlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("schedule arguments are invalid")
             return
         }
+        actions.register()
         scheduler.schedule(
             id: args.post.id,
             atMs: args.atMs,
