@@ -39,7 +39,14 @@ enum RealOnboarding {
             return failed("confirm password field", app: app)
         }
         confirmField.typeText(password)
-        confirmField.typeText("\n")
+        guard submitPasswordForm(
+            app,
+            passwordField: passwordField,
+            confirmField: confirmField,
+            password: password
+        ) else {
+            return failed("password submission", app: app)
+        }
 
         let reveal = button(app, named: "Reveal Recovery Phrase")
         if !reveal.waitForExistence(timeout: 10) {
@@ -263,6 +270,66 @@ enum RealOnboarding {
         guard element.isHittable && element.isEnabled else { return false }
         element.tap()
         return true
+    }
+
+    private static func submitPasswordForm(
+        _ app: XCUIApplication,
+        passwordField: XCUIElement,
+        confirmField: XCUIElement,
+        password: String
+    ) -> Bool {
+        let submitKey = keyboardSubmitKey(app)
+        if submitKey.exists {
+            guard waitUntilHittable(submitKey, timeout: 5) else { return false }
+            submitKey.tap()
+        } else {
+            confirmField.typeText("\n")
+        }
+
+        guard
+            let passwordLength = secureEntryLength(passwordField),
+            let confirmLength = secureEntryLength(confirmField),
+            confirmLength > passwordLength
+        else {
+            return true
+        }
+
+        confirmField.press(forDuration: 1.0)
+        let selectAll = namedElement(
+            app.descendants(matching: .any),
+            label: "Select All",
+            comparison: "CONTAINS[c]"
+        )
+        if waitUntilHittable(selectAll, timeout: 2) {
+            selectAll.tap()
+        } else {
+            confirmField.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+        }
+        confirmField.typeText(password)
+        if let retriedLength = secureEntryLength(confirmField), retriedLength > passwordLength {
+            return false
+        }
+
+        let retrySubmitKey = keyboardSubmitKey(app)
+        guard waitUntilHittable(retrySubmitKey, timeout: 5) else { return false }
+        retrySubmitKey.tap()
+        return true
+    }
+
+    private static func keyboardSubmitKey(_ app: XCUIApplication) -> XCUIElement {
+        app.keyboards.buttons.matching(
+            NSPredicate(
+                format: "label ==[c] 'Return' OR label ==[c] 'Done' OR label ==[c] 'Go'"
+            )
+        ).firstMatch
+    }
+
+    private static func secureEntryLength(_ field: XCUIElement) -> Int? {
+        guard let value = field.value as? String else { return nil }
+        if let reportedLength = Int(value.split(separator: " ").first ?? "") {
+            return reportedLength
+        }
+        return value.count
     }
 
     private static func tickNamedControl(_ app: XCUIApplication, label: String) -> Bool {
