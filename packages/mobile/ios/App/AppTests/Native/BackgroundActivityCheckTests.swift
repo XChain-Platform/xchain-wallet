@@ -78,6 +78,11 @@ final class BackgroundActivityCheckTests: XCTestCase {
 
     func testUsesEphemeralGetRequestSettings() throws {
         let configuration = BackgroundActivityCheck.sessionConfiguration()
+        XCTAssertFalse(configuration.urlCache === URLCache.shared)
+        XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
+        XCTAssertFalse(
+            configuration.urlCredentialStorage === URLCredentialStorage.shared
+        )
         XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
         XCTAssertEqual(configuration.timeoutIntervalForRequest, 10)
         XCTAssertEqual(configuration.timeoutIntervalForResource, 10)
