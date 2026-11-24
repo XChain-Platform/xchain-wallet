@@ -76,6 +76,10 @@ const watchScheme = readFileSync(
     'utf8',
 );
 const watchAppSource = readFileSync(join(ios, 'App', 'WatchApp', 'XChainWatchApp.swift'), 'utf8');
+const watchRootSource = readFileSync(
+    join(ios, 'App', 'WatchApp', 'Screens', 'RootView.swift'),
+    'utf8',
+);
 const watchTestsSource = readFileSync(join(ios, 'App', 'WatchAppTests', 'SmokeTests.swift'), 'utf8');
 const nativeTestsSource = readFileSync(join(ios, 'App', 'AppTests', 'Native', 'NativeSmokeTests.swift'), 'utf8');
 const watchSharedSource = readFileSync(join(ios, 'App', 'WatchShared', 'WatchShared.swift'), 'utf8');
@@ -137,7 +141,8 @@ assert.match(
 );
 assert.match(watchScheme, /BlueprintName = "WatchApp"/);
 assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
-assert.match(watchAppSource, /@main[\s\S]*Open XChain Wallet on your phone/);
+assert.match(watchAppSource, /@main[\s\S]*RootView\(\)/);
+assert.match(watchRootSource, /NotSetUpScreen\([\s\S]*state\.openWalletOnPhone/);
 assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
 assert.match(nativeTestsSource, /final class NativeSmokeTests: XCTestCase/);
 assert.match(watchSharedSource, /enum WatchShared/);
