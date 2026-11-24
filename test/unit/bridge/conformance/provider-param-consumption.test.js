@@ -17,14 +17,7 @@ const executableHandlerSource = handlersSource
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*$/gm, '');
 
-const NOT_HONOURED = {
-    SignActionParams: {
-        feeStrategyHint: 'Deprecated because pages cannot choose bridge action fees.',
-    },
-    SignMessageParams: {
-        displayLabel: 'Cosmetic display hint is not rendered by the wallet.',
-    },
-};
+const PARAM_INTERFACES = ['SignActionParams', 'SignMessageParams'];
 
 function interfaceBody(name) {
     const match = bridgeSpecSource.match(
@@ -45,23 +38,12 @@ function isReadByHandler(field) {
 }
 
 describe('provider parameter consumption', () => {
-    for (const interfaceName of Object.keys(NOT_HONOURED)) {
+    for (const interfaceName of PARAM_INTERFACES) {
         it(`accounts for every ${interfaceName} field`, () => {
             const fields = interfaceFields(interfaceName);
             const unread = fields.filter((field) => !isReadByHandler(field));
-            const allowlisted = Object.keys(NOT_HONOURED[interfaceName]).sort();
 
-            expect(unread).toEqual(allowlisted);
-            for (const field of allowlisted) expect(isReadByHandler(field), field).toBe(false);
+            expect(unread).toEqual([]);
         });
     }
-
-    it('marks ignored SignActionParams fields as deprecated', () => {
-        const body = interfaceBody('SignActionParams');
-        for (const field of Object.keys(NOT_HONOURED.SignActionParams)) {
-            const docs = body.match(new RegExp(`/\\*\\*([\\s\\S]*?)\\*/\\s*${field}\\??:`));
-            expect(docs, `${field} has a documentation block`).not.toBeNull();
-            expect(docs[1], field).toContain('@deprecated');
-        }
-    });
 });

@@ -52,7 +52,11 @@ function bindMessagingPubkeyLookups(sdk, descriptor) {
  * @property {(address: string, network?: string) => { valid: boolean, type: string|null, network: string|null, error: string|null }} wallet.validateAddress
  * @property {(txHex: string, encoder?: unknown) => Promise<{ txid: string }>} wallet.broadcastTx
  * @property {Object} auth
- * @property {(message: string, wif: string, opts?: { segwitNative?: boolean, segwitRedeemScript?: boolean, format?: 'bip322-simple' }) => string} auth.signMessage
+ * @property {(message: string, wif: string, opts?: {
+ *     format?: 'bip322-simple',
+ *     segwitNative?: boolean,
+ *     segwitRedeemScript?: boolean
+ * }) => string} auth.signMessage
  * @property {(address: string, message: string, signature: string, network?: string) => { valid: boolean, error: string|null }} auth.verifyMessage
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]

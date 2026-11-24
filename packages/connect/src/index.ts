@@ -220,8 +220,6 @@ export interface SignMessageParams {
     chainId: ChainId;
     address: string;
     message: string;
-    // Optional hint for the wallet's plain-English display. Purely cosmetic.
-    displayLabel?: string;
 }
 
 export interface SignMessageSuccess {
@@ -264,13 +262,6 @@ export interface SignActionParams<TParams = Record<string, unknown>> {
     chainId: ChainId;
     action: string;
     params: TParams;
-    /**
-     * @deprecated Accepted and ignored. Bridge actions use the wallet's fee
-     * settings; a page cannot choose the fee and the sign screen has no fee
-     * strategy picker. Kept so existing callers compile until the next major
-     * bridge-spec version.
-     */
-    feeStrategyHint?: 'low' | 'normal' | 'fast';
 }
 
 export interface SignActionSuccess {
@@ -324,9 +315,6 @@ export interface SignPsbtParams {
     // Required and non-empty. Each entry names an input the wallet may sign
     // and must resolve to an account in the site's connect grant.
     signingPaths: PsbtSigningPath[];
-    // signPsbt never broadcasts. Omit this field or pass false, then
-    // broadcast the returned txHex. true is refused with INVALID_PARAMS.
-    broadcast?: boolean;
 }
 
 export interface SignPsbtSuccess {
@@ -334,9 +322,6 @@ export interface SignPsbtSuccess {
     signedPsbtHex: string;
     // Present only when the wallet finalized the PSBT.
     txHex?: string;
-    // Present only when the wallet broadcast the tx. signPsbt currently
-    // never broadcasts, so this field is not set.
-    txid?: string;
 }
 
 export type SignPsbtResult = SignPsbtSuccess | BridgeErrorResult;
@@ -524,7 +509,6 @@ export {
     isXChainAvailable,
     getProvider,
     generateNonce,
-    makeSignInParams,
     validateSignInChallenge,
 } from './client.ts';
 export type { GetProviderOpts } from './client.ts';

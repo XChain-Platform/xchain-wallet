@@ -321,12 +321,6 @@ export class MockXChainProvider implements XChainProvider {
         if (blockedOrThrottled) return blockedOrThrottled;
         const shapeError = signingPathsError(params.signingPaths);
         if (shapeError) return { ok: false, error: 'INVALID_PARAMS', message: shapeError };
-        if (params.broadcast !== undefined && typeof params.broadcast !== 'boolean') {
-            return { ok: false, error: 'INVALID_PARAMS', message: 'broadcast must be a boolean' };
-        }
-        if (params.broadcast === true) {
-            return { ok: false, error: 'INVALID_PARAMS', message: 'signPsbt does not broadcast' };
-        }
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         const signed = params.psbtHex + 'deadbeef';
         return { ok: true, signedPsbtHex: signed, txHex: 'mock-txhex' };

@@ -23,8 +23,8 @@
 //     uninstall();
 
 import {
+    generateNonce,
     getProvider,
-    makeSignInParams,
     parseSignInChallenge,
     validateSignInChallenge,
     type BridgeErrorCode,
@@ -85,7 +85,7 @@ export async function runExample(): Promise<ExampleReport> {
 
         await provider.getBalances(chainId, fromAddress);
 
-        const signInParams = makeSignInParams(APP_ID);
+        const signInParams = { appId: APP_ID, nonce: generateNonce() };
         const signIn = await provider.signIn(signInParams);
         if (signIn.ok) {
             // A challenge that will not parse is a FAILURE, never a pass. Written as
