@@ -11,6 +11,7 @@
 // A fold or unfold resizes the window with a confirm open: the confirm and
 // every form value must survive, and the Approve settle must re-arm.
 
+import { bech32 } from '@scure/base';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 import { loadDuoViewports } from '../../fixtures/duoMeasured.js';
@@ -65,4 +66,66 @@ test('an open confirm and its form values survive a Duo resize and the settle re
         const after = await captureFoldState(page);
         expect(foldSurvivalFailures(first, after)).toEqual([]);
     }
+});
+
+const CONTACT_COUNT = 16;
+const DELETE_CONFIRM = { confirmSelector: '[role="dialog"][aria-labelledby]' };
+
+function contactAddress(seed) {
+    return bech32.encode('bc', [0, ...bech32.toWords(new Uint8Array(20).fill(seed))]);
+}
+
+async function addContact(page, name, seed) {
+    await page.getByRole('button', { name: 'Add contact', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(name);
+    await page.getByRole('textbox', { name: 'Address', exact: true }).fill(contactAddress(seed));
+    await page.getByRole('button', { name: 'Create contact', exact: true }).click();
+    await expect(page.getByRole('list', { name: 'Contacts' }).getByRole('button', { name, exact: true })).toBeVisible();
+}
+
+test('one Duo resize keeps form values: the contacts filter text, scroll, selected detail and open confirm', async ({ page }) => {
+    test.setTimeout(10 * 60 * 1000);
+    page.setDefaultTimeout(30 * 1000);
+    const [measured] = loadDuoViewports();
+    const opened = { ...measured, state: 'open-portrait', width: measured.width * 2 };
+    const widened = { ...opened, width: opened.width + 24 };
+
+    await page.setViewportSize({ width: opened.width, height: opened.height });
+    await createWallet(page);
+    await setNativeFold(page, foldPayloadFor(opened));
+    await palette(page, 'Contacts');
+
+    for (let i = 1; i <= CONTACT_COUNT; i += 1) await addContact(page, `Fold ${String(i).padStart(2, '0')}`, i);
+
+    const confirm = page.getByRole('dialog', { name: 'Delete Fold 12 from contacts?' });
+    const list = page.getByRole('list', { name: 'Contacts' });
+    const listRegion = page.locator('[data-list-detail] > div:not([role]) > [role="region"]');
+    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
+    const search = page.getByRole('searchbox', { name: 'Search contacts' });
+    await search.fill('Fold');
+    await expect(search).toHaveValue('Fold');
+    await page.keyboard.press('Escape');
+
+    const target = list.getByRole('button', { name: 'Fold 12', exact: true });
+    await target.scrollIntoViewIfNeeded();
+    await target.click();
+    await expect(page.getByRole('region', { name: 'Fold 12', exact: true })).toBeVisible();
+    await page.getByRole('list', { name: 'Contact actions' }).getByRole('button', { name: /^Delete\b/ }).click();
+    await expect(confirm).toBeVisible();
+
+    const before = await captureFoldState(page, DELETE_CONFIRM);
+    expect(before.scrollTop, `contacts list scrolled away from the top (measured ${before.scrollTop})`).toBeGreaterThan(0);
+    expect(before.confirmOpen).toBe(true);
+    expect(before.detailKey, 'a selected contact detail').toBeTruthy();
+
+    await foldTo(page, widened);
+    await expect(confirm).toBeVisible();
+
+    const after = await captureFoldState(page, DELETE_CONFIRM);
+    expect(foldSurvivalFailures(before, after), `before ${JSON.stringify(before)} after ${JSON.stringify(after)}`).toEqual([]);
+    await expect(listRegion).toBeVisible();
+    await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(confirm).toBeHidden();
+    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
+    await expect(page.getByRole('searchbox', { name: 'Search contacts' })).toHaveValue('Fold');
 });
