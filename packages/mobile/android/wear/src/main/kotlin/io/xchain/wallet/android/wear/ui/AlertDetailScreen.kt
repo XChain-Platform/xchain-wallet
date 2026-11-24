@@ -62,9 +62,23 @@ internal fun AlertDetailScreen(
                 },
             )
         }
-        item { Text(alert?.title ?: text("w4.title")) }
-        alert?.body?.let { body -> item { Text(body) } }
-        alert?.let { item { Text(formatAt(it.at)) } }
+        if (alert == null) {
+            item { Text(text("w4.title")) }
+        } else {
+            val time = formatAt(alert.at)
+            item {
+                Column(
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = AccessibilityLabels.alertDetail(alert, time)
+                    },
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(alert.title)
+                    alert.body?.let { Text(it) }
+                    Text(time)
+                }
+            }
+        }
         request?.let { display ->
             val labels = AccessibilityLabels.requestLines(display, requestText::getValue, formatAt)
             itemsIndexed(display.lines) { index, line ->

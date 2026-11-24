@@ -23,6 +23,8 @@ object AccessibilityLabels {
     fun alertRow(alert: AlertDisplay, time: String): String =
         SpokenLabels.lines(alert.title, alert.body, time)
 
+    fun alertDetail(alert: AlertDisplay, time: String): String = alertRow(alert, time)
+
     fun requestLines(
         display: RequestDisplay,
         text: (String) -> String,

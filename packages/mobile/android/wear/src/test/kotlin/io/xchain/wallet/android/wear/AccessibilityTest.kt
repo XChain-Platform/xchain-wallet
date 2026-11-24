@@ -134,6 +134,10 @@ class AccessibilityTest {
             content = { AlertsScreen(AlertsDisplay(listOf(alert), null, null), NOW, {}, {}, ::text) },
             verify = { assertLabel(AccessibilityLabels.alertRow(alert, "2 h ago")) },
         )
+        show(
+            content = { AlertDetailScreen(alert, null, {}, ::text) { "at:$it" } },
+            verify = { assertLabel(AccessibilityLabels.alertDetail(alert, "at:${alert.at}")) },
+        )
 
         val request = RequestDisplay(
             AlertDisplayValue(key = "w1.requestWaiting"),
