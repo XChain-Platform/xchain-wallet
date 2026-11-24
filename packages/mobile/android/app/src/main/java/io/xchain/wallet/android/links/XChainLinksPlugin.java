@@ -56,6 +56,7 @@ public class XChainLinksPlugin extends Plugin {
     private static final String SCHEME_WEB = "https";
     private static final String HOST_WEB = "xchain.io";
     private static final String PATH_PREFIX_WEB = "/wallet/link/";
+    private static final int MAX_LINK_LENGTH = 16384;
 
     /**
      * Marks an Intent this plugin has already taken the link out of.
@@ -131,6 +132,7 @@ public class XChainLinksPlugin extends Plugin {
         if (intent == null) return null;
         Uri data = intent.getData();
         if (data == null) return null;
+        if (data.toString().length() > MAX_LINK_LENGTH) return null;
         String scheme = data.getScheme();
         if (scheme == null) return null;
         // Already taken out of this Intent (see EXTRA_CONSUMED). Android
@@ -152,6 +154,13 @@ public class XChainLinksPlugin extends Plugin {
                 && HOST_WEB.equalsIgnoreCase(data.getHost())
                 && encodedPath != null
                 && encodedPath.startsWith(PATH_PREFIX_WEB)) {
+            intent.putExtra(EXTRA_CONSUMED, true);
+            return data.toString();
+        }
+        if (SCHEME_WEB.equalsIgnoreCase(scheme)
+                && LinkIntakeRule.HOST_WALLET.equalsIgnoreCase(data.getHost())
+                && encodedPath != null
+                && encodedPath.startsWith(LinkIntakeRule.PATH_PREFIX_WALLET)) {
             intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }

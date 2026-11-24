@@ -216,3 +216,56 @@ export function pbxprojFacts(text) {
         copyPhases,
     };
 }
+
+export function watchTargetsStableFailures(firstText, secondText, options) {
+    const watchTargets = options?.watchTargets;
+    if (
+        !Array.isArray(watchTargets)
+        || watchTargets.length === 0
+        || watchTargets.some((name) => typeof name !== 'string' || name.length === 0)
+    ) {
+        throw new TypeError('watchTargets must be a non-empty array of non-empty names');
+    }
+
+    const firstProject = parsePbxproj(firstText);
+    const secondProject = parsePbxproj(secondText);
+    const firstObjects = firstProject.objects ?? {};
+    const secondObjects = secondProject.objects ?? {};
+    const secondTargets = Object.values(secondObjects)
+        .filter((object) => object.isa === 'PBXNativeTarget');
+    const secondTargetNames = new Set(secondTargets.map((target) => target.name));
+    const groupPaths = (objects) => Object.values(objects)
+        .filter((object) => object.isa === 'PBXFileSystemSynchronizedRootGroup')
+        .map((group) => group.path);
+    const firstGroupPaths = groupPaths(firstObjects).sort();
+    const secondGroupPaths = groupPaths(secondObjects);
+    const secondGroupPathSet = new Set(secondGroupPaths);
+    const hasCopyPhase = (targetName, matchesPhase, embeddedPath) => {
+        const target = secondTargets.find((candidate) => candidate.name === targetName);
+        return (target?.buildPhases ?? []).some((reference) => {
+            const phase = secondObjects[reference];
+            return phase?.isa === 'PBXCopyFilesBuildPhase'
+                && matchesPhase(phase)
+                && (phase.files ?? []).some((fileReference) => {
+                    const buildFile = secondObjects[fileReference];
+                    return secondObjects[buildFile?.fileRef]?.path === embeddedPath;
+                });
+        });
+    };
+
+    const failures = [];
+    if (secondText !== firstText) failures.push('bytes');
+    if (Number(secondProject.objectVersion) !== 77) failures.push('objectVersion');
+    failures.push(...watchTargets
+        .filter((name) => !secondTargetNames.has(name))
+        .map((name) => `target:${name}`));
+    failures.push(...firstGroupPaths
+        .filter((path) => !secondGroupPathSet.has(path))
+        .map((path) => `group:${path}`));
+    if (secondGroupPaths.length === 0) failures.push('groups');
+    if (!hasCopyPhase('App', (phase) => Number(phase.dstSubfolderSpec) === 16
+        && phase.dstPath === '$(CONTENTS_FOLDER_PATH)/Watch', 'WatchApp.app')) failures.push('embed');
+    if (!hasCopyPhase('WatchApp', (phase) => Number(phase.dstSubfolderSpec) === 13,
+        'WatchWidgets.appex')) failures.push('widgets-embed');
+    return failures;
+}

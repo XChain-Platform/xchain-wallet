@@ -30,7 +30,7 @@ export function DialogsSection() {
                 what={<><code>&lt;NoticeModal title message confirmLabel onClose /&gt;</code> and <code>&lt;ConfirmModal title message confirmLabel cancelLabel danger onConfirm onCancel /&gt;</code> from <code>@xchain-wallet/core/shared/components/</code>. ConfirmModal focuses Cancel first, so a destructive action is never one stray Enter away; <code>useConfirmModal</code> gives <code>await confirm(...)</code> at the call site.</>}
                 when={<>NoticeModal: a quick result where a result screen would be overkill (message sent, order placed). ConfirmModal: replace every <code>window.confirm()</code>.</>}
                 whenNot={<>Signing or approving a transaction (the full ConfirmActionModal screen) · an error the user must fix in a form (StatusMessage in the form) · a result the user has already moved on from (toast).</>}
-                sizing={<>Panel 320px max, <code>--xc-space-4</code> padding, buttons full width. The same size on every platform; on a phone it is inset by <code>--xc-space-4</code> from the edges.</>}
+                sizing={<>Panel 320px max, <code>--xc-card-pad</code> (8px) padding, buttons full width. The same size on every platform. ConfirmModal also takes <code>busy</code>, <code>error</code> and <code>confirmIcon</code>.</>}
                 doRule={<>✓ Title is the question or the result ("Remove this contact?") · <code>danger</code> when confirming removes or spends something</>}
                 dontRule={<>✗ Native <code>alert()</code> / <code>confirm()</code> · a long message (link to a screen instead) · three buttons</>}
             />

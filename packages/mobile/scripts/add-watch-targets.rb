@@ -39,6 +39,14 @@ def add_synchronized_group(project, target, path)
   target.file_system_synchronized_groups << group unless target.file_system_synchronized_groups.include?(group)
 end
 
+def synchronize_existing_group(project, target, root, path)
+  return add_synchronized_group(project, target, path) if Dir.exist?(File.join(root, path))
+
+  group_class = Xcodeproj::Project::Object::PBXFileSystemSynchronizedRootGroup
+  group = project.objects.find { |object| object.is_a?(group_class) && object.path == path }
+  group&.remove_from_project
+end
+
 def dependency_named?(host, name)
   host.dependencies.any? do |dependency|
     dependency.name == name || dependency.target&.name == name || dependency.target_proxy&.remote_info == name
@@ -142,6 +150,19 @@ add_target_dependency(watch_tests, watch_app)
 
 phone_app = project.targets.find { |target| target.name == 'App' }
 abort('add-watch-targets: no App target') unless phone_app
+phone_root = File.dirname(project_path)
+%w[App/watch App/notify App/activity App/fold].each do |path|
+  synchronize_existing_group(project, phone_app, phone_root, path)
+end
+
+phone_tests = project.targets.find { |target| target.name == 'AppTests' }
+abort('add-watch-targets: no AppTests target') unless phone_tests
+synchronize_existing_group(project, phone_tests, phone_root, 'AppTests/Native')
+
+phone_ui_tests = project.targets.find { |target| target.name == 'AppUITests' }
+abort('add-watch-targets: no AppUITests target') unless phone_ui_tests
+synchronize_existing_group(project, phone_ui_tests, phone_root, 'AppUITests/Native')
+
 embed_target(phone_app, watch_app, 'Embed Watch Content', '16', '$(CONTENTS_FOLDER_PATH)/Watch')
 
 project.instance_variable_set(:@object_version, '77')
