@@ -197,6 +197,13 @@
 			path = AppUITests/Native;
 			sourceTree = "<group>";
 		};
+		A08800000000000000000001 /* App/sounds */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = App/sounds;
+			sourceTree = "<group>";
+		};
 		A900500EC4A558ADCBF5461C /* WatchWidgets */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -435,6 +442,7 @@
 				EFBE8F0AC56248CAA030CCA1 /* App/notify */,
 				3978BEA267B10830B5F9B28A /* App/activity */,
 				AC394D0E4E19843C922657A8 /* App/fold */,
+				A08800000000000000000001 /* App/sounds */,
 			);
 			name = App;
 			packageProductDependencies = (

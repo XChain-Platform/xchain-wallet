@@ -658,8 +658,9 @@ describe('SignApproval untrusted text', () => {
         fireEvent.click(screen.getByRole('option', { name: /^bcrt1qsecondsecondsecond/ }));
         expect(screen.getByRole('button', { name: 'Sign in as: bcrt1qsecondsecondsecond' })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign In' }).disabled).toBe(false));
-        const approve = screen.getByRole('button', { name: 'Sign In' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' }).disabled).toBe(false));
+        expect(screen.queryByRole('button', { name: 'Sign In' })).not.toBeInTheDocument();
+        const approve = screen.getByRole('button', { name: 'Approve' });
         approve.focus();
         fireEvent.click(approve);
         await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledTimes(1));
@@ -684,10 +685,10 @@ describe('SignApproval untrusted text', () => {
         );
         expect(await screen.findByText(/no address it may sign in with/i)).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
-        // G130: Sign In keeps its colour; the tap names what is missing.
-        const signIn = screen.getByRole('button', { name: 'Sign In' });
-        expect(signIn.disabled).toBe(false);
-        fireEvent.click(signIn);
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        expect(screen.queryByRole('button', { name: 'Sign In' })).not.toBeInTheDocument();
+        expect(approve.disabled).toBe(false);
+        fireEvent.click(approve);
         expect(screen.getByTestId('confirm-blocked')).toHaveTextContent('Choose the address to sign in with.');
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });

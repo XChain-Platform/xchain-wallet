@@ -5,5 +5,31 @@
     "description": "TypeScript type definitions and reference client for the window.xchain dApp bridge",
     "main": "./src/runtime.js",
     "types": "./src/index.ts",
-    "type": "module"
+    "type": "module",
+    "scripts": {
+        "build": "node scripts/build.mjs && tsc -p tsconfig.json",
+        "prepack": "node scripts/build.mjs && tsc -p tsconfig.json"
+    },
+    "files": [
+        "dist",
+        "wallet-requests.json",
+        "README.md",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "main": "./dist/xchain-connect.cjs",
+        "module": "./dist/xchain-connect.js",
+        "types": "./dist/index.d.ts",
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/xchain-connect.js",
+                "require": "./dist/xchain-connect.cjs"
+            },
+            "./wallet-requests.json": "./wallet-requests.json",
+            "./xchain-connect.min.js": "./dist/xchain-connect.min.js",
+            "./package.json": "./package.json"
+        }
+    }
 }
