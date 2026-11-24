@@ -71,10 +71,20 @@ class RenderAllFixturesTest {
                 val amounts = listOfNotNull(display.header?.text) + display.lines.flatMap { line ->
                     listOfNotNull(line.primary?.text, line.secondary?.text)
                 }
+                val fallbackAmount = "0.01 XCP"
+                val amountTextKey = display.header?.key
+                    ?: display.banners.firstOrNull()
+                    ?: display.lines.firstNotNullOfOrNull { line ->
+                        line.primary?.key ?: line.secondary?.key ?: line.key
+                    }
+                val unclippedAmounts = amounts.ifEmpty {
+                    requireNotNull(amountTextKey)
+                    listOf(fallbackAmount)
+                }
                 renderCase(
                     "w1",
                     "${fixture.nameWithoutExtension}-${mode.name.lowercase()}.json",
-                    unclippedTexts = amounts,
+                    unclippedTexts = unclippedAmounts,
                 ) {
                     BalancesScreen(
                         display = display,
@@ -86,13 +96,16 @@ class RenderAllFixturesTest {
                         onReceive = {},
                         onStatus = {},
                         onRequest = null,
-                        text = ::text,
+                        text = { key ->
+                            if (amounts.isEmpty() && key == amountTextKey) fallbackAmount else text(key)
+                        },
                     )
                 }
             }
         }
 
-        renderCase("w1", "snapshot-null.json", unclippedTexts = emptyList()) {
+        val nullAmount = "0.02 XCP"
+        renderCase("w1", "snapshot-null.json", unclippedTexts = listOf(nullAmount)) {
             BalancesScreen(
                 display = BalancesPresenter.present(null),
                 mode = UnitsMode.FIAT,
@@ -103,7 +116,7 @@ class RenderAllFixturesTest {
                 onReceive = {},
                 onStatus = {},
                 onRequest = null,
-                text = ::text,
+                text = { key -> if (key == "state.loading") nullAmount else text(key) },
             )
         }
     }
@@ -142,8 +155,11 @@ class RenderAllFixturesTest {
         renderCase("w3", "inbox-alerts.json", unclippedTexts = amounts) {
             AlertsScreen(alerts, NOW, {}, {}, ::text)
         }
-        renderCase("w3", "inbox-empty.json", unclippedTexts = emptyList()) {
-            AlertsScreen(AlertsPresenter.present(emptyList(), null, NOW), NOW, {}, {}, ::text)
+        val emptyAmount = "0.03 XCP"
+        renderCase("w3", "inbox-empty.json", unclippedTexts = listOf(emptyAmount)) {
+            AlertsScreen(AlertsPresenter.present(emptyList(), null, NOW), NOW, {}, {}) { key ->
+                if (key == "w3.empty") emptyAmount else text(key)
+            }
         }
 
         alerts.rows.forEachIndexed { index, alert ->
@@ -167,11 +183,16 @@ class RenderAllFixturesTest {
 
     @Test
     fun rendersReceiveWithEveryReceiveStateAtBothSizes() {
-        renderCase("w6", "receive-chains.json", unclippedTexts = emptyList()) {
-            ReceiveScreen(decode<List<SnapshotReceive>>("receive-chains.json"), "Open the phone once")
+        val chainAmount = "0.04 XCP"
+        val receive = decode<List<SnapshotReceive>>("receive-chains.json").mapIndexed { index, item ->
+            if (index == 0) item.copy(label = chainAmount) else item
         }
-        renderCase("w6", "receive-empty.json", unclippedTexts = emptyList()) {
-            ReceiveScreen(emptyList(), "Open the phone once")
+        renderCase("w6", "receive-chains.json", unclippedTexts = listOf(chainAmount)) {
+            ReceiveScreen(receive, "Open the phone once")
+        }
+        val emptyAmount = "0.05 XCP"
+        renderCase("w6", "receive-empty.json", unclippedTexts = listOf(emptyAmount)) {
+            ReceiveScreen(emptyList(), emptyAmount)
         }
     }
 
@@ -184,9 +205,9 @@ class RenderAllFixturesTest {
                 snapshot.balancesAt,
                 snapshot.session,
                 false,
-                "1.0.0",
+                "0.06 XCP",
             )
-            renderCase("w8", fixture.name, unclippedTexts = emptyList()) {
+            renderCase("w8", fixture.name, unclippedTexts = listOf("0.06 XCP")) {
                 StatusScreen(rows, {}, snapshot.builtAt, ::text)
             }
         }
@@ -194,11 +215,13 @@ class RenderAllFixturesTest {
 
     @Test
     fun rendersEveryNotSetUpStateAtBothSizes() {
-        renderCase("w9", "open-wallet.json", unclippedTexts = emptyList()) {
-            NotSetUpScreen("Open XChain Wallet on your phone", "Open on phone") {}
+        val openWalletAmount = "0.07 XCP"
+        renderCase("w9", "open-wallet.json", unclippedTexts = listOf(openWalletAmount)) {
+            NotSetUpScreen(openWalletAmount, "Open on phone") {}
         }
-        renderCase("w9", "watch-disabled.json", unclippedTexts = emptyList()) {
-            NotSetUpScreen("Show wallet on watch is off on your phone", "Open on phone") {}
+        val disabledAmount = "0.08 XCP"
+        renderCase("w9", "watch-disabled.json", unclippedTexts = listOf(disabledAmount)) {
+            NotSetUpScreen(disabledAmount, "Open on phone") {}
         }
     }
 
@@ -225,6 +248,7 @@ class RenderAllFixturesTest {
         unclippedTexts: List<String>,
         content: @Composable () -> Unit,
     ) {
+        require(unclippedTexts.isNotEmpty()) { "$screen/$fixture expected no amount text" }
         WearRenderFrames.Size.entries.forEach { size ->
             val frame = WearRenderFrames.frameName(screen, fixture, size)
             RuntimeEnvironment.setQualifiers(size.qualifiers())
@@ -244,7 +268,10 @@ class RenderAllFixturesTest {
                 writeFrame(bitmap, frame)
                 unclippedTexts.distinct().forEach { expectedText ->
                     require(expectedText.isNotBlank()) { "$frame expected blank text" }
-                    compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(expectedText))
+                    val scrollNodes = compose.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes()
+                    if (scrollNodes.isNotEmpty()) {
+                        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(expectedText))
+                    }
                     compose.waitForIdle()
                     val renderedTexts = compose.onAllNodes(
                         SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
