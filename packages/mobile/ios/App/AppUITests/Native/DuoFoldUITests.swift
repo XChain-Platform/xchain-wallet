@@ -515,9 +515,7 @@ final class DuoFoldUITests: XCTestCase {
     }
 
     private func expandFormSection(_ label: String, app: XCUIApplication) -> Bool {
-        let section = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH[c] %@", label)
-        ).firstMatch
+        let section = sectionHeader(label, app: app)
         guard section.waitForExistence(timeout: 8) else {
             XCTContext.runActivity(named: "Send section not offered: \(label)") { _ in }
             return true
@@ -532,6 +530,21 @@ final class DuoFoldUITests: XCTestCase {
         let expanded = (section.value as? String)?.lowercased() == "true"
         if !expanded { section.tap() }
         return true
+    }
+
+    // A section header's label is its title plus its Optional tag or summary
+    // ("Advanced Optional Default"). The Send mode tabs above the recipient
+    // include one labelled exactly "Advanced", and tapping that tab swaps the
+    // To and Amount fields for the multi-line recipient text, so a header is
+    // never matched by its bare title.
+    private func sectionHeader(_ label: String, app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(
+            NSPredicate(
+                format: "label BEGINSWITH[c] %@ AND NOT (label ==[c] %@)",
+                label,
+                label
+            )
+        ).firstMatch
     }
 
     private func scrollToSendAction(_ app: XCUIApplication) -> Bool {
