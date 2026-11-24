@@ -72,34 +72,15 @@ struct TokenDetailScreen: View {
             } else {
                 ScrollView {
                     VStack(spacing: 8) {
-                        Button(action: toggleArtwork) { artwork(side: 72) }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenIdentity(display)))
+                        artworkButton
                         Text(verbatim: display.displayName).font(.headline).accessibilityHidden(true)
                         Text(verbatim: display.tick).foregroundStyle(.secondary).accessibilityHidden(true)
-                        Button(action: toggleAmount) {
-                            Text(verbatim: amountText)
-                                .font(.title3)
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.5)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenAmount(
-                            display,
-                            showsValue: state.showsValue,
-                            text: localized
-                        )))
+                        amountButton
                         if let chart = display.chart, !chart.points.isEmpty {
                             PriceLineView(chart: chart).frame(height: 54).accessibilityHidden(true)
                         }
                         facts
-                        Button(action: onOpenOnPhone) {
-                            Label(LocalizedStringKey("w2.openOnPhone"), systemImage: "iphone")
-                        }
-                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                            "w2.openOnPhone", text: localized
-                        )))
+                        openOnPhoneButton
                     }
                 }
             }
@@ -110,27 +91,66 @@ struct TokenDetailScreen: View {
     func toggleAmount() { state.showsValue.toggle() }
     func toggleArtwork() { state.artworkExpanded.toggle() }
 
+    var amountButton: some View {
+        Button(action: toggleAmount) {
+            Text(verbatim: amountText)
+                .font(.title3)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenAmount(
+            display,
+            showsValue: state.showsValue,
+            text: localized
+        )))
+    }
+
+    var artworkButton: some View {
+        Button(action: toggleArtwork) { artwork(side: 72) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenIdentity(display)))
+    }
+
+    var openOnPhoneButton: some View {
+        Button(action: onOpenOnPhone) {
+            Label(LocalizedStringKey("w2.openOnPhone"), systemImage: "iphone")
+        }
+        .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+            "w2.openOnPhone", text: localized
+        )))
+    }
+
     @ViewBuilder private var facts: some View {
         ForEach(Array(factRows.enumerated()), id: \.offset) { _, row in
-            LabeledContent {
-                Text(verbatim: row.value).fixedSize(horizontal: false, vertical: true)
-            } label: {
-                if row.localized { Text(LocalizedStringKey(row.label)) }
-                else { Text(verbatim: row.label) }
-            }
-            .accessibilityLabel(Text(verbatim: AccessibilityLabels.labeled(
-                row.label,
-                value: row.value,
-                localized: row.localized,
-                text: localized
-            )))
+            factRow(row)
         }
         if let noticeKey {
-            Text(LocalizedStringKey(noticeKey))
-                .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                    noticeKey, text: localized
-                )))
+            notice(noticeKey)
         }
+    }
+
+    func factRow(_ row: TokenDetailFactRow) -> some View {
+        LabeledContent {
+            Text(verbatim: row.value).fixedSize(horizontal: false, vertical: true)
+        } label: {
+            if row.localized { Text(LocalizedStringKey(row.label)) }
+            else { Text(verbatim: row.label) }
+        }
+        .accessibilityLabel(Text(verbatim: AccessibilityLabels.labeled(
+            row.label,
+            value: row.value,
+            localized: row.localized,
+            text: localized
+        )))
+    }
+
+    func notice(_ key: String) -> some View {
+        Text(LocalizedStringKey(key))
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                key, text: localized
+            )))
     }
 
     @ViewBuilder private func artwork(side: CGFloat) -> some View {

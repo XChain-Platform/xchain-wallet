@@ -19,11 +19,7 @@ struct AlertsScreen: View {
     var body: some View {
         List {
             if rows.isEmpty {
-                Text("w3.empty")
-                    .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                        "w3.empty",
-                        text: { NSLocalizedString($0, comment: "") }
-                    )))
+                emptyState
             } else {
                 ForEach(rows, id: \.id) { item in
                     rowLink(item)
@@ -31,6 +27,14 @@ struct AlertsScreen: View {
             }
         }
         .navigationTitle("w3.title")
+    }
+
+    var emptyState: some View {
+        Text("w3.empty")
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                "w3.empty",
+                text: { NSLocalizedString($0, comment: "") }
+            )))
     }
 
     func rowLink(_ item: SnapshotInboxItem) -> some View {

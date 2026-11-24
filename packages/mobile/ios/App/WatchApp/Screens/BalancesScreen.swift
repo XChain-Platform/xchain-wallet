@@ -79,11 +79,7 @@ struct BalancesScreen: View {
     var body: some View {
         List {
             ForEach(display.banners, id: \.self) {
-                Text(LocalizedStringKey($0))
-                    .font(.caption2)
-                    .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                        $0, text: localized
-                    )))
+                banner($0)
             }
             if let header = display.header { headerButton(header) }
             if let requestModel { requestLink(requestModel) }
@@ -91,17 +87,11 @@ struct BalancesScreen: View {
             ForEach(Array(display.lines.dropFirst(rows.count).enumerated()), id: \.offset) {
                 offset, line in
                 if let key = line.key {
-                    Text(LocalizedStringKey(key))
-                        .font(.caption2)
-                        .accessibilityLabel(Text(verbatim: accessibilityLines[rows.count + offset]))
+                    statusLine(key, index: rows.count + offset)
                 }
             }
             if let age = display.ageLine {
-                Text(LocalizedStringKey(age))
-                    .font(.caption2)
-                    .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                        age, text: localized
-                    )))
+                ageLine(age)
             }
         }
         .scrollPosition(id: $scrollTarget)
@@ -153,18 +143,44 @@ struct BalancesScreen: View {
         )))
     }
 
+    func banner(_ key: String) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                key, text: localized
+            )))
+    }
+
+    func statusLine(_ key: String, index: Int) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: accessibilityLines[index]))
+    }
+
+    func ageLine(_ key: String) -> some View {
+        Text(LocalizedStringKey(key))
+            .font(.caption2)
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                key, text: localized
+            )))
+    }
+
     func rowLink(_ item: BalancesScreenRow) -> some View {
         NavigationLink(value: item.selection) {
-            BalanceRowView(
-                name: item.line.name ?? "",
-                chainId: item.row.chainId,
-                tick: item.row.tick,
-                tickerColor: item.row.tickerColor,
-                amountCell: (cellText(item.line.primary), item.line.secondary?.text)
-            )
+            rowView(item)
             .minimumScaleFactor(0.5)
         }
         .accessibilityLabel(Text(verbatim: accessibilityLines[item.index]))
+    }
+
+    func rowView(_ item: BalancesScreenRow) -> BalanceRowView {
+        BalanceRowView(
+            name: item.line.name ?? "",
+            chainId: item.row.chainId,
+            tick: item.row.tick,
+            tickerColor: item.row.tickerColor,
+            amountCell: (cellText(item.line.primary), item.line.secondary?.text)
+        )
     }
 
     private func cellText(_ text: BalanceText?) -> String {
