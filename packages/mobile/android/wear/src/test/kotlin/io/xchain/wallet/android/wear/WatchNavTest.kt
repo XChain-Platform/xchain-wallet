@@ -3,7 +3,6 @@
 
 package io.xchain.wallet.android.wear
 
-import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
@@ -154,9 +153,23 @@ class WatchNavTest {
     }
 
     @Test
-    fun mainActivityDeclaresItsComposeLifecycleEntryPoint() {
-        assertTrue(ComponentActivity::class.java.isAssignableFrom(MainActivity::class.java))
-        MainActivity::class.java.getDeclaredMethod("onCreate", Bundle::class.java)
+    fun mainActivityHostsWatchNavInComposeContent() {
+        val source = source(
+            "packages/mobile/android/wear/src/main/kotlin/io/xchain/wallet/android/wear/MainActivity.kt",
+        )
+
+        assertTrue(source.contains("setContent"))
+        assertTrue(source.contains("WatchNav()"))
+    }
+
+    @Test
+    fun watchNavUsesSwipeDismissableHostForItsScreenGraph() {
+        val source = source(
+            "packages/mobile/android/wear/src/main/kotlin/io/xchain/wallet/android/wear/nav/WatchNav.kt",
+        )
+
+        assertTrue(source.contains("internal fun WatchNavGraph("))
+        assertTrue(source.contains("SwipeDismissableNavHost("))
     }
 
     private fun fixture(name: String): Snapshot =
@@ -164,6 +177,15 @@ class WatchNavTest {
 
     private fun resource(name: String): File =
         checkNotNull(javaClass.classLoader?.getResource(name)).toURI().let(::File)
+
+    private fun source(path: String): String {
+        var directory = File(checkNotNull(System.getProperty("user.dir")))
+        while (true) {
+            val candidate = directory.resolve(path)
+            if (candidate.isFile) return candidate.readText()
+            directory = directory.parentFile ?: error("Could not locate $path")
+        }
+    }
 
     @androidx.compose.runtime.Composable
     private fun testText(key: String): String = mapOf(
