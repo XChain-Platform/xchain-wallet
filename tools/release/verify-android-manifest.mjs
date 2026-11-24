@@ -229,6 +229,77 @@ if (!parserPrefix) {
     }
 }
 
+// --- 4b. The web wallet App Link claim ---------------------------------
+const walletOrigin = /const WALLET_LINK_ORIGIN = '([^']+)'/.exec(parserSource)?.[1];
+const walletPrefix = /const WALLET_LINK_PREFIX = '([^']+)'/.exec(parserSource)?.[1];
+const deriveWalletClaim = 'This script derives the expected claim from the parser rather than holding a copy of it. '
+    + 'If the constant moved or was renamed, point this at the new one - do not paste a literal back in.';
+
+if (!walletOrigin) {
+    fail('WALLET_LINK_ORIGIN was not found in packages/core/src/uri/xchainUri.js', deriveWalletClaim);
+}
+if (!walletPrefix) {
+    fail('WALLET_LINK_PREFIX was not found in packages/core/src/uri/xchainUri.js', deriveWalletClaim);
+}
+
+if (walletOrigin && walletPrefix) {
+    const walletHost = new URL(walletOrigin).host;
+    const androidAttribute = (element, name) => (
+        new RegExp(`\\bandroid:${name}\\s*=\\s*"([^"]*)"`).exec(element)?.[1]
+    );
+    const intentFilters = [...manifest.matchAll(/<intent-filter\b[^>]*>[\s\S]*?<\/intent-filter>/g)]
+        .map((match) => {
+            const block = match[0];
+            const openingTag = /^<intent-filter\b[^>]*>/.exec(block)?.[0] || '';
+            const data = [...block.matchAll(/<data\b[^>]*\/\s*>/g)].map((dataMatch) => {
+                const element = dataMatch[0];
+                return {
+                    host: androidAttribute(element, 'host'),
+                    pathPrefix: androidAttribute(element, 'pathPrefix'),
+                    scheme: androidAttribute(element, 'scheme'),
+                };
+            });
+            return {
+                autoVerify: androidAttribute(openingTag, 'autoVerify'),
+                data,
+            };
+        });
+    const walletFilters = intentFilters.filter((filter) => filter.data.some(
+        (data) => data.scheme === 'https' && data.host === walletHost,
+    ));
+    const walletData = walletFilters.flatMap((filter) => filter.data.filter(
+        (data) => data.scheme === 'https' && data.host === walletHost,
+    ));
+    const sharedHostFilter = intentFilters.some((filter) => {
+        const httpsHosts = new Set(filter.data
+            .filter((data) => data.scheme === 'https')
+            .map((data) => data.host));
+        return httpsHosts.has('xchain.io') && httpsHosts.has(walletHost);
+    });
+
+    if (walletData.length === 0) {
+        fail(`the bundle claims no https App Link on ${walletHost}`,
+            'Every web-wallet hand-off stays in the browser and the app is never offered.');
+    } else if (walletData.some((data) => data.pathPrefix === undefined)) {
+        fail(`${walletHost} declares NO pathPrefix`,
+            'That claims the whole web wallet instead of only links the parser accepts.');
+    } else {
+        const claimed = [...new Set(walletData.map((data) => data.pathPrefix))].sort();
+        if (claimed.length !== 1 || claimed[0] !== walletPrefix) {
+            fail(`the bundle claims [${claimed.join(', ')}] on ${walletHost} and the parser acts on ${walletPrefix}`,
+                'The Android claim and the parser must cover exactly the same paths.');
+        } else if (walletFilters.some((filter) => filter.autoVerify !== 'true')) {
+            fail(`${walletHost} claim sits in a filter that does not set autoVerify`,
+                'Android does not verify that filter against assetlinks.json.');
+        } else if (sharedHostFilter) {
+            fail('one filter holds both hosts',
+                'Android combines hosts and prefixes within a filter, widening both claims.');
+        } else {
+            pass(`App Link claim on ${walletHost} is exactly the parser's range (${walletPrefix}), and it autoVerifies`);
+        }
+    }
+}
+
 // --- 5. The versionCode, when the caller knows which one to expect ------
 //
 // Play accepts a versionCode exactly once, so a bundle carrying the wrong one
