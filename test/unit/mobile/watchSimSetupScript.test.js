@@ -213,26 +213,46 @@ describe('watch-sim-setup.sh', () => {
         expect(result.stderr).toContain(`android: AVD ${name} logical size expected ${dp}`);
     });
 
-    it('boots named headless AVDs and stops only their recorded pids', async () => {
-        const fixture = makeFixture();
+    it('boots named headless AVDs on fixed ports, waits for them, and stops recorded pids', async () => {
+        const fixture = makeFixture({ adbStateAfter: 3, adbBootAfter: 2 });
         const small = run(fixture, ['--boot-wear', 'small']);
         const large = run(fixture, ['--boot-wear', 'large']);
 
         expect(small.status).toBe(0);
+        expect(small.stdout).toBe('emulator-5572\n');
         expect(large.status).toBe(0);
+        expect(large.stdout).toBe('emulator-5570\n');
         const smallPid = join(fixture.root, 'tmp/watch-sim/small.pid');
         const largePid = join(fixture.root, 'tmp/watch-sim/large.pid');
         expect(readFileSync(smallPid, 'utf8')).toMatch(/^\d+\n$/);
         expect(readFileSync(largePid, 'utf8')).toMatch(/^\d+\n$/);
         await expect.poll(() => readFileSync(fixture.log, 'utf8')).toContain(
-            'emulator -avd xc-wear-large-round -no-window -no-audio',
+            'emulator -avd xc-wear-large-round -no-window -no-audio -no-snapshot -port 5570',
         );
         const stopped = run(fixture, ['--stop-wear']);
         expect(stopped.status).toBe(0);
         expect(() => readFileSync(smallPid)).toThrow();
         expect(() => readFileSync(largePid)).toThrow();
         const commands = readFileSync(fixture.log, 'utf8');
-        expect(commands).toContain('emulator -avd xc-wear-small-round -no-window -no-audio');
+        expect(commands).toContain('emulator -avd xc-wear-small-round -no-window -no-audio -no-snapshot -port 5572');
+        expect(commands).toContain('adb -s emulator-5572 get-state');
+        expect(commands).toContain('adb -s emulator-5572 shell getprop sys.boot_completed');
+        expect(commands).toContain('adb -s emulator-5570 get-state');
+        expect(commands).toContain('adb -s emulator-5570 shell getprop sys.boot_completed');
+        expect(commands.match(/adb -s emulator-5572 get-state/g)).toHaveLength(4);
+        expect(commands.match(/adb -s emulator-5572 shell getprop sys.boot_completed/g)).toHaveLength(2);
+    });
+
+    it('caps the Wear boot wait at 180 seconds', () => {
+        expect(source).toContain('${WATCH_SIM_BOOT_TIMEOUT_SECONDS:-180}');
+        const fixture = makeFixture({ adbStateAfter: 999, bootTimeout: 1 });
+        const result = run(fixture, ['--boot-wear', 'small']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+            'android: emulator-5572 did not reach device and complete boot within 1 seconds',
+        );
+        expect(run(fixture, ['--stop-wear']).status).toBe(0);
     });
 });
 
@@ -252,6 +272,9 @@ function makeFixture(options = {}) {
         largeImage: true,
         smallDimensions: true,
         largeDimensions: true,
+        adbStateAfter: 1,
+        adbBootAfter: 1,
+        bootTimeout: 180,
         malformed: false,
         managerTrailingLines: 0,
         watchRuntime: undefined,
@@ -279,6 +302,7 @@ function makeFixture(options = {}) {
     put(join(bin, 'xcodebuild'), commandStub('xcodebuild'), 0o755);
     put(join(sdk, 'cmdline-tools/latest/bin/sdkmanager'), sdkmanagerStub(), 0o755);
     put(join(sdk, 'cmdline-tools/latest/bin/avdmanager'), avdmanagerStub(), 0o755);
+    put(join(sdk, 'platform-tools/adb'), adbStub(), 0o755);
     put(emulatorTemplate, emulatorStub(), 0o755);
     if (settings.emulator) put(emulator, emulatorStub(), 0o755);
     if (settings.avds) {
@@ -305,6 +329,10 @@ function run(fixture, args = []) {
             ...process.env,
             ANDROID_AVD_HOME: join(fixture.root, 'avd'),
             FAKE_AVDS: fixture.settings.avds ? '1' : '0',
+            FAKE_ADB_STATE_AFTER: fixture.settings.adbStateAfter,
+            FAKE_ADB_BOOT_AFTER: fixture.settings.adbBootAfter,
+            FAKE_ADB_STATE_COUNT: join(fixture.root, 'adb-state-count'),
+            FAKE_ADB_BOOT_COUNT: join(fixture.root, 'adb-boot-count'),
             FAKE_AVD_HOME: join(fixture.root, 'avd'),
             FAKE_COMMAND_LOG: fixture.log,
             FAKE_DEVICES: fixture.devices,
@@ -316,6 +344,7 @@ function run(fixture, args = []) {
             FAKE_PAIRS: fixture.pairs,
             FAKE_RUNTIMES: fixture.runtimes,
             PATH: `${fixture.bin}:${process.env.PATH}`,
+            WATCH_SIM_BOOT_TIMEOUT_SECONDS: fixture.settings.bootTimeout,
             XCHAIN_ANDROID_SDK: fixture.sdk,
         },
     });
@@ -456,6 +485,22 @@ function emulatorStub() {
     return `#!/usr/bin/env bash
 printf 'emulator %s\n' "$*" >> "$FAKE_COMMAND_LOG"
 exec sleep 30
+`;
+}
+
+function adbStub() {
+    return `#!/usr/bin/env bash
+printf 'adb %s\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$*" in
+  *' get-state')
+    count=$(($(cat "$FAKE_ADB_STATE_COUNT" 2>/dev/null || printf 0) + 1))
+    printf '%s\n' "$count" > "$FAKE_ADB_STATE_COUNT"
+    [ "$count" -ge "$FAKE_ADB_STATE_AFTER" ] && printf 'device\n' ;;
+  *' shell getprop sys.boot_completed')
+    count=$(($(cat "$FAKE_ADB_BOOT_COUNT" 2>/dev/null || printf 0) + 1))
+    printf '%s\n' "$count" > "$FAKE_ADB_BOOT_COUNT"
+    [ "$count" -ge "$FAKE_ADB_BOOT_AFTER" ] && printf '1\n' ;;
+esac
 `;
 }
 

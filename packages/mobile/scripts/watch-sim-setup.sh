@@ -221,17 +221,32 @@ check_duo() {
 }
 
 boot_wear() {
-    local size="$1" avd pid_file
+    local size="$1" avd port serial pid_file deadline state boot
+    local adb="$sdk/platform-tools/adb" timeout="${WATCH_SIM_BOOT_TIMEOUT_SECONDS:-180}"
     case "$size" in
-        small) avd=xc-wear-small-round ;;
-        large) avd=xc-wear-large-round ;;
+        small) avd=xc-wear-small-round; port=5572 ;;
+        large) avd=xc-wear-large-round; port=5570 ;;
         *) echo 'usage: watch-sim-setup.sh --boot-wear small|large' >&2; return 2 ;;
     esac
     [ -x "$emulator" ] || { echo "android: missing emulator at $emulator" >&2; return 1; }
+    [ -x "$adb" ] || { echo "android: missing adb at $adb" >&2; return 1; }
     mkdir -p "$pid_dir"
     pid_file="$pid_dir/$size.pid"
-    "$emulator" -avd "$avd" -no-window -no-audio >"$pid_dir/$size.log" 2>&1 &
+    "$emulator" -avd "$avd" -no-window -no-audio -no-snapshot -port "$port" >"$pid_dir/$size.log" 2>&1 &
     printf '%s\n' "$!" > "$pid_file"
+    serial="emulator-$port"
+    deadline=$((SECONDS + timeout))
+    while (( SECONDS < deadline )); do
+        state="$("$adb" -s "$serial" get-state 2>/dev/null || true)"
+        boot=
+        if [ "$state" = device ]; then
+            boot="$("$adb" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+        fi
+        [ "$boot" = 1 ] && { printf '%s\n' "$serial"; return; }
+        sleep 1
+    done
+    echo "android: $serial did not reach device and complete boot within $timeout seconds" >&2
+    return 1
 }
 
 stop_wear() {
