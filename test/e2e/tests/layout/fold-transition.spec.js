@@ -12,7 +12,7 @@
 // every form value must survive, and the Approve settle must re-arm.
 
 import { bech32 } from '@scure/base';
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 import { loadDuoViewports } from '../../fixtures/duoMeasured.js';
 import { foldPayloadFor, setNativeFold } from '../../fixtures/foldPublish.js';
@@ -128,4 +128,33 @@ test('one Duo resize keeps form values: the contacts filter text, scroll, select
     await expect(confirm).toBeHidden();
     await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
     await expect(page.getByRole('searchbox', { name: 'Search contacts' })).toHaveValue('Fold');
+});
+
+const SEND_RECIPIENT = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+
+test('Duo fold keeps the Send fields', async ({ page }) => {
+    test.setTimeout(10 * 60 * 1000);
+    page.setDefaultTimeout(30 * 1000);
+    const [measured] = loadDuoViewports();
+    const opened = { ...measured, state: 'open-portrait', width: measured.width * 2 };
+    const closed = { ...measured, state: 'closed-portrait' };
+
+    await page.setViewportSize({ width: opened.width, height: opened.height });
+    await createWallet(page);
+    await setNativeFold(page, foldPayloadFor(opened));
+    await gotoSection(page, 'Send');
+
+    const main = page.getByRole('main');
+    const recipient = main.getByLabel('To', { exact: true });
+    const amount = main.getByRole('textbox', { name: /^Amount/ });
+    await recipient.fill(SEND_RECIPIENT);
+    await amount.fill('0.01');
+    await expect(recipient).toHaveValue(SEND_RECIPIENT);
+    await expect(amount).toHaveValue('0.01');
+
+    await foldTo(page, closed);
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible();
+    await expect(main.getByLabel('To', { exact: true })).toHaveValue(SEND_RECIPIENT);
+    await expect(main.getByRole('textbox', { name: /^Amount/ })).toHaveValue('0.01');
 });
