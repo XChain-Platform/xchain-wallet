@@ -34,6 +34,7 @@
 		XC1000B0000000000000000A /* CallbackResolve.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000A /* CallbackResolve.swift */; };
 		XC1000B0000000000000000B /* CallbackPostRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000B /* CallbackPostRequest.swift */; };
 		XC1000B0000000000000000C /* BrowserReturnHint.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000C /* BrowserReturnHint.swift */; };
+		XC1000B00000000000000012 /* BrowserReturnOpen.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000012 /* BrowserReturnOpen.swift */; };
 		XC1000B0000000000000000D /* CallbackPinnedTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000D /* CallbackPinnedTarget.swift */; };
 		XC1000B0000000000000000E /* CallbackPinnedTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000E /* CallbackPinnedTrust.swift */; };
 		XC1000B0000000000000000F /* CallbackHttpWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000F /* CallbackHttpWire.swift */; };
@@ -153,6 +154,7 @@
 		XC1000A0000000000000000A /* CallbackResolve.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackResolve.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000B /* CallbackPostRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostRequest.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000C /* BrowserReturnHint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/BrowserReturnHint.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000012 /* BrowserReturnOpen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/BrowserReturnOpen.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000D /* CallbackPinnedTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPinnedTarget.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000E /* CallbackPinnedTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPinnedTrust.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000F /* CallbackHttpWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackHttpWire.swift; sourceTree = "<group>"; };
@@ -365,6 +367,7 @@
 				XC1000A0000000000000000A /* CallbackResolve.swift */,
 				XC1000A0000000000000000B /* CallbackPostRequest.swift */,
 				XC1000A0000000000000000C /* BrowserReturnHint.swift */,
+				XC1000A00000000000000012 /* BrowserReturnOpen.swift */,
 				XC1000A0000000000000000D /* CallbackPinnedTarget.swift */,
 				XC1000A0000000000000000E /* CallbackPinnedTrust.swift */,
 				XC1000A0000000000000000F /* CallbackHttpWire.swift */,
@@ -728,6 +731,7 @@
 				XC1000B0000000000000000A /* CallbackResolve.swift in Sources */,
 				XC1000B0000000000000000B /* CallbackPostRequest.swift in Sources */,
 				XC1000B0000000000000000C /* BrowserReturnHint.swift in Sources */,
+				XC1000B00000000000000012 /* BrowserReturnOpen.swift in Sources */,
 				XC1000B0000000000000000D /* CallbackPinnedTarget.swift in Sources */,
 				XC1000B0000000000000000E /* CallbackPinnedTrust.swift in Sources */,
 				XC1000B0000000000000000F /* CallbackHttpWire.swift in Sources */,
