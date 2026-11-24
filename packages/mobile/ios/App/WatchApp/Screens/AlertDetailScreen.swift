@@ -40,24 +40,44 @@ struct AlertDetailScreen: View {
         item.map { RelativeTimeText.alertKey(at: $0.at, now: now) }
     }
     var requestExpired: Bool { AlertsRules.isExpired(expiresAt: request?.expiresAt, now: now) }
+    var requestModel: AlertsPresenter.RequestModel? {
+        request.map { AlertsPresenter.request($0, now: now) }
+    }
+    var requestAccessibilityLines: [String] {
+        requestModel.map {
+            AccessibilityLabels.requestLines($0, text: localized, time: formattedExpiry)
+        } ?? []
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: familySymbol).font(.title2).foregroundStyle(.tint)
+                    .accessibilityHidden(true)
                 if let item {
                     Text(item.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                    if let detailBody { Text(detailBody).fixedSize(horizontal: false, vertical: true) }
+                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.alertDetail(
+                            item,
+                            time: formattedAlertTime
+                        )))
+                    if let detailBody {
+                        Text(detailBody).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityHidden(true)
+                    }
                     if let time = alertTime {
                         Text(RelativeTimeText.fill(NSLocalizedString(time.key, comment: ""), n: time.n))
                             .font(.footnote).foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                 } else if let request {
                     Text(request.sentence).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(Text(verbatim: requestAccessibilityLines[0]))
                     LabeledContent(LocalizedStringKey("w4.requestAmount"), value: request.amountText)
+                        .accessibilityLabel(Text(verbatim: requestAccessibilityLines[1]))
                     if let expiresAt = request.expiresAt {
                         if requestExpired {
                             Text(LocalizedStringKey("w4.requestExpired"))
+                                .accessibilityLabel(Text(verbatim: requestAccessibilityLines[2]))
                         } else {
                             LabeledContent(LocalizedStringKey("w4.requestExpiry")) {
                                 Text(
@@ -65,14 +85,31 @@ struct AlertDetailScreen: View {
                                     format: .dateTime.month(.abbreviated).day().hour().minute()
                                 )
                             }
+                            .accessibilityLabel(Text(verbatim: requestAccessibilityLines[2]))
                         }
                     }
                 }
                 Button(action: onOpenOnPhone) {
                     Label(LocalizedStringKey("w4.openOnPhone"), systemImage: "iphone")
                 }
+                .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                    "w4.openOnPhone", text: localized
+                )))
             }
         }
         .navigationTitle(LocalizedStringKey("w4.title"))
     }
+
+    private var formattedAlertTime: String {
+        guard let time = alertTime else { return "" }
+        return RelativeTimeText.fill(localized(time.key), n: time.n)
+    }
+
+    private func formattedExpiry(_ expiresAt: Int64) -> String {
+        Date(timeIntervalSince1970: Double(expiresAt) / 1_000).formatted(
+            .dateTime.month(.abbreviated).day().hour().minute()
+        )
+    }
+
+    private func localized(_ key: String) -> String { NSLocalizedString(key, comment: "") }
 }

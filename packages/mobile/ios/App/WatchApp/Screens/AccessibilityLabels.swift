@@ -4,6 +4,17 @@
 import Foundation
 
 enum AccessibilityLabels {
+    static func control(_ key: String, text: (String) -> String) -> String {
+        text(key)
+    }
+
+    static func balanceHeader(
+        _ display: BalancesDisplay,
+        text: (String) -> String
+    ) -> String {
+        spoken(display.header, isPrimary: true, text: text) ?? ""
+    }
+
     static func balanceLines(
         _ display: BalancesDisplay,
         text: (String) -> String
@@ -42,6 +53,39 @@ enum AccessibilityLabels {
                 requestValue(line.value, text: text, time: time),
             ])
         }
+    }
+
+    static func tokenIdentity(_ display: TokenDetailDisplay) -> String {
+        SpokenLabels.lines([display.displayName, display.tick])
+    }
+
+    static func tokenAmount(
+        _ display: TokenDetailDisplay,
+        showsValue: Bool,
+        text: (String) -> String
+    ) -> String {
+        let amount = showsValue ? display.valueText : display.amountText
+        return SpokenLabels.lines([
+            display.displayName,
+            amount == "••••" ? text(SpokenLabels.hiddenKey) : amount,
+        ])
+    }
+
+    static func labeled(
+        _ label: String,
+        value: String,
+        localized: Bool,
+        text: (String) -> String
+    ) -> String {
+        SpokenLabels.lines([localized ? text(label) : label, value])
+    }
+
+    static func alertRow(_ item: SnapshotInboxItem, time: String) -> String {
+        SpokenLabels.lines([item.title, item.body, time])
+    }
+
+    static func alertDetail(_ item: SnapshotInboxItem, time: String) -> String {
+        SpokenLabels.lines([item.title, AlertsRules.detailBody(item.body), time])
     }
 
     private static func spoken(

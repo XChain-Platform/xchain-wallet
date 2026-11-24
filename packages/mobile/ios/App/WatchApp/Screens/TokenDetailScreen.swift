@@ -66,6 +66,7 @@ struct TokenDetailScreen: View {
                         artwork(side: min(proxy.size.width, proxy.size.height))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenIdentity(display)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
@@ -73,19 +74,32 @@ struct TokenDetailScreen: View {
                     VStack(spacing: 8) {
                         Button(action: toggleArtwork) { artwork(side: 72) }
                             .buttonStyle(.plain)
-                        Text(verbatim: display.displayName).font(.headline)
-                        Text(verbatim: display.tick).foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenIdentity(display)))
+                        Text(verbatim: display.displayName).font(.headline).accessibilityHidden(true)
+                        Text(verbatim: display.tick).foregroundStyle(.secondary).accessibilityHidden(true)
                         Button(action: toggleAmount) {
-                            Text(verbatim: amountText).font(.title3).monospacedDigit()
+                            Text(verbatim: amountText)
+                                .font(.title3)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.tokenAmount(
+                            display,
+                            showsValue: state.showsValue,
+                            text: localized
+                        )))
                         if let chart = display.chart, !chart.points.isEmpty {
-                            PriceLineView(chart: chart).frame(height: 54)
+                            PriceLineView(chart: chart).frame(height: 54).accessibilityHidden(true)
                         }
                         facts
                         Button(action: onOpenOnPhone) {
                             Label(LocalizedStringKey("w2.openOnPhone"), systemImage: "iphone")
                         }
+                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                            "w2.openOnPhone", text: localized
+                        )))
                     }
                 }
             }
@@ -104,8 +118,19 @@ struct TokenDetailScreen: View {
                 if row.localized { Text(LocalizedStringKey(row.label)) }
                 else { Text(verbatim: row.label) }
             }
+            .accessibilityLabel(Text(verbatim: AccessibilityLabels.labeled(
+                row.label,
+                value: row.value,
+                localized: row.localized,
+                text: localized
+            )))
         }
-        if let noticeKey { Text(LocalizedStringKey(noticeKey)) }
+        if let noticeKey {
+            Text(LocalizedStringKey(noticeKey))
+                .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                    noticeKey, text: localized
+                )))
+        }
     }
 
     @ViewBuilder private func artwork(side: CGFloat) -> some View {
@@ -121,6 +146,7 @@ struct TokenDetailScreen: View {
     }
 
     private var artworkImage: UIImage? { imageData.flatMap(UIImage.init(data:)) }
+    private func localized(_ key: String) -> String { NSLocalizedString(key, comment: "") }
     private var glyphColor: Color {
         guard let rgb = display.glyphRGB, rgb.count == 3 else { return .gray }
         return Color(red: rgb[0], green: rgb[1], blue: rgb[2])

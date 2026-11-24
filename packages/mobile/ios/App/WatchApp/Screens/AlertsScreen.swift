@@ -20,6 +20,10 @@ struct AlertsScreen: View {
         List {
             if rows.isEmpty {
                 Text("w3.empty")
+                    .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+                        "w3.empty",
+                        text: { NSLocalizedString($0, comment: "") }
+                    )))
             } else {
                 ForEach(rows, id: \.id) { item in
                     rowLink(item)
@@ -36,6 +40,10 @@ struct AlertsScreen: View {
         .simultaneousGesture(TapGesture().onEnded {
             markRead(MarkReadIntent(id: item.id))
         })
+        .accessibilityLabel(Text(verbatim: AccessibilityLabels.alertRow(
+            item,
+            time: relativeTime(item)
+        )))
     }
 
     private func relativeTime(_ item: SnapshotInboxItem) -> String {
