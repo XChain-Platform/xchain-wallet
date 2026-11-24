@@ -9,7 +9,7 @@ final class WatchSettingsNavUITests: XCTestCase {
 
         let words = RealOnboarding.createFreshWallet(
             app,
-            password: "WalletPass1!"
+            password: "XChainPwd1!?"
         )
         XCTAssertNotNil(words)
         guard words != nil else { return }
