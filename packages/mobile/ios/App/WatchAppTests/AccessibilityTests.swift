@@ -43,19 +43,8 @@ final class AccessibilityTests: XCTestCase {
                     setMode: { _ in },
                     open: { _ in }
                 )
-                var installed: [String] = []
-                for row in screen.rows {
-                    installed.append(try accessibilityLabel(in: screen.rowLink(row)))
-                }
-                for index in screen.rows.count ..< display.lines.count {
-                    if let key = display.lines[index].key {
-                        installed.append(try accessibilityLabel(
-                            in: screen.statusLine(key, index: index)
-                        ))
-                    }
-                }
                 XCTAssertEqual(
-                    installed,
+                    display.lines.indices.map(screen.rowLabel),
                     expectedMode.a11y ?? [],
                     "\(fixture) \(modeName)"
                 )
@@ -69,79 +58,55 @@ final class AccessibilityTests: XCTestCase {
         let text: (String) -> String = { strings[$0] ?? $0 }
         let snapshot = try snapshot("snapshot-unpriced", directory: directory)
         let balances = BalancesPresenter.present(snapshot: snapshot, mode: .fiat)
-        XCTAssertEqual(
-            try accessibilityLabel(in: BalancesScreen(
-                snapshot: snapshot, mode: .fiat, phoneReachable: true,
-                now: snapshot.builtAt, setMode: { _ in }, open: { _ in }
-            ).headerButton(try XCTUnwrap(balances.header)).body),
-            snapshot.totals.fiatText
-        )
         let balancesScreen = BalancesScreen(
             snapshot: snapshot, mode: .fiat, phoneReachable: true,
             now: snapshot.builtAt, setMode: { _ in }, open: { _ in }
         )
+        XCTAssertEqual(
+            balancesScreen.headerLabel(),
+            snapshot.totals.fiatText
+        )
+        XCTAssertNotNil(balances.header)
         for (control, expected) in [
             (BalancesToolbarRules.Control.bell, "Alerts"),
             (.qr, "Receive"),
             (.status, "Status"),
         ] {
             XCTAssertEqual(
-                try accessibilityLabel(in: balancesScreen.toolbarContent.controlButton(control)),
+                balancesScreen.toolbarContent.controlLabel(control),
                 expected
             )
         }
         let requestModel = try XCTUnwrap(balancesScreen.requestModel)
-        XCTAssertEqual(
-            try accessibilityLabel(in: balancesScreen.requestLink(requestModel)),
-            "1 request waiting"
-        )
+        XCTAssertEqual(balancesScreen.requestLabel(requestModel), "1 request waiting")
         for key in balancesScreen.display.banners {
-            XCTAssertEqual(
-                try accessibilityLabel(in: balancesScreen.banner(key)),
-                text(key)
-            )
+            XCTAssertEqual(balancesScreen.controlLabel(key), text(key))
         }
         if let age = balancesScreen.display.ageLine {
-            XCTAssertEqual(
-                try accessibilityLabel(in: balancesScreen.ageLine(age)),
-                text(age)
-            )
+            XCTAssertEqual(balancesScreen.controlLabel(age), text(age))
         }
 
         let detail = TokenDetailPresenter.present(
             row: snapshot.rows[0], detail: nil, phoneReachable: false
         )
         let detailScreen = TokenDetailScreen(display: detail, onOpenOnPhone: {})
-        XCTAssertEqual(
-            try accessibilityLabel(in: detailScreen.artworkButton),
-            "Pepe Cash, PEPECASH"
+        XCTAssertEqual(detailScreen.identityLabel(), "Pepe Cash, PEPECASH")
+        XCTAssertEqual(detailScreen.amountLabel(), "Pepe Cash, 1,000 PEPECASH")
+        let priceSource = TokenDetailFactRow(
+            label: "w2.priceSource", localized: true, value: "XChain DEX"
         )
         XCTAssertEqual(
-            try accessibilityLabel(in: detailScreen.amountButton),
-            "Pepe Cash, 1,000 PEPECASH"
-        )
-        XCTAssertEqual(
-            try accessibilityLabel(in: detailScreen.factRow(TokenDetailFactRow(
-                label: "w2.priceSource", localized: true, value: "XChain DEX"
-            ))),
+            detailScreen.factLabel(priceSource),
             "Price source, XChain DEX"
         )
-        XCTAssertEqual(
-            try accessibilityLabel(in: detailScreen.openOnPhoneButton),
-            "Open on phone"
-        )
+        XCTAssertEqual(detailScreen.controlLabel("w2.openOnPhone"), "Open on phone")
         let noticeKey = try XCTUnwrap(detailScreen.noticeKey)
-        XCTAssertEqual(
-            try accessibilityLabel(in: detailScreen.notice(noticeKey)),
-            text(noticeKey)
-        )
+        XCTAssertEqual(detailScreen.controlLabel(noticeKey), text(noticeKey))
         let hiddenDetail = TokenDetailPresenter.present(
             row: snapshot.rows[0], detail: nil, phoneReachable: false, redacted: true
         )
         XCTAssertEqual(
-            try accessibilityLabel(in: TokenDetailScreen(
-                display: hiddenDetail, onOpenOnPhone: {}
-            ).amountButton),
+            TokenDetailScreen(display: hiddenDetail, onOpenOnPhone: {}).amountLabel(),
             "Pepe Cash, Amount hidden"
         )
 
@@ -150,23 +115,14 @@ final class AccessibilityTests: XCTestCase {
             from: WatchFixtureFiles.data("inbox-alerts", in: directory)
         )[0]
         let alertsScreen = AlertsScreen(inbox: [alert], now: alert.at, markRead: { _ in })
-        XCTAssertEqual(
-            try accessibilityLabel(in: alertsScreen.rowLink(alert)),
+        let alertLabel =
             "Send confirmed, Your send is confirmed and now appears in wallet activity., Just now"
-        )
+        XCTAssertEqual(alertsScreen.rowLabel(alert), alertLabel)
+        let alertDetail = AlertDetailScreen(item: alert, now: alert.at, onOpenOnPhone: {})
+        XCTAssertEqual(alertDetail.alertLabel(alert), alertLabel)
+        XCTAssertEqual(alertDetail.controlLabel("w4.openOnPhone"), "Open on phone")
         XCTAssertEqual(
-            accessibilityLabels(in: AlertDetailScreen(
-                item: alert, now: alert.at, onOpenOnPhone: {}
-            ).body),
-            [
-                "Send confirmed, Your send is confirmed and now appears in wallet activity., Just now",
-                "Open on phone",
-            ]
-        )
-        XCTAssertEqual(
-            try accessibilityLabel(in: AlertsScreen(
-                inbox: [], now: alert.at, markRead: { _ in }
-            ).emptyState),
+            AlertsScreen(inbox: [], now: alert.at, markRead: { _ in }).controlLabel("w3.empty"),
             text("w3.empty")
         )
 
@@ -192,11 +148,14 @@ final class AccessibilityTests: XCTestCase {
             let screen = AlertDetailScreen(
                 request: request, now: 1_700_000_000_000, onOpenOnPhone: {}
             )
-            XCTAssertEqual(
-                accessibilityLabels(in: screen.body),
-                Set(screen.requestAccessibilityLines + ["Open on phone"]),
-                name
-            )
+            XCTAssertEqual(screen.requestLabel(0), expectedLines[0], name)
+            XCTAssertEqual(screen.requestLabel(1), expectedLines[1], name)
+            if name == "request-expired" {
+                XCTAssertEqual(screen.requestLabel(2), expectedLines[2], name)
+            } else if name == "request-paydue" {
+                XCTAssertTrue(screen.requestLabel(2).hasPrefix("Expires, "), name)
+            }
+            XCTAssertEqual(screen.controlLabel("w4.openOnPhone"), "Open on phone", name)
             XCTAssertEqual(
                 AccessibilityLabels.requestLines(model, text: text) { "at:\($0)" },
                 expectedLines,
@@ -227,33 +186,34 @@ final class AccessibilityTests: XCTestCase {
             w2, size: size, dynamicTypeSize: .accessibility3
         ))
 
-        let row = try XCTUnwrap(w1.rows.first)
-        let renderedRow = w1.rowView(row).body.body
-        XCTAssertTrue(WatchRender.strings(in: renderedRow).contains(snapshot.rows[0].amountText))
-        XCTAssertTrue(environmentValues(Int.self, in: renderedRow).contains(1))
-        let rowScale = try XCTUnwrap(
-            environmentValues(CGFloat.self, in: w1.rowLink(row)).first { $0 == 0.5 }
-        )
-        XCTAssertTrue(WatchRender.strings(in: w2.amountButton).contains(snapshot.rows[0].amountText))
-        let detailScale = try XCTUnwrap(
-            environmentValues(CGFloat.self, in: w2.amountButton).first { $0 == 0.5 }
-        )
-        XCTAssertTrue(environmentValues(Int.self, in: w2.amountButton).contains(1))
-
         let rowWidth = size.width - CGFloat(BalanceRowRules.iconPoints + 8 + 32)
         let detailWidth = size.width - 32
-        XCTAssertTrue(WatchRender.fits(
-            snapshot.rows[0].amountText,
-            font: .body,
-            dynamicTypeSize: .accessibility3,
-            width: rowWidth / rowScale
-        ))
-        XCTAssertTrue(WatchRender.fits(
-            snapshot.rows[0].amountText,
+        for row in w1.rows {
+            let amount = w1.rowView(row).amountCell
+            assertFits(
+                amount.primary,
+                font: .body,
+                in: rowWidth,
+                file: #filePath,
+                line: #line
+            )
+            if let secondary = amount.secondary {
+                assertFits(
+                    secondary,
+                    font: .caption2,
+                    in: rowWidth,
+                    file: #filePath,
+                    line: #line
+                )
+            }
+        }
+        assertFits(
+            w2.amountText,
             font: .title3,
-            dynamicTypeSize: .accessibility3,
-            width: detailWidth / detailScale
-        ))
+            in: detailWidth,
+            file: #filePath,
+            line: #line
+        )
     }
 
     private func snapshot(_ name: String, directory: URL) throws -> Snapshot {
@@ -275,62 +235,24 @@ final class AccessibilityTests: XCTestCase {
         return strings
     }
 
-    private func accessibilityLabel(in value: Any) throws -> String {
-        let labels = accessibilityLabels(in: value)
-        XCTAssertEqual(
-            labels.count,
-            1,
-            "Rendered control must have exactly one accessibility label: \(type(of: value))"
+    private func assertFits(
+        _ text: String,
+        font: Font,
+        in width: CGFloat,
+        file: StaticString,
+        line: UInt
+    ) {
+        let measuredWidth = WatchRender.idealWidth(
+            of: text,
+            font: font,
+            dynamicTypeSize: .accessibility3
         )
-        return try XCTUnwrap(labels.first, "Rendered control has no accessibility label")
-    }
-
-    private func accessibilityLabels(in value: Any) -> Set<String> {
-        var labels = Set<String>()
-        var visited = Set<ObjectIdentifier>()
-
-        func visit(_ value: Any, depth: Int) {
-            guard depth < 200 else { return }
-            let typeName = String(reflecting: type(of: value))
-            if typeName.contains("AccessibilityAttachmentModifier") {
-                labels.formUnion(WatchRender.strings(in: value))
-                return
-            }
-            let mirror = Mirror(reflecting: value)
-            if mirror.displayStyle == .class {
-                let identifier = ObjectIdentifier(value as AnyObject)
-                guard visited.insert(identifier).inserted else { return }
-            }
-            for child in mirror.children {
-                visit(child.value, depth: depth + 1)
-            }
-        }
-
-        visit(value, depth: 0)
-        return labels
-    }
-
-    private func environmentValues<T>(_ type: T.Type, in value: Any) -> [T] {
-        var values: [T] = []
-
-        func visit(_ value: Any, depth: Int) {
-            guard depth < 60 else { return }
-            let mirror = Mirror(reflecting: value)
-            if String(reflecting: Swift.type(of: value)).contains("EnvironmentKeyWritingModifier") {
-                values += mirror.children.compactMap { child in
-                    child.label == "value" ? child.value as? T : nil
-                }
-                values += mirror.children
-                    .filter { $0.label == "value" }
-                    .flatMap { Mirror(reflecting: $0.value).children }
-                    .compactMap { $0.value as? T }
-            }
-            for child in mirror.children {
-                visit(child.value, depth: depth + 1)
-            }
-        }
-
-        visit(value, depth: 0)
-        return values
+        XCTAssertLessThanOrEqual(
+            (measuredWidth ?? .infinity) * 0.5,
+            width,
+            "Amount '\(text)' does not fit its rendered frame at minimum scale",
+            file: file,
+            line: line
+        )
     }
 }

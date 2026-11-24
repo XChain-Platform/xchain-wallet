@@ -49,6 +49,18 @@ struct AlertDetailScreen: View {
         } ?? []
     }
 
+    func alertLabel(_ item: SnapshotInboxItem) -> String {
+        AccessibilityLabels.alertDetail(item, time: formattedAlertTime)
+    }
+
+    func requestLabel(_ index: Int) -> String {
+        requestAccessibilityLines[index]
+    }
+
+    func controlLabel(_ key: String) -> String {
+        AccessibilityLabels.control(key, text: localized)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
@@ -56,10 +68,7 @@ struct AlertDetailScreen: View {
                     .accessibilityHidden(true)
                 if let item {
                     Text(item.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(Text(verbatim: AccessibilityLabels.alertDetail(
-                            item,
-                            time: formattedAlertTime
-                        )))
+                        .accessibilityLabel(Text(verbatim: alertLabel(item)))
                     if let detailBody {
                         Text(detailBody).fixedSize(horizontal: false, vertical: true)
                             .accessibilityHidden(true)
@@ -71,13 +80,13 @@ struct AlertDetailScreen: View {
                     }
                 } else if let request {
                     Text(request.sentence).font(.headline).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(Text(verbatim: requestAccessibilityLines[0]))
+                        .accessibilityLabel(Text(verbatim: requestLabel(0)))
                     LabeledContent(LocalizedStringKey("w4.requestAmount"), value: request.amountText)
-                        .accessibilityLabel(Text(verbatim: requestAccessibilityLines[1]))
+                        .accessibilityLabel(Text(verbatim: requestLabel(1)))
                     if let expiresAt = request.expiresAt {
                         if requestExpired {
                             Text(LocalizedStringKey("w4.requestExpired"))
-                                .accessibilityLabel(Text(verbatim: requestAccessibilityLines[2]))
+                                .accessibilityLabel(Text(verbatim: requestLabel(2)))
                         } else {
                             LabeledContent(LocalizedStringKey("w4.requestExpiry")) {
                                 Text(
@@ -85,16 +94,14 @@ struct AlertDetailScreen: View {
                                     format: .dateTime.month(.abbreviated).day().hour().minute()
                                 )
                             }
-                            .accessibilityLabel(Text(verbatim: requestAccessibilityLines[2]))
+                            .accessibilityLabel(Text(verbatim: requestLabel(2)))
                         }
                     }
                 }
                 Button(action: onOpenOnPhone) {
                     Label(LocalizedStringKey("w4.openOnPhone"), systemImage: "iphone")
                 }
-                .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                    "w4.openOnPhone", text: localized
-                )))
+                .accessibilityLabel(Text(verbatim: controlLabel("w4.openOnPhone")))
             }
         }
         .navigationTitle(LocalizedStringKey("w4.title"))

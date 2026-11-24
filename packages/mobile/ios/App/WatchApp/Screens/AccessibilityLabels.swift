@@ -19,17 +19,19 @@ enum AccessibilityLabels {
         _ display: BalancesDisplay,
         text: (String) -> String
     ) -> [String] {
-        display.lines.map { line in
-            if let key = line.key {
-                return text(key)
-            }
+        display.lines.map { balanceLine($0, text: text) }
+    }
 
-            return SpokenLabels.lines([
-                line.name,
-                spoken(line.primary, isPrimary: true, text: text),
-                spoken(line.secondary, isPrimary: false, text: text),
-            ])
+    static func balanceLine(_ line: BalanceLine, text: (String) -> String) -> String {
+        if let key = line.key {
+            return text(key)
         }
+
+        return SpokenLabels.lines([
+            line.name,
+            spoken(line.primary, isPrimary: true, text: text),
+            spoken(line.secondary, isPrimary: false, text: text),
+        ])
     }
 
     static func requestPinned(

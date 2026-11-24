@@ -16,6 +16,14 @@ struct AlertsScreen: View {
         AlertsRules.newestFirst(inbox, at: \SnapshotInboxItem.at)
     }
 
+    func rowLabel(_ item: SnapshotInboxItem) -> String {
+        AccessibilityLabels.alertRow(item, time: relativeTime(item))
+    }
+
+    func controlLabel(_ key: String) -> String {
+        AccessibilityLabels.control(key, text: { NSLocalizedString($0, comment: "") })
+    }
+
     var body: some View {
         List {
             if rows.isEmpty {
@@ -31,10 +39,7 @@ struct AlertsScreen: View {
 
     var emptyState: some View {
         Text("w3.empty")
-            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                "w3.empty",
-                text: { NSLocalizedString($0, comment: "") }
-            )))
+            .accessibilityLabel(Text(verbatim: controlLabel("w3.empty")))
     }
 
     func rowLink(_ item: SnapshotInboxItem) -> some View {
@@ -44,10 +49,7 @@ struct AlertsScreen: View {
         .simultaneousGesture(TapGesture().onEnded {
             markRead(MarkReadIntent(id: item.id))
         })
-        .accessibilityLabel(Text(verbatim: AccessibilityLabels.alertRow(
-            item,
-            time: relativeTime(item)
-        )))
+        .accessibilityLabel(Text(verbatim: rowLabel(item)))
     }
 
     private func relativeTime(_ item: SnapshotInboxItem) -> String {

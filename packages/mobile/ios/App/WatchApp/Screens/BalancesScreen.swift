@@ -59,10 +59,6 @@ struct BalancesScreen: View {
         )
     }
 
-    var accessibilityLines: [String] {
-        AccessibilityLabels.balanceLines(display, text: localized)
-    }
-
     var requestModel: AlertsPresenter.RequestModel? {
         guard let snapshot, !snapshot.request.id.isEmpty else { return nil }
         return AlertsPresenter.request(snapshot.request, now: now ?? snapshot.builtAt)
@@ -114,9 +110,25 @@ struct BalancesScreen: View {
     func headerButton(_ header: BalanceText) -> BalancesHeaderButton {
         BalancesHeaderButton(
             header: header,
-            accessibilityLabel: AccessibilityLabels.balanceHeader(display, text: localized),
+            accessibilityLabel: headerLabel(),
             action: toggleUnits
         )
+    }
+
+    func headerLabel() -> String {
+        AccessibilityLabels.balanceHeader(display, text: localized)
+    }
+
+    func rowLabel(_ index: Int) -> String {
+        AccessibilityLabels.balanceLine(display.lines[index], text: localized)
+    }
+
+    func requestLabel(_ model: AlertsPresenter.RequestModel) -> String {
+        AccessibilityLabels.requestPinned(model, text: localized)
+    }
+
+    func controlLabel(_ key: String) -> String {
+        AccessibilityLabels.control(key, text: localized)
     }
 
     @ViewBuilder
@@ -137,32 +149,25 @@ struct BalancesScreen: View {
         NavigationLink(value: AlertSelection(id: snapshot?.request.id ?? "")) {
             Text(LocalizedStringKey(display.requestKey ?? "w1.requestWaiting"))
         }
-        .accessibilityLabel(Text(verbatim: AccessibilityLabels.requestPinned(
-            model,
-            text: localized
-        )))
+        .accessibilityLabel(Text(verbatim: requestLabel(model)))
     }
 
     func banner(_ key: String) -> some View {
         Text(LocalizedStringKey(key))
             .font(.caption2)
-            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                key, text: localized
-            )))
+            .accessibilityLabel(Text(verbatim: controlLabel(key)))
     }
 
     func statusLine(_ key: String, index: Int) -> some View {
         Text(LocalizedStringKey(key))
             .font(.caption2)
-            .accessibilityLabel(Text(verbatim: accessibilityLines[index]))
+            .accessibilityLabel(Text(verbatim: rowLabel(index)))
     }
 
     func ageLine(_ key: String) -> some View {
         Text(LocalizedStringKey(key))
             .font(.caption2)
-            .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
-                key, text: localized
-            )))
+            .accessibilityLabel(Text(verbatim: controlLabel(key)))
     }
 
     func rowLink(_ item: BalancesScreenRow) -> some View {
@@ -170,7 +175,7 @@ struct BalancesScreen: View {
             rowView(item)
             .minimumScaleFactor(0.5)
         }
-        .accessibilityLabel(Text(verbatim: accessibilityLines[item.index]))
+        .accessibilityLabel(Text(verbatim: rowLabel(item.index)))
     }
 
     func rowView(_ item: BalancesScreenRow) -> BalanceRowView {
@@ -222,10 +227,14 @@ struct BalancesToolbar: ToolbarContent {
         Button { open(BalancesToolbarRules.destination(control)) } label: {
             Image(systemName: iconName(control))
         }
-        .accessibilityLabel(Text(verbatim: AccessibilityLabels.control(
+        .accessibilityLabel(Text(verbatim: controlLabel(control)))
+    }
+
+    func controlLabel(_ control: BalancesToolbarRules.Control) -> String {
+        AccessibilityLabels.control(
             labelKey(control),
             text: { NSLocalizedString($0, comment: "") }
-        )))
+        )
     }
 
     private func labelKey(_ control: BalancesToolbarRules.Control) -> String {
