@@ -15,13 +15,11 @@ import {
     isXChainAvailable as runtimeIsXChainAvailable,
     getProvider as runtimeGetProvider,
     generateNonce as runtimeGenerateNonce,
-    makeSignInParams as runtimeMakeSignInParams,
     validateSignInChallenge as runtimeValidateSignInChallenge,
 } from './runtime.js';
 import type {
     XChainProvider,
     SignInChallengeV2,
-    SignInParams,
 } from './index.ts';
 
 // Event fired on `window` by the wallet's inject script once
@@ -47,13 +45,6 @@ export const getProvider: (
 // Generate a cryptographically random nonce, hex-encoded. 16 bytes = 128
 // bits of entropy, plenty for replay protection.
 export const generateNonce: (byteLength?: number) => string = runtimeGenerateNonce;
-
-// Build a SignInParams with a fresh nonce and a sane expiry window.
-// Pure - does not touch the provider.
-export const makeSignInParams: (
-    appId: string,
-    opts?: { expiresInMs?: number; nonce?: string },
-) => SignInParams = runtimeMakeSignInParams;
 
 // Verify a parsed sign-in challenge is current and well-formed. Does NOT
 // verify the signature - callers use `sdk.auth.verifyMessage` for that.
