@@ -6,7 +6,6 @@ package io.xchain.wallet.android.wear
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -43,7 +42,7 @@ class AlertRowTest {
         compose.onNodeWithText("Payment due").assertIsDisplayed()
         compose.onNodeWithText("Complete your payment").assertIsDisplayed()
         compose.onNodeWithText("2 h ago").assertIsDisplayed()
-        compose.onNodeWithTag("alertUnreadDot").assertIsDisplayed()
+        compose.onNodeWithTag("alertUnreadDot", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
@@ -53,7 +52,7 @@ class AlertRowTest {
         compose.onNodeWithText("Payment due").assertIsDisplayed()
         compose.onNodeWithText("1 h ago").assertIsDisplayed()
         compose.onNodeWithText("Complete your payment").assertDoesNotExist()
-        compose.onNodeWithTag("alertUnreadDot").assertDoesNotExist()
+        compose.onNodeWithTag("alertUnreadDot", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
