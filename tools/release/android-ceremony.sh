@@ -706,6 +706,7 @@ fi
 echo
 echo "==> staged in $OUTPUT_DIR:"
 echo "    $AAB_NAME   (Play upload; NEVER hosted publicly)"
+echo "    $WEAR_AAB_NAME   (Play upload, Wear OS; NEVER hosted publicly)"
 echo "    $APK_NAME   (direct download, STORE feature set; hosted on downloads.xchain.io)"
 if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
     echo "    $FULL_APK_NAME   (direct download, FULL feature set)"
@@ -732,7 +733,7 @@ fi
 # The full APK belongs to its own lane (android-full), so a set holding it
 # needs both lanes named: --lane android alone refuses it as undeclared.
 if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
-    echo "Next: sign all three artifacts into a GPG-signed manifest (K1). These"
+    echo "Next: sign all four artifacts into a GPG-signed manifest (K1). These"
     echo "lanes are signed on their own, and the full APK is its own lane, so pass"
     echo "--lane android,android-full - with --lane android alone the artifact-set"
     echo "gate refuses the -full.apk as undeclared, and with no --lane it demands"
@@ -742,7 +743,7 @@ if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
     echo "      bash tools/release/sign.sh --tag $TAG --lane android,android-full \\"
     echo "        --input $OUTPUT_DIR"
 else
-    echo "Next: sign both artifacts into a GPG-signed manifest (K1). This lane is"
+    echo "Next: sign all three artifacts into a GPG-signed manifest (K1). This lane is"
     echo "signed on its own, so pass --lane android - without it the artifact-set"
     echo "gate demands the web, extension and desktop artifacts this ceremony does"
     echo "not build, and refuses:"
