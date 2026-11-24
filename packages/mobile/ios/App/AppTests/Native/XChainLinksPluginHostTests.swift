@@ -43,7 +43,10 @@ final class XChainLinksPluginHostTests: XCTestCase {
 
         XCTAssertEqual(plugin.identifier, "XChainLinksPlugin")
         XCTAssertEqual(plugin.jsName, "XChainLinks")
-        XCTAssertEqual(plugin.pluginMethods.map(\.name), ["takePendingLink", "resolveHost"])
+        XCTAssertEqual(
+            plugin.pluginMethods.map(\.name),
+            ["takePendingLink", "resolveHost", "returnToBrowser"]
+        )
         XCTAssertTrue(plugin.pluginMethods.allSatisfy { $0.returnType == CAPPluginReturnPromise })
         XCTAssertEqual(
             plugin.hostLookup("127.0.0.1"),
