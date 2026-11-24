@@ -13,27 +13,45 @@ import io.xchain.wallet.android.wear.data.SnapshotStore
 import io.xchain.wallet.android.wear.data.WatchPaths
 import io.xchain.wallet.android.wear.tile.BalanceTileService
 import java.io.File
+import java.io.InputStream
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 class WatchListenerService : WearableListenerService() {
+    internal data class StateItem(val enabled: Boolean, val builtAt: Long)
+
+    internal var readChannel: (ChannelClient.Channel, (InputStream) -> Unit) -> Unit = { channel, consume ->
+        val client = Wearable.getChannelClient(this)
+        client.getInputStream(channel).addOnSuccessListener { input ->
+            try {
+                consume(input)
+            } finally {
+                client.close(channel)
+            }
+        }
+        Unit
+    }
+
     override fun onMessageReceived(event: MessageEvent) = receive(event.path, event.data)
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
-        val client = Wearable.getChannelClient(this)
-        client.getInputStream(channel).addOnSuccessListener { input ->
+        readChannel(channel) { input ->
             input.use { receive(channel.path, it.readBytes()) }
-            client.close(channel)
         }
     }
 
     override fun onDataChanged(events: DataEventBuffer) {
-        events.filter { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path == WatchPaths.STATE }
-            .forEach {
-                val map = DataMapItem.fromDataItem(it.dataItem).dataMap
-                receiveState(map.getBoolean("enabled"), map.getLong("builtAt"))
-            }
+        onStateItems(
+            events.filter { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path == WatchPaths.STATE }
+                .map {
+                    val map = DataMapItem.fromDataItem(it.dataItem).dataMap
+                    StateItem(map.getBoolean("enabled"), map.getLong("builtAt"))
+                },
+        )
     }
+
+    internal fun onStateItems(items: Iterable<StateItem>) =
+        items.forEach { receiveState(it.enabled, it.builtAt) }
 
     internal fun receive(path: String, data: ByteArray) {
         val incoming = WatchPaths.classify(path) ?: return
