@@ -19,6 +19,8 @@
 //   5. nothing scrolls the page sideways;
 //   6. content reaches the page gutter on both sides.
 
+import { readFileSync } from 'node:fs';
+
 import {
     dismissIntroCarousel,
     expect,
@@ -27,6 +29,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { DUO_MEASURED_PATH } from '../../fixtures/duoMeasured.js';
 import { duoWidths, enterDemoWallet, overflowingElements } from '../../fixtures/responsive.js';
 
 const BASE_VIEWPORTS = [
@@ -347,10 +350,34 @@ test('the app header keeps only its logo and controls in one row at every width'
     }
 });
 
-test("the measured Duo widths are part of the sweep", () => {
-    const all = duoWidths();
-    expect(all.length, "at least one reachable Duo state").toBeGreaterThan(0);
-    for (const d of all) {
-        expect(VIEWPORTS.some((v) => v.width === d.width && v.height === d.height), d.name).toBe(true);
-    }
-});
+const DUO_STATES = [
+    { state: 'closed-portrait', label: 'outer portrait' },
+    { state: 'closed-landscape', label: 'outer landscape' },
+    { state: 'open-portrait', label: 'Book' },
+    { state: 'open-landscape', label: 'rotated' },
+];
+
+const MEASURED = JSON.parse(readFileSync(DUO_MEASURED_PATH, 'utf8'));
+
+for (const { state, label } of DUO_STATES) {
+    test(`Duo ${label} (${state}) is swept or recorded unreachable`, () => {
+        const raw = MEASURED.states?.[state];
+        expect(raw, `measured-widths.json carries a ${state} entry`).toBeTruthy();
+
+        const reached = duoWidths().filter((d) => d.state === state);
+        if (reached.length === 0) {
+            expect(typeof raw.unreachable, `${state} has no measured size, so it must say why`).toBe('string');
+            expect(raw.unreachable.trim().length, `${state} unreachable reason`).toBeGreaterThan(0);
+            return;
+        }
+
+        expect(reached, `${state} appears once`).toHaveLength(1);
+        const [d] = reached;
+        expect({ width: d.width, height: d.height }, `${state} size matches the measurement`)
+            .toEqual({ width: Math.round(raw.width), height: Math.round(raw.height) });
+        expect(
+            VIEWPORTS.some((v) => v.width === d.width && v.height === d.height),
+            `${state} ${d.width}x${d.height} is in the sweep`,
+        ).toBe(true);
+    });
+}
