@@ -90,22 +90,27 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testRootNavigationStackBuildsAtBothWatchSizes() throws {
+    func testNotSetUpRootRendersBothMessagesAtBothWatchSizes() throws {
         let model = makeModel()
-        session.receive(snapshot(enabled: true))
+        let root = RootView(model: model)
+        let redaction = AmbientRedactionState(
+            luminanceReduced: false,
+            phoneHidden: false,
+            hideAmounts: false
+        )
+        let sizes = [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)]
+        let before = try sizes.map { size in
+            try renderedPixels(root.rootContent(redaction: redaction), size: size)
+        }
+
+        session.receive(snapshot(enabled: false))
         waitForMainQueue()
+        let disabled = try sizes.map { size in
+            try renderedPixels(root.rootContent(redaction: redaction), size: size)
+        }
 
-        for size in [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)] {
-            let body = RootView(model: model).body.frame(
-                width: size.width,
-                height: size.height
-            )
-            let typeNames = renderedTypeNames(in: body)
-
-            XCTAssertTrue(typeNames.contains { $0.contains("NavigationStack") }, "\(size)")
-            XCTAssertTrue(typeNames.contains { $0.contains("WatchScreen") }, "\(size)")
-            XCTAssertTrue(typeNames.contains { $0.contains("BalanceSelection") }, "\(size)")
-            XCTAssertTrue(typeNames.contains { $0.contains("AlertSelection") }, "\(size)")
+        for index in sizes.indices {
+            XCTAssertNotEqual(before[index], disabled[index], "\(sizes[index])")
         }
     }
 
@@ -167,24 +172,13 @@ final class RootViewTests: XCTestCase {
         return try XCTUnwrap(message["value"] as? [String: Any])
     }
 
-    private func renderedTypeNames(in value: Any) -> Set<String> {
-        var typeNames = Set<String>()
-        var visited = Set<ObjectIdentifier>()
-
-        func visit(_ value: Any, depth: Int) {
-            guard depth < 50 else { return }
-            typeNames.insert(String(reflecting: type(of: value)))
-
-            let mirror = Mirror(reflecting: value)
-            if mirror.displayStyle == .class {
-                let identifier = ObjectIdentifier(value as AnyObject)
-                guard visited.insert(identifier).inserted else { return }
-            }
-            for child in mirror.children { visit(child.value, depth: depth + 1) }
-        }
-
-        visit(value, depth: 0)
-        return typeNames
+    @MainActor
+    private func renderedPixels(_ view: some View, size: CGSize) throws -> Data {
+        let image = try XCTUnwrap(WatchRender.image(view, size: size), "\(size)")
+        XCTAssertEqual(image.width, Int(size.width * 2), "\(size)")
+        XCTAssertEqual(image.height, Int(size.height * 2), "\(size)")
+        XCTAssertFalse(WatchRender.isBlank(image), "\(size)")
+        return try XCTUnwrap(image.dataProvider?.data as Data?, "\(size)")
     }
 }
 
