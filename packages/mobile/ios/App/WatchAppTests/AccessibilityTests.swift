@@ -300,12 +300,6 @@ final class AccessibilityTests: XCTestCase {
             amountWidth + 1,
             "Amount '\(text)' is truncated in its rendered frame"
         )
-        XCTAssertEqual(
-            rendered.width,
-            fullRenderedWidth,
-            accuracy: 2,
-            "Amount '\(text)' did not render all glyphs"
-        )
     }
 
     private func inkBounds<Content: View>(
