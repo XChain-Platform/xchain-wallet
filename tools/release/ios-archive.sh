@@ -46,10 +46,16 @@ Takes no arguments. Archives only: it does not export and it does not
 upload (see ios-export.sh).
 
 Environment, signed mode (all required):
-  APPLE_API_KEY       App Store Connect API key, the .p8 file CONTENTS
+  APPLE_API_KEY       App Store Connect API key, the .p8 file CONTENTS, or set
+  APPLE_API_KEY_PATH  the path to the .p8 file instead
   APPLE_API_KEY_ID    the key's id
   APPLE_API_ISSUER    the issuer id
   APPLE_TEAM_ID       the team the archive is signed for
+
+When neither key variable is set, the single AuthKey_*.p8 under
+APPLE_API_KEY_DIR (default: ~/.appstoreconnect/private_keys) is used. The
+issuer defaults to XCHAIN_RELEASE_DIR/asc-issuer.txt and the team defaults to
+the Xcode project's DEVELOPMENT_TEAM.
 
 Environment, unsigned mode:
   XCHAIN_IOS_ARCHIVE_UNSIGNED=1   archive with signing disabled
@@ -98,10 +104,44 @@ archive="$here/packages/mobile/ios/build/App.xcarchive"
 unsigned="${XCHAIN_IOS_ARCHIVE_UNSIGNED:-}"
 
 if [ -z "$unsigned" ]; then
-    : "${APPLE_API_KEY:?APPLE_API_KEY (the .p8 contents) is required, or set XCHAIN_IOS_ARCHIVE_UNSIGNED=1 to archive without signing}"
+    keyfile="${APPLE_API_KEY_PATH:-}"
+    if [ -n "$keyfile" ]; then
+        if [ ! -f "$keyfile" ]; then
+            echo "ios-archive: APPLE_API_KEY_PATH does not exist: $keyfile" >&2
+            exit 1
+        fi
+    elif [ -z "${APPLE_API_KEY:-}" ]; then
+        key_search_dir="${APPLE_API_KEY_DIR:-$HOME/.appstoreconnect/private_keys}"
+        key_matches=()
+        for candidate in "$key_search_dir"/AuthKey_*.p8; do
+            [ -f "$candidate" ] && key_matches+=("$candidate")
+        done
+        if [ "${#key_matches[@]}" -ne 1 ]; then
+            echo "ios-archive: expected exactly one AuthKey_*.p8 in $key_search_dir; found ${#key_matches[@]}" >&2
+            exit 1
+        fi
+        keyfile="${key_matches[0]}"
+        key_name="$(basename "$keyfile")"
+        APPLE_API_KEY_ID="${key_name#AuthKey_}"
+        APPLE_API_KEY_ID="${APPLE_API_KEY_ID%.p8}"
+    fi
     : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"
-    : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"
-    : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
+    if [ -z "${APPLE_API_ISSUER:-}" ]; then
+        issuer_file="${XCHAIN_RELEASE_DIR:-$HOME/.xchain-release}/asc-issuer.txt"
+        if [ ! -f "$issuer_file" ]; then
+            echo "ios-archive: APPLE_API_ISSUER is unset and $issuer_file does not exist" >&2
+            exit 1
+        fi
+        APPLE_API_ISSUER="$(<"$issuer_file")"
+    fi
+    : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required or asc-issuer.txt must be non-empty}"
+    if [ -z "${APPLE_TEAM_ID:-}" ] && [ -f "$project/project.pbxproj" ]; then
+        APPLE_TEAM_ID="$(awk '/DEVELOPMENT_TEAM = [^;]+;/ { value=$0; sub(/^.*DEVELOPMENT_TEAM = /, "", value); sub(/;.*/, "", value); print value; exit }' "$project/project.pbxproj")"
+    fi
+    : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required or the Xcode project must set DEVELOPMENT_TEAM}"
+    if [ -n "$keyfile" ]; then
+        echo "ios-archive: using App Store Connect key file $keyfile (key ID $APPLE_API_KEY_ID)" >&2
+    fi
 fi
 
 if [ ! -d "$project" ]; then
@@ -145,10 +185,13 @@ else
     # never echoed: the value is passed through the environment into the file
     # directly, so it does not appear in an argument list, in the run log, or
     # in any shell history.
-    keydir="$(mktemp -d)"
-    trap 'rm -rf "$keydir"' EXIT
-    keyfile="$keydir/AuthKey_${APPLE_API_KEY_ID}.p8"
-    ( umask 077; printf '%s' "$APPLE_API_KEY" > "$keyfile" )
+    if [ -z "$keyfile" ]; then
+        keydir="$(mktemp -d)"
+        trap 'rm -rf "$keydir"' EXIT
+        keyfile="$keydir/AuthKey_${APPLE_API_KEY_ID}.p8"
+        ( umask 077; printf '%s' "$APPLE_API_KEY" > "$keyfile" )
+        echo "ios-archive: using App Store Connect key file $keyfile (key ID $APPLE_API_KEY_ID)" >&2
+    fi
 
     xcodebuild archive \
         -project "$project" \
