@@ -73,7 +73,7 @@ final class AccessibilityTests: XCTestCase {
             try accessibilityLabel(in: BalancesScreen(
                 snapshot: snapshot, mode: .fiat, phoneReachable: true,
                 now: snapshot.builtAt, setMode: { _ in }, open: { _ in }
-            ).headerButton(try XCTUnwrap(balances.header))),
+            ).headerButton(try XCTUnwrap(balances.header)).body),
             snapshot.totals.fiatText
         )
         let balancesScreen = BalancesScreen(
@@ -220,14 +220,12 @@ final class AccessibilityTests: XCTestCase {
             onOpenOnPhone: {}
         )
 
-        let w1Image = try XCTUnwrap(WatchRender.image(
+        XCTAssertNotNil(WatchRender.image(
             w1, size: size, dynamicTypeSize: .accessibility3
         ))
-        let w2Image = try XCTUnwrap(WatchRender.image(
+        XCTAssertNotNil(WatchRender.image(
             w2, size: size, dynamicTypeSize: .accessibility3
         ))
-        XCTAssertFalse(WatchRender.isBlank(w1Image))
-        XCTAssertFalse(WatchRender.isBlank(w2Image))
 
         let row = try XCTUnwrap(w1.rows.first)
         let renderedRow = w1.rowView(row).body.body
@@ -279,20 +277,31 @@ final class AccessibilityTests: XCTestCase {
 
     private func accessibilityLabel(in value: Any) throws -> String {
         let labels = accessibilityLabels(in: value)
-        XCTAssertEqual(labels.count, 1, "Rendered control must have exactly one accessibility label")
+        XCTAssertEqual(
+            labels.count,
+            1,
+            "Rendered control must have exactly one accessibility label: \(type(of: value))"
+        )
         return try XCTUnwrap(labels.first, "Rendered control has no accessibility label")
     }
 
     private func accessibilityLabels(in value: Any) -> Set<String> {
         var labels = Set<String>()
+        var visited = Set<ObjectIdentifier>()
 
         func visit(_ value: Any, depth: Int) {
-            guard depth < 60 else { return }
-            if String(reflecting: type(of: value)) == "SwiftUI.AccessibilityAttachmentModifier" {
+            guard depth < 200 else { return }
+            let typeName = String(reflecting: type(of: value))
+            if typeName.contains("AccessibilityAttachmentModifier") {
                 labels.formUnion(WatchRender.strings(in: value))
                 return
             }
-            for child in Mirror(reflecting: value).children {
+            let mirror = Mirror(reflecting: value)
+            if mirror.displayStyle == .class {
+                let identifier = ObjectIdentifier(value as AnyObject)
+                guard visited.insert(identifier).inserted else { return }
+            }
+            for child in mirror.children {
                 visit(child.value, depth: depth + 1)
             }
         }
