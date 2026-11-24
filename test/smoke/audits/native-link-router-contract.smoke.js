@@ -19,6 +19,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 
 const parser = read('packages/core/src/uri/xchainUri.js');
+const bip21 = read('packages/core/src/uri/bip21.js');
 const intake = read('packages/web/src/deeplinks/nativeDeepLinks.js');
 const manifest = read('packages/mobile/android/app/src/main/AndroidManifest.xml');
 const androidInbox = read(
@@ -32,19 +33,43 @@ const webApp = read('packages/web/src/App.jsx');
 const origin = /WEB_LINK_ORIGIN\s*=\s*'([^']+)'/.exec(parser)?.[1];
 const walletOrigin = /WALLET_LINK_ORIGIN\s*=\s*'([^']+)'/.exec(parser)?.[1];
 const prefix = /WEB_LINK_PREFIX\s*=\s*'([^']+)'/.exec(parser)?.[1];
-assert.ok(origin && walletOrigin && prefix, 'the URI router must state both web origins and its path prefix');
+const walletPrefix = /WALLET_LINK_PREFIX\s*=\s*'([^']+)'/.exec(parser)?.[1];
+assert.ok(
+    origin && walletOrigin && prefix && walletPrefix,
+    'the URI router must state both web origins and their path prefixes',
+);
 const webHost = new URL(origin).host;
 const walletHost = new URL(walletOrigin).host;
 
 const verifiedFilters = [...manifest.matchAll(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g)];
-assert.equal(verifiedFilters.length, 1, 'Android must have one auto-verified App Link filter');
-const appLink = /<data android:scheme="https" android:host="([^"]+)" android:pathPrefix="([^"]+)" \/>/
-    .exec(verifiedFilters[0][1]);
-assert.ok(appLink, 'the verified Android filter must constrain scheme, host, and path');
+assert.equal(verifiedFilters.length, 2, 'Android must have two auto-verified App Link filters');
+const appLinks = verifiedFilters.map((filter) => {
+    const match = /<data android:scheme="https" android:host="([^"]+)" android:pathPrefix="([^"]+)" \/>/
+        .exec(filter[1]);
+    assert.ok(match, 'each verified Android filter must constrain scheme, host, and path');
+    return { host: match[1], prefix: match[2] };
+});
 assert.deepEqual(
-    { host: appLink[1], prefix: appLink[2] },
-    { host: webHost, prefix },
-    'the verified Android claim must equal the web-link pattern accepted by the router',
+    appLinks,
+    [
+        { host: webHost, prefix },
+        { host: walletHost, prefix: walletPrefix },
+    ],
+    'the verified Android claims must equal the web-link patterns accepted by the router',
+);
+
+const uriMaxLength = /URI_MAX_LENGTH\s*=\s*([\d_]+)/.exec(bip21)?.[1];
+const androidMaxLength = /private static final int MAX_LINK_LENGTH\s*=\s*([\d_]+);/
+    .exec(androidInbox)?.[1];
+assert.ok(uriMaxLength && androidMaxLength, 'the core and Android intake must declare link-length caps');
+assert.equal(
+    Number(androidMaxLength.replaceAll('_', '')),
+    Number(uriMaxLength.replaceAll('_', '')),
+    'the Android link-length cap must equal the core URI cap',
+);
+assert.ok(
+    androidInbox.includes('LinkIntakeRule.HOST_WALLET'),
+    'the Android intake must name the shared wallet host rule',
 );
 
 const entitlementHosts = [...entitlements.matchAll(/<string>applinks:([^<]+)<\/string>/g)].map((m) => m[1]);

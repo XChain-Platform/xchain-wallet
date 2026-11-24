@@ -16,7 +16,7 @@ export function CopyButtonSection() {
                 when={<>Use beside addresses, transaction IDs, signatures, and other values users need elsewhere.</>}
                 whenNot={<>Do not offer copying when the surrounding flow can pass the value directly.</>}
                 sizing={<>Content-sized and suitable for an inline detail row or compact action group.</>}
-                variants={<>Custom label, accessible label, feedback duration, and sensitive clipboard handling.</>}
+                variants={<>Custom label, accessible label, feedback duration, sensitive clipboard handling, <code>appearance="outlined"</code> for a per-row action, <code>iconOnly</code>, and <code>onCopied</code>.</>}
                 doRule={<>Set <code>sensitive</code> for seed words and private keys so native clipboard policy is enforced.</>}
                 dontRule={<>Do not call <code>navigator.clipboard</code> directly from a route.</>}
             />

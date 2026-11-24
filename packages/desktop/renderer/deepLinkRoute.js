@@ -73,7 +73,7 @@ function unwrapProtocolHandler(raw) {
  *
  * @param {unknown} raw
  * @param {any} chainRegistry
- * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
+ * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'site-request-approval', request: Record<string, unknown> } | { view: 'newer-wallet-needed' } | { view: 'deep-link-error', message: string } | null}
  */
 export function deepLinkRoute(raw, chainRegistry) {
     if (typeof raw !== 'string' || !raw) return null;
@@ -126,13 +126,20 @@ export function deepLinkRoute(raw, chainRegistry) {
 
     const lower = normalized.toLowerCase();
     const isXchainLink = scheme === 'xchain'
-        || lower.startsWith('https://xchain.io/wallet/link/');
+        || lower.startsWith('https://xchain.io/wallet/link/')
+        || lower.startsWith('https://wallet.xchain.io/link/');
     if (!isXchainLink) return null;
     let intent;
     try {
         intent = hardenUriIntentText(parseXchainUri(normalized, { chainRegistry }));
     } catch {
         return invalidRoute();
+    }
+    if (intent?.kind === 'request') {
+        return { view: 'site-request-approval', request: intent.request };
+    }
+    if (intent?.kind === 'request-unsupported') {
+        return { view: 'newer-wallet-needed' };
     }
     // The parser preserves unknown actions as send-shaped intents for generic
     // URI tooling. External links accept only screens that require an explicit

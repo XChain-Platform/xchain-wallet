@@ -34,7 +34,7 @@ const ok = form.validate({ 'thing-name': name.trim() ? null : 'Enter a name.' })
 </FormPage>`}
             </Markup>
             <Guidance
-                what={<>Props: <code>errors</code> (a list of <code>{'{ id, label, message }'}</code>; <code>id</code> is the field's input id and makes the entry a link), <code>focusKey</code> (change it on each submit attempt so a repeated failure takes focus again), <code>recovery</code> (an optional <code>{'{ label, onAction }'}</code> button, such as Use max). Renders nothing for an empty list.</>}
+                what={<>Props: <code>errors</code> (a list of <code>{'{ id, label, message }'}</code>; <code>id</code> is the field's input id and makes the entry a link), <code>focusKey</code> (change it on each submit attempt so a repeated failure takes focus again), <code>form</code> (the <code>useFormErrors</code> object, in place of <code>errors</code> and <code>focusKey</code>), <code>action</code> (an optional <code>{'{ label, onAction }'}</code> button, such as Use max; <code>recovery</code> is the older name). Renders nothing for an empty list.</>}
                 when={<>A form submit that failed validation, with one or more field errors or a form-level error the user can fix on this page.</>}
                 whenNot={<>A network or signing failure the user cannot fix in a field (StatusMessage variant="error") · live per-keystroke feedback (the field's own <code>error</code>).</>}
                 sizing={<>Full form width, <code>--xc-space-3</code> padding, <code>--xc-radius-md</code>, a danger border and text. One line of heading, then a list.</>}
@@ -62,7 +62,7 @@ const ok = form.validate({ 'thing-name': name.trim() ? null : 'Enter a name.' })
                 <Input id="sg-summary-amount" label="Amount" error="Amount must be a positive number." onChange={() => {}} />
             </LiveExample>
             <Guidance
-                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows with its other notices as the first item of the page content. Props: <code>variant</code> (default warning), <code>role</code>, <code>lead</code> (a bold lead-in sentence, such as "Destroy is irreversible."), <code>testId</code>, and the text as children, or <code>lines</code> (an array of strings) for one message of several paragraphs, such as a decoder's warnings.</>}
+                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows with its other notices as the first item of the page content. Props: <code>tone</code> (info, danger or success; <code>variant</code> is the older name, default warning), <code>title</code> (a bold line above the text, such as "Destroy is irreversible."; <code>lead</code> is the older alias), <code>role</code>, <code>testId</code>, <code>onDismiss</code>, and the text as children, or <code>lines</code> (an array of strings, with <code>bullets</code> to show separate issues as a list) for one message of several paragraphs, such as a decoder's warnings.</>}
                 when={<>A fact about the whole form that a field or control knows only once it renders, such as the fee selector's fallback-rate note.</>}
                 whenNot={<>A field problem (the field's own <code>error</code>) · text that is not a plain string, which renders in place.</>}
                 sizing={<>The StatusMessage row, at full content width, first in the page content (above the card when wide), with the form gap between stacked notices.</>}
@@ -76,7 +76,7 @@ const ok = form.validate({ 'thing-name': name.trim() ? null : 'Enter a name.' })
                 </FormPage>
             </LiveExample>
             <Guidance
-                what={<>FieldNote: a toned line under one field, or beside one item of a review summary, drawn like a field error (a glyph and small toned text) with no box. Props: <code>variant</code> (warning, error or info; default warning), <code>role</code> (alert by default for warning and error), <code>id</code> for the field's <code>aria-describedby</code>, and the text as children or <code>lines</code>.</>}
+                what={<>FieldNote: a toned line under one field, or beside one item of a review summary, drawn like a field error (a glyph and small toned text) with no box. Props: <code>variant</code> (warning, error, info or success; default warning), <code>action</code> (a slot for a small recovery control such as Clear), <code>role</code> (alert by default for warning and error), <code>id</code> for the field's <code>aria-describedby</code>, and the text as children or <code>lines</code>.</>}
                 when={<>A caution about one field's value that is not a validation error (a pasted or lookalike address) · a note about one decoded item in a review list.</>}
                 whenNot={<>A message about the whole form or its context, such as a wrong network or a missing owner address (FormNotice) · a validation error on an Input (its own <code>error</code>).</>}
                 sizing={<>The field help line: <code>--xc-text-xs</code>, <code>--xc-help-gap</code> above, the prose width.</>}
