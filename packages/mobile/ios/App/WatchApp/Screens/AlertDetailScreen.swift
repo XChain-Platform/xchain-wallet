@@ -46,17 +46,9 @@ struct AlertDetailScreen: View {
     var alertTime: (key: String, n: Int)? { content.alertTime }
     var requestExpired: Bool { content.requestExpired }
     var requestModel: AlertsPresenter.RequestModel? { content.requestModel }
-    func alertLabel(_ item: SnapshotInboxItem) -> String {
-        content.alertLabel(item)
-    }
-
-    func requestLabel(_ index: Int) -> String {
-        content.requestLabel(index)
-    }
-
-    func controlLabel(_ key: String) -> String {
-        content.controlLabel(key)
-    }
+    var alertLabel: (SnapshotInboxItem) -> String { content.alertLabel }
+    var requestLabel: (Int) -> String { content.requestLabel }
+    var controlLabel: (String) -> String { content.controlLabel }
 
     var body: some View {
         ScrollView {

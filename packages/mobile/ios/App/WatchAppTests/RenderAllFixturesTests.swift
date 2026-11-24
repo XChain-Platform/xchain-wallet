@@ -53,6 +53,7 @@ final class RenderAllFixturesTests: XCTestCase {
     }
 
     private func renderBalances(_ snapshots: [Named<Snapshot>], size: CGSize) throws {
+        var scaledAmountAssertions = 0
         for fixture in snapshots {
             for mode in [WatchUnitsMode.fiat, .units] {
                 let modeName = mode == .fiat ? "fiat" : "units"
@@ -91,7 +92,7 @@ final class RenderAllFixturesTests: XCTestCase {
                         tickerColor: row.tickerColor
                     )
                     if let amount = line.primary?.text {
-                        try assertRenderedBalanceAmountFits(
+                        if try assertRenderedBalanceAmountFits(
                             primary: amount,
                             secondary: line.secondary == nil ? nil : "",
                             name: name,
@@ -99,10 +100,12 @@ final class RenderAllFixturesTests: XCTestCase {
                             font: .body,
                             fixture: fixture.name,
                             size: size
-                        )
+                        ) {
+                            scaledAmountAssertions += 1
+                        }
                     }
                     if let amount = line.secondary?.text {
-                        try assertRenderedBalanceAmountFits(
+                        if try assertRenderedBalanceAmountFits(
                             primary: "",
                             secondary: amount,
                             name: name,
@@ -110,10 +113,19 @@ final class RenderAllFixturesTests: XCTestCase {
                             font: .caption2,
                             fixture: fixture.name,
                             size: size
-                        )
+                        ) {
+                            scaledAmountAssertions += 1
+                        }
                     }
                 }
             }
+        }
+        if BalanceRowRules.stacksNameOverAmount(screenWidth: Double(size.width)) {
+            XCTAssertGreaterThan(
+                scaledAmountAssertions,
+                0,
+                "W1 fixtures did not exercise compact amount scaling at \(sizeDescription(size))"
+            )
         }
     }
 
@@ -374,9 +386,9 @@ final class RenderAllFixturesTests: XCTestCase {
         size: CGSize,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) throws {
+    ) throws -> Bool {
         guard BalanceRowRules.stacksNameOverAmount(screenWidth: Double(size.width)) else {
-            return
+            return false
         }
         let text = primary.isEmpty ? secondary ?? "" : primary
         let contentWidth = size.width - 32
@@ -407,6 +419,12 @@ final class RenderAllFixturesTests: XCTestCase {
                 .minimumScaleFactor(BalanceRowView.amountMinimumScale)
                 .frame(width: amountWidth, alignment: .trailing)
         )
+        let unscaled = try inkBounds(
+            Text(verbatim: text)
+                .font(font)
+                .lineLimit(1)
+                .fixedSize()
+        )
         let context = "W1 \(fixture) amount at \(sizeDescription(size)): \(text)"
         XCTAssertEqual(
             rendered.width,
@@ -424,6 +442,17 @@ final class RenderAllFixturesTests: XCTestCase {
             file: file,
             line: line
         )
+        let exercisesScaling = unscaled.width > amountWidth && expected.height < unscaled.height
+        if exercisesScaling {
+            XCTAssertLessThan(
+                rendered.height,
+                unscaled.height,
+                "\(context) retained unscaled glyph height and is truncated",
+                file: file,
+                line: line
+            )
+        }
+        return exercisesScaling
     }
 
     private func inkBounds<Content: View>(

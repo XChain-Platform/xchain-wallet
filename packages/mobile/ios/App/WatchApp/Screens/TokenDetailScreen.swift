@@ -71,21 +71,10 @@ struct TokenDetailScreen: View {
     func toggleAmount() { content.toggleAmount() }
     func toggleArtwork() { content.toggleArtwork() }
 
-    func identityLabel() -> String {
-        content.identityLabel()
-    }
-
-    func amountLabel() -> String {
-        content.amountLabel()
-    }
-
-    func factLabel(_ row: TokenDetailFactRow) -> String {
-        content.factLabel(row)
-    }
-
-    func controlLabel(_ key: String) -> String {
-        content.controlLabel(key)
-    }
+    var identityLabel: () -> String { content.identityLabel }
+    var amountLabel: () -> String { content.amountLabel }
+    var factLabel: (TokenDetailFactRow) -> String { content.factLabel }
+    var controlLabel: (String) -> String { content.controlLabel }
 
     var amountButton: some View {
         content.amountButton
