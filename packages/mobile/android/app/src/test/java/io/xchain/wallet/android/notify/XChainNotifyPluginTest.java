@@ -92,6 +92,7 @@ public class XChainNotifyPluginTest {
 
         XChainNotifyPlugin.createChannels(context);
 
+        assertEquals(10, NotifyChannels.FAMILIES.size());
         assertEquals(NotifyChannels.FAMILIES.size(), manager.getNotificationChannels().size());
         for (String family : NotifyChannels.FAMILIES) {
             NotificationChannel channel = manager.getNotificationChannel(
