@@ -915,13 +915,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
+        if (preflightBlocked) return preflightBlockReason();
         if (psbtApprovalBlocked || coSignApprovalBlocked) {
-            if (preflightBlocked) return preflightBlockReason();
             return (psbtDecodePending || coSignPreview.loading)
                 ? { key: 'checking', text: t('confirmStandard.blocked.checking') }
                 : { key: 'refusal', text: t('confirmStandard.blocked.fails') };
         }
-        if (preflightBlocked) return preflightBlockReason();
         if (signInBlocked) return { key: 'signIn', text: t('confirmStandard.blocked.signInAddress') };
         if (!walletId) return { key: 'wallet', text: t('confirmStandard.blocked.wallet') };
         if (password.length === 0) return { key: 'credentials', text: t('confirmStandard.blocked.password') };
