@@ -42,8 +42,7 @@ final class BalancesScreenTests: XCTestCase {
     func testToolbarButtonsOpenTheirRenderedDestinations() throws {
         var opened: [WatchScreen] = []
         let screen = make(open: { opened.append($0) })
-        let toolbar = try XCTUnwrap(firstValue(of: BalancesToolbar.self, in: screen.body))
-        let buttons = renderedButtons(in: toolbar.body)
+        let buttons = try XCTUnwrap(renderedToolbarButtons(in: screen.body))
 
         XCTAssertEqual(buttons.count, 3)
         XCTAssertEqual(
@@ -65,14 +64,14 @@ final class BalancesScreenTests: XCTestCase {
         XCTAssertNil(recorded)
     }
 
-    func testUnreadCountsOnlyUnreadInboxItems() {
+    func testUnreadCountsOnlyUnreadInboxItems() throws {
         let screen = make(inbox: [
             item("a", read: false), item("b", read: true), item("c", read: false)
         ])
 
         XCTAssertEqual(screen.unread, 2)
         XCTAssertTrue(
-            renderedButtons(in: screen.toolbarContent.body)
+            try XCTUnwrap(renderedToolbarButtons(in: screen.body))
                 .flatMap { renderedContent(in: $0).strings }
                 .contains("bell.badge")
         )
@@ -163,12 +162,14 @@ final class BalancesScreenTests: XCTestCase {
         return buttons
     }
 
-    private func firstValue<T>(of type: T.Type, in value: Any, depth: Int = 0) -> T? {
-        if let match = value as? T { return match }
+    private func renderedToolbarButtons(in value: Any, depth: Int = 0) -> [Any]? {
         guard depth < 40 else { return nil }
+        if let toolbar = value as? BalancesToolbar {
+            return renderedButtons(in: toolbar.body)
+        }
         for child in Mirror(reflecting: value).children {
-            if let match = firstValue(of: type, in: child.value, depth: depth + 1) {
-                return match
+            if let buttons = renderedToolbarButtons(in: child.value, depth: depth + 1) {
+                return buttons
             }
         }
         return nil
