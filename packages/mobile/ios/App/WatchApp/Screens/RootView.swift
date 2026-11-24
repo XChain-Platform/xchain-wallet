@@ -77,7 +77,10 @@ final class RootViewModel: ObservableObject {
 
     func activate() {
         phoneLink.activate()
-        phoneReachable = phoneLink.isReachable
+        let reachable = phoneLink.isReachable
+        if phoneReachable != reachable {
+            phoneReachable = reachable
+        }
     }
 
     func setMode(_ newMode: WatchUnitsMode) {

@@ -91,18 +91,13 @@ final class RootViewTests: XCTestCase {
 
     @MainActor
     func testRootRendersNotSetUpAndSetUpAtBothWatchSizes() throws {
-        let model = makeModel()
         let sizes = [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)]
 
         for size in sizes {
-            try assertRootRenders(model, state: "not set up", size: size)
+            try assertRootRenders(setUp: false, size: size)
         }
-
-        session.receive(snapshot(enabled: true))
-        waitForMainQueue()
-
         for size in sizes {
-            try assertRootRenders(model, state: "set up", size: size)
+            try assertRootRenders(setUp: true, size: size)
         }
     }
 
@@ -166,10 +161,20 @@ final class RootViewTests: XCTestCase {
 
     @MainActor
     private func assertRootRenders(
-        _ model: RootViewModel,
-        state: String,
+        setUp: Bool,
         size: CGSize
     ) throws {
+        let model = makeModel()
+        if setUp {
+            session.receive(snapshot(enabled: true))
+            waitForMainQueue()
+        }
+        let state = setUp ? "set up" : "not set up"
+        XCTAssertEqual(
+            WatchScreenGraph.root(hasSnapshot: model.hasSnapshot, enabled: model.enabled),
+            setUp ? .balances : .notSetUp,
+            state
+        )
         let renderer = ImageRenderer(
             content: RootView(model: model).frame(width: size.width, height: size.height)
         )
