@@ -46,6 +46,12 @@ assert.ok(
 
 const PREFIX = /const WEB_LINK_PREFIX = '([^']+)'/.exec(parserSource)?.[1];
 assert.ok(PREFIX, 'WEB_LINK_PREFIX not found in the parser, so the claim fixture cannot be derived');
+const WALLET_ORIGIN = /const WALLET_LINK_ORIGIN = '([^']+)'/.exec(parserSource)?.[1];
+assert.ok(WALLET_ORIGIN, 'WALLET_LINK_ORIGIN not found in the parser, so the claim fixture cannot be derived');
+const WALLET_PREFIX = /const WALLET_LINK_PREFIX = '([^']+)'/.exec(parserSource)?.[1];
+assert.ok(WALLET_PREFIX, 'WALLET_LINK_PREFIX not found in the parser, so the claim fixture cannot be derived');
+const WALLET_HOST = new URL(WALLET_ORIGIN).host;
+const WALLET_HOST_REGEX = WALLET_HOST.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const VERSION_CODE = '3350050';
 
@@ -61,10 +67,15 @@ const buildManifest = (over = {}) => {
         activityName = 'io.xchain.wallet.android.MainActivity',
         appAttrs = 'android:allowBackup="false" android:usesCleartextTraffic="false"',
         dataElements = null,
+        walletData = null,
+        walletAutoVerify = autoVerify,
         versionCode = VERSION_CODE,
     } = over;
     const data = dataElements ?? [
         `<data android:host="xchain.io" android:pathPrefix="${prefix}" android:scheme="https"/>`,
+    ];
+    const wallet = walletData ?? [
+        `<data android:host="${WALLET_HOST}" android:pathPrefix="${WALLET_PREFIX}" android:scheme="https"/>`,
     ];
     return [
         `<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:versionCode="${versionCode}"`
@@ -77,6 +88,13 @@ const buildManifest = (over = {}) => {
         '        <category android:name="android.intent.category.BROWSABLE"/>',
         ...data.map((d) => `        ${d}`),
         '      </intent-filter>',
+        ...(wallet.length > 0 ? [
+            `      <intent-filter${walletAutoVerify ? ' android:autoVerify="true"' : ''}>`,
+            '        <action android:name="android.intent.action.VIEW"/>',
+            '        <category android:name="android.intent.category.BROWSABLE"/>',
+            ...wallet.map((d) => `        ${d}`),
+            '      </intent-filter>',
+        ] : []),
         '    </activity>',
         exportedExtra
             ? '    <receiver android:exported="true" android:name="androidx.profileinstaller.ProfileInstallReceiver"/>'
@@ -139,6 +157,34 @@ mustFail('a second claim merged in beside the correct one',
     ] }), /claims \[.*\/pay\/.*\]/);
 mustFail('the right paths with autoVerify dropped, so nothing is ever verified',
     buildManifest({ autoVerify: false }), /no filter sets autoVerify/);
+mustFail('no web-wallet https App Link claim at all',
+    buildManifest({ walletData: [] }),
+    new RegExp(`claims no https App Link on ${WALLET_HOST_REGEX}`));
+mustFail('the web-wallet host claimed with no pathPrefix',
+    buildManifest({ walletData: [`<data android:host="${WALLET_HOST}" android:scheme="https"/>`] }),
+    new RegExp(`${WALLET_HOST_REGEX} declares NO pathPrefix`));
+mustFail('a web-wallet claim that differs from the parser',
+    buildManifest({ walletData: [
+        `<data android:host="${WALLET_HOST}" android:pathPrefix="/wallet/link/" android:scheme="https"/>`,
+    ] }), new RegExp(`claims \\[\\/wallet\\/link\\/\\] on ${WALLET_HOST_REGEX} and the parser acts on`));
+mustFail('the web-wallet claim with autoVerify dropped',
+    buildManifest({ walletAutoVerify: false }),
+    new RegExp(`${WALLET_HOST_REGEX} claim sits in a filter that does not set autoVerify`));
+mustFail('both https hosts in one filter',
+    buildManifest({
+        dataElements: [
+            `<data android:host="xchain.io" android:pathPrefix="${PREFIX}" android:scheme="https"/>`,
+            `<data android:host="${WALLET_HOST}" android:pathPrefix="${WALLET_PREFIX}" android:scheme="https"/>`,
+        ],
+        walletData: [],
+    }), /one filter holds both hosts/);
+mustPass('a multiline web-wallet filter in source attribute order is accepted',
+    buildManifest({ walletData: [
+        '<data\n'
+        + '          android:scheme="https"\n'
+        + `          android:host="${WALLET_HOST}"\n`
+        + `          android:pathPrefix="${WALLET_PREFIX}"/>`,
+    ] }));
 
 // Derivation, not a literal: move the parser and the claim together and the
 // verifier must follow. This is what stops the script becoming a second copy
