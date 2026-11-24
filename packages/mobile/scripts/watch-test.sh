@@ -103,6 +103,12 @@ prepare_gradle() {
     export ANDROID_HOME="${XCHAIN_ANDROID_SDK:-/opt/homebrew/share/android-commandlinetools}"
     export ANDROID_USER_HOME="$logs/android-home"
     export GRADLE_USER_HOME="$logs/gradle-home"
+    # Each run gets a fresh Gradle home, so parallel lanes would each re-download
+    # every jar and Maven Central answers with 429s. A seeded read-only cache,
+    # when the host has one, serves those jars without sharing a writable home.
+    if [ -z "${GRADLE_RO_DEP_CACHE:-}" ] && [ -d "$HOME/.gradle/ro-dep-cache/modules-2" ]; then
+        export GRADLE_RO_DEP_CACHE="$HOME/.gradle/ro-dep-cache"
+    fi
     if [ -z "${JAVA_HOME:-}" ]; then
         [ -d /opt/homebrew/opt/openjdk@21 ] || die "JAVA_HOME is unset and /opt/homebrew/opt/openjdk@21 is absent"
         JAVA_HOME=/opt/homebrew/opt/openjdk@21
