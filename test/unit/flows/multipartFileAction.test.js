@@ -2,9 +2,9 @@
 // Copyright (c) 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The pinned SDK's FILE action knows only format 0, so the multi-part manifest
-// and part actions are serialized in the wallet. The real pinned SDK is used
-// here to prove both the refusal and that format 0 serializes the same way.
+// SDK releases before 0.28 know only FILE format 0, so the wallet serializes
+// the multi-part manifest and part action formats. The real pinned SDK is used
+// here to keep that compatibility behavior aligned across SDK releases.
 
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
@@ -16,10 +16,32 @@ const { XChainSDK } = require('xchain-sdk');
 const sdk = new XChainSDK({ network: 'bitcoin-regtest', preflight: false });
 
 describe('the pinned SDK and multi-part FILE formats', () => {
-    it('refuses a part action, which is why the wallet serializes it', () => {
-        expect(() => sdk.actions.createAction({
-            action: 'FILE', params: { VERSION: '2', FILE_HASH: HASH, PART_INDEX: '0' },
-        })).toThrow(/FILE requires field: TYPE/);
+    it('agrees with the pinned SDK on multi-part FILE actions', () => {
+        const part = {
+            action: 'FILE', params: { VERSION: '2', FILE_HASH: HASH, PART_INDEX: '25' },
+        };
+        let sdkPart;
+        try {
+            sdkPart = sdk.actions.createAction(part);
+        } catch (error) {
+            expect(error).toEqual(expect.objectContaining({
+                message: expect.stringMatching(/FILE requires field: TYPE/),
+            }));
+            return;
+        }
+
+        expect(sdkPart.actionString).toBe(multipartFileActionString(part));
+
+        const manifest = {
+            action: 'FILE',
+            params: {
+                VERSION: '1', FILE_HASH: HASH, TOTAL_PARTS: '26', TOTAL_BYTES: '10000000',
+                NAME: 'art.png', TYPE: 'image/png', TITLE: '', MEMO: 'm',
+                GATE_TICKER: '', ENCRYPTION_METHOD: '', KEY_HASH: '', GATE_MIN_AMOUNT: '', COMPRESSION: '',
+            },
+        };
+        expect(sdk.actions.createAction(manifest).actionString)
+            .toBe(multipartFileActionString(manifest));
     });
 });
 
