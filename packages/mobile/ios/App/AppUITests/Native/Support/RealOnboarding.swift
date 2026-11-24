@@ -39,13 +39,39 @@ enum RealOnboarding {
             return failed("confirm password field", app: app)
         }
         confirmField.typeText(password)
-
-        let passwordNext = button(app, named: "Next")
-        guard scrollAndTap(passwordNext, in: app, timeout: timeout) else {
-            return failed("password submission", app: app)
-        }
+        confirmField.typeText("\n")
 
         let reveal = button(app, named: "Reveal Recovery Phrase")
+        if !reveal.waitForExistence(timeout: 10) {
+            let passwordStage = namedElement(
+                app.staticTexts,
+                label: "Step 1 of 3",
+                comparison: "CONTAINS[c]"
+            )
+            guard passwordStage.exists else {
+                return failed("password submission", app: app)
+            }
+
+            let keyboardDone = namedElement(
+                app.toolbars.buttons,
+                label: "Done",
+                comparison: "CONTAINS[c]"
+            )
+            guard waitUntilHittable(keyboardDone, timeout: 5) else {
+                return failed("password submission", app: app)
+            }
+            keyboardDone.tap()
+
+            let passwordNext = button(app, named: "Next")
+            guard waitUntilHittable(passwordNext, timeout: 5) else {
+                return failed("password submission", app: app)
+            }
+            passwordNext.tap()
+            guard reveal.waitForExistence(timeout: 10) else {
+                return failed("password submission", app: app)
+            }
+        }
+
         guard scrollAndTap(reveal, in: app, timeout: timeout) else {
             return failed("recovery phrase reveal", app: app)
         }
