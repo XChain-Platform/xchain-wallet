@@ -85,7 +85,7 @@ private fun resolve(
     formatAt: (Long) -> String,
 ): String = value.text ?: value.at?.let(formatAt) ?: text(requireNotNull(value.key))
 
-private fun familyGlyph(family: String?): String = when (AlertFamilyIcon.phoneIcon(family)) {
+internal fun familyGlyph(family: String?): String = when (AlertFamilyIcon.phoneIcon(family)) {
     "SendIcon" -> "↗"
     "DownloadIcon" -> "↓"
     "ClockIcon" -> "◷"
