@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Skeleton, StatusMessage, Notice, NoticeList, Icon, EmptyState } from '@xchain-wallet/core/ui';
+import { Skeleton, Notice, NoticeList, Icon, EmptyState } from '@xchain-wallet/core/ui';
 import { DiagnosticDetails } from '@xchain-wallet/core/shared/components/DiagnosticDetails.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
@@ -25,12 +25,13 @@ export function StatesSection() {
                     <ul style={{ margin: '8px 0 0 16px', padding: 0, lineHeight: 1.6 }}>
                         <li><strong><code>&lt;Skeleton&gt;</code></strong>: first paint while data is in flight; shapes mimic what's about to load.</li>
                         <li><strong><code>&lt;EmptyState&gt;</code></strong>: loaded successfully, dataset is empty; optional CTA to populate (see the Empty state section; it supersedes <code>EmptyStateNudge</code>).</li>
-                        <li><strong><code>&lt;StatusMessage variant="error"&gt;</code></strong>: inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
-                        <li><strong><code>&lt;StatusMessage variant="status" | "info" | "success"&gt;</code></strong>: inline informational copy / confirmation after a successful action stays on the same view.</li>
+                        <li><strong><code>&lt;Notice tone="danger"&gt;</code></strong>: inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
+                        <li><strong><code>&lt;Notice tone="info" | "success"&gt;</code></strong>: inline informational copy, or confirmation after a successful action, on the same view.</li>
                         <li><strong>Toast</strong> (via <code>ToastHost</code>): ephemeral result of an action when the user has already moved on (e.g. copied to clipboard, address generated).</li>
                     </ul>
+                    <code>StatusMessage</code> and its variant names are the older spelling of the same component. <code>PageNotice</code> draws a standard notice at the page's notice host when nested content raises it.
                 </>}
-                doRule={<>✓ Pick by intent, not aesthetic preference. Pre-fetch = Skeleton. Loaded-empty = EmptyState. Failed = inline StatusMessage. Action result = Toast (if non-blocking) or success StatusMessage (if blocking)</>}
+                doRule={<>✓ Pick by intent, not aesthetic preference. Pre-fetch = Skeleton. Loaded-empty = EmptyState. Failed = inline Notice. Action result = Toast (if non-blocking) or success Notice (if blocking)</>}
                 dontRule={<>✗ Show a spinner when you could show a skeleton (the skeleton conveys what's loading) · show empty-state text in a Skeleton-shaped slot (defeats the loading hint) · use a toast for an inline form error (the user can't act on a message that vanishes)</>}
             />
 
@@ -50,13 +51,9 @@ export function StatesSection() {
 ) : null}
 
 // Inline error: user is still here, needs to act
-<StatusMessage
-    variant="error"
-    details={technicalError}
-    recovery={{ label: 'Use Max', onAction: useMax }}
->
+<Notice tone="danger" details={technicalError} action={{ label: 'Use Max', onAction: useMax }}>
     Insufficient balance.
-</StatusMessage>
+</Notice>
 
 // Action just completed, user has likely moved on: toast. The host owns
 // where it shows and how long it stays; pass only the words and the tone.
@@ -89,14 +86,14 @@ showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
                 />
             </LiveExample>
 
-            <LiveExample label="StatusMessage: error with technical details and one-step recovery">
-                <StatusMessage
-                    variant="error"
+            <LiveExample label="Notice: danger with technical details and one-step action">
+                <Notice
+                    tone="danger"
                     details="available=0.001 BTC; required=0.0014 BTC"
-                    recovery={{ label: 'Use Max', onAction: () => {} }}
+                    action={{ label: 'Use Max', onAction: () => {} }}
                 >
                     Insufficient balance. You have 0.001 BTC available.
-                </StatusMessage>
+                </Notice>
             </LiveExample>
 
             <LiveExample label="NoticeList: several issues are bullets inside the notice; one issue stays a plain line (U101)">
@@ -117,22 +114,16 @@ showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
                 />
             </LiveExample>
 
-            <LiveExample label="StatusMessage: inline success after action">
-                <StatusMessage variant="success">
+            <LiveExample label="Notice: inline success after action">
+                <Notice tone="success">
                     Address copied to clipboard.
-                </StatusMessage>
+                </Notice>
             </LiveExample>
 
-            <LiveExample label="StatusMessage: info (informational copy with its own tone)">
-                <StatusMessage variant="info">
+            <LiveExample label="Notice: info (informational copy with its own tone)">
+                <Notice tone="info">
                     Your balances update when the network reconnects.
-                </StatusMessage>
-            </LiveExample>
-
-            <LiveExample label="StatusMessage: neutral status / informational">
-                <StatusMessage variant="status">
-                    Fee estimate refreshing…
-                </StatusMessage>
+                </Notice>
             </LiveExample>
 
             <Guidance

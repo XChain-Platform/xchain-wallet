@@ -19,7 +19,7 @@ export function UnavailableStatesSection() {
             kicker="What an empty screen says when the cause is the connection, not the account: the page could not be loaded offline, or balances could not be checked."
         >
             <Guidance
-                what={<>Both render the shared <code>EmptyState</code> with the info icon and a Try again action, and both hide the page-level reachability notice while shown so the message appears once. <code>BalancesUncheckedState</code> adds a Receive action when the screen offers one.</>}
+                what={<>Both render the shared <code>EmptyState</code> with the info icon and a Try again action, and both hide the page-level reachability notice while shown so the message appears once. <code>BalancesUncheckedState</code> adds a Receive action when the screen offers one. <code>StalenessLabel</code> is a muted "updated N ago" line for stale price or balance data.</>}
                 when={<>A list or detail that has nothing to show because the network is unreachable. Use <code>useBalancesUnchecked</code> to decide when a balance list is unchecked rather than empty.</>}
                 whenNot={<>A reachable network with no data: that is the plain EmptyState.</>}
                 doRule={<>✓ Pass <code>onRetry</code> so Try again re-runs the load</>}

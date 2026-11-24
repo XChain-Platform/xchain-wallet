@@ -27,7 +27,7 @@ export function NetworkFieldSection() {
             kicker="THE way a form says which network the action runs on: a field-shaped button with a list icon that opens the full-screen network picker. Every authoring form uses it instead of a dropdown."
         >
             <Guidance
-                what={<>A field-shaped button showing the current network and a trailing list icon. It opens <code>NetworkPicker</code>, whose full-screen list draws every row like a token-list row (big network icon, name, a "BTC · Mainnet" line under it, right chevron) and returns the selection to the form.</>}
+                what={<>A field-shaped button showing the current network and a trailing list icon. It opens <code>NetworkPicker</code>, whose full-screen list draws every row like a token-list row (big network icon, name, a "BTC · Mainnet" line under it, right chevron) and returns the selection to the form. <code>NetworksField</code> is the multi-network sibling: a field-shaped button showing the chosen set as joined names, or a count past a character budget.</>}
                 when={<>The top of every action-authoring form (Send, Claim rewards, Unstake, Delegate, Issue, Broadcast…). Forms opened from a specific context (a staking position's Claim, a contract's Stake) still render it, seeded to that network, so the network is visible and retargetable like on any other form.</>}
                 whenNot={<>Pure display of a fixed network inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list's network filter, which opens the same full-screen list).</>}
                 sizing={<><code>md</code> matches standard form controls; <code>lg</code> matches hero fields on focused transaction screens.</>}
