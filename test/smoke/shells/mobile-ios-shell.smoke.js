@@ -1257,7 +1257,20 @@ assert.equal(
     'the app must keep one WebView and one vault session',
 );
 
-// --- 20. The activity-check setting reaches its native store -----------
+// --- 20. App-local watch and notification plugins reach the bridge -----
+
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainWatchPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainWatchPlugin',
+);
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainNotifyPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainNotifyPlugin',
+);
+
+// --- 21. The activity-check setting reaches its native store -----------
 
 assert.match(
     didLoadBody[1],
@@ -1274,7 +1287,7 @@ assert.match(
     'XChainActivityPlugin must answer to the name requested by the shared activity-check configuration',
 );
 
-// --- 21. Fold updates reach the WebView -------------------------------
+// --- 22. Fold updates reach the WebView -------------------------------
 
 assert.match(
     didLoadBody[1],
@@ -1308,6 +1321,7 @@ console.log(
     + ' something to spend. §18: while composing routes through the remote encoder, that same demo reaches the'
     + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction.'
     + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled.'
-    + ' §20: capacitorDidLoad registers XChainActivityPlugin, which answers to XChainActivity.'
-    + ' §21: capacitorDidLoad constructs and starts FoldPublisher on the bridge WebView)',
+    + ' §20: capacitorDidLoad registers XChainWatchPlugin and XChainNotifyPlugin.'
+    + ' §21: capacitorDidLoad registers XChainActivityPlugin, which answers to XChainActivity.'
+    + ' §22: capacitorDidLoad constructs and starts FoldPublisher on the bridge WebView)',
 );
