@@ -3,23 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The site-request round trip, one leg per place a request link can land.
-//
-// The test-dapp server starts in-process. Every leg is required: a missing
-// harness piece (the built extension, an Android device, a booted iOS
-// simulator) or a broken product path fails the run with the piece named.
-// ANDROID_SERIAL and XCHAIN_IOS_UDID pick a target when more than one exists.
+// The site-request round trip, one leg per default-run place a request link can land.
 
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
-import { createServer as createSecureServer } from 'node:https';
-import { tmpdir } from 'node:os';
-import { once } from 'node:events';
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { test as walletTest, expect as walletExpect, createWallet, unlockWallet, DEFAULT_PASSWORD } from '../../../fixtures/wallet.js';
-import { chromium, test as base, expect } from '@playwright/test';
 import { XCHAIN_SERVICE_HOSTS } from '../../../fixtures/outboundGuard.js';
 import {
     decodeRequestLink,
@@ -31,24 +21,23 @@ import {
 import {
     androidViewArgs,
     iosOpenUrlArgs,
-    parseAmStart,
 } from '../../../fixtures/siteRequestLaunch.js';
-import { HOST_BLOCK_ARG } from '../../../host-block.js';
-import { providerReady } from '../../../../../packages/connect/src/transportPick.js';
 import { buildReturnUrl } from '../../../../../packages/core/src/site_request/returnFragment.js';
 import { URI_MAX_LENGTH } from '../../../../../packages/core/src/uri/bip21.js';
 import { classifyDeepLink, attachDeepLinkHandlers } from '../../../../../packages/desktop/main/protocol.js';
 import { sendSiteReturn } from '../../../../../packages/desktop/main/siteRequest.js';
-import { createCallbackStore, createTestDappServer } from '../../../../../packages/test-dapp/server.js';
-
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const WALLET_ROOT = resolve(HERE, '../../../../..');
-const EXTENSION_DIST = resolve(WALLET_ROOT, 'packages/extension/dist');
-const WEB_PORT = Number(process.env.E2E_SITE_REQUEST_PORT ?? 5491);
-const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
-const CLAIM = 'cCcCcCcCcCcCcCcCcCcCcC';
-const REQUEST_ID = 'AAAAAAAAAAAAAAAAAAAAAA';
-const ADDRESS = 'bcrt1qsiterequestroundtrip0000000000000000';
+import {
+    ADDRESS,
+    CLAIM,
+    expect,
+    loginEnvelope,
+    REQUEST_ID,
+    startDapp,
+    test,
+    WALLET_ROOT,
+    WEB_PORT,
+    WEB_URL,
+} from './round-trip.helpers.js';
 
 const LOGIN_RESULT = Object.freeze({
     address: ADDRESS,
@@ -67,19 +56,6 @@ function loginRecord(overrides = {}) {
     };
 }
 
-function loginEnvelope({ dappOrigin, withReturn = true, id = REQUEST_ID }) {
-    return {
-        v: 1,
-        id,
-        method: 'login',
-        params: { appId: 'xchain-test-dapp', nonce: 'round-trip-nonce', chains: ['bitcoin-regtest'] },
-        ...(withReturn ? { return: `${dappOrigin}/` } : {}),
-        callback: `${dappOrigin}/callback`,
-        app: { name: 'XChain test dApp' },
-        developerMode: true,
-    };
-}
-
 function returnPayload(id = REQUEST_ID) {
     return {
         v: 1,
@@ -91,12 +67,6 @@ function returnPayload(id = REQUEST_ID) {
     };
 }
 
-async function listen(server) {
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    return `http://127.0.0.1:${server.address().port}`;
-}
-
 async function post(url, body) {
     const response = await fetch(url, {
         method: 'POST',
@@ -104,42 +74,6 @@ async function post(url, body) {
         body: JSON.stringify(body),
     });
     return { status: response.status, body: await response.json() };
-}
-
-function tool(command, args) {
-    const found = spawnSync(command, args, { encoding: 'utf8', timeout: 30_000 });
-    if (found.error || found.status !== 0) {
-        throw new Error(`${command} ${args.slice(0, 3).join(' ')} failed: ${found.error?.message ?? found.stderr}`);
-    }
-    return found.stdout;
-}
-
-function androidSerial() {
-    if (process.env.ANDROID_SERIAL) return process.env.ANDROID_SERIAL;
-    const attached = tool('adb', ['devices']).split('\n').slice(1)
-        .map((line) => line.split('\t'))
-        .filter(([, state]) => state?.trim() === 'device')
-        .map(([name]) => name);
-    if (attached.length !== 1) throw new Error(`expected one attached Android device, found ${attached.length}; set ANDROID_SERIAL`);
-    return attached[0];
-}
-
-function iosUdid() {
-    if (process.env.XCHAIN_IOS_UDID) return process.env.XCHAIN_IOS_UDID;
-    const booted = [...tool('xcrun', ['simctl', 'list', 'devices', 'booted']).matchAll(/\(([0-9A-F-]{36})\) \(Booted\)/g)];
-    if (booted.length !== 1) throw new Error(`expected one booted iOS simulator, found ${booted.length}; set XCHAIN_IOS_UDID`);
-    return booted[0][1];
-}
-
-async function until(read, { timeout = 30_000, step = 500 } = {}) {
-    const deadline = Date.now() + timeout;
-    let last;
-    for (;;) {
-        last = read();
-        if (last) return last;
-        if (Date.now() > deadline) return last;
-        await new Promise((done) => { setTimeout(done, step); });
-    }
 }
 
 async function pageRequestLink(page) {
@@ -154,50 +88,6 @@ async function pageRequestLink(page) {
     expect(opened).toHaveLength(1);
     return decodeRequestLink(opened[0]);
 }
-
-// The connect client checks a request's return and callback without the
-// developer-mode loopback allowance, so a page on plain http cannot build a
-// link. The page legs therefore load the same server over https, on a
-// throwaway certificate, while server-side calls use the http listener.
-function throwawayCertificate() {
-    const directory = mkdtempSync(resolve(tmpdir(), 'site-request-cert-'));
-    const key = resolve(directory, 'key.pem');
-    const cert = resolve(directory, 'cert.pem');
-    const made = spawnSync('openssl', [
-        'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes',
-        '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=127.0.0.1',
-        '-addext', 'subjectAltName=IP:127.0.0.1',
-    ], { encoding: 'utf8' });
-    if (made.status !== 0) throw new Error('openssl could not make the throwaway certificate');
-    return { key: readFileSync(key), cert: readFileSync(cert) };
-}
-
-async function startDapp() {
-    const store = createCallbackStore();
-    const server = createTestDappServer({ store });
-    const origin = await listen(server);
-    const secure = createSecureServer(throwawayCertificate(), server.listeners('request')[0]);
-    secure.listen(0, '127.0.0.1');
-    await once(secure, 'listening');
-    return {
-        origin,
-        secureOrigin: `https://127.0.0.1:${secure.address().port}`,
-        store,
-        close: () => Promise.all([server, secure].map((listener) => new Promise((done) => {
-            listener.close(done);
-            listener.closeAllConnections();
-        }))),
-    };
-}
-
-const test = base.extend({
-    ignoreHTTPSErrors: true,
-    dapp: async ({}, use) => { // eslint-disable-line no-empty-pattern
-        const dapp = await startDapp();
-        await use(dapp);
-        await dapp.close();
-    },
-});
 
 test.describe('test-dapp claim rule', () => {
     test('a login claim is accepted once and a replay is refused', async ({ dapp }) => {
@@ -325,114 +215,6 @@ test.describe('phone launch', () => {
         expect(manifest).toContain('android:scheme="xchain"');
     });
 
-    test('the Android device opens the wallet on the request link and the wallet stays up', async ({ dapp }) => {
-        test.setTimeout(90_000);
-        const serial = androidSerial();
-        const installed = tool('adb', ['-s', serial, 'shell', 'pm', 'list', 'packages', 'io.xchain.wallet.android']);
-        const packageName = process.env.XCHAIN_ANDROID_PACKAGE
-            ?? ['io.xchain.wallet.android.debug', 'io.xchain.wallet.android'].find((name) => installed.split('\n').some((line) => line.trim() === `package:${name}`));
-        expect(packageName, 'no XChain wallet package is installed on the device').toBeTruthy();
-
-        const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
-        tool('adb', ['-s', serial, 'logcat', '-c']);
-        const run = spawnSync('adb', androidViewArgs(link, { packageName, serial, stopFirst: true }), {
-            encoding: 'utf8',
-            timeout: 60_000,
-        });
-        const started = parseAmStart(`${run.stdout}${run.stderr}`);
-        expect(started.error).toBeNull();
-        expect(started.ok).toBe(true);
-
-        const resumed = await until(() => tool('adb', ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
-            .split('\n').find((line) => line.includes('ResumedActivity') && line.includes(`${packageName}/`)));
-        expect(resumed, 'the wallet activity is not the resumed one').toBeTruthy();
-
-        await new Promise((done) => { setTimeout(done, 3000); });
-        expect(tool('adb', ['-s', serial, 'shell', 'pidof', packageName]).trim(), 'the wallet process is gone').not.toBe('');
-        const crash = tool('adb', ['-s', serial, 'logcat', '-d', '-b', 'crash']);
-        expect(crash).not.toContain(packageName);
-    });
-
-    test('the iOS simulator opens the wallet on the request link and the wallet runs', async ({ dapp }) => {
-        test.setTimeout(90_000);
-        const udid = iosUdid();
-        const bundle = process.env.XCHAIN_IOS_BUNDLE ?? 'io.xchain.wallet.ios';
-
-        const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
-        const isRunning = () => tool('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'])
-            .split('\n').find((line) => line.includes(`UIKitApplication:${bundle}`));
-        spawnSync('xcrun', ['simctl', 'terminate', udid, bundle], { encoding: 'utf8', timeout: 30_000 });
-        const launch = spawnSync('xcrun', ['simctl', 'launch', udid, bundle], { encoding: 'utf8', timeout: 60_000 });
-        expect(launch.status, `${launch.stdout}${launch.stderr}`).toBe(0);
-        expect(await until(isRunning), `${bundle} did not launch`).toBeTruthy();
-
-        const pidBefore = isRunning().trim().split(/\s+/)[0];
-        const run = spawnSync('xcrun', iosOpenUrlArgs(link, { udid }), { encoding: 'utf8', timeout: 60_000 });
-        expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
-
-        const delivered = await until(() => tool('xcrun', [
-            'simctl', 'spawn', udid, 'log', 'show', '--last', '90s', '--style', 'compact',
-            '--predicate', 'eventMessage CONTAINS "Opening URL" AND eventMessage CONTAINS "' + bundle + '"',
-        ]).split('\n').find((line) => line.includes(link.slice(0, 80))));
-        expect(delivered, `the simulator never reported opening the request link with ${bundle}`).toBeTruthy();
-
-        await new Promise((done) => { setTimeout(done, 3000); });
-        const after = isRunning();
-        expect(after, `${bundle} is not running after openurl`).toBeTruthy();
-        expect(after.trim().split(/\s+/)[0], 'the wallet process was replaced while handling the link').toBe(pidBefore);
-    });
-});
-
-test.describe('extension on the test-dapp', () => {
-    test('the extension provider is injected on the page and the connect client uses it', async ({ dapp }, testInfo) => {
-        expect(existsSync(resolve(EXTENSION_DIST, 'manifest.json')), 'packages/extension/dist is not built').toBe(true);
-
-        const profile = mkdtempSync(resolve(tmpdir(), 'site-request-ext-'));
-        const context = await chromium.launchPersistentContext(profile, {
-            channel: 'chromium',
-            headless: true,
-            ignoreHTTPSErrors: true,
-            args: [`--disable-extensions-except=${EXTENSION_DIST}`, `--load-extension=${EXTENSION_DIST}`, HOST_BLOCK_ARG],
-        });
-        try {
-            const page = await context.newPage();
-            await page.goto(`${dapp.secureOrigin}/`);
-            await expect.poll(() => page.evaluate(() => typeof window.xchain), { timeout: 30_000 }).toBe('object');
-            const provider = await page.evaluate(() => ({ version: window.xchain.version }));
-            expect(typeof provider.version).toBe('string');
-            expect(providerReady(provider), `the injected provider reports ${provider.version}, below the connect client minimum`).toBe(true);
-
-            await page.evaluate(() => {
-                window.__opened = [];
-                window.__providerTraffic = [];
-                window.open = (url) => { window.__opened.push(String(url)); return {}; };
-                window.addEventListener('message', (event) => {
-                    const data = event.data;
-                    if (event.source !== window || !data) return;
-                    if (data.source === 'xchain-inject' || data.source === 'xchain-inject-response') {
-                        window.__providerTraffic.push({ source: data.source, id: data.id, type: data.type, ok: data.ok });
-                    }
-                });
-            });
-            await page.getByRole('button', { name: 'Login with XChain' }).click();
-            await expect.poll(
-                () => page.evaluate(() => window.__providerTraffic.map((entry) => entry.source)),
-                { timeout: 30_000 },
-            ).toEqual(['xchain-inject', 'xchain-inject-response']);
-            const traffic = await page.evaluate(() => window.__providerTraffic);
-            expect(traffic[0].type, 'the page asked the provider to sign in').toMatch(/sign.?in|login/i);
-            expect(traffic[1].id, 'the provider answered the same request').toBe(traffic[0].id);
-            await expect.poll(
-                () => page.locator('#response').textContent(),
-                { timeout: 30_000 },
-            ).toMatch(/"error": "WALLET_LOCKED"/);
-            await expect(page.locator('[data-pick]')).toHaveCount(0);
-            expect(await page.evaluate(() => window.__opened)).toEqual([]);
-            testInfo.annotations.push({ type: 'extension', description: EXTENSION_DIST });
-        } finally {
-            await context.close();
-        }
-    });
 });
 
 const webTest = walletTest.extend({
