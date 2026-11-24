@@ -33,6 +33,95 @@ struct TokenDetailScreen: View {
         _state = StateObject(wrappedValue: state)
     }
 
+    var content: TokenDetailContent {
+        TokenDetailContent(
+            display: display,
+            imageData: imageData,
+            state: state,
+            onOpenOnPhone: onOpenOnPhone
+        )
+    }
+
+    var amountText: String { content.amountText }
+    var showsPriceLine: Bool { content.showsPriceLine }
+    var showsArtworkImage: Bool { content.showsArtworkImage }
+    var noticeKey: String? { content.noticeKey }
+    var factRows: [TokenDetailFactRow] { content.factRows }
+
+    var body: some View {
+        Group {
+            if state.artworkExpanded {
+                GeometryReader { proxy in
+                    Button(action: toggleArtwork) {
+                        content.artwork(side: min(proxy.size.width, proxy.size.height))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(verbatim: identityLabel()))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                ScrollView {
+                    content
+                }
+            }
+        }
+        .navigationTitle(LocalizedStringKey("w2.title"))
+    }
+
+    func toggleAmount() { content.toggleAmount() }
+    func toggleArtwork() { content.toggleArtwork() }
+
+    func identityLabel() -> String {
+        content.identityLabel()
+    }
+
+    func amountLabel() -> String {
+        content.amountLabel()
+    }
+
+    func factLabel(_ row: TokenDetailFactRow) -> String {
+        content.factLabel(row)
+    }
+
+    func controlLabel(_ key: String) -> String {
+        content.controlLabel(key)
+    }
+
+    var amountButton: some View {
+        content.amountButton
+    }
+
+    var amountTextView: some View {
+        content.amountTextView
+    }
+
+    var artworkButton: some View {
+        content.artworkButton
+    }
+
+    var openOnPhoneButton: some View {
+        content.openOnPhoneButton
+    }
+}
+
+struct TokenDetailContent: View {
+    let display: TokenDetailDisplay
+    let imageData: Data?
+    @ObservedObject var state: TokenDetailScreenState
+    let onOpenOnPhone: () -> Void
+
+    init(
+        display: TokenDetailDisplay,
+        imageData: Data? = nil,
+        state: TokenDetailScreenState = TokenDetailScreenState(),
+        onOpenOnPhone: @escaping () -> Void
+    ) {
+        self.display = display
+        self.imageData = imageData
+        self.state = state
+        self.onOpenOnPhone = onOpenOnPhone
+    }
+
     var amountText: String { state.showsValue ? display.valueText : display.amountText }
     var showsPriceLine: Bool { display.chart?.points.isEmpty == false }
     var showsArtworkImage: Bool { display.artworkHash != nil && artworkImage != nil }
@@ -59,33 +148,17 @@ struct TokenDetailScreen: View {
     }
 
     var body: some View {
-        Group {
-            if state.artworkExpanded {
-                GeometryReader { proxy in
-                    Button(action: toggleArtwork) {
-                        artwork(side: min(proxy.size.width, proxy.size.height))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text(verbatim: identityLabel()))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        artworkButton
-                        Text(verbatim: display.displayName).font(.headline).accessibilityHidden(true)
-                        Text(verbatim: display.tick).foregroundStyle(.secondary).accessibilityHidden(true)
-                        amountButton
-                        if let chart = display.chart, !chart.points.isEmpty {
-                            PriceLineView(chart: chart).frame(height: 54).accessibilityHidden(true)
-                        }
-                        facts
-                        openOnPhoneButton
-                    }
-                }
+        VStack(spacing: 8) {
+            artworkButton
+            Text(verbatim: display.displayName).font(.headline).accessibilityHidden(true)
+            Text(verbatim: display.tick).foregroundStyle(.secondary).accessibilityHidden(true)
+            amountButton
+            if let chart = display.chart, !chart.points.isEmpty {
+                PriceLineView(chart: chart).frame(height: 54).accessibilityHidden(true)
             }
+            facts
+            openOnPhoneButton
         }
-        .navigationTitle(LocalizedStringKey("w2.title"))
     }
 
     func toggleAmount() { state.showsValue.toggle() }
@@ -168,7 +241,7 @@ struct TokenDetailScreen: View {
             .accessibilityLabel(Text(verbatim: controlLabel(key)))
     }
 
-    @ViewBuilder private func artwork(side: CGFloat) -> some View {
+    @ViewBuilder func artwork(side: CGFloat) -> some View {
         if showsArtworkImage, let artworkImage {
             Image(uiImage: artworkImage).resizable().scaledToFit()
                 .frame(width: side, height: side)

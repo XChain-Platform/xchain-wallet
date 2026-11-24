@@ -10,6 +10,8 @@ enum BalanceRowLayout: Equatable {
 }
 
 struct BalanceRowView: View {
+    static let amountMinimumScale: CGFloat = 0.5
+
     let name: String
     let chainId: String
     let tick: String
@@ -76,9 +78,14 @@ struct BalanceRowContent: View {
 
     private var amount: some View {
         VStack(alignment: .trailing, spacing: 0) {
-            Text(amountCell.primary).lineLimit(1)
+            Text(amountCell.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(BalanceRowView.amountMinimumScale)
             if let secondary = amountCell.secondary {
-                Text(secondary).font(.caption2).lineLimit(1)
+                Text(secondary)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(BalanceRowView.amountMinimumScale)
             }
         }
     }
