@@ -309,7 +309,7 @@ test.describe('phone launch', () => {
         const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
         const published = publishedLink(link);
 
-        const android = androidViewArgs(published, { packageName: 'io.xchain.wallet.android.debug', stopFirst: true });
+        const android = androidViewArgs(published, { packageName: 'io.xchain.wallet.android', stopFirst: true });
         expect(android.at(-1)).toBe(`'${published}'`);
         expect(android).toContain('-p');
         expect(iosOpenUrlArgs(link)).toEqual(['simctl', 'openurl', 'booted', link]);
@@ -327,8 +327,10 @@ test.describe('phone launch', () => {
     test('the Android device opens the wallet on the request link and the wallet stays up', async ({ dapp }) => {
         test.setTimeout(90_000);
         const serial = androidSerial();
-        const packageName = process.env.XCHAIN_ANDROID_PACKAGE ?? 'io.xchain.wallet.android.debug';
-        expect(tool('adb', ['-s', serial, 'shell', 'pm', 'list', 'packages', packageName])).toContain(`package:${packageName}`);
+        const installed = tool('adb', ['-s', serial, 'shell', 'pm', 'list', 'packages', 'io.xchain.wallet.android']);
+        const packageName = process.env.XCHAIN_ANDROID_PACKAGE
+            ?? ['io.xchain.wallet.android.debug', 'io.xchain.wallet.android'].find((name) => installed.split('\n').some((line) => line.trim() === `package:${name}`));
+        expect(packageName, 'no XChain wallet package is installed on the device').toBeTruthy();
 
         const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
         tool('adb', ['-s', serial, 'logcat', '-c']);
