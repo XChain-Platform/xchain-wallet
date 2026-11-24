@@ -148,6 +148,10 @@ const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVar
 // An unknown view renders inside the route outlet's Suspense like every other
 // route, so its EmptyState and ListPage styles stay out of the startup CSS.
 const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
+const NewerWalletNeeded = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'NewerWalletNeeded');
+const SiteRequestApproval = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'SiteRequestApproval');
+const loadLinkHandoff = import.meta.glob('./routes/LinkHandoff.jsx')['./routes/LinkHandoff.jsx'];
+const LinkHandoff = loadLinkHandoff ? lazyRoute(loadLinkHandoff, 'LinkHandoff') : null;
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
 const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AccountPicker.jsx'), 'AccountPicker');
@@ -308,6 +312,13 @@ const loadPaletteBalanceRows = async (messagingClient, walletId, accountId) => {
 
 export function App() {
     const variantState = useActiveVariant();
+    if (LinkHandoff && typeof window !== 'undefined' && /^\/link(?:\/|$)/.test(window.location.pathname)) {
+        return (
+            <Suspense fallback={<Loading />}>
+                <LinkHandoff />
+            </Suspense>
+        );
+    }
     const { variant, source } = variantState;
     const shell = shellForVariant(variant);
     // Pick the page-level wrapper. Four cases:
@@ -806,6 +817,9 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
+    const [siteRequestRoute, setSiteRequestRoute] = useState(
+        /** @type {{ view?: string, request?: Record<string, unknown> } | null} */ (null),
+    );
     // The launch guard keeps a URI authoritative through both unlock and the
     // later per-wallet last-view restore.
     const launchRouteState = useRef(createLaunchRouteState());
@@ -894,6 +908,7 @@ function AppInner() {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setSiteRequestRoute(null);
         setMultisigInitialLink(null);
         setGlobalScannerOpen(false);
         launchRouteState.current.clear();
@@ -952,6 +967,9 @@ function AppInner() {
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
+            }
+            if (route.view === 'site-request-approval' || route.view === 'newer-wallet-needed') {
+                setSiteRequestRoute(route);
             }
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             // The launch guard holds a locked-session link through unlock and the
@@ -1445,6 +1463,21 @@ function AppInner() {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
+            if (siteRequestRoute?.view === 'site-request-approval' && siteRequestRoute.request) {
+                return (
+                    <SiteRequestApproval
+                        request={siteRequestRoute.request}
+                        onReject={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
+            }
+            if (siteRequestRoute?.view === 'newer-wallet-needed') {
+                return (
+                    <NewerWalletNeeded
+                        onBack={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
+            }
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
                     <AlertsRoute

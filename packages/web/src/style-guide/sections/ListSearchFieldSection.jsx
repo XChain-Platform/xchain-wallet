@@ -14,11 +14,11 @@ export function ListSearchFieldSection() {
             id="list-search-field"
             title="List search field"
             tag="CANONICAL · ListSearchField"
-            kicker="The search box every list filter panel opens with: a search icon, the kit Input and the browser's own clear control."
+            kicker="No screen uses it; list pages use ListFilterMenu."
         >
             <Guidance
                 what={<><code>ListSearchField</code> is a controlled search <code>Input</code> with a leading search icon. <code>label</code> is its accessible name and falls back to the placeholder.</>}
-                when={<>The first control inside a <code>ListFilterPopover</code> panel: conversations, messages in a thread, payments due, notifications.</>}
+                when={<>The first control inside a <code>ListFilterPopover</code> panel.</>}
                 whenNot={<>A search row drawn in the page body (the filter panel holds it) and form fields.</>}
                 doRule={<>✓ Give it a label that names what is searched ("Search conversations") · keep the placeholder to one word</>}
                 dontRule={<>✗ Add a second clear button · draw a raw input with its own icon</>}

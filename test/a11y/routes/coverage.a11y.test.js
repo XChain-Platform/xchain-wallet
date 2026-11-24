@@ -118,6 +118,7 @@ const ROUTES_RENDERED_BY_AXE = [
     'MyOrdersView',
     'MySwapsView',
     'MyTokens',
+    'NewerWalletNeeded',
     'ObligationsView',
     'Onboarding',
     'OnboardingCarousel',
@@ -171,10 +172,7 @@ const ROUTES_RENDERED_BY_AXE = [
     'WalletPicker',
 ];
 
-const ROUTES_NOT_RENDERED_BY_AXE = [
-    // SI-16 mounts this route and removes this entry.
-    'NewerWalletNeeded',
-];
+const ROUTES_NOT_RENDERED_BY_AXE = [];
 
 function registeredRouteNames() {
     return Object.keys(routeModules)

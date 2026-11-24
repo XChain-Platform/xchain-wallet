@@ -34,11 +34,11 @@ export function SwitchSection() {
             kicker="An immediate on/off setting with consistent semantics, geometry, and touch behavior."
         >
             <Guidance
-                what={<>A controlled native checkbox with <code>role="switch"</code>, a visible label, and an optional linked description.</>}
+                what={<>A controlled native checkbox with <code>role="switch"</code>, a visible label, and an optional linked description. Optional <code>icon</code> leads the row; <code>help</code> adds the label-row InfoTip.</>}
                 when={<>Use for an independent setting that takes effect as soon as it changes.</>}
                 whenNot={<>Use <a href="#segmented-control">SegmentedControl</a> for mutually exclusive choices, <code>ChoiceControl</code> for form selections, or <code>Button</code> for an action.</>}
                 sizing={<>The track and thumb derive from the shared control scale. The complete labeled target is at least 44px high.</>}
-                variants={<>Off, on, and disabled. Theme colors come from shared control tokens.</>}
+                variants={<>Off, on, and disabled. Theme colors come from shared control tokens. A group of on/off options (G118) is <code>OptionSwitchList</code> with <code>OptionSwitch</code> rows: a card of icon rows, each with a switch on the right, never a checkbox list.</>}
                 doRule={<>Give every switch a concise visible label and explain consequences in the description.</>}
                 dontRule={<>Do not use a switch when a separate Save action is required or substitute a pressed button for an on/off setting.</>}
             />
@@ -49,6 +49,11 @@ export function SwitchSection() {
     checked={hideSmallBalances}
     onChange={(event) => setHideSmallBalances(event.target.checked)}
 />`}
+            </Markup>
+            <Markup>
+{`<OptionSwitchList>
+    <OptionSwitch icon={<Icon.CheckIcon />} label="Price alerts" checked={on} onChange={toggle} />
+</OptionSwitchList>`}
             </Markup>
             <LiveExample label="Interactive setting">
                 <InteractiveSwitch />
