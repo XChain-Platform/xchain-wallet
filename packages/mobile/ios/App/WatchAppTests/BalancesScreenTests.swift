@@ -100,6 +100,11 @@ final class BalancesScreenTests: XCTestCase {
                 action()
                 return true
             }
+            if child.label == "closure",
+               let action = child.value as? (@MainActor () -> Void) {
+                action()
+                return true
+            }
             if invokeAction(in: child.value, depth: depth + 1) { return true }
         }
         return false
