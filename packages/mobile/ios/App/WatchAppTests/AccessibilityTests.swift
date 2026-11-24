@@ -1,12 +1,18 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import CoreGraphics
 import SwiftUI
 import XCTest
 @testable import WatchApp
 
 @MainActor
 final class AccessibilityTests: XCTestCase {
+    private struct InkBounds {
+        let width: CGFloat
+        let height: CGFloat
+    }
+
     private struct ExpectedMode: Decodable {
         let a11y: [String]?
     }
@@ -186,33 +192,47 @@ final class AccessibilityTests: XCTestCase {
             w2, size: size, dynamicTypeSize: .accessibility3
         ))
 
-        let rowWidth = size.width - CGFloat(BalanceRowRules.iconPoints + 8 + 32)
+        let contentWidth = size.width - 32
+        let rowWidth = contentWidth - CGFloat(BalanceRowRules.iconPoints + 8)
         let detailWidth = size.width - 32
         for row in w1.rows {
             let amount = w1.rowView(row).amountCell
-            assertFits(
-                amount.primary,
+            let primaryRow = measurementRow(row, primary: row.line.primary, secondary: nil)
+            try assertRenderedAmountFits(
+                w1.fittedRow(primaryRow),
+                subtracting: AnyView(w1.fittedRow(
+                    measurementRow(row, primary: nil, secondary: nil)
+                )),
+                text: amount.primary,
                 font: .body,
-                in: rowWidth,
-                file: #filePath,
-                line: #line
+                frameWidth: contentWidth,
+                amountWidth: rowWidth,
+                cropLeading: CGFloat(BalanceRowRules.iconPoints + 8)
             )
             if let secondary = amount.secondary {
-                assertFits(
-                    secondary,
+                let secondaryRow = measurementRow(
+                    row, primary: nil, secondary: row.line.secondary
+                )
+                try assertRenderedAmountFits(
+                    w1.fittedRow(secondaryRow),
+                    subtracting: AnyView(w1.fittedRow(
+                        measurementRow(row, primary: nil, secondary: nil)
+                    )),
+                    text: secondary,
                     font: .caption2,
-                    in: rowWidth,
-                    file: #filePath,
-                    line: #line
+                    frameWidth: contentWidth,
+                    amountWidth: rowWidth,
+                    cropLeading: CGFloat(BalanceRowRules.iconPoints + 8)
                 )
             }
         }
-        assertFits(
-            w2.amountText,
+        try assertRenderedAmountFits(
+            w2.amountTextView,
+            text: w2.amountText,
             font: .title3,
-            in: detailWidth,
-            file: #filePath,
-            line: #line
+            monospaced: true,
+            frameWidth: detailWidth,
+            amountWidth: detailWidth
         )
     }
 
@@ -235,24 +255,164 @@ final class AccessibilityTests: XCTestCase {
         return strings
     }
 
-    private func assertFits(
-        _ text: String,
+    private func measurementRow(
+        _ row: BalancesScreenRow,
+        primary: BalanceText?,
+        secondary: BalanceText?
+    ) -> BalancesScreenRow {
+        BalancesScreenRow(
+            selection: row.selection,
+            index: row.index,
+            row: row.row,
+            line: BalanceLine(
+                name: row.line.name, primary: primary, secondary: secondary
+            )
+        )
+    }
+
+    private func assertRenderedAmountFits<Content: View>(
+        _ content: Content,
+        subtracting baseline: AnyView? = nil,
+        text: String,
         font: Font,
-        in width: CGFloat,
-        file: StaticString,
-        line: UInt
-    ) {
-        let measuredWidth = WatchRender.idealWidth(
-            of: text,
-            font: font,
-            dynamicTypeSize: .accessibility3
+        monospaced: Bool = false,
+        frameWidth: CGFloat,
+        amountWidth: CGFloat,
+        cropLeading: CGFloat = 0
+    ) throws {
+        let rendered = try inkBounds(
+            content,
+            subtracting: baseline,
+            frameWidth: frameWidth,
+            frameHeight: baseline == nil ? nil : 100,
+            cropLeading: cropLeading
         )
+        let referenceText = Text(verbatim: text).font(font).lineLimit(1).fixedSize()
+        let reference = try inkBounds(
+            monospaced ? AnyView(referenceText.monospacedDigit()) : AnyView(referenceText)
+        )
+        let renderedScale = rendered.height / reference.height
+        let fullRenderedWidth = reference.width * renderedScale
+
+        XCTAssertLessThanOrEqual(rendered.width, amountWidth + 1, text)
         XCTAssertLessThanOrEqual(
-            (measuredWidth ?? .infinity) * 0.5,
-            width,
-            "Amount '\(text)' does not fit its rendered frame at minimum scale",
-            file: file,
-            line: line
+            fullRenderedWidth,
+            amountWidth + 1,
+            "Amount '\(text)' is truncated in its rendered frame"
         )
+        XCTAssertEqual(
+            rendered.width,
+            fullRenderedWidth,
+            accuracy: 2,
+            "Amount '\(text)' did not render all glyphs"
+        )
+    }
+
+    private func inkBounds<Content: View>(
+        _ content: Content,
+        subtracting baseline: AnyView? = nil,
+        frameWidth: CGFloat? = nil,
+        frameHeight: CGFloat? = nil,
+        cropLeading: CGFloat = 0
+    ) throws -> InkBounds {
+        let base = AnyView(
+            content
+                .foregroundStyle(.white)
+                .environment(\.dynamicTypeSize, .accessibility3)
+        )
+        let view = framed(base, width: frameWidth, height: frameHeight)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 4
+        renderer.proposedSize = .unspecified
+        let image = try XCTUnwrap(renderer.cgImage)
+        let pixels = try pixelData(image)
+        let baselinePixels: [UInt8]?
+        if let baseline {
+            let baselineView = framed(
+                AnyView(
+                    baseline
+                        .foregroundStyle(.white)
+                        .environment(\.dynamicTypeSize, .accessibility3)
+                ),
+                width: frameWidth,
+                height: frameHeight
+            )
+            let baselineRenderer = ImageRenderer(content: baselineView)
+            baselineRenderer.scale = renderer.scale
+            baselineRenderer.proposedSize = .unspecified
+            let baselineImage = try XCTUnwrap(baselineRenderer.cgImage)
+            XCTAssertEqual(baselineImage.width, image.width)
+            XCTAssertEqual(baselineImage.height, image.height)
+            baselinePixels = try pixelData(baselineImage)
+        } else {
+            baselinePixels = nil
+        }
+        let bytesPerPixel = 4
+        let bytesPerRow = image.width * bytesPerPixel
+
+        var minX = image.width
+        var minY = image.height
+        var maxX = -1
+        var maxY = -1
+        let firstX = min(Int(cropLeading * renderer.scale), image.width)
+        for y in 0 ..< image.height {
+            for x in firstX ..< image.width {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let differs = baselinePixels.map { baseline in
+                    (0 ..< bytesPerPixel).reduce(0) {
+                        $0 + abs(Int(pixels[offset + $1]) - Int(baseline[offset + $1]))
+                    } > 16
+                } ?? true
+                if pixels[offset + 3] > 8, differs {
+                    minX = min(minX, x)
+                    minY = min(minY, y)
+                    maxX = max(maxX, x)
+                    maxY = max(maxY, y)
+                }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(maxX, minX, "Rendered amount has no visible pixels")
+        XCTAssertGreaterThanOrEqual(maxY, minY, "Rendered amount has no visible pixels")
+        return InkBounds(
+            width: CGFloat(maxX - minX + 1) / renderer.scale,
+            height: CGFloat(maxY - minY + 1) / renderer.scale
+        )
+    }
+
+    private func framed(
+        _ content: AnyView,
+        width: CGFloat?,
+        height: CGFloat?
+    ) -> AnyView {
+        guard width != nil || height != nil else { return content }
+        return AnyView(content.frame(width: width, height: height, alignment: .topLeading))
+    }
+
+    private func pixelData(_ image: CGImage) throws -> [UInt8] {
+        let bytesPerPixel = 4
+        let bytesPerRow = image.width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: image.height * bytesPerRow)
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+            | CGBitmapInfo.byteOrder32Big.rawValue
+        let drewImage = pixels.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(
+                data: bytes.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: bitmapInfo
+            ) else {
+                return false
+            }
+            context.draw(
+                image,
+                in: CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            )
+            return true
+        }
+        XCTAssertTrue(drewImage)
+        return pixels
     }
 }

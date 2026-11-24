@@ -118,14 +118,17 @@ struct TokenDetailScreen: View {
 
     var amountButton: some View {
         Button(action: toggleAmount) {
-            Text(verbatim: amountText)
-                .font(.title3)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+            amountTextView
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verbatim: amountLabel()))
+    }
+
+    var amountTextView: some View {
+        Text(verbatim: amountText)
+            .font(.title3)
+            .monospacedDigit()
+            .modifier(WatchAmountFit())
     }
 
     var artworkButton: some View {

@@ -3,6 +3,14 @@
 
 import SwiftUI
 
+struct WatchAmountFit: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+}
+
 struct BalanceSelection: Hashable {
     let id: String
 }
@@ -172,10 +180,13 @@ struct BalancesScreen: View {
 
     func rowLink(_ item: BalancesScreenRow) -> some View {
         NavigationLink(value: item.selection) {
-            rowView(item)
-            .minimumScaleFactor(0.5)
+            fittedRow(item)
         }
         .accessibilityLabel(Text(verbatim: rowLabel(item.index)))
+    }
+
+    func fittedRow(_ item: BalancesScreenRow) -> some View {
+        rowView(item).modifier(WatchAmountFit())
     }
 
     func rowView(_ item: BalancesScreenRow) -> BalanceRowView {
