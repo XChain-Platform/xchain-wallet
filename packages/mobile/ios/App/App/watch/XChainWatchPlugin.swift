@@ -2,32 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import Capacitor
-import ObjectiveC
 import WatchConnectivity
-
-private var watchIntentHandlerKey: UInt8 = 0
-
-extension WatchSessionHost {
-    var onIntent: ((String, [String: Any]) -> Void)? {
-        get {
-            objc_getAssociatedObject(self, &watchIntentHandlerKey)
-                as? (String, [String: Any]) -> Void
-        }
-        set {
-            objc_setAssociatedObject(
-                self,
-                &watchIntentHandlerKey,
-                newValue,
-                .OBJC_ASSOCIATION_COPY_NONATOMIC
-            )
-        }
-    }
-
-    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        guard let intent = WatchIntentMessage.read(message) else { return }
-        onIntent?(intent.kind, intent.value)
-    }
-}
 
 @objc(XChainWatchPlugin)
 public class XChainWatchPlugin: CAPPlugin, CAPBridgedPlugin {
