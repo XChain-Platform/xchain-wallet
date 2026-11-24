@@ -12,6 +12,7 @@ import {
     CONTRACT_MODEL_FILES,
     contractPairs,
 } from '../../../tools/watch/contract-pairs.mjs';
+import { expectedEntryFailures } from '../../../tools/watch/expected-entries.mjs';
 import { fixtureReachFailures } from '../../../tools/watch/fixture-reach.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -73,4 +74,20 @@ assert.deepEqual(
     `watch fixture reach failures:\n${fixtureFailures.join('\n')}`,
 );
 
-console.log('watch contract parity audit passed: fields, strings and fixtures match');
+const expected = {
+    balances: JSON.parse(readRepoFile('test/fixtures/watch/expected/balances.json')),
+    request: JSON.parse(readRepoFile('test/fixtures/watch/expected/request.json')),
+};
+const expectedFailures = expectedEntryFailures({
+    fixtures,
+    expected,
+    prefixes: { balances: 'snapshot-', request: 'request-' },
+});
+
+assert.deepEqual(
+    expectedFailures,
+    [],
+    `watch expected entry failures:\n${expectedFailures.join('\n')}`,
+);
+
+console.log('watch contract parity audit passed: fields, strings, fixtures and expected entries match');
