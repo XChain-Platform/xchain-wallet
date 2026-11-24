@@ -12,6 +12,8 @@
 
 package io.xchain.wallet.android.links;
 
+import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
@@ -24,6 +26,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -76,9 +79,11 @@ public class XChainLinksPlugin extends Plugin {
 
     /** The link that launched the app, until the SPA asks for it. */
     private String pending;
+    String linkReferrer;
 
     CallbackPinnedOpen.Opener callbackOpener = CallbackPinnedOpen.SYSTEM;
     CallbackResolve.Lookup callbackLookup = CallbackResolve.SYSTEM;
+    Consumer<Intent> returnOpener = intent -> returnContext().startActivity(intent);
     Executor callbackExecutor = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "xchain-callback-post");
         thread.setDaemon(true);
@@ -87,15 +92,22 @@ public class XChainLinksPlugin extends Plugin {
 
     @Override
     public void load() {
-        Intent intent = getActivity() == null ? null : getActivity().getIntent();
+        Activity activity = getActivity();
+        Intent intent = activity == null ? null : activity.getIntent();
         pending = extract(intent);
+        if (pending != null) {
+            linkReferrer = referrerOf(intent, activity == null ? null : activity.getReferrer());
+        }
     }
 
     @Override
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
+        Activity activity = getActivity();
+        Uri activityReferrer = activity == null ? null : activity.getReferrer();
         String url = extract(intent);
         if (url == null) return;
+        linkReferrer = referrerOf(intent, activityReferrer);
 
         // QUEUE **XOR** NOTIFY, which is the whole delivery contract: one
         // intent reaches the SPA exactly once.
@@ -181,6 +193,41 @@ public class XChainLinksPlugin extends Plugin {
                 call.reject("Callback host lookup failed");
             }
         });
+    }
+
+    Context returnContext() {
+        return getContext();
+    }
+
+    @PluginMethod
+    public void returnToBrowser(PluginCall call) {
+        String checked = BrowserReturnUrl.checked(call.getString("url"));
+        if (checked == null) {
+            call.reject("Return URL refused");
+            return;
+        }
+        try {
+            Context context = returnContext();
+            Intent intent = BrowserReturnIntent.forUrl(
+                    checked, linkReferrer, context.getPackageName(), context.getPackageManager());
+            returnOpener.accept(intent);
+            call.resolve(new JSObject());
+        } catch (Throwable throwable) {
+            call.reject("No browser opened the return URL");
+        }
+    }
+
+    static String referrerOf(Intent intent, Uri activityReferrer) {
+        Uri intentReferrer = intent == null
+                ? null
+                : intent.getParcelableExtra(Intent.EXTRA_REFERRER);
+        if (intentReferrer != null) return intentReferrer.toString();
+
+        String referrerName = intent == null
+                ? null
+                : intent.getStringExtra(Intent.EXTRA_REFERRER_NAME);
+        if (referrerName != null && !referrerName.isEmpty()) return referrerName;
+        return activityReferrer == null ? null : activityReferrer.toString();
     }
 
     /**
