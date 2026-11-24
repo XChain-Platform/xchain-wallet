@@ -63,9 +63,17 @@
 	<string>Allow XChain Wallet to connect to wallet nodes and services on your local network.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow XChain Wallet to choose images from your photo library for wallet attachments and imports.</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>io.xchain.wallet.ios.activity-check</string>
+	</array>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>io.xchain.wallet.view</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
