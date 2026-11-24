@@ -1,11 +1,24 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import UIKit
 import WatchConnectivity
 import XCTest
 @testable import App
 
 final class WatchSessionHostTests: XCTestCase {
+    func testApplicationLaunchStartsTheSharedSessionOwner() {
+        let delegate = AppDelegateStub()
+
+        let accepted = delegate.application(
+            UIApplication.shared,
+            willFinishLaunchingWithOptions: nil
+        )
+
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(delegate.activationCount, 1)
+    }
+
     func testInitializationOwnsActivatesAndReadsTheSession() {
         let session = SessionStub(
             activationState: .activated,
@@ -70,6 +83,14 @@ final class WatchSessionHostTests: XCTestCase {
             host.state,
             WatchSessionState(paired: false, installed: false, reachable: false)
         )
+    }
+}
+
+private final class AppDelegateStub: AppDelegate {
+    private(set) var activationCount = 0
+
+    override func activateWatchSessionAtLaunch() {
+        activationCount += 1
     }
 }
 

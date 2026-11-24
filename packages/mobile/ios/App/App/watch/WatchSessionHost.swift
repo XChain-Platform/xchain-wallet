@@ -1,6 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import Foundation
+import UIKit
 import WatchConnectivity
 
 protocol PhoneWatchSession: AnyObject {
@@ -72,5 +73,19 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
             installed: session?.isWatchAppInstalled == true,
             reachable: session?.isReachable == true
         )
+    }
+}
+
+extension AppDelegate {
+    func application(
+        _ application: UIApplication,
+        willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        activateWatchSessionAtLaunch()
+        return true
+    }
+
+    @objc func activateWatchSessionAtLaunch() {
+        _ = WatchSessionHost.shared
     }
 }
