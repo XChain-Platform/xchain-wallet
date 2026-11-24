@@ -6,6 +6,12 @@ import XCTest
 
 @MainActor
 final class BalancesScreenEventLogTests: XCTestCase {
+    func testBodyAppearanceDelegatesToAppeared() throws {
+        let source = try String(contentsOf: balancesScreenSourceURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains(".onAppear { appeared() }"))
+    }
+
     func testBodyAppearanceCallsRecordingHook() throws {
         var shownCount = 0
         let screen = BalancesScreen(
@@ -91,5 +97,12 @@ final class BalancesScreenEventLogTests: XCTestCase {
             Snapshot.self,
             from: WatchFixtureFiles.data("snapshot-rows50", in: directory)
         )
+    }
+
+    private func balancesScreenSourceURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("WatchApp/Screens/BalancesScreen.swift")
     }
 }
