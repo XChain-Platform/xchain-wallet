@@ -361,7 +361,6 @@ describe('single-source bridge runtime', () => {
             'isXChainAvailable',
             'getProvider',
             'generateNonce',
-            'makeSignInParams',
             'validateSignInChallenge',
         ];
         for (const name of names) expect(spec[name], name).toBe(runtime[name]);
