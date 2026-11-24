@@ -20,6 +20,8 @@ final class FoldPublisherTests: XCTestCase {
         var evaluatedScripts: [String] = []
         var lines: [String] = []
         var appliedInsets: [UIEdgeInsets] = []
+        var accessibilityRefreshes = 0
+        var accessibilityRefreshCancellations = 0
         weak var appliedWebView: WKWebView?
     }
 
@@ -98,6 +100,7 @@ final class FoldPublisherTests: XCTestCase {
         publisher.stop()
         publisher.stop()
         XCTAssertEqual(harness.cancellations.sorted(), ["hinge", "size", "traits"])
+        XCTAssertEqual(harness.accessibilityRefreshCancellations, 1)
         XCTAssertNil(harness.sizeChanged)
         XCTAssertNil(harness.traitsChanged)
         XCTAssertNil(harness.hingeChanged)
@@ -203,6 +206,21 @@ final class FoldPublisherTests: XCTestCase {
         XCTAssertTrue(harness.evaluatedScripts[3].contains("\"posture\":\"partial\""))
     }
 
+    func testFoldChangesRearmAccessibilityAfterLayoutSettles() {
+        let (publisher, _, harness) = makeSubject()
+
+        publisher.start()
+        harness.sizeChanged?()
+        harness.traitsChanged?()
+        harness.hingeChanged?(.partial)
+
+        XCTAssertEqual(harness.accessibilityRefreshes, 4)
+        XCTAssertEqual(harness.accessibilityRefreshCancellations, 3)
+
+        publisher.stop()
+        XCTAssertEqual(harness.accessibilityRefreshCancellations, 4)
+    }
+
     func testInstallsBootstrapOnlyOnceAcrossRestart() {
         let (publisher, webView, harness) = makeSubject()
 
@@ -257,6 +275,12 @@ final class FoldPublisherTests: XCTestCase {
                 harness.appliedWebView = view
                 harness.appliedInsets.append(insets)
                 view.scrollView.scrollIndicatorInsets = insets
+            },
+            scheduleAccessibilityRefresh: {
+                harness.accessibilityRefreshes += 1
+                return .init {
+                    harness.accessibilityRefreshCancellations += 1
+                }
             },
             log: { harness.lines.append($0) }
         )

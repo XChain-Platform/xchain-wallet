@@ -29,6 +29,7 @@ final class FoldPublisher {
         var installBootstrap: @MainActor (WKWebView, String) -> Void
         var evaluateJavaScript: @MainActor (WKWebView, String) -> Void
         var applyInsets: @MainActor (WKWebView, UIEdgeInsets) -> Void
+        var scheduleAccessibilityRefresh: @MainActor () -> Cancellation
         var log: @MainActor (String) -> Void
 
         static var live: Self {
@@ -88,6 +89,13 @@ final class FoldPublisher {
                 },
                 evaluateJavaScript: { webView, script in webView.evaluateJavaScript(script) },
                 applyInsets: { webView, insets in webView.scrollView.scrollIndicatorInsets = insets },
+                scheduleAccessibilityRefresh: {
+                    let work = DispatchWorkItem {
+                        UIAccessibility.post(notification: .layoutChanged, argument: nil)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+                    return Cancellation { work.cancel() }
+                },
                 log: { print($0) }
             )
         }
@@ -96,6 +104,7 @@ final class FoldPublisher {
     private weak var webView: WKWebView?
     private let environment: Environment
     private var cancellations: [Cancellation] = []
+    private var accessibilityRefresh: Cancellation?
     private var hingeState = HingeState.absent
     private var isStarted = false
     private var didInstallBootstrap = false
@@ -125,6 +134,8 @@ final class FoldPublisher {
         guard isStarted else { return }
         cancellations.forEach { $0.cancel() }
         cancellations.removeAll()
+        accessibilityRefresh?.cancel()
+        accessibilityRefresh = nil
         isStarted = false
     }
 
@@ -194,6 +205,8 @@ final class FoldPublisher {
         }
         let insets = Self.indicatorInsets(for: environment.safeAreaInsets(webView))
         environment.applyInsets(webView, insets)
+        accessibilityRefresh?.cancel()
+        accessibilityRefresh = environment.scheduleAccessibilityRefresh()
         let bounds = environment.bounds(webView)
         if let line = FoldPayload.line(
             posture: state.posture, orientation: state.orientation,
