@@ -805,6 +805,7 @@ export function ConfirmActionModal({
             onApprove={handleApprove}
             rejectDisabled={exitsLocked}
             approveLoading={approveInFlight || signaturePhase}
+            approveSettled={approveSettled}
         />
     );
 

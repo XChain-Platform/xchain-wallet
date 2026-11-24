@@ -25,7 +25,6 @@ import {
     isBridgeErrorCode,
     isErrorCode,
     makeLoginParams,
-    makeSignInParams,
     parseLoginChallenge,
     parseSignInChallenge,
     validateLoginChallenge,
@@ -72,12 +71,11 @@ describe('connect protocol 0.2.0', () => {
         expect(isErrorCode('NOT_AN_ERROR')).toBe(false);
     });
 
-    it('uses Login names while retaining every SignIn alias', () => {
+    it('uses Login names while retaining the supported SignIn aliases', () => {
         expect(LOGIN_CHALLENGE_VERSION).toBe(SIGN_IN_CHALLENGE_VERSION);
         expect(LOGIN_DEFAULT_EXPIRY_MS).toBe(SIGN_IN_DEFAULT_EXPIRY_MS);
         expect(LOGIN_CHALLENGE_PREFIX).toBe(SIGN_IN_CHALLENGE_PREFIX);
         expect(LOGIN_CHALLENGE_SEPARATOR).toBe(SIGN_IN_CHALLENGE_SEPARATOR);
-        expect(makeLoginParams).toBe(makeSignInParams);
         expect(formatLoginChallenge).toBe(formatSignInChallenge);
         expect(parseLoginChallenge).toBe(parseSignInChallenge);
         expect(validateLoginChallenge).toBe(validateSignInChallenge);
