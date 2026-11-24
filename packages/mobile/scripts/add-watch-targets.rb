@@ -151,7 +151,7 @@ add_target_dependency(watch_tests, watch_app)
 phone_app = project.targets.find { |target| target.name == 'App' }
 abort('add-watch-targets: no App target') unless phone_app
 phone_root = File.dirname(project_path)
-%w[App/watch App/notify App/activity App/fold].each do |path|
+%w[App/watch App/notify App/activity App/fold App/sounds].each do |path|
   synchronize_existing_group(project, phone_app, phone_root, path)
 end
 

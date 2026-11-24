@@ -50,6 +50,7 @@ export const PUBLIC_BRIDGE_TYPES = Object.freeze([
     'bridge.signAction',
     'bridge.signPsbt',
     'bridge.coSign',
+    'bridge.login',
     'bridge.signIn',
     'bridge.parallel',
 ]);

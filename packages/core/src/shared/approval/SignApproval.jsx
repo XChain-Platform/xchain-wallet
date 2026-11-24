@@ -44,6 +44,11 @@ import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtCon
 import { describeUnreadableReason, isUnreadableActionReason } from '@xchain-wallet/core/shared/components/psbtDecodeReasons.js';
 import { describePolicyReason } from '@xchain-wallet/core/shared/components/coSignPolicyReasons.js';
 import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
+import {
+    isAnotherDeviceLogin,
+    linkAnswerOrigin,
+    linkAppName,
+} from '../../site_request/linkIdentity.js';
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { useFeeFiat } from '@xchain-wallet/core/shared/hooks/useFeeFiat.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
@@ -107,7 +112,6 @@ const KIND_TITLE = {
     signPsbt: 'Sign Transaction',
     signAction: 'Sign Action',
     coSign: 'Co-sign Transaction',
-    signIn: 'Sign In',
 };
 
 /**
@@ -136,7 +140,15 @@ const KIND_TITLE = {
  * @param {() => void} props.onReject
  */
 export function SignApproval({ id, kind, payload, onReject }) {
-    const origin = neutralizeControlText(payload?.origin || '', { maxLength: 2048 });
+    const linkRequest = payload?.linkRequest;
+    const linkMode = linkRequest !== null
+        && typeof linkRequest === 'object'
+        && !Array.isArray(linkRequest);
+    const answerOrigin = linkMode ? linkAnswerOrigin(linkRequest) : null;
+    const origin = neutralizeControlText(
+        linkMode ? answerOrigin || '' : payload?.origin || '',
+        { maxLength: 2048 },
+    );
     const chainId = payload?.chainId || null;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
@@ -684,7 +696,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
     }, [chainId, intentKey]);
 
 
-    const title = KIND_TITLE[kind] ?? 'Approve Request';
+    const title = kind === 'signIn'
+        ? t('extension.sign.loginTitle')
+        : KIND_TITLE[kind] ?? 'Approve Request';
     const showSavePermanent =
         kind === 'signAction' ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
@@ -697,18 +711,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // screen by its own ChainBadge, so approval-drift between tabs (§21.3) stays
     // addressed by the badge rather than by the button text. The smoke test
     // asserts the retired wording never reappears in this file.
-    // Sign-in keeps its own verb: it is not an approval of a balance-moving
-    // action, and "Approve" would understate what signing in to a site does.
-    const approveLabel = kind === 'signIn' ? 'Sign In' : 'Approve';
+    const approveLabel = t('extension.connect.approve');
 
     // §21.3 dApp Source block: Origin + App name (when the dApp
     // attached one). Only renders when an origin is present; in
     // practice every dApp request carries one, but user-initiated
     // sign flows that re-use this screen wouldn't.
-    const appName = neutralizeControlText(
-        payload?.appName || payload?.payload?.appName || '',
-        { maxLength: 80 },
-    );
+    const appName = linkMode
+        ? linkAppName(linkRequest) || ''
+        : neutralizeControlText(
+            payload?.appName || payload?.payload?.appName || '',
+            { maxLength: 80 },
+        );
     const formattedIntent = intent.decoded ? groupDecodedAmounts(intent.decoded) : null;
     const barePaymentExpected = kind === 'signPsbt'
         && !psbtIntent.loading
@@ -886,16 +900,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // (G130): the tap says why at the top of the window (G129) and sends
     // nothing; a missing password also marks the password field.
     function approveBlockReason() {
+        if (linkMode && !answerOrigin) return { key: 'linkTargets', text: t('extension.approval.invalidLinkTargets') };
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
         if (preflightBlocked) {
-            if (preflightState.actionString !== preflightActionString || preflightState.loading) {
-                return { key: 'checking', text: t('confirmStandard.blocked.checking') };
-            }
+            if (preflightState.actionString !== preflightActionString || preflightState.loading) return { key: 'checking', text: t('confirmStandard.blocked.checking') };
             const errors = (preflightState.report?.findings || []).filter((f) => f?.severity === 'error');
-            return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length
-                ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') }
-                : { key: 'fails', text: t('confirmStandard.blocked.fails') };
+            return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') } : { key: 'fails', text: t('confirmStandard.blocked.fails') };
         }
         if (psbtApprovalBlocked || coSignApprovalBlocked) {
             return (psbtDecodePending || coSignPreview.loading)
@@ -988,12 +999,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
             chainName: descriptor?.displayName || '',
         });
     const requestingSite = siteNameFromOrigin(origin);
-    const confirmationHead = {
+    let confirmationHead = {
         ...baseHead,
         sentence: kind === 'signPsbt'
             ? baseHead.sentence
             : sentenceForSite(baseHead.sentence, requestingSite),
     };
+    if (kind === 'signIn' && requestingSite) {
+        confirmationHead = {
+            ...confirmationHead,
+            sentence: `${t('extension.sign.signInTo')} ${requestingSite}`,
+        };
+    }
     // The network fee the site asks for, as its own row in the facts card
     // (no Total block, G127 revised 2026-11-16): the amount and its fiat value,
     // or the site's rate when the amount is not known.
@@ -1064,7 +1081,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             value: signingWith,
             testId: 'confirm-signing-wallet',
         }] : []),
-        ...(appName ? [{
+        ...(appName && !linkMode ? [{
             key: 'app-name',
             label: t('extension.sign.declaredName', { name: '' }).replace(/[:\s]+$/, '') || 'App',
             value: appName,
@@ -1143,7 +1160,15 @@ export function SignApproval({ id, kind, payload, onReject }) {
         extraWarnings,
     });
     const currentBlock = blockedTap ? approveBlockReason() : null;
-    const shownBlock = currentBlock && currentBlock.key === blockedTap ? currentBlock : null;
+    const anotherDeviceLogin = linkMode && Boolean(origin) && isAnotherDeviceLogin(linkRequest);
+    const shownApprovalBlock = currentBlock && currentBlock.key === blockedTap ? currentBlock : null;
+    const shownBlock = shownApprovalBlock || anotherDeviceLogin;
+    const signInAsLabel = linkMode
+        ? t('extension.sign.signInAs')
+        : t('extension.sign.providerSignInAs');
+    const noSignInAddress = linkMode
+        ? t('extension.sign.noSignInAddress')
+        : t('extension.sign.providerNoSignInAddress');
     const passwordBlock = !signingUnavailable && walletMode !== null ? (
         <form
             id="sign-approval-form"
@@ -1208,7 +1233,15 @@ export function SignApproval({ id, kind, payload, onReject }) {
             }
         >
             <FormPage as="div" label={title}>
-                {kind === 'signPsbt' ? (
+                {linkMode && origin ? (
+                    <OriginIdentity
+                        origin={origin}
+                        label={t('extension.approval.linkAnswer', { origin })}
+                        testId="link-answer-origin"
+                    >
+                        {appName ? <p>{t('extension.sign.declaredName', { name: appName })}</p> : null}
+                    </OriginIdentity>
+                ) : kind === 'signPsbt' ? (
                     <OriginIdentity
                         origin={origin}
                         label={t('extension.approval.requestingSite')}
@@ -1217,21 +1250,28 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 ) : null}
                 <ConfirmStandard
                     label={title}
-                    status={confirmationStatus}
-                    acknowledged={acknowledged}
-                    onAcknowledge={acknowledge}
+                    facts={confirmationFacts}
                     top={panicFrozen || shownBlock ? (
                         <>
-                            {shownBlock ? (
-                                <Notice tone="danger" role="alert" testId="confirm-blocked" data-reason={shownBlock.key} flush>
-                                    {shownBlock.text}
-                                </Notice>
-                            ) : null}
                             {panicFrozen ? (
                                 <PanicSignStatus notice={panicNotice} testId="approval-panic-freeze" role="alert" />
                             ) : null}
+                            {anotherDeviceLogin ? (
+                                <Notice tone="warning" role="note" testId="another-device-login" flush>
+                                    {t('extension.sign.anotherDevice', { origin })}
+                                </Notice>
+                            ) : null}
+                            {shownApprovalBlock ? (
+                                <Notice tone="danger" role="alert" testId="confirm-blocked" data-reason={shownApprovalBlock.key} flush>
+                                    {shownApprovalBlock.text}
+                                </Notice>
+                            ) : null}
                         </>
                     ) : null}
+                    status={confirmationStatus}
+                    warning={confirmationWarning}
+                    acknowledged={acknowledged}
+                    onAcknowledge={acknowledge}
                     mark={(kind === 'signAction' || kind === 'signPsbt') && baseHead.heroTick && descriptor ? (
                         <TickerIcon chainId={descriptor.id} tick={baseHead.heroTick} context="hero" />
                     ) : null}
@@ -1246,24 +1286,22 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         ? (kind === 'signMessage' ? t('signerSelect.title') : t('send.fields.from'))
                         : ''}
                     chainName={kind === 'signMessage' ? '' : descriptor?.displayName || ''}
-                    afterAddress={kind === 'signMessage' ? (
+                    afterAddress={kind === 'signMessage' && !linkMode ? (
                         <OriginIdentity
                             origin={origin}
                             label={t('extension.approval.requestingSite')}
                             testId="confirm-request-origin"
                         />
                     ) : null}
-                    facts={confirmationFacts}
                     preserveFactOrder={kind === 'signMessage'}
                     messageText={kind === 'signMessage' ? displayedSignedText : undefined}
-                    warning={confirmationWarning}
                 >
                     {kind === 'signIn' ? (
                         <div className={styles.signInChoice}>
                         {signInAddresses.length === 0 ? (
                             <>
                                 <p className={shared.error} role="alert">
-                                    {t('extension.sign.noSignInAddress')}
+                                    {noSignInAddress}
                                 </p>
                             </>
                         ) : (
@@ -1273,7 +1311,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             // layout; `text` names it) and the chain name its
                             // second line. Values are the list index as text.
                             <IconSelect
-                                label={t('extension.sign.signInAs')}
+                                label={signInAsLabel}
                                 help={t('extension.sign.signInAsHint')}
                                 value={String(signInChoice)}
                                 onChange={(next) => setSignInChoice(Number(next))}

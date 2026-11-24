@@ -227,6 +227,7 @@ describe('what the reference dApp sees through the real provider', () => {
             'getBalances',
             'getSupportedChains',
             'isXChainWallet',
+            'login',
             'off',
             'on',
             'parallel',
@@ -252,6 +253,19 @@ describe('what the reference dApp sees through the real provider', () => {
         expect(result.ok).toBe(false);
         expect(result.error).toBe('INTERNAL_ERROR');
         expect(result.message).toMatch(/invalid response envelope/);
+    });
+
+    it('routes login to its dedicated request type and keeps signIn as an alias', async () => {
+        const requestTypes = [];
+        relayOverride = (data) => {
+            requestTypes.push(data.type);
+            reply(data.id, { ok: true, result: { ok: true } });
+        };
+
+        await provider.login({ appId: 'login-route' });
+        await provider.signIn({ appId: 'sign-in-route' });
+
+        expect(requestTypes).toEqual(['bridge.login', 'bridge.signIn']);
     });
 
     it('accepts responses only from the current window origin', async () => {
