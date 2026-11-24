@@ -898,8 +898,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             ? null
             : await findConnectedSite(deps.vault, req.origin);
         const hadAddressGrant = Array.isArray(site?.permissions?.addresses);
-        await signThrottleReady(deps.vault);
-        assertNotThrottled(signThrottle, req);
         if (typeof req.appId !== 'string' || req.appId.length === 0) {
             throw bridgeError('INVALID_PARAMS', 'appId must be a non-empty string');
         }
@@ -1059,8 +1057,16 @@ export function registerBridgeHandlers(host, opts = {}) {
         return buildLoginResult(proofs);
     };
 
-    register('bridge.login', loginHandler);
-    register('bridge.signIn', loginHandler);
+    register('bridge.login', async (req, deps) => {
+        await signThrottleReady(deps.vault);
+        assertNotThrottled(signThrottle, req);
+        return loginHandler(req, deps);
+    });
+    register('bridge.signIn', async (req, deps) => {
+        await signThrottleReady(deps.vault);
+        assertNotThrottled(signThrottle, req);
+        return loginHandler(req, deps);
+    });
 }
 
 
