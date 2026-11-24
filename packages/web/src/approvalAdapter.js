@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { injectApprovalAdapter } from '@xchain-wallet/core/shared/approval/index.js';
+import { injectApprovalAdapter } from '@xchain-wallet/core/shared/approval/adapter.js';
 import { isLocalhostOrigin } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { deliverResult } from '../../core/src/site_request/deliver.js';
 
