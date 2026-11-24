@@ -3,6 +3,8 @@
 
 package io.xchain.wallet.android.wear.ui
 
+import io.xchain.wallet.android.wear.data.DetailFact
+
 object AccessibilityLabels {
     fun balanceLines(display: BalancesDisplay, text: (String) -> String): List<String> =
         display.lines.map { line ->
@@ -29,6 +31,17 @@ object AccessibilityLabels {
             line.value.spoken(text, time),
         )
     }
+
+    fun tokenIdentity(display: TokenDetailDisplay): String =
+        SpokenLabels.lines(display.displayName, display.tick)
+
+    fun tokenAmount(display: TokenDetailDisplay, showsValue: Boolean, hiddenText: String): String {
+        val amount = (if (showsValue) display.valueText else display.amountText)
+            .let { if (it == AmbientRedaction.DOTS) hiddenText else it }
+        return SpokenLabels.lines(display.displayName, amount)
+    }
+
+    fun fact(fact: DetailFact): String = SpokenLabels.lines(fact.label, fact.value)
 
     private fun BalanceText.spoken(text: (String) -> String, primary: Boolean = false): String =
         this.text ?: text(
