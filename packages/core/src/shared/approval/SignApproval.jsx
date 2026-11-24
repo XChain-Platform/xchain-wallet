@@ -915,8 +915,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
-        if (preflightBlocked) return preflightBlockReason();
+        if (preflightBlocked && !(psbtApprovalBlocked || coSignApprovalBlocked)) {
+            return preflightBlockReason();
+        }
         if (psbtApprovalBlocked || coSignApprovalBlocked) {
+            if (preflightBlocked) return preflightBlockReason();
             return (psbtDecodePending || coSignPreview.loading)
                 ? { key: 'checking', text: t('confirmStandard.blocked.checking') }
                 : { key: 'refusal', text: t('confirmStandard.blocked.fails') };
