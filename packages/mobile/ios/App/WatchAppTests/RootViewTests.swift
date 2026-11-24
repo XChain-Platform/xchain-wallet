@@ -27,7 +27,7 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testRootStartsAtNotSetUpAndUsesBothContractMessages() throws {
+    func testRootStartsAtNotSetUpAndUsesBothContractMessages() async throws {
         let model = makeModel()
         let root = RootView(model: model)
 
@@ -38,7 +38,7 @@ final class RootViewTests: XCTestCase {
         )
 
         session.receive(snapshot(enabled: false))
-        waitForMainQueue()
+        await waitForMainQueue()
 
         XCTAssertEqual(root.rootScreen, .notSetUp)
         XCTAssertEqual(
@@ -48,10 +48,10 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testSnapshotDrivesBalancesStatusPreferencesAndAmbientFlag() throws {
+    func testSnapshotDrivesBalancesStatusPreferencesAndAmbientFlag() async throws {
         let model = makeModel()
         session.receive(snapshot(enabled: true))
-        waitForMainQueue()
+        await waitForMainQueue()
 
         XCTAssertEqual(RootView(model: model).rootScreen, .balances)
         XCTAssertEqual(model.snapshot?.balancesAt, 1_700_000_000_000)
@@ -69,10 +69,10 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testDetailMarkReadAndOpenOnPhoneUseTheSharedSession() throws {
+    func testDetailMarkReadAndOpenOnPhoneUseTheSharedSession() async throws {
         let model = makeModel()
         session.receive(snapshot(enabled: true))
-        waitForMainQueue()
+        await waitForMainQueue()
 
         model.requestDetail("bitcoin-mainnet:BTC")
         model.markRead(MarkReadIntent(id: "alert-1"))
@@ -90,14 +90,14 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    func testRootRendersNotSetUpAndSetUpAtBothWatchSizes() throws {
+    func testRootRendersNotSetUpAndSetUpAtBothWatchSizes() async throws {
         let sizes = [CGSize(width: 176, height: 215), CGSize(width: 205, height: 251)]
 
         for size in sizes {
-            try assertRootRenders(setUp: false, size: size)
+            try await assertRootRenders(setUp: false, size: size)
         }
         for size in sizes {
-            try assertRootRenders(setUp: true, size: size)
+            try await assertRootRenders(setUp: true, size: size)
         }
     }
 
@@ -167,10 +167,10 @@ final class RootViewTests: XCTestCase {
     }
 
     @MainActor
-    private func waitForMainQueue() {
-        let expectation = expectation(description: "main queue")
-        DispatchQueue.main.async { expectation.fulfill() }
-        wait(for: [expectation], timeout: 1)
+    private func waitForMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
     }
 
     private func value(kind: String) throws -> [String: Any] {
@@ -182,11 +182,11 @@ final class RootViewTests: XCTestCase {
     private func assertRootRenders(
         setUp: Bool,
         size: CGSize
-    ) throws {
+    ) async throws {
         let model = makeModel()
         if setUp {
             session.receive(snapshot(enabled: true))
-            waitForMainQueue()
+            await waitForMainQueue()
         }
         let state = setUp ? "set up" : "not set up"
         XCTAssertEqual(
