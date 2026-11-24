@@ -84,9 +84,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Still validated in the SPA, on exactly the same footing.
         SceneDelegateProxy.shared.scene(scene, continue: userActivity)
 
+        let deliver: (String?) -> Void = { XChainLinkInbox.shared.deliver($0) }
         if deliverWatchHandoff(
             userActivity,
-            to: { XChainLinkInbox.shared.deliver($0) }
+            to: deliver
         ) {
             return
         }
@@ -96,7 +97,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // forwarding to it alone reached nothing. This is the line that makes
         // the tap arrive somewhere.
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb else { return }
-        XChainLinkInbox.shared.deliver(userActivity.webpageURL?.absoluteString)
+        deliver(userActivity.webpageURL?.absoluteString)
     }
 
     @discardableResult
