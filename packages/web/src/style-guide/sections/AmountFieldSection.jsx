@@ -125,7 +125,7 @@ export function AmountFieldSection() {
             id="amount-field"
             title="Amount field"
             tag="CANONICAL amount entry"
-            kicker="The standard amount-entry block: an input sized like every other field (md, 36px), with an in-field Max icon, a coin/fiat swap toggle showing the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens. size='lg' exists only for hero screens (Send/Receive)."
+            kicker="The standard amount-entry block: an input sized like every other field (md, 36px), with an in-field Max icon, a coin/fiat swap toggle showing the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens. size='lg' is available for a hero field; every form today uses md."
         >
             <Guidance
                 what={<>A composed block around the shared <code>Input</code> primitive: an amount input at the given <code>size</code> (see Field sizes), an in-field <b>Max</b> icon at the trailing edge (the shared <code>FieldIconButton</code> in the Input's <code>fieldAction</code> slot: no box, no text, named "Use max available amount"), and a footer row with the coin/fiat swap toggle + derived conversion (left) and caller-supplied balance text (right). The canonical <code>amount</code> is always coin-scale; in fiat mode the parent derives it via the price rate. Fiat affordances render only when a <code>fiatRate</code> is passed (native coins with an oracle price); token fields pass <code>null</code> and get a plain amount input.</>}
@@ -196,7 +196,7 @@ export function AmountFieldSection() {
                 />
             </LiveExample>
 
-            <LiveExample label="Hero (lg): Send / Receive sizing; identical functionality, bigger field.">
+            <LiveExample label="Hero (lg): available for a focused full-page field; identical functionality, bigger field.">
                 <AmountField
                     size="lg"
                     amount={heroAmount}

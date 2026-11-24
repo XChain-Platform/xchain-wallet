@@ -19,18 +19,18 @@ export function AccentBorderedCardSection() {
     return (
         <Section
             id="solid-accent-card"
-            title="Solid accent card (the blue box)"
+            title="Hero card (Total Balance)"
             tag="CANONICAL hero / primary-figure card"
-            kicker="A solid-fill brand-blue card with white text: the visual peak of a screen. Used for the Total Balance hero at the top of Home; reuse anywhere the page has ONE primary figure (a balance, a result, a status) the user should anchor on."
+            kicker="A bordered hero surface for the one primary figure on a screen. Used for the Total Balance hero at the top of Home."
         >
             <Guidance
-                what={<>A card filled with a top-to-bottom gradient from <code>--xc-accent-primary</code> to <code>--xc-accent-primary-hover</code>. <code>--xc-on-accent</code> text sits on top. A soft outer drop-shadow mixed from the accent makes the card visibly float above the surface beneath it.</>}
+                what={<>A card using the <code>--xc-hero-bg</code> fill, <code>--xc-hero-border</code> border, <code>--xc-hero-text</code> text, <code>--xc-card-radius</code>, <code>--xc-card-pad</code> padding and <code>--xc-hero-shadow</code>. A chart sits inside, with range chips (<code>--xc-hero-chip-*</code>) and change pills (<code>--xc-hero-pill-*</code>).</>}
                 when={<>The single most important figure on a screen: total balance on Home, a deal-closing summary on a confirmation screen, the "you are here" status on an in-flight transaction. Use ONCE per screen.</>}
                 whenNot={<>Default grouping: <a href="#gray-card">card</a>. Highlighted-but-not-primary cards (the portfolio chart wrap, the quick-action tiles): the outlined accent-border variant (Quick-action card pattern). Status callouts (error / warning / success): tinted status colors, not the brand fill.</>}
-                sizing={<>Padding usually compact: <code>var(--xc-space-2) var(--xc-space-3)</code> (8/12px). The card is short and wide, prioritizing the figure inside. Radius <code>var(--xc-radius-md)</code>. The shadow mixes <code>--xc-accent-primary</code> at 25% with transparency. Accent text uses opacity stops: 100% for the figure, ~85% for the label, ~60% for the scope/sub.</>}
-                variants={<>The shared <code>TotalBalanceHero</code> always provides chart and privacy actions. <code>onRefresh</code>, <code>onToggleFilter</code>, <code>onCommandPalette</code>, <code>onOpenSettings</code>, and <code>onLockWallet</code> add only the actions each shell can perform.</>}
-                doRule={<>✓ Reserve for the ONE primary figure on a page · always pair with white text so contrast stays AAA · use the gradient (not a flat fill, so the depth signal makes it read as "hero") · tint the box-shadow with the accent so it feels glowy, not generic-card-drop-shadow</>}
-                dontRule={<>✗ Use a solid flat fill instead of the gradient (loses the hero depth) · use this for secondary cards (defeats the "one peak per page" rule) · put dark text on it (breaks the white-on-blue identity)</>}
+                sizing={<>Padding <code>--xc-card-pad</code> (8px). Radius <code>--xc-card-radius</code> (8px).</>}
+                variants={<>The shared <code>TotalBalanceHero</code> always provides chart and privacy actions. <code>onRefresh</code>, <code>onCommandPalette</code>, <code>onOpenSettings</code>, and <code>onLockWallet</code> add only the actions each shell can perform.</>}
+                doRule={<>✓ Use the <code>--xc-hero-*</code> tokens, never a flat brand-blue fill.</>}
+                dontRule={<>✗ Never put white text on it.</>}
                 supersedes={<>Hand-written copies of the Home balance hero. Use <code>TotalBalanceHero</code> so pricing, privacy, staleness, and shell actions keep the same behavior.</>}
             />
 

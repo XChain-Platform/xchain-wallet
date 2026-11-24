@@ -47,7 +47,7 @@ export function IconsSection() {
         >
             <Guidance
                 what={<>One icon set, 18×18 default, single-color via <code>stroke="currentColor"</code> so each icon inherits the surrounding text color (and the same Icon glyph can render in the muted-text-color of a balance row OR the accent-blue of a header at zero cost). The set lives at <code>packages/core/src/ui/icons/index.jsx</code>.</>}
-                when={<>Buttons, headers, list-row affordances, status indicators: anywhere a glyph is needed. <code>iconForLabel(label)</code> auto-resolves a fitting glyph from a button's text (Send button → SendIcon) so most callers don't pass an explicit <code>icon</code> prop.</>}
+                when={<>Buttons, headers, list-row affordances, status indicators: anywhere a glyph is needed. <code>Icon.iconForLabel(label)</code> auto-resolves a fitting glyph from a button's text (Send button → SendIcon) so most callers don't pass an explicit <code>icon</code> prop.</>}
                 whenNot={<>Emoji icons for wayfinding (sidebar / breadcrumb chrome) are fine where they convey identity better than a generic glyph; the rest of the app uses flat SVG.</>}
                 doRule={<>✓ Always import via <code>{`import { Icon } from '@xchain-wallet/core/ui'`}</code> and reference <code>&lt;Icon.SendIcon /&gt;</code> · let icons inherit color from the surrounding text (don't force a fill / stroke at the call site) · use the concept-mapping (SendIcon for any "send" affordance, BookIcon for address book, etc.) so a glyph always means the same thing</>}
                 dontRule={<>✗ Inline a one-off SVG · pull a Lucide icon directly bypassing the wrapper (defeats the icon-swap point of having a catalog) · resize past 18-24px without checking (bigger icons need different stroke weights to read right)</>}
@@ -60,8 +60,8 @@ export function IconsSection() {
 <Icon.FilterIcon />
 
 // Auto-resolve from label (Button does this automatically):
-import { iconForLabel } from '@xchain-wallet/core/ui';
-const SendGlyph = iconForLabel('Send');`}
+import { Icon } from '@xchain-wallet/core/ui';
+const SendGlyph = Icon.iconForLabel('Send');`}
             </Markup>
             <LiveExample label="All shipped icons (currentColor; drag your OS to dark mode to see)">
                 <div style={{

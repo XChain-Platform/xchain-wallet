@@ -48,10 +48,16 @@ test('merges all catalogs into deterministic Apple and Android resources', async
         path.join(root, 'packages/mobile/ios/App/WatchApp/en.lproj/Localizable.strings'),
         'utf8',
     );
+    const widgets = await readFile(
+        path.join(root, 'packages/mobile/ios/App/WatchWidgets/en.lproj/Localizable.strings'),
+        'utf8',
+    );
     const android = await readFile(
         path.join(root, 'packages/mobile/android/wear/src/main/res/values/strings.xml'),
         'utf8',
     );
+    assert.equal(widgets, apple);
+    assert.ok(widgets.includes('"g1.request" = "Request";'));
     assert.match(apple, /"g1\.alerts" = "Alerts";/);
     assert.match(apple, /"w1\.title" = "Balances";/);
     assert.match(apple, /"w4\.title" = "Alert detail";/);
@@ -68,6 +74,7 @@ test('--check exits one when either output is stale and does not rewrite it', as
     assert.equal(run(root).status, 0);
     const outputs = [
         'packages/mobile/ios/App/WatchApp/en.lproj/Localizable.strings',
+        'packages/mobile/ios/App/WatchWidgets/en.lproj/Localizable.strings',
         'packages/mobile/android/wear/src/main/res/values/strings.xml',
     ];
 
