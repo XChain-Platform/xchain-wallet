@@ -15,8 +15,9 @@ final class WatchRenderTests: XCTestCase {
     }
 
     func testNotSetUpScreenRendersNonblankImage() throws {
+        let screen = NotSetUpScreen(textKey: "state.openWalletOnPhone")
         let image = try XCTUnwrap(WatchRender.image(
-            NotSetUpScreen(textKey: "state.openWalletOnPhone"),
+            screen,
             size: WatchRender.screenSize()
         ))
 
@@ -65,7 +66,7 @@ final class WatchRenderTests: XCTestCase {
     }
 
     func testBalanceRowStringsIncludeNameAndAmount() {
-        let row = BalanceRowView(
+        let row: BalanceRowView = BalanceRowView(
             name: "Bitcoin",
             chainId: "bitcoin-mainnet",
             tick: "BTC",
