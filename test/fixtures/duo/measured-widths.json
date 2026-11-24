@@ -1,0 +1,32 @@
+{
+    "device": "XC iPhone Duo",
+    "measuredAt": "2026-11-24T08:08:51.000Z",
+    "states": {
+        "closed-portrait": {
+            "width": 466,
+            "height": 678,
+            "division": {
+                "orientation": "none",
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+            }
+        },
+        "closed-landscape": {
+            "unreachable": "simctl io screenConfig crashes SpringBoard on this simulator runtime"
+        },
+        "open-portrait": {
+            "unreachable": "simctl io screenConfig crashes SpringBoard on this simulator runtime"
+        },
+        "open-landscape": {
+            "unreachable": "simctl io screenConfig crashes SpringBoard on this simulator runtime"
+        },
+        "partial-vertical": {
+            "unreachable": "simctl io screenConfig crashes SpringBoard on this simulator runtime"
+        },
+        "partial-horizontal": {
+            "unreachable": "simctl io screenConfig crashes SpringBoard on this simulator runtime"
+        }
+    }
+}
