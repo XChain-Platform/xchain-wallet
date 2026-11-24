@@ -86,6 +86,7 @@ public class XChainLinksPluginPostTest {
 
         assertNull(call.result);
         assertEquals("Callback POST failed", call.rejection);
+        assertNull(call.rejectionCause);
     }
 
     private static void assertSuccessfulPost(int status) {
@@ -118,6 +119,7 @@ public class XChainLinksPluginPostTest {
 
         assertNull(call.result);
         assertEquals("Callback request refused", call.rejection);
+        assertNull(call.rejectionCause);
         assertEquals(0, opener.calls);
     }
 
@@ -216,6 +218,7 @@ public class XChainLinksPluginPostTest {
     private static final class TestCall extends PluginCall {
         JSObject result;
         String rejection;
+        Exception rejectionCause;
 
         TestCall(JSObject data) {
             super(null, "XChainLinks", "test", "post", data);
@@ -227,8 +230,14 @@ public class XChainLinksPluginPostTest {
         }
 
         @Override
+        public void reject(String message) {
+            rejection = message;
+        }
+
+        @Override
         public void reject(String message, Exception error) {
             rejection = message;
+            rejectionCause = error;
         }
     }
 }

@@ -155,11 +155,11 @@ public class XChainLinksPlugin extends Plugin {
                 reply.put("status", status);
                 call.resolve(reply);
             } catch (IllegalArgumentException exception) {
-                call.reject("Callback request refused", exception);
+                call.reject("Callback request refused");
             } catch (java.io.IOException exception) {
-                call.reject("Callback POST failed", exception);
+                call.reject("Callback POST failed");
             } catch (Exception exception) {
-                call.reject("Callback POST failed", exception);
+                call.reject("Callback POST failed");
             }
         });
     }
