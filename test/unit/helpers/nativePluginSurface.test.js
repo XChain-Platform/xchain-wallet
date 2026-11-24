@@ -36,7 +36,7 @@ describe('native plugin surface readers', () => {
             + 'XChainLinksPlugin.java',
         ))).toEqual({
             name: 'XChainLinks',
-            methods: ['takePendingLink', 'post', 'resolveHost'],
+            methods: ['takePendingLink', 'post', 'resolveHost', 'returnToBrowser'],
         });
         expect(javaPluginSurface(read(
             'packages/mobile/android/app/src/main/java/io/xchain/wallet/android/clipboard/'
