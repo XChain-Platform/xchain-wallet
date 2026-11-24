@@ -5,10 +5,10 @@
 
 // The site-request round trip, one leg per place a request link can land.
 //
-// The test-dapp server and the link oracle are the only parts every leg needs,
-// so they start in-process. The legs that need a larger harness (the built
-// extension, an Android emulator, a booted iOS simulator) check for it and
-// skip with the missing piece named, rather than passing without running.
+// The test-dapp server starts in-process. Every leg is required: a missing
+// harness piece (the built extension, an Android device, a booted iOS
+// simulator) or a broken product path fails the run with the piece named.
+// ANDROID_SERIAL and XCHAIN_IOS_UDID pick a target when more than one exists.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -105,8 +105,39 @@ async function post(url, body) {
 }
 
 function tool(command, args) {
-    const found = spawnSync(command, args, { encoding: 'utf8', timeout: 15_000 });
-    return found.error || found.status !== 0 ? null : found.stdout;
+    const found = spawnSync(command, args, { encoding: 'utf8', timeout: 30_000 });
+    if (found.error || found.status !== 0) {
+        throw new Error(`${command} ${args.slice(0, 3).join(' ')} failed: ${found.error?.message ?? found.stderr}`);
+    }
+    return found.stdout;
+}
+
+function androidSerial() {
+    if (process.env.ANDROID_SERIAL) return process.env.ANDROID_SERIAL;
+    const attached = tool('adb', ['devices']).split('\n').slice(1)
+        .map((line) => line.split('\t'))
+        .filter(([, state]) => state?.trim() === 'device')
+        .map(([name]) => name);
+    if (attached.length !== 1) throw new Error(`expected one attached Android device, found ${attached.length}; set ANDROID_SERIAL`);
+    return attached[0];
+}
+
+function iosUdid() {
+    if (process.env.XCHAIN_IOS_UDID) return process.env.XCHAIN_IOS_UDID;
+    const booted = [...tool('xcrun', ['simctl', 'list', 'devices', 'booted']).matchAll(/\(([0-9A-F-]{36})\) \(Booted\)/g)];
+    if (booted.length !== 1) throw new Error(`expected one booted iOS simulator, found ${booted.length}; set XCHAIN_IOS_UDID`);
+    return booted[0][1];
+}
+
+async function until(read, { timeout = 30_000, step = 500 } = {}) {
+    const deadline = Date.now() + timeout;
+    let last;
+    for (;;) {
+        last = read();
+        if (last) return last;
+        if (Date.now() > deadline) return last;
+        await new Promise((done) => { setTimeout(done, step); });
+    }
 }
 
 async function pageRequestLink(page) {
@@ -284,13 +315,22 @@ test.describe('phone launch', () => {
         expect(decodeRequestLink(iosOpenUrlArgs(published).at(-1))).toMatchObject({ id: REQUEST_ID });
     });
 
-    test('the Android emulator opens the wallet on the request link', async ({ dapp }) => {
-        const serial = process.env.ANDROID_SERIAL;
-        test.skip(!serial, 'ANDROID_SERIAL names no emulator or device');
+    test('the Android manifest claims the published link host and the xchain scheme', async () => {
+        const manifest = readFileSync(resolve(WALLET_ROOT, 'packages/mobile/android/app/src/main/AndroidManifest.xml'), 'utf8');
+        const published = new URL(publishedLink('xchain:request'));
+        expect(manifest).toContain(`android:host="${published.host}"`);
+        expect(manifest).toContain(`android:pathPrefix="${published.pathname}"`);
+        expect(manifest).toContain('android:scheme="xchain"');
+    });
 
+    test('the Android device opens the wallet on the request link and the wallet stays up', async ({ dapp }) => {
+        test.setTimeout(90_000);
+        const serial = androidSerial();
         const packageName = process.env.XCHAIN_ANDROID_PACKAGE ?? 'io.xchain.wallet.android.debug';
-        test.skip(!tool('adb', ['-s', serial, 'shell', 'pm', 'list', 'packages', packageName])?.includes(`package:${packageName}`), `${packageName} is not installed on ${serial}`);
-        const link = publishedLink(requestLink(loginEnvelope({ dappOrigin: dapp.origin })));
+        expect(tool('adb', ['-s', serial, 'shell', 'pm', 'list', 'packages', packageName])).toContain(`package:${packageName}`);
+
+        const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
+        tool('adb', ['-s', serial, 'logcat', '-c']);
         const run = spawnSync('adb', androidViewArgs(link, { packageName, serial, stopFirst: true }), {
             encoding: 'utf8',
             timeout: 60_000,
@@ -298,23 +338,37 @@ test.describe('phone launch', () => {
         const started = parseAmStart(`${run.stdout}${run.stderr}`);
         expect(started.error).toBeNull();
         expect(started.ok).toBe(true);
+
+        const resumed = await until(() => tool('adb', ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
+            .split('\n').find((line) => line.includes('ResumedActivity') && line.includes(`${packageName}/`)));
+        expect(resumed, 'the wallet activity is not the resumed one').toBeTruthy();
+
+        await new Promise((done) => { setTimeout(done, 3000); });
+        expect(tool('adb', ['-s', serial, 'shell', 'pidof', packageName]).trim(), 'the wallet process is gone').not.toBe('');
+        const crash = tool('adb', ['-s', serial, 'logcat', '-d', '-b', 'crash']);
+        expect(crash).not.toContain(packageName);
     });
 
-    test('the iOS simulator opens the wallet on the request link', async ({ dapp }) => {
-        const udid = process.env.XCHAIN_IOS_UDID;
-        test.skip(!udid, 'XCHAIN_IOS_UDID names no simulator');
-        const listed = tool('xcrun', ['simctl', 'list', 'devices', 'booted']);
-        test.skip(!listed?.includes(`${udid}) (Booted)`), `simulator ${udid} is not booted`);
+    test('the iOS simulator opens the wallet on the request link and the wallet runs', async ({ dapp }) => {
+        test.setTimeout(90_000);
+        const udid = iosUdid();
+        const bundle = process.env.XCHAIN_IOS_BUNDLE ?? 'io.xchain.wallet.ios';
+        expect(tool('xcrun', ['simctl', 'listapps', udid])).toContain(bundle);
 
         const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
+        spawnSync('xcrun', ['simctl', 'terminate', udid, bundle], { encoding: 'utf8', timeout: 30_000 });
         const run = spawnSync('xcrun', iosOpenUrlArgs(link, { udid }), { encoding: 'utf8', timeout: 60_000 });
         expect(run.status).toBe(0);
+
+        const running = await until(() => tool('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'])
+            .split('\n').find((line) => line.includes(`UIKitApplication:${bundle}`)));
+        expect(running, `${bundle} is not running after openurl`).toBeTruthy();
     });
 });
 
 test.describe('extension on the test-dapp', () => {
     test('the extension provider is injected on the page and the connect client uses it', async ({ dapp }, testInfo) => {
-        test.skip(!existsSync(resolve(EXTENSION_DIST, 'manifest.json')), 'packages/extension/dist is not built');
+        expect(existsSync(resolve(EXTENSION_DIST, 'manifest.json')), 'packages/extension/dist is not built').toBe(true);
 
         const profile = mkdtempSync(resolve(tmpdir(), 'site-request-ext-'));
         const context = await chromium.launchPersistentContext(profile, {
@@ -329,7 +383,7 @@ test.describe('extension on the test-dapp', () => {
             await expect.poll(() => page.evaluate(() => typeof window.xchain), { timeout: 30_000 }).toBe('object');
             const provider = await page.evaluate(() => ({ version: window.xchain.version }));
             expect(typeof provider.version).toBe('string');
-            test.fixme(!providerReady(provider), `the injected provider reports ${provider.version}, below the connect client's minimum, so the page offers the chooser instead of the extension`);
+            expect(providerReady(provider), `the injected provider reports ${provider.version}, below the connect client minimum`).toBe(true);
 
             await page.evaluate(() => {
                 window.__opened = [];
@@ -392,10 +446,7 @@ webTest.describe('web wallet round trip', () => {
         const approve = page.getByRole('button', { name: /^Approve/ });
         const boundary = page.getByText("This screen couldn't be shown");
         await walletExpect(approve.or(boundary).first()).toBeVisible({ timeout: 30_000 });
-        webTest.fixme(
-            await boundary.isVisible(),
-            `the approval route crashed: ${pageErrors.find((message) => /adapter/.test(message)) ?? pageErrors[0] ?? 'no page error'}`,
-        );
+        expect(await boundary.isVisible(), `the approval route crashed: ${pageErrors.find((message) => /adapter/.test(message)) ?? pageErrors[0] ?? 'no page error'}`).toBe(false);
 
         await walletExpect(page.getByText(new URL(envelope.return).host).first()).toBeVisible();
         await approve.click();
@@ -403,5 +454,34 @@ webTest.describe('web wallet round trip', () => {
         const returned = readReturn(page.url());
         expect(returned).toMatchObject({ id: envelope.id, ok: true });
         expect(page.url().startsWith(envelope.return)).toBe(true);
+    });
+
+    webTest('a link edited to drop return is approved by the wallet and goes nowhere', async ({ page, dapp }) => {
+        const dappPage = await page.context().newPage();
+        dappPage.__dappUrl = `${dapp.secureOrigin}/`;
+        const envelope = await pageRequestLink(dappPage);
+        const { return: _dropped, ...edited } = envelope;
+        await dapp.store.put(envelope.id, loginRecord());
+
+        const pageErrors = [];
+        page.on('pageerror', (error) => pageErrors.push(error.message));
+        await createWallet(page);
+        await page.goto(`/?uri=${encodeURIComponent(requestLink(edited))}`);
+        await unlockWallet(page);
+
+        const approve = page.getByRole('button', { name: /^Approve/ });
+        const boundary = page.getByText("This screen couldn't be shown");
+        await walletExpect(approve.or(boundary).first()).toBeVisible({ timeout: 30_000 });
+        expect(await boundary.isVisible(), `the approval route crashed: ${pageErrors[0] ?? 'no page error'}`).toBe(false);
+
+        await approve.click();
+        await walletExpect(approve).toBeHidden({ timeout: 30_000 });
+        await page.waitForTimeout(1000);
+        expect(page.url()).not.toContain('#xchain=');
+        expect(new URL(page.url()).origin).toBe(WEB_URL);
+        await expect(dappPage.locator('#response')).toHaveText('Waiting for the wallet...');
+        await expect(dappPage.locator('#address')).toHaveValue('');
+        expect((await (await fetch(`${dapp.origin}/result/${envelope.id}`)).json()).claimed).toBe(false);
+        await dappPage.close();
     });
 });
