@@ -546,7 +546,7 @@ final class RenderAllFixturesTests: XCTestCase {
                 text,
                 font: font,
                 dynamicTypeSize: .large,
-                width: size.width / BalanceRowView.amountMinimumScale
+                width: size.width
             ),
             "\(screen) \(fixture) amount is truncated at "
                 + "\(sizeDescription(size)): \(text)",
