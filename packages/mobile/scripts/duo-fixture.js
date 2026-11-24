@@ -1,6 +1,14 @@
 // Copyright (c) 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {
+    mkdirSync,
+    readFileSync,
+    writeFileSync,
+} from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 export const DUO_STATES = Object.freeze([
     'closed-portrait',
     'closed-landscape',
@@ -112,6 +120,101 @@ export function checkMeasuredWidths(value) {
     return problems;
 }
 
+function parseAssignment(value) {
+    const separator = value.indexOf('=');
+    if (separator === -1) return null;
+    return [value.slice(0, separator), value.slice(separator + 1)];
+}
+
+function parseWriteArguments(args) {
+    const options = {
+        foldPaths: {},
+        unreachable: {},
+    };
+    const assignedStates = new Set();
+    const singleFlags = new Set();
+
+    for (let index = 0; index < args.length; index += 2) {
+        const flag = args[index];
+        const value = args[index + 1];
+        if (!['--device', '--out', '--measured-at', '--state', '--unreachable'].includes(flag)
+            || value === undefined
+            || value.startsWith('--')) {
+            return { status: 2 };
+        }
+
+        if (flag === '--state' || flag === '--unreachable') {
+            const assignment = parseAssignment(value);
+            if (!assignment) return { status: 2 };
+
+            const [stateName, assignedValue] = assignment;
+            if (assignedStates.has(stateName)) {
+                return { status: 1, problem: `Duo state "${stateName}" was given more than once` };
+            }
+            assignedStates.add(stateName);
+            const target = flag === '--state' ? options.foldPaths : options.unreachable;
+            target[stateName] = assignedValue;
+            continue;
+        }
+
+        if (singleFlags.has(flag)) return { status: 2 };
+        singleFlags.add(flag);
+        if (flag === '--device') options.device = value;
+        if (flag === '--out') options.out = value;
+        if (flag === '--measured-at') options.measuredAt = value;
+    }
+
+    if (options.device === undefined || options.out === undefined) return { status: 2 };
+    return { status: 0, options };
+}
+
+export function runCli(args) {
+    const [verb, ...arguments_] = args;
+    if (verb !== 'write') return 2;
+
+    const parsed = parseWriteArguments(arguments_);
+    if (parsed.status !== 0) {
+        if (parsed.problem) process.stderr.write(`${parsed.problem}\n`);
+        return parsed.status;
+    }
+
+    const folds = {};
+    for (const [stateName, path] of Object.entries(parsed.options.foldPaths)) {
+        let text;
+        try {
+            text = readFileSync(path, 'utf8');
+        } catch {
+            process.stderr.write(`Cannot read Duo state "${stateName}" log "${path}"\n`);
+            return 1;
+        }
+        folds[stateName] = parseFoldLines(text);
+    }
+
+    let fixture;
+    try {
+        fixture = buildMeasuredWidths({
+            device: parsed.options.device,
+            measuredAt: parsed.options.measuredAt ?? new Date().toISOString(),
+            folds,
+            unreachable: parsed.options.unreachable,
+        });
+    } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        process.stderr.write(`${error.message}\n`);
+        return 1;
+    }
+
+    const problems = checkMeasuredWidths(fixture);
+    if (problems.length > 0) {
+        for (const problem of problems) process.stderr.write(`${problem}\n`);
+        return 1;
+    }
+
+    mkdirSync(dirname(parsed.options.out), { recursive: true });
+    writeFileSync(parsed.options.out, `${JSON.stringify(fixture, null, 4)}\n`);
+    return 0;
+}
+
 function checkState(state, path, problems) {
     if (!isObject(state)) {
         problems.push(`${path} must be an object`);
@@ -216,4 +319,8 @@ function isIsoTimestamp(value) {
     const offsetIsValid = offsetHour === undefined
         || (offsetHour <= 23 && offsetMinute <= 59);
     return datePartsMatch && offsetIsValid;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+    process.exitCode = runCli(process.argv.slice(2));
 }

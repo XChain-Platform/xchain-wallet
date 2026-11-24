@@ -27,6 +27,9 @@ const messages = {
     'extension.popup.unsupportedPageHint': 'Open a regular website to use the wallet.',
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',
+    'extension.approval.linkAnswer': 'Opened from a link. The answer goes to {origin}',
+    'extension.approval.invalidLinkTargets':
+        "This request names different sites and can't be approved.",
 
     'extension.approval.title': 'Approval Request',
     'extension.connect.title': 'Connect Wallet',
@@ -37,9 +40,12 @@ const messages = {
     'extension.connect.accounts.share': 'Share {name}',
 
     'extension.sign.declaredName': 'Site-provided name: {name}',
-    'extension.sign.signInAs': 'Sign in as',
+    'extension.sign.loginTitle': 'Login with XChain',
+    'extension.sign.signInAs': 'Log in as',
     'extension.sign.signInAsHint': 'Select the approved address this site will use to sign in.',
-    'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
+    'extension.sign.noSignInAddress': 'This site has no address it may log in with.',
+    'extension.sign.providerSignInAs': 'Sign in as',
+    'extension.sign.providerNoSignInAddress': 'This site has no address it may sign in with.',
     'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
     'extension.sign.feeSetBySite': 'Set by the site{rate}',
     'extension.sign.alwaysAllow':
@@ -47,8 +53,9 @@ const messages = {
     'extension.sign.warningNoun.message': 'message',
     'extension.sign.signingPaths': 'Signing paths',
     'extension.sign.psbtMissing': 'This request is missing the transaction to sign',
-    'extension.sign.signInTo': 'Sign in to',
+    'extension.sign.signInTo': 'Log in to',
     'extension.sign.warningNoun.signIn': 'sign-in',
+    'extension.sign.anotherDevice': 'You are logging in on another device at {origin}',
     'extension.sign.oneTimeCode': 'One-time code',
     'extension.sign.controlCharacters':
         'Control characters are displayed safely. The original {noun} text is what you will sign.',

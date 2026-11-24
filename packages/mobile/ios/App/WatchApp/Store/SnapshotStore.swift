@@ -12,11 +12,17 @@ final class SnapshotStore {
 
     private let file: SnapshotFile
     private let writer: Writer
+    private let widgetSummary: WidgetSummary
     private let decoder = JSONDecoder()
 
     private(set) var latest: Snapshot?
 
-    init(directory: URL, writer: Writer? = nil, directoryCreator: DirectoryCreator? = nil) {
+    init(
+        directory: URL,
+        writer: Writer? = nil,
+        directoryCreator: DirectoryCreator? = nil,
+        widgetSummary: WidgetSummary = WidgetSummary()
+    ) {
         let createDirectory = directoryCreator ?? { url, intermediates, attributes in
             try FileManager.default.createDirectory(
                 at: url,
@@ -30,6 +36,7 @@ final class SnapshotStore {
         self.writer = writer ?? { data, options in
             try file.save(data, options: options)
         }
+        self.widgetSummary = widgetSummary
         latest = file.load().flatMap { try? decoder.decode(Snapshot.self, from: $0) }
     }
 
@@ -51,6 +58,15 @@ final class SnapshotStore {
         do {
             try writer(data, Self.fileProtection)
             latest = snapshot
+            widgetSummary.save(
+                showTotal: snapshot.settings.showTotal,
+                session: snapshot.session,
+                hidden: snapshot.hidden,
+                totalText: snapshot.totals.fiatText,
+                unreadCount: snapshot.inbox.lazy.filter { !$0.read }.count,
+                requestWaiting: !snapshot.request.id.isEmpty,
+                balancesAt: snapshot.balancesAt
+            )
             return true
         } catch {
             return false
