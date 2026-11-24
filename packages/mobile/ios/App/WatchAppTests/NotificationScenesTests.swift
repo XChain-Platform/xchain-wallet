@@ -28,19 +28,14 @@ final class NotificationScenesTests: XCTestCase {
                 NotificationSceneRules.defaultActionId,
                 NotificationSceneRules.openOnPhoneActionId,
             ] {
-                let delegate = WatchApplicationDelegate()
-                let root = NotificationRoutingRootView(
-                    notifications: delegate,
-                    pendingRequest: { request }
-                )
-                let navigation = root.navigation
+                let delegate = WatchApplicationDelegate(pendingRequest: { request })
 
                 XCTAssertTrue(delegate.route(
                     notificationId: request.id,
                     category: category,
                     actionId: actionId
                 ))
-                XCTAssertEqual(navigation.path, [.alertDetail], "\(fixture) \(actionId)")
+                XCTAssertEqual(delegate.request?.id, request.id, "\(fixture) \(actionId)")
             }
         }
     }
@@ -51,43 +46,43 @@ final class NotificationScenesTests: XCTestCase {
             Request.self,
             from: WatchFixtureFiles.data("request-confirm", in: directory)
         )
-        let dismissed = WatchNotificationResponse(
+        let delegate = WatchApplicationDelegate(pendingRequest: { request })
+
+        XCTAssertFalse(delegate.route(
             notificationId: request.id,
             category: "request",
             actionId: NotificationSceneRules.dismissActionId
-        )
-        let stale = WatchNotificationResponse(
+        ))
+        XCTAssertFalse(delegate.route(
             notificationId: "stale-request",
             category: "request",
             actionId: NotificationSceneRules.defaultActionId
-        )
-
-        XCTAssertNil(NotificationNavigation.path(for: dismissed, pendingRequest: request))
-        XCTAssertEqual(
-            NotificationNavigation.path(for: stale, pendingRequest: request),
-            [.balances]
-        )
+        ))
+        XCTAssertNil(delegate.request)
     }
 
-    func testDelegatePublishesOnlyRoutableResponses() {
-        let delegate = WatchApplicationDelegate()
+    func testDelegatePublishesOnlyMatchingPendingRequests() throws {
+        let directory = try XCTUnwrap(WatchFixtureFiles.directory())
+        let request = try decoder.decode(
+            Request.self,
+            from: WatchFixtureFiles.data("request-confirm", in: directory)
+        )
+        let delegate = WatchApplicationDelegate(pendingRequest: { request })
 
         XCTAssertFalse(delegate.route(
             notificationId: "request-id",
-            category: "request",
-            actionId: NotificationSceneRules.dismissActionId
+            category: "alert",
+            actionId: NotificationSceneRules.defaultActionId
         ))
-        XCTAssertNil(delegate.response)
+        XCTAssertNil(delegate.request)
         XCTAssertTrue(delegate.route(
-            notificationId: "request-id",
+            notificationId: request.id,
             category: "request",
             actionId: NotificationSceneRules.defaultActionId
         ))
-        XCTAssertEqual(delegate.response, WatchNotificationResponse(
-            notificationId: "request-id",
-            category: "request",
-            actionId: NotificationSceneRules.defaultActionId
-        ))
+        XCTAssertEqual(delegate.request?.id, request.id)
+        delegate.dismissRequest()
+        XCTAssertNil(delegate.request)
     }
 
     private func notificationRegistrations(in root: Any) -> [String: [String]] {

@@ -1,21 +1,26 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import Combine
 import SwiftUI
 import UserNotifications
+import WatchConnectivity
 import WatchKit
-
-struct WatchNotificationResponse: Equatable {
-    let notificationId: String
-    let category: String
-    let actionId: String
-}
 
 @MainActor
 final class WatchApplicationDelegate: NSObject, ObservableObject,
     WKApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
-    @Published private(set) var response: WatchNotificationResponse?
+    @Published private(set) var request: Request?
+    private let pendingRequest: () -> Request?
+
+    override init() {
+        pendingRequest = { WatchNotificationSnapshot.latest?.request }
+        super.init()
+    }
+
+    init(pendingRequest: @escaping () -> Request?) {
+        self.pendingRequest = pendingRequest
+        super.init()
+    }
 
     func applicationDidFinishLaunching() {
         UNUserNotificationCenter.current().delegate = self
@@ -23,15 +28,24 @@ final class WatchApplicationDelegate: NSObject, ObservableObject,
 
     @discardableResult
     func route(notificationId: String, category: String, actionId: String) -> Bool {
-        guard NotificationSceneRules.responsePath(category: category, actionId: actionId) != nil else {
-            return false
-        }
-        response = WatchNotificationResponse(
+        guard let route = NotificationResponseRoute.resolve(
             notificationId: notificationId,
             category: category,
-            actionId: actionId
-        )
+            actionId: actionId,
+            request: pendingRequest()
+        ), route.path.last == .alertDetail, let request = route.request else { return false }
+        self.request = request
         return true
+    }
+
+    func dismissRequest() {
+        request = nil
+    }
+
+    func openOnPhone(_ request: Request) {
+        OpenOnPhone(send: WCSession.default.send)(
+            OpenOnPhoneIntent(route: RootView.requestRoute(request.id))
+        )
     }
 
     func userNotificationCenter(
@@ -46,83 +60,6 @@ final class WatchApplicationDelegate: NSObject, ObservableObject,
             actionId: response.actionIdentifier
         )
         completionHandler()
-    }
-}
-
-@MainActor
-final class NotificationNavigation: ObservableObject {
-    @Published var path: [WatchScreen] = []
-    private let pendingRequest: () -> Request?
-    private var responseSubscription: AnyCancellable?
-
-    init(
-        notifications: WatchApplicationDelegate,
-        pendingRequest: @escaping () -> Request?
-    ) {
-        self.pendingRequest = pendingRequest
-        responseSubscription = notifications.$response
-            .compactMap { $0 }
-            .sink { [weak self] in self?.route($0) }
-    }
-
-    private func route(_ response: WatchNotificationResponse) {
-        guard let route = Self.path(
-            for: response,
-            pendingRequest: pendingRequest()
-        ) else { return }
-        path = Array(route.dropFirst())
-    }
-
-    func open(_ screen: WatchScreen) {
-        path.append(screen)
-    }
-
-    static func path(
-        for response: WatchNotificationResponse,
-        pendingRequest: Request?
-    ) -> [WatchScreen]? {
-        guard let path = NotificationSceneRules.responsePath(
-            category: response.category,
-            actionId: response.actionId
-        ) else { return nil }
-        guard path.last == .alertDetail else { return path }
-        return NotificationRequestLookup.pendingRequest(
-            notificationId: response.notificationId,
-            category: response.category,
-            request: pendingRequest
-        ) == nil ? [.balances] : path
-    }
-}
-
-@MainActor
-struct NotificationRoutingRootView: View {
-    @StateObject private var model: RootViewModel
-    @StateObject var navigation: NotificationNavigation
-
-    init(
-        notifications: WatchApplicationDelegate,
-        pendingRequest: (() -> Request?)? = nil
-    ) {
-        let model = RootViewModel.live()
-        _model = StateObject(wrappedValue: model)
-        _navigation = StateObject(wrappedValue: NotificationNavigation(
-            notifications: notifications,
-            pendingRequest: pendingRequest ?? { [weak model] in model?.snapshot?.request }
-        ))
-    }
-
-    var body: some View {
-        AmbientRedaction(
-            phoneHidden: model.snapshot?.hidden ?? false,
-            hideAmounts: model.hideAmounts
-        ) { redaction in
-            NavigationStack(path: $navigation.path) {
-                RootContent(model: model, redaction: redaction) {
-                    navigation.open($0)
-                }
-            }
-        }
-        .task { model.activate() }
     }
 }
 
@@ -174,6 +111,30 @@ final class RequestNotificationController: WKUserNotificationHostingController<A
     }
 }
 
+@MainActor
+private struct NotificationRouteModifier: ViewModifier {
+    @ObservedObject var notifications: WatchApplicationDelegate
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: requestIsPresented) {
+            if let request = notifications.request {
+                NavigationStack {
+                    AlertDetailScreen(request: request) {
+                        notifications.openOnPhone(request)
+                    }
+                }
+            }
+        }
+    }
+
+    private var requestIsPresented: Binding<Bool> {
+        Binding(
+            get: { notifications.request != nil },
+            set: { if !$0 { notifications.dismissRequest() } }
+        )
+    }
+}
+
 @main
 struct XChainWatchApp: App {
     @WKApplicationDelegateAdaptor(WatchApplicationDelegate.self) private var appDelegate
@@ -187,11 +148,8 @@ struct XChainWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if appDelegate.response == nil {
-                RootView()
-            } else {
-                NotificationRoutingRootView(notifications: appDelegate)
-            }
+            RootView()
+                .modifier(NotificationRouteModifier(notifications: appDelegate))
         }
         Self.notificationScenes
     }
