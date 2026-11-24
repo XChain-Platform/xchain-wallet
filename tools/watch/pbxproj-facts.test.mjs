@@ -43,9 +43,36 @@ test('reads facts from the current App Xcode project', async () => {
                 productType: 'com.apple.product-type.bundle.unit-test',
                 bundleIds: ['io.xchain.wallet.ios.watch.tests'],
             },
+            {
+                name: 'WatchWidgets',
+                productType: 'com.apple.product-type.app-extension',
+                bundleIds: ['io.xchain.wallet.ios.watch.widgets'],
+            },
         ],
-        synchronizedGroups: ['WatchApp', 'WatchAppTests'],
-        copyPhases: [],
+        synchronizedGroups: [
+            'App/activity',
+            'App/fold',
+            'App/notify',
+            'App/watch',
+            'AppTests/Native',
+            'AppUITests/Native',
+            'WatchApp',
+            'WatchAppTests',
+            'WatchShared',
+            'WatchWidgets',
+        ],
+        copyPhases: [
+            {
+                name: 'Embed App Extensions',
+                dstSubfolderSpec: 13,
+                dstPath: '',
+            },
+            {
+                name: 'Embed Watch Content',
+                dstSubfolderSpec: 16,
+                dstPath: '$(CONTENTS_FOLDER_PATH)/Watch',
+            },
+        ],
     });
 });
 

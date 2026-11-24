@@ -26,7 +26,7 @@ export function ActivityRowsSection() {
             kicker="One row for one thing that happened: the asset mark, action and status, amount, block and time. History and the Home activity tab draw it from the same component."
         >
             <Guidance
-                what={<><code>ActivityRow</code> is a full-width button with three lines: action and status, amount, then block and relative time. Pending rows omit the block. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
+                what={<><code>ActivityRow</code> is a full-width button with three lines: action and status, amount, then block and relative time. Pending rows omit the block. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>ActivityEntryRow</code> is the Home variant of the activity row. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
                 when={<>Any list of past activity.</>}
                 whenNot={<>Balances (BalanceList) · people and addresses (ListRow).</>}
                 doRule={<>✓ Map every status to its label through <code>statusLabels</code></>}

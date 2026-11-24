@@ -18,9 +18,9 @@ export function PillSegmentedSection() {
             kicker="The inline exclusive filter and the sub-tab strip are the SegmentedControl component, not a route's own pill."
         >
             <Guidance
-                what={<><code>&lt;SegmentedControl items value onChange /&gt;</code> with two to four short labels. See the Segmented control section for its states.</>}
+                what={<><code>&lt;SegmentedControl items value onChange /&gt;</code> for a short inline choice. It spans its row, 44px high. Items may carry <code>disabled</code> and <code>tone</code> (<code>'accent'</code> | <code>'success'</code> | <code>'danger'</code>). See the Segmented control section for its states.</>}
                 when={<>An inline filter above a list (All, Coins, Tokens) or a sub-tab strip inside a panel.</>}
-                whenNot={<>More than four options (Select) · page-level tabs (Tabs).</>}
+                whenNot={<>Page-level tabs (Tabs). With many more options, a Select reads better.</>}
                 doRule={<>✓ Keep the labels short enough for one line at 360px</>}
                 dontRule={<>✗ Draw a route-local pill from native buttons</>}
                 supersedes={<>The route-local pill copy this section used to show.</>}
