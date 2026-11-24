@@ -20,22 +20,33 @@ final class BalancesScreenTests: XCTestCase {
         XCTAssertEqual(screen.crownUpperBound, 1)
     }
 
-    func testHeaderAndDoubleTapDriveTheSameToggle() {
+    func testHeaderAndDoubleTapButtonsDriveTheSameToggle() throws {
         var recorded: [WatchUnitsMode] = []
         let screen = make(mode: .fiat, setMode: { recorded.append($0) })
-        let header = screen.display.header!
+        let header = try XCTUnwrap(screen.display.header)
+        let headerBody = screen.headerButton(header).body
+        let shortcut = screen.doubleTapShortcut
+        let headerContent = renderedContent(in: headerBody)
+        let shortcutContent = renderedContent(in: shortcut)
+        let headerButton = try XCTUnwrap(renderedButtons(in: headerBody).first)
+        let shortcutButton = try XCTUnwrap(renderedButtons(in: shortcut).first)
 
-        XCTAssertTrue(invokeAction(in: screen.headerButton(header)))
-        XCTAssertTrue(invokeAction(in: screen.doubleTapShortcut))
+        XCTAssertTrue(headerContent.typeNames.contains { $0.hasPrefix("SwiftUI.Button<") })
+        XCTAssertTrue(shortcutContent.typeNames.contains { $0.hasPrefix("SwiftUI.Button<") })
+        XCTAssertTrue(shortcutContent.typeNames.contains { $0.contains("HandGestureShortcut") })
+        XCTAssertTrue(invokeAction(in: headerButton))
+        XCTAssertTrue(invokeAction(in: shortcutButton))
 
         XCTAssertEqual(recorded, [.units, .units])
     }
 
-    func testHeaderSwitchesUnitsToFiat() {
+    func testHeaderSwitchesUnitsToFiat() throws {
         var recorded: WatchUnitsMode?
         let screen = make(mode: .units, setMode: { recorded = $0 })
+        let header = try XCTUnwrap(screen.display.header)
+        let button = try XCTUnwrap(renderedButtons(in: screen.headerButton(header).body).first)
 
-        XCTAssertTrue(invokeAction(in: screen.headerButton(screen.display.header!)))
+        XCTAssertTrue(invokeAction(in: button))
         XCTAssertEqual(recorded, .fiat)
     }
 
@@ -56,11 +67,13 @@ final class BalancesScreenTests: XCTestCase {
         XCTAssertEqual(opened, [.alerts, .receive, .status])
     }
 
-    func testToggleIsIgnoredOnTestNetwork() {
+    func testToggleIsIgnoredOnTestNetwork() throws {
         var recorded: WatchUnitsMode?
         let screen = make(isTest: true, setMode: { recorded = $0 })
+        let header = try XCTUnwrap(screen.display.header)
+        let button = try XCTUnwrap(renderedButtons(in: screen.headerButton(header).body).first)
 
-        XCTAssertTrue(invokeAction(in: screen.headerButton(screen.display.header!)))
+        XCTAssertTrue(invokeAction(in: button))
         XCTAssertNil(recorded)
     }
 
