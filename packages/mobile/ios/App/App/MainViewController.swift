@@ -35,6 +35,7 @@ import WebKit
 class MainViewController: CAPBridgeViewController {
 
     private var launchCover: UIView?
+    private var foldPublisher: FoldPublisher?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -92,6 +93,13 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(XChainSplashPlugin())
         // Without this, getPlugin('XChainActivity') in packages/core/src/notifications/activityCheckConfig.js finds nothing and the setting is silently never stored.
         bridge?.registerPluginInstance(XChainActivityPlugin())
+
+        // Without this, fold updates silently never reach the WebView.
+        if let webView {
+            let publisher = FoldPublisher(webView: webView)
+            publisher.start()
+            foldPublisher = publisher
+        }
 
         // WebKit history does not know about route-local review steps or
         // signing locks. The app-owned edge gesture routes through the same
