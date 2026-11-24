@@ -33,6 +33,7 @@
 		XC1000B00000000000000009 /* CallbackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000009 /* CallbackSession.swift */; };
 		XC1000B0000000000000000A /* CallbackResolve.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000A /* CallbackResolve.swift */; };
 		XC1000B0000000000000000B /* CallbackPostRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000B /* CallbackPostRequest.swift */; };
+		XC1000B0000000000000000C /* BrowserReturnHint.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A0000000000000000C /* BrowserReturnHint.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
 		XC1037B00000000000000001 /* DisabledCapacitorPlugins.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */; };
 		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
@@ -146,6 +147,7 @@
 		XC1000A00000000000000009 /* CallbackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackSession.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000A /* CallbackResolve.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackResolve.swift; sourceTree = "<group>"; };
 		XC1000A0000000000000000B /* CallbackPostRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostRequest.swift; sourceTree = "<group>"; };
+		XC1000A0000000000000000C /* BrowserReturnHint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/BrowserReturnHint.swift; sourceTree = "<group>"; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
 		XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledCapacitorPlugins.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000001 /* VaultArgon2id.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultArgon2id.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 				XC1000A00000000000000009 /* CallbackSession.swift */,
 				XC1000A0000000000000000A /* CallbackResolve.swift */,
 				XC1000A0000000000000000B /* CallbackPostRequest.swift */,
+				XC1000A0000000000000000C /* BrowserReturnHint.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -709,6 +712,7 @@
 				XC1000B00000000000000009 /* CallbackSession.swift in Sources */,
 				XC1000B0000000000000000A /* CallbackResolve.swift in Sources */,
 				XC1000B0000000000000000B /* CallbackPostRequest.swift in Sources */,
+				XC1000B0000000000000000C /* BrowserReturnHint.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
