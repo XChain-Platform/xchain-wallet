@@ -33,13 +33,9 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
     var supported: Bool { session != nil }
     var activationState: WCSessionActivationState { session?.activationState ?? .notActivated }
 
-    static func activateAtLaunch() {
-        _ = shared
-    }
-
     @discardableResult
-    static func activateAtLaunch(session: PhoneWatchSession) -> WatchSessionHost {
-        WatchSessionHost(session: session)
+    static func activateAtLaunch(session: PhoneWatchSession? = nil) -> WatchSessionHost {
+        session.map { WatchSessionHost(session: $0) } ?? shared
     }
 
     init(session: PhoneWatchSession?) {
