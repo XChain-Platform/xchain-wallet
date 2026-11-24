@@ -4,17 +4,23 @@
 package io.xchain.wallet.android.wear.complication
 
 import android.app.PendingIntent
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.NoDataComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceService
+import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import io.xchain.wallet.android.wear.data.GlanceSummary
 import io.xchain.wallet.android.wear.data.Snapshot
 import io.xchain.wallet.android.wear.data.SnapshotStore
+import io.xchain.wallet.android.wear.tile.TileRefresher
 import kotlinx.serialization.json.Json
 
 class WalletComplicationService : ComplicationDataSourceService() {
@@ -45,6 +51,20 @@ class WalletComplicationService : ComplicationDataSourceService() {
 
     internal companion object {
         const val PREVIEW_TEXT = "$0.00"
+        internal var refresher: TileRefresher = TileRefresher(
+            now = System::currentTimeMillis,
+            schedule = { delayMs, task -> Handler(Looper.getMainLooper()).postDelayed(task, delayMs) },
+        )
+        internal var requestAll: (Context) -> Unit = { context ->
+            ComplicationDataSourceUpdateRequester.create(
+                context,
+                ComponentName(context, WalletComplicationService::class.java),
+            ).requestUpdateAll()
+        }
+
+        fun onSnapshot(context: Context) {
+            refresher.onSnapshot { requestAll(context) }
+        }
 
         fun dataFor(
             type: ComplicationType,
