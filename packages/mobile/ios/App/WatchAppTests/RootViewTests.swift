@@ -107,10 +107,9 @@ final class RootViewTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("WatchApp/Screens/RootView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
-        let stackStart = try XCTUnwrap(source.range(of: "NavigationStack(path: $path)"))
-        let stackSource = source[stackStart.lowerBound...].prefix(200)
+        let wiringPattern = #"NavigationStack\(path:\s*\$path\)\s*\{\s*RootContent\(model:\s*model,\s*redaction:\s*redaction\)\s*\{\s*path\.append\(\$0\)\s*\}"#
 
-        XCTAssertTrue(stackSource.contains("RootContent(model: model, redaction: redaction)"))
+        XCTAssertNotNil(source.range(of: wiringPattern, options: .regularExpression))
     }
 
     @MainActor
