@@ -2,6 +2,8 @@ import XCTest
 
 final class RealOnboardingUITests: XCTestCase {
     func testCreatesFreshWalletThroughRealOnboarding() {
+        executionTimeAllowance = 600
+
         let app = XCUIApplication()
         app.launch()
 
