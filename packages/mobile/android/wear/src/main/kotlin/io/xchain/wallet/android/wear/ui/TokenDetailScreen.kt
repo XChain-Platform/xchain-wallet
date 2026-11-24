@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.material3.Button
@@ -38,6 +40,7 @@ fun TokenDetailScreen(display: TokenDetailDisplay, artwork: ByteArray?, onOpenOn
         artwork,
         stringResource(R.string.w2_open_on_phone),
         display.notice?.let { stringResource(noticeText(it)) },
+        stringResource(R.string.state_amount_hidden),
         onOpenOnPhone,
     )
 
@@ -47,6 +50,7 @@ internal fun TokenDetailScreen(
     artwork: ByteArray?,
     openText: String,
     noticeText: String?,
+    hiddenText: String = "",
     onOpenOnPhone: () -> Unit,
 ) {
     val bitmap = remember(artwork) {
@@ -78,16 +82,38 @@ internal fun TokenDetailScreen(
                 art(Modifier.size(side).clickable { fullScreen = true })
             }
         }
-        item { Text(display.displayName) }
-        item { Text(display.tick) }
         item {
-            Text(if (showValue) display.valueText else display.amountText, Modifier.clickable { showValue = !showValue })
+            Text(
+                display.displayName,
+                Modifier.semantics { contentDescription = AccessibilityLabels.tokenIdentity(display) },
+            )
+        }
+        item {
+            Text(
+                display.tick,
+                Modifier.semantics { contentDescription = AccessibilityLabels.tokenIdentity(display) },
+            )
+        }
+        item {
+            Text(
+                if (showValue) display.valueText else display.amountText,
+                Modifier
+                    .clickable { showValue = !showValue }
+                    .semantics {
+                        contentDescription = AccessibilityLabels.tokenAmount(display, showValue, hiddenText)
+                    },
+            )
         }
         display.changeText?.let { item { Text(it) } }
         display.chart?.let { item { PriceLine(it, Modifier.fillMaxWidth().height(48.dp).testTag("price-line")) } }
         display.priceSourceText?.let { item { Text(it) } }
         noticeText?.let { item { Text(it) } }
-        items(display.facts.size) { Text("${display.facts[it].label}: ${display.facts[it].value}") }
+        items(display.facts.size) {
+            Text(
+                "${display.facts[it].label}: ${display.facts[it].value}",
+                Modifier.semantics { contentDescription = AccessibilityLabels.fact(display.facts[it]) },
+            )
+        }
         display.description?.let { item { Text(it) } }
         item { Button(onClick = onOpenOnPhone, label = { Text(openText) }) }
     }
