@@ -364,11 +364,20 @@ test.describe('phone launch', () => {
         expect(launch.status, `${launch.stdout}${launch.stderr}`).toBe(0);
         expect(await until(isRunning), `${bundle} did not launch`).toBeTruthy();
 
+        const pidBefore = isRunning().trim().split(/\s+/)[0];
         const run = spawnSync('xcrun', iosOpenUrlArgs(link, { udid }), { encoding: 'utf8', timeout: 60_000 });
         expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
 
+        const delivered = await until(() => tool('xcrun', [
+            'simctl', 'spawn', udid, 'log', 'show', '--last', '90s', '--style', 'compact',
+            '--predicate', 'eventMessage CONTAINS "Opening URL" AND eventMessage CONTAINS "' + bundle + '"',
+        ]).split('\n').find((line) => line.includes(link.slice(0, 80))));
+        expect(delivered, `the simulator never reported opening the request link with ${bundle}`).toBeTruthy();
+
         await new Promise((done) => { setTimeout(done, 3000); });
-        expect(isRunning(), `${bundle} is not running after openurl`).toBeTruthy();
+        const after = isRunning();
+        expect(after, `${bundle} is not running after openurl`).toBeTruthy();
+        expect(after.trim().split(/\s+/)[0], 'the wallet process was replaced while handling the link').toBe(pidBefore);
     });
 });
 
