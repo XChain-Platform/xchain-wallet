@@ -896,30 +896,19 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
-    function preflightBlockReason() {
-        if (preflightState.actionString !== preflightActionString || preflightState.loading) {
-            return { key: 'checking', text: t('confirmStandard.blocked.checking') };
-        }
-        const errors = (preflightState.report?.findings || []).filter((f) => f?.severity === 'error');
-        return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length
-            ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') }
-            : { key: 'fails', text: t('confirmStandard.blocked.fails') };
-    }
-
     // Why Approve cannot go ahead yet, or null. Approve never looks disabled
     // (G130): the tap says why at the top of the window (G129) and sends
     // nothing; a missing password also marks the password field.
     function approveBlockReason() {
-        if (linkMode && !answerOrigin) {
-            return { key: 'linkTargets', text: t('extension.approval.invalidLinkTargets') };
-        }
+        if (linkMode && !answerOrigin) return { key: 'linkTargets', text: t('extension.approval.invalidLinkTargets') };
         if (psbtRefusal) return { key: 'refusal', text: String(psbtRefusal) };
         if (psbtFailureText) return { key: 'refusal', text: psbtFailureText };
-        if (preflightBlocked && !(psbtApprovalBlocked || coSignApprovalBlocked)) {
-            return preflightBlockReason();
+        if (preflightBlocked) {
+            if (preflightState.actionString !== preflightActionString || preflightState.loading) return { key: 'checking', text: t('confirmStandard.blocked.checking') };
+            const errors = (preflightState.report?.findings || []).filter((f) => f?.severity === 'error');
+            return confirmationStatus?.overrides?.length > 0 && confirmationStatus.overrides.length === errors.length ? { key: 'signAnyway', text: t('confirmStandard.blocked.signAnyway') } : { key: 'fails', text: t('confirmStandard.blocked.fails') };
         }
         if (psbtApprovalBlocked || coSignApprovalBlocked) {
-            if (preflightBlocked) return preflightBlockReason();
             return (psbtDecodePending || coSignPreview.loading)
                 ? { key: 'checking', text: t('confirmStandard.blocked.checking') }
                 : { key: 'refusal', text: t('confirmStandard.blocked.fails') };
