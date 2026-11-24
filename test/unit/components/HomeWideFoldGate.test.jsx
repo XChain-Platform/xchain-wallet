@@ -4,7 +4,10 @@
 import React from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useHomeWide } from '../../../packages/core/src/shared/components/HomeWideLayout.jsx';
+import {
+    HOME_DUO_BOOK_WIDTH_PX,
+    useHomeWide,
+} from '../../../packages/core/src/shared/components/HomeWideLayout.jsx';
 
 const MIN_WIDTH = 1060;
 let homeWidth = 879;
@@ -50,17 +53,29 @@ afterEach(() => {
     cleanup();
     globalThis.ResizeObserver = originalResizeObserver;
     delete globalThis.__xchainNativeFold;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
 
 describe('Home wide fold gate', () => {
     it('is wide below the measured minimum with a finite vertical fold division', () => {
+        vi.stubGlobal('innerWidth', HOME_DUO_BOOK_WIDTH_PX);
         globalThis.__xchainNativeFold = {
             division: { orientation: 'vertical', x: 515.5, y: 0 },
         };
         render(<FoldProbe />);
 
         expect(screen.getByTestId('home')).toHaveAttribute('data-wide', 'true');
+    });
+
+    it('stays narrow at a non-Book width with a finite vertical fold division', () => {
+        vi.stubGlobal('innerWidth', HOME_DUO_BOOK_WIDTH_PX - 1);
+        globalThis.__xchainNativeFold = {
+            division: { orientation: 'vertical', x: 515.5, y: 0 },
+        };
+        render(<FoldProbe />);
+
+        expect(screen.getByTestId('home')).toHaveAttribute('data-wide', 'false');
     });
 
     it.each([
@@ -84,6 +99,7 @@ describe('Home wide fold gate', () => {
     });
 
     it('responds when a fold is published and removed after mount', () => {
+        vi.stubGlobal('innerWidth', HOME_DUO_BOOK_WIDTH_PX);
         render(<FoldProbe />);
         const home = screen.getByTestId('home');
         expect(home).toHaveAttribute('data-wide', 'false');
