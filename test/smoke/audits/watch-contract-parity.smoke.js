@@ -3,8 +3,8 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { extname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { contractParityFailures } from '../../../tools/watch/contract-fields.mjs';
@@ -12,6 +12,7 @@ import {
     CONTRACT_MODEL_FILES,
     contractPairs,
 } from '../../../tools/watch/contract-pairs.mjs';
+import { fixtureReachFailures } from '../../../tools/watch/fixture-reach.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const readRepoFile = (path) => readFileSync(join(root, path), 'utf8');
@@ -43,4 +44,33 @@ assert.equal(
     stringsOutput || strings.error?.message || 'watch strings check failed',
 );
 
-console.log('watch contract parity audit passed: fields and strings match');
+const fixtureDirectory = join(root, 'test/fixtures/watch');
+const fixtures = readdirSync(fixtureDirectory, { recursive: true })
+    .filter((path) => (
+        extname(path) === '.json'
+        && !path.startsWith(`inputs${sep}`)
+    ))
+    .map((path) => path.slice(0, -extname(path).length));
+const readTestSources = (directory, extensions) => readdirSync(directory, { recursive: true })
+    .filter((path) => extensions.includes(extname(path)))
+    .map((path) => readFileSync(join(directory, path), 'utf8'))
+    .join('\n');
+const sources = {
+    swift: readTestSources(
+        join(root, 'packages/mobile/ios/App/WatchAppTests'),
+        ['.swift'],
+    ),
+    wear: readTestSources(
+        join(root, 'packages/mobile/android/wear/src/test'),
+        ['.kt', '.java'],
+    ),
+};
+const fixtureFailures = fixtureReachFailures({ fixtures, sources });
+
+assert.deepEqual(
+    fixtureFailures,
+    [],
+    `watch fixture reach failures:\n${fixtureFailures.join('\n')}`,
+);
+
+console.log('watch contract parity audit passed: fields, strings and fixtures match');
