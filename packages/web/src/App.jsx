@@ -149,6 +149,7 @@ const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVar
 // route, so its EmptyState and ListPage styles stay out of the startup CSS.
 const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
 const NewerWalletNeeded = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'NewerWalletNeeded');
+const SiteRequestApproval = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'SiteRequestApproval');
 const SignApproval = lazyRoute(() => import('@xchain-wallet/core/shared/approval/SignApproval.jsx'), 'SignApproval');
 const loadLinkHandoff = import.meta.glob('./routes/LinkHandoff.jsx')['./routes/LinkHandoff.jsx'];
 const LinkHandoff = loadLinkHandoff ? lazyRoute(loadLinkHandoff, 'LinkHandoff') : null;
@@ -387,7 +388,7 @@ function SiteRequestRun({ request, onDone }) {
         };
     }, [request]);
 
-    if (!entry) return null;
+    if (!entry) return <SiteRequestApproval request={request} onReject={() => handle.current?.cancel()} />;
     return (
         <SignApproval
             key={entry.id}

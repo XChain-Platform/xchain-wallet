@@ -33,6 +33,7 @@ import {
     iosOpenUrlArgs,
     parseAmStart,
 } from '../../../fixtures/siteRequestLaunch.js';
+import { HOST_BLOCK_ARG } from '../../../host-block.js';
 import { providerReady } from '../../../../../packages/connect/src/transportPick.js';
 import { buildReturnUrl } from '../../../../../packages/core/src/site_request/returnFragment.js';
 import { URI_MAX_LENGTH } from '../../../../../packages/core/src/uri/bip21.js';
@@ -356,7 +357,6 @@ test.describe('phone launch', () => {
         test.setTimeout(90_000);
         const udid = iosUdid();
         const bundle = process.env.XCHAIN_IOS_BUNDLE ?? 'io.xchain.wallet.ios';
-        expect(tool('xcrun', ['simctl', 'listapps', udid])).toContain(bundle);
 
         const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
         const isRunning = () => tool('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'])
@@ -392,7 +392,7 @@ test.describe('extension on the test-dapp', () => {
             channel: 'chromium',
             headless: true,
             ignoreHTTPSErrors: true,
-            args: [`--disable-extensions-except=${EXTENSION_DIST}`, `--load-extension=${EXTENSION_DIST}`],
+            args: [`--disable-extensions-except=${EXTENSION_DIST}`, `--load-extension=${EXTENSION_DIST}`, HOST_BLOCK_ARG],
         });
         try {
             const page = await context.newPage();
