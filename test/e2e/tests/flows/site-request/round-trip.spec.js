@@ -357,13 +357,18 @@ test.describe('phone launch', () => {
         expect(tool('xcrun', ['simctl', 'listapps', udid])).toContain(bundle);
 
         const link = requestLink(loginEnvelope({ dappOrigin: dapp.origin }));
+        const isRunning = () => tool('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'])
+            .split('\n').find((line) => line.includes(`UIKitApplication:${bundle}`));
         spawnSync('xcrun', ['simctl', 'terminate', udid, bundle], { encoding: 'utf8', timeout: 30_000 });
-        const run = spawnSync('xcrun', iosOpenUrlArgs(link, { udid }), { encoding: 'utf8', timeout: 60_000 });
-        expect(run.status).toBe(0);
+        const launch = spawnSync('xcrun', ['simctl', 'launch', udid, bundle], { encoding: 'utf8', timeout: 60_000 });
+        expect(launch.status, `${launch.stdout}${launch.stderr}`).toBe(0);
+        expect(await until(isRunning), `${bundle} did not launch`).toBeTruthy();
 
-        const running = await until(() => tool('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'])
-            .split('\n').find((line) => line.includes(`UIKitApplication:${bundle}`)));
-        expect(running, `${bundle} is not running after openurl`).toBeTruthy();
+        const run = spawnSync('xcrun', iosOpenUrlArgs(link, { udid }), { encoding: 'utf8', timeout: 60_000 });
+        expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
+
+        await new Promise((done) => { setTimeout(done, 3000); });
+        expect(isRunning(), `${bundle} is not running after openurl`).toBeTruthy();
     });
 });
 
