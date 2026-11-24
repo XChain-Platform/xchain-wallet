@@ -308,6 +308,7 @@ const ARTIFACTS = [
     // preserve the shape of a release cut before any lane had shipped.
     // The next lane to flip adds its artifacts here in the same commit.
     'xchain-wallet-android-v9.9.9.aab',
+    'xchain-wallet-wear-v9.9.9.aab',
     'xchain-wallet-v9.9.9.apk',
     // android-full shipped in v0.341.3.
     'xchain-wallet-v9.9.9-full.apk',

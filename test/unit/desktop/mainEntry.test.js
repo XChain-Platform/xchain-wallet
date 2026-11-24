@@ -157,6 +157,10 @@ const runtime = vi.hoisted(() => ({
     wipeRuntimeStores: vi.fn(),
 }));
 
+const flows = vi.hoisted(() => ({
+    getSettings: vi.fn(),
+}));
+
 const updater = vi.hoisted(() => ({
     attachUpdater: vi.fn(),
     checkForUpdates: vi.fn(),
@@ -179,6 +183,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 vi.mock('electron', () => electron);
 vi.mock('@xchain-wallet/core', () => ({
+    flows,
     registry: { defaultRegistry: vi.fn(() => ({})) },
     sdk: {
         adaptXChainSDK: vi.fn(() => vi.fn()),
@@ -256,6 +261,7 @@ beforeEach(() => {
     runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceIdleAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceSystemAutoLock.mockResolvedValue({ locked: true, reason: 'system-event' });
+    flows.getSettings.mockResolvedValue({ developerMode: false, privacy: { torRouting: false } });
     updater.attachUpdater.mockResolvedValue({
         checkForUpdates: updater.checkForUpdates,
         downloadUpdate: updater.downloadAndInstall,
@@ -270,6 +276,45 @@ afterEach(() => {
 });
 
 describe('desktop main entry point', () => {
+    it('registers and serves the production site request channel', async () => {
+        runtime.instance.vault = {};
+        flows.getSettings.mockResolvedValue({ developerMode: false, privacy: { torRouting: true } });
+        const fetchImpl = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 204 });
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        try {
+            await import('../../../packages/desktop/main/index.js');
+            await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:site-request')).toBe(true));
+            const handler = electron.ipcHandlers.get('xchain:site-request');
+            const event = { senderFrame: { url: appIndex }, sender: { getURL: () => appIndex } };
+            const returnUrl = 'https://app.example/#xchain=A';
+
+            await expect(handler(
+                { senderFrame: { url: 'file:///outside/index.html' } },
+                { type: 'return', url: returnUrl },
+            )).resolves.toEqual({ sent: false, reason: 'FORBIDDEN_SENDER' });
+            expect(electron.shell.openExternal).not.toHaveBeenCalled();
+
+            await expect(handler(event, { type: 'return', url: returnUrl }))
+                .resolves.toEqual({ sent: true });
+            expect(electron.shell.openExternal).toHaveBeenCalledWith(returnUrl);
+
+            await expect(handler(event, {
+                type: 'callback',
+                url: 'https://callback.example/result',
+                body: { v: 1, id: 'request-id', method: 'login', ok: true, result: {} },
+            })).resolves.toEqual({ sent: true, status: 204 });
+            expect(flows.getSettings).toHaveBeenCalledWith(runtime.instance.vault);
+            expect(fetchImpl).toHaveBeenCalledWith(
+                'https://callback.example/result',
+                expect.not.objectContaining({ dispatcher: expect.anything() }),
+            );
+        } finally {
+            fetchImpl.mockRestore();
+            delete runtime.instance.vault;
+        }
+    });
+
     it('sets a restrictive CSP response header on packaged renderer files', async () => {
         electron.app.whenReady.mockResolvedValueOnce();
         await import('../../../packages/desktop/main/index.js');

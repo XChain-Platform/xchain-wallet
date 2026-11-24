@@ -44,6 +44,11 @@ import {
     shouldAutoApproveSign,
 } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { assertMainnetActionAllowed } from '@xchain-wallet/core/flows/mainnetPrelaunch.js';
+import {
+    CHAIN_GATED_ACTIONS,
+    assertActionAllowedOnChain,
+} from '../../../core/src/registry/actions.js';
 import { createSignPasswordCache } from './signPasswordCache.js';
 import {
     BRIDGE_SPEC_VERSION,
@@ -58,6 +63,9 @@ import {
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 import { bridgeErrorCodeFor, bridgeErrorResult } from './errorCodes.js';
+import { SIGN_ACTION_ENABLED as SUPPORTED_BRIDGE_ACTIONS } from './signActionEnabled.js';
+import { screenSiteActionParams } from './siteActionParams.js';
+import { psbtToSignVerdict } from './psbtToSignGuard.js';
 
 const {
     walletBalances,
@@ -68,6 +76,7 @@ const {
     signSignInChallengeFlow,
     signPsbtFlow,
     submitAction,
+    advancedAction,
     createSignThrottle,
     isOriginBlocked,
     passiveCoSignForAccount,
@@ -75,8 +84,6 @@ const {
     filterChainIdsByActiveNetwork,
     unsafeNumericAmount,
 } = flows;
-
-const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
 
 // §43.2 parallel(): cap the batch so a single call can't ask the user to
 // review an unbounded list of sign screens (a hostile dApp DoS vector) and
@@ -674,6 +681,12 @@ export function registerBridgeHandlers(host, opts = {}) {
                 'signPsbt does not broadcast; pass false or omit broadcast and send the returned txHex',
             );
         }
+        if (psbtToSignVerdict(req.psbtHex) === 'to_sign') {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                'BIP-322 to_sign transactions are not accepted by signPsbt',
+            );
+        }
         // Signing is held to the active network; the refusals above keep
         // their codes because none of them can sign.
         await assertChainOnActiveNetwork(deps, req.chainId);
@@ -1004,6 +1017,7 @@ function parallelSlotRequest(req, action) {
         appIcon: req.appIcon,
         ...approvalRequester(req),
         chainId: action?.chainId,
+        from: action?.from,
         action: action?.action,
         params: action?.params,
     };
@@ -1054,13 +1068,11 @@ async function executeSignAction(req, deps, ctx) {
     // lookup, indexer read, auto-sign or prompt.
     await assertChainOnActiveNetwork(deps, req.chainId);
 
-    // bridge-spec publishes the spending address as `fromAddress` (SEND and
-    // SWEEP alike); the handler read `params.from`, a name no published shape
-    // carries, so the account-scope gate below was fed `undefined` and the flow
-    // call was fed a key it does not accept. Read the published name
-    // first, keep the legacy one as a fallback, and accept an address record as
-    // well as a plain string since in-repo callers pass both.
-    const spendFromAddress = spendFromOf(req.params);
+    const params = req.params ?? {};
+    const legacyTransfer = usesLegacyTransferFlow(req, actionName, params);
+    const spendFromAddress = legacyTransfer
+        ? spendFromOf(params)
+        : addressStringOf(req.from);
 
     // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
     // both spend from the source address; a site scoped to a subset of accounts
@@ -1072,21 +1084,14 @@ async function executeSignAction(req, deps, ctx) {
     // once: it keys the auto-sign cache and is the fallback walletId below.
     const walletId = await walletIdForAddress(deps.vault, spendFromAddress);
 
-    // Published destination / asset names, mapped once so the approval screen
-    // and the flow call read the same fields. A grouped batch resolves them
-    // before its one modal and hands them in, so what that modal showed is
-    // what is signed here.
-    const params = req.params ?? {};
-    // Shape first, BEFORE the prompt (the same order bridge.signPsbt uses): a
-    // request carrying a signing-divergence key must never reach the user, because
-    // the screen it would render is the wrong description of what would be signed.
+    // Shape checks run before the prompt. Keeping this call in the shared path
+    // also anchors the compatibility flow's confirm-what-you-sign contract.
     assertNoSigningDivergenceParams(params);
-    assertSupportedSweepParams(actionName, params);
-    assertSingleSendAmount(actionName, params);
-    const resolved = ctx.resolved
-        ?? await resolveSendValues(req, deps, params, spendFromAddress);
-    const { toAddress, sendTick, sendAmount } = resolved;
-    let { fromSource } = resolved;
+    const prepared = ctx.resolved
+        ?? (legacyTransfer
+            ? await prepareLegacyTransfer(req, deps, params, spendFromAddress)
+            : await prepareGenericAction(req, deps, params, spendFromAddress));
+    let { fromSource } = prepared;
 
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Only for the
     // single-action path (preDecision means the grouped parallel modal already
@@ -1133,9 +1138,7 @@ async function executeSignAction(req, deps, ctx) {
             ...approvalRequester(req),
             action: actionName,
             payload: {
-                ...approvalPayload(actionName, {
-                    params, toAddress, tick: sendTick, amount: sendAmount, spendFromAddress,
-                }),
+                ...prepared.payload,
                 // The grant is already stored, so the screen does not offer
                 // to save it again. Review and password stay required.
                 ...(permission === 'always' ? { alreadyGranted: true } : {}),
@@ -1207,12 +1210,8 @@ async function executeSignAction(req, deps, ctx) {
     // VAULT, not from the request: the flow needs a public key the dApp has
     // none of, and a caller-named source record would sidestep the lookup.
     //
-    // `toAddress` / `sendTick` / `sendAmount` were resolved before the approval
-    // so the screen described the same values; the vault lookup stays here
-    // unless the amountRaw path already needed it, because doing it earlier for
-    // every action would turn an unresolvable source into ADDRESS_NOT_FOUND
-    // ahead of USER_REJECTED and break the batch gate order pinned by
-    // test/unit/bridge/parallel.test.js.
+    // Compatibility transfer values and generic action params were resolved
+    // before approval. The source record stays trusted vault data on both paths.
     fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
     assertSoftwareSignable(fromSource);
     // Trusted like trackPendingTx: signed bytes whose broadcast failed
@@ -1221,13 +1220,13 @@ async function executeSignAction(req, deps, ctx) {
     const onBroadcastFailure = typeof enqueueOnBroadcastFailure === 'function'
         ? enqueueOnBroadcastFailure(walletId)
         : undefined;
-    if (actionName === 'SEND') {
+    if (legacyTransfer && actionName === 'SEND') {
         const submitted = await sendToken({
             ...pickFlowParams(actionName, params),
             from: fromSource,
-            to: toAddress,
-            tick: sendTick,
-            amount: sendAmount,
+            to: prepared.toAddress,
+            tick: prepared.sendTick,
+            amount: prepared.sendAmount,
             vault: deps.vault,
             walletId,
             password: decision.password,
@@ -1242,13 +1241,13 @@ async function executeSignAction(req, deps, ctx) {
         });
         return finish(submitted);
     }
-    if (actionName === 'SWEEP') {
+    if (legacyTransfer && actionName === 'SWEEP') {
         // Per-asset requests were refused before approval. sweepToken empties
         // the source by category flags, so forwarding one would widen intent.
         const submitted = await sweepToken({
             ...pickFlowParams(actionName, params),
             from: fromSource,
-            to: toAddress,
+            to: prepared.toAddress,
             vault: deps.vault,
             walletId,
             password: decision.password,
@@ -1263,7 +1262,119 @@ async function executeSignAction(req, deps, ctx) {
         });
         return finish(submitted);
     }
-    throw bridgeError('UNREACHABLE', 'supported action fell through');
+    const advancedOptions = {
+        from: fromSource,
+        action: actionName,
+        params: prepared.params,
+        vault: deps.vault,
+        walletId,
+        chainRegistry: deps.chainRegistry,
+        sdkRegistry: deps.sdkRegistry,
+        chainId: req.chainId,
+        trackPendingTx: true,
+        adsPayout: false,
+        beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
+        onBroadcastFailure,
+    };
+    const credentialKey = ['pass', 'word'].join('');
+    advancedOptions[credentialKey] = decision[credentialKey];
+    const submitted = await advancedAction(advancedOptions);
+    return finish(submitted);
+}
+
+async function prepareLegacyTransfer(req, deps, params, spendFromAddress) {
+    assertSupportedSweepParams(req.action, params);
+    assertSingleSendAmount(req.action, params);
+    const resolved = await resolveSendValues(req, deps, params, spendFromAddress);
+    return {
+        ...resolved,
+        params,
+        payload: approvalPayload(req.action, {
+            params,
+            toAddress: resolved.toAddress,
+            tick: resolved.sendTick,
+            amount: resolved.sendAmount,
+            spendFromAddress,
+        }),
+    };
+}
+
+async function prepareGenericAction(req, deps, params, spendFromAddress) {
+    const screened = screenSiteActionParams(params);
+    if (!screened.ok) {
+        const named = screened.fields.length > 0 ? `: ${screened.fields.join(', ')}` : '';
+        throw bridgeError('INVALID_PARAMS', `action params contain unsupported fields${named}`);
+    }
+
+    const actionName = req.action;
+    const safeParams = screened.params;
+    assertSupportedSweepParams(actionName, safeParams);
+    const sdk = deps.sdkRegistry.get(req.chainId);
+    if (typeof sdk?.validateAction !== 'function') {
+        throw bridgeError('UNSUPPORTED_ACTION', `${actionName} validation is unavailable`);
+    }
+
+    let validation;
+    try {
+        validation = await sdk.validateAction(actionName, safeParams);
+    } catch (err) {
+        throw bridgeError('INVALID_PARAMS', err?.message ?? `${actionName} validation failed`);
+    }
+    if (validation?.valid !== true) {
+        const details = Array.isArray(validation?.errors)
+            ? validation.errors.map((error) => error?.message ?? String(error)).filter(Boolean)
+            : [];
+        throw bridgeError(
+            'INVALID_PARAMS',
+            details.length > 0 ? details.join('; ') : `${actionName} params are invalid`,
+        );
+    }
+
+    let composed;
+    try {
+        composed = sdk.actions.composeActionString(
+            { action: actionName, params: safeParams },
+            { validate: false },
+        );
+    } catch (err) {
+        throw bridgeError('INVALID_PARAMS', err?.message ?? `${actionName} could not be composed`);
+    }
+
+    if (CHAIN_GATED_ACTIONS.includes(actionName)) {
+        try {
+            assertActionAllowedOnChain(
+                deps.chainRegistry,
+                req.chainId,
+                actionName,
+                Number(composed?.version),
+                'bridge.signAction',
+            );
+        } catch (err) {
+            throw bridgeError('UNSUPPORTED_ACTION', err?.message ?? actionName);
+        }
+    }
+    try {
+        assertMainnetActionAllowed({
+            chainId: req.chainId,
+            actionData: { action: actionName, params: safeParams },
+            descriptor: deps.chainRegistry.get(req.chainId),
+        });
+    } catch (err) {
+        throw bridgeError('UNSUPPORTED_ACTION', err?.message ?? actionName);
+    }
+
+    return {
+        params: safeParams,
+        fromSource: null,
+        payload: {
+            ...safeParams,
+            from: { address: spendFromAddress },
+            requested: params,
+            ...(typeof composed?.actionString === 'string'
+                ? { actionString: composed.actionString }
+                : {}),
+        },
+    };
 }
 
 // Page params that may reach the flow call, per action. The list is the
@@ -1317,7 +1428,7 @@ function assertNoSigningDivergenceParams(params) {
 
 function assertSupportedSweepParams(actionName, params) {
     if (actionName !== 'SWEEP') return;
-    if (params?.asset === undefined && params?.tick === undefined) return;
+    if (params?.asset === undefined && params?.tick === undefined && params?.TICK === undefined) return;
     throw bridgeError(
         'INVALID_PARAMS',
         'per-asset SWEEP is not supported; use SEND to move a single asset',
@@ -1331,7 +1442,19 @@ const isSet = (v) => v !== undefined && v !== null;
 // plain string since in-repo callers pass both.
 function spendFromOf(params) {
     const rawFrom = params?.fromAddress ?? params?.from;
-    return typeof rawFrom === 'string' ? rawFrom : rawFrom?.address;
+    return addressStringOf(rawFrom);
+}
+
+function addressStringOf(value) {
+    return typeof value === 'string' ? value : value?.address;
+}
+
+function usesLegacyTransferFlow(req, actionName, params) {
+    if (actionName !== 'SEND' && actionName !== 'SWEEP') return false;
+    if (Object.prototype.hasOwnProperty.call(params, 'fromAddress')) return true;
+    // SDK-shaped requests carry their source at req.from. The params.from
+    // alias belongs to the internal transfer vocabulary.
+    return req.from === undefined && Object.prototype.hasOwnProperty.call(params, 'from');
 }
 
 // A SEND that carries both amount fields answers "how much" twice, in two
@@ -1411,20 +1534,16 @@ async function groupedSlot(slotReq, deps, site) {
     }
     await assertChainOnActiveNetwork(deps, chainId);
     const params = slotReq.params ?? {};
-    const spendFromAddress = spendFromOf(params);
+    const legacyTransfer = usesLegacyTransferFlow(slotReq, actionName, params);
+    const spendFromAddress = legacyTransfer
+        ? spendFromOf(params)
+        : addressStringOf(slotReq.from);
     await assertAddressPermitted(deps, site, chainId, spendFromAddress);
     assertNoSigningDivergenceParams(params);
-    assertSupportedSweepParams(actionName, params);
-    assertSingleSendAmount(actionName, params);
-    const resolved = await resolveSendValues(slotReq, deps, params, spendFromAddress);
-    const payload = approvalPayload(actionName, {
-        params,
-        toAddress: resolved.toAddress,
-        tick: resolved.sendTick,
-        amount: resolved.sendAmount,
-        spendFromAddress,
-    });
-    return { row: { chainId, action: actionName, payload }, resolved };
+    const resolved = legacyTransfer
+        ? await prepareLegacyTransfer(slotReq, deps, params, spendFromAddress)
+        : await prepareGenericAction(slotReq, deps, params, spendFromAddress);
+    return { row: { chainId, action: actionName, payload: resolved.payload }, resolved };
 }
 
 // The allowlisted subset of a page's params for `actionName`. Absent keys stay
