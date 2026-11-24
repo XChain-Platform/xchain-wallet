@@ -40,6 +40,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -73,7 +74,7 @@ class RenderAllFixturesTest {
                 renderCase(
                     "w1",
                     "${fixture.nameWithoutExtension}-${mode.name.lowercase()}.json",
-                    amounts,
+                    unclippedTexts = amounts,
                 ) {
                     BalancesScreen(
                         display = display,
@@ -91,7 +92,7 @@ class RenderAllFixturesTest {
             }
         }
 
-        renderCase("w1", "snapshot-null.json") {
+        renderCase("w1", "snapshot-null.json", unclippedTexts = emptyList()) {
             BalancesScreen(
                 display = BalancesPresenter.present(null),
                 mode = UnitsMode.FIAT,
@@ -113,13 +114,17 @@ class RenderAllFixturesTest {
         fixtures("detail-").forEach { fixture ->
             val detail = json.decodeFromString<Detail>(fixture.readText())
             val display = TokenDetailPresenter.present(row, detail, phoneReachable = true)
-            renderCase("w2", fixture.name, listOf(display.amountText)) {
+            renderCase("w2", fixture.name, unclippedTexts = listOf(display.amountText)) {
                 TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {}
             }
         }
 
         val display = TokenDetailPresenter.present(row, detail = null, phoneReachable = false)
-        renderCase("w2", "detail-phone-away.json", listOf(display.amountText)) {
+        renderCase(
+            "w2",
+            "detail-phone-away.json",
+            unclippedTexts = listOf(display.amountText),
+        ) {
             TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {}
         }
     }
@@ -131,21 +136,20 @@ class RenderAllFixturesTest {
         val alerts = AlertsPresenter.present(inbox, request = null, now = NOW)
         val alertTexts = alerts.rows.flatMap { alert ->
             listOfNotNull(alert.title, alert.body)
-        }
-        renderCase("w3", "inbox-alerts.json", expectedTexts = alertTexts) {
+        }.filter(String::isNotBlank)
+        renderCase("w3", "inbox-alerts.json", unclippedTexts = alertTexts) {
             AlertsScreen(alerts, NOW, {}, {}, ::text)
         }
-        renderCase("w3", "inbox-empty.json") {
+        renderCase("w3", "inbox-empty.json", unclippedTexts = emptyList()) {
             AlertsScreen(AlertsPresenter.present(emptyList(), null, NOW), NOW, {}, {}, ::text)
         }
 
         alerts.rows.forEachIndexed { index, alert ->
             val fixture = "inbox-alerts-${(index + 1).toString().padStart(2, '0')}.json"
-            val detailTexts = listOfNotNull(alert.title, alert.body)
+            val detailTexts = listOfNotNull(alert.title, alert.body).filter(String::isNotBlank)
             renderCase(
                 "w4",
                 fixture,
-                expectedTexts = detailTexts,
                 unclippedTexts = detailTexts,
             ) {
                 AlertDetailScreen(alert, null, {}, ::text) { "Nov 14, 2023" }
@@ -154,7 +158,7 @@ class RenderAllFixturesTest {
         fixtures("request-").forEach { fixture ->
             val request = json.decodeFromString<Request>(fixture.readText())
             val display = AlertsPresenter.presentRequest(request, NOW)
-            renderCase("w4", fixture.name, listOf(request.amountText)) {
+            renderCase("w4", fixture.name, unclippedTexts = listOf(request.amountText)) {
                 AlertDetailScreen(null, display, {}, ::text) { "Jan 1, 2100" }
             }
         }
@@ -162,10 +166,10 @@ class RenderAllFixturesTest {
 
     @Test
     fun rendersReceiveWithEveryReceiveStateAtBothSizes() {
-        renderCase("w6", "receive-chains.json") {
+        renderCase("w6", "receive-chains.json", unclippedTexts = emptyList()) {
             ReceiveScreen(decode<List<SnapshotReceive>>("receive-chains.json"), "Open the phone once")
         }
-        renderCase("w6", "receive-empty.json") {
+        renderCase("w6", "receive-empty.json", unclippedTexts = emptyList()) {
             ReceiveScreen(emptyList(), "Open the phone once")
         }
     }
@@ -181,7 +185,7 @@ class RenderAllFixturesTest {
                 false,
                 "1.0.0",
             )
-            renderCase("w8", fixture.name) {
+            renderCase("w8", fixture.name, unclippedTexts = emptyList()) {
                 StatusScreen(rows, {}, snapshot.builtAt, ::text)
             }
         }
@@ -189,20 +193,35 @@ class RenderAllFixturesTest {
 
     @Test
     fun rendersEveryNotSetUpStateAtBothSizes() {
-        renderCase("w9", "open-wallet.json") {
+        renderCase("w9", "open-wallet.json", unclippedTexts = emptyList()) {
             NotSetUpScreen("Open XChain Wallet on your phone", "Open on phone") {}
         }
-        renderCase("w9", "watch-disabled.json") {
+        renderCase("w9", "watch-disabled.json", unclippedTexts = emptyList()) {
             NotSetUpScreen("Show wallet on watch is off on your phone", "Open on phone") {}
         }
+    }
+
+    @Test
+    fun missingExpectedAmountFailsRenderCheck() {
+        val amount = "12.34 XCP"
+        val renderedTexts = listOf("Balance", amount).filterNot(amount::equals)
+
+        val failure = assertThrows(AssertionError::class.java) {
+            assertRenderedAndUnclipped(
+                frame = "missing-amount",
+                expectedText = amount,
+                renderedTexts = renderedTexts,
+                clipped = emptyList(),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("did not render expected text: $amount"))
     }
 
     private fun renderCase(
         screen: String,
         fixture: String,
-        amounts: List<String> = emptyList(),
-        expectedTexts: List<String> = amounts,
-        unclippedTexts: List<String> = amounts,
+        unclippedTexts: List<String>,
         content: @Composable () -> Unit,
     ) {
         WearRenderFrames.Size.entries.forEach { size ->
@@ -222,7 +241,8 @@ class RenderAllFixturesTest {
                 assertEquals("$frame height", size.pixelSide(), bitmap.height)
                 assertTrue("$frame captured fewer than two pixel colours", hasMultipleColors(bitmap))
                 writeFrame(bitmap, frame)
-                expectedTexts.distinct().forEach { expectedText ->
+                unclippedTexts.distinct().forEach { expectedText ->
+                    require(expectedText.isNotBlank()) { "$frame expected blank text" }
                     compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(expectedText))
                     compose.waitForIdle()
                     val renderedTexts = compose.onAllNodes(
@@ -231,17 +251,12 @@ class RenderAllFixturesTest {
                     ).fetchSemanticsNodes().flatMap { node ->
                         node.config[SemanticsProperties.Text].map { it.text }
                     }
-                    assertTrue(
-                        "$frame did not render expected text: $expectedText; rendered: $renderedTexts",
-                        renderedTexts.any { text -> text.contains(expectedText) },
+                    assertRenderedAndUnclipped(
+                        frame = frame,
+                        expectedText = expectedText,
+                        renderedTexts = renderedTexts,
+                        clipped = clippedTexts(compose),
                     )
-                    if (expectedText in unclippedTexts) {
-                        val clipped = clippedTexts(compose)
-                        assertFalse(
-                            "$frame clipped expected text $expectedText: $clipped",
-                            clipped.any { text -> text.contains(expectedText) },
-                        )
-                    }
                 }
             } catch (failure: Throwable) {
                 val framed = AssertionError(frame)
@@ -251,6 +266,22 @@ class RenderAllFixturesTest {
                 controller.pause().stop().destroy()
             }
         }
+    }
+
+    private fun assertRenderedAndUnclipped(
+        frame: String,
+        expectedText: String,
+        renderedTexts: List<String>,
+        clipped: List<String>,
+    ) {
+        assertTrue(
+            "$frame did not render expected text: $expectedText; rendered: $renderedTexts",
+            renderedTexts.any { text -> text.contains(expectedText) },
+        )
+        assertFalse(
+            "$frame clipped expected text $expectedText: $clipped",
+            clipped.any { text -> text.contains(expectedText) },
+        )
     }
 
     private fun hasMultipleColors(bitmap: Bitmap): Boolean {
