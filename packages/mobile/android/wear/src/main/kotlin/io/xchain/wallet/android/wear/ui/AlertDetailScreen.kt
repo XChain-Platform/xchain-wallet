@@ -15,7 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
-import androidx.wear.compose.foundation.lazy.items
+import androidx.wear.compose.foundation.lazy.itemsIndexed
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
@@ -44,6 +44,11 @@ internal fun AlertDetailScreen(
     formatAt: (Long) -> String,
 ) {
     val family = alert?.family ?: "request"
+    val requestText = request?.lines
+        ?.flatMap { line -> listOfNotNull(line.label?.key, line.value.key) }
+        ?.distinct()
+        ?.associateWith { key -> text(key) }
+        .orEmpty()
     TransformingLazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
@@ -61,8 +66,13 @@ internal fun AlertDetailScreen(
         alert?.body?.let { body -> item { Text(body) } }
         alert?.let { item { Text(formatAt(it.at)) } }
         request?.let { display ->
-            items(display.lines) { line ->
-                Column {
+            val labels = AccessibilityLabels.requestLines(display, requestText::getValue, formatAt)
+            itemsIndexed(display.lines) { index, line ->
+                Column(
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = labels[index]
+                    },
+                ) {
                     line.label?.let {
                         Text(resolve(it, text, formatAt), style = MaterialTheme.typography.labelSmall)
                     }
