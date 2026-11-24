@@ -4,43 +4,10 @@
 import UIKit
 import WebKit
 import XCTest
-import ObjectiveC.runtime
 @testable import App
 
 @MainActor
 final class FoldPublisherTests: XCTestCase {
-    @available(iOS 27.1, *)
-    private final class ReservedRegionSpyWebView: WKWebView {
-        var requestedKinds: [AnyObject] = []
-
-        static func installOverrides() {
-            let oneArgument = NSSelectorFromString("reservedRegionsOfKind:")
-            let twoArguments = NSSelectorFromString("reservedRegionsOfKind:options:")
-            if let method = class_getInstanceMethod(UIView.self, oneArgument) {
-                let block: @convention(block) (AnyObject, AnyObject) -> NSArray = { receiver, kind in
-                    MainActor.assumeIsolated {
-                        (receiver as? ReservedRegionSpyWebView)?.requestedKinds.append(kind)
-                    }
-                    return []
-                }
-                class_addMethod(
-                    self, oneArgument, imp_implementationWithBlock(block), method_getTypeEncoding(method)
-                )
-            }
-            if let method = class_getInstanceMethod(UIView.self, twoArguments) {
-                let block: @convention(block) (AnyObject, AnyObject, UInt) -> NSArray = { receiver, kind, _ in
-                    MainActor.assumeIsolated {
-                        (receiver as? ReservedRegionSpyWebView)?.requestedKinds.append(kind)
-                    }
-                    return []
-                }
-                class_addMethod(
-                    self, twoArguments, imp_implementationWithBlock(block), method_getTypeEncoding(method)
-                )
-            }
-        }
-    }
-
     private final class Harness {
         var sizeRegistrations = 0
         var traitRegistrations = 0
@@ -140,14 +107,15 @@ final class FoldPublisherTests: XCTestCase {
         guard #available(iOS 27.1, *) else {
             return XCTFail("iOS 27.1 is required")
         }
-        ReservedRegionSpyWebView.installOverrides()
-        let webView = ReservedRegionSpyWebView(frame: .zero)
+        var requestedKinds: [UIView.ReservedRegion.Kind] = []
 
-        let frame = FoldPublisher.Environment.live.divisionFrame(webView)
+        let frame = FoldPublisher.divisionFrame { kind in
+            requestedKinds.append(kind)
+            return []
+        }
 
         XCTAssertNil(frame)
-        XCTAssertEqual(webView.requestedKinds.count, 1)
-        XCTAssertEqual(webView.requestedKinds[0] as? UIView.ReservedRegion.Kind, .division)
+        XCTAssertEqual(requestedKinds, [.division])
     }
 
     func testLiveSizeObservationStartsAndStopsCallbacks() {

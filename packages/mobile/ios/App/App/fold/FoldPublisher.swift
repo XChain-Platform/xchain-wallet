@@ -75,7 +75,9 @@ final class FoldPublisher {
                 },
                 divisionFrame: { webView in
                     guard #available(iOS 27.1, *) else { return nil }
-                    return webView.reservedRegions(kind: .division).first?.frame
+                    return FoldPublisher.divisionFrame { kind in
+                        webView.reservedRegions(kind: kind)
+                    }
                 },
                 bounds: { $0.bounds },
                 safeAreaInsets: { $0.safeAreaInsets },
@@ -136,6 +138,13 @@ final class FoldPublisher {
         case .fullyOpen: return .open
         @unknown default: return .unknown
         }
+    }
+
+    @available(iOS 27.1, *)
+    static func divisionFrame(
+        query: (UIView.ReservedRegion.Kind) -> [UIView.ReservedRegion]
+    ) -> CGRect? {
+        query(.division).first?.frame
     }
 
     nonisolated static func state(status: HingeState, division: CGRect?) -> State {
