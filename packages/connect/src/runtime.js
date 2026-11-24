@@ -263,19 +263,21 @@ export function generateNonce(byteLength = 16) {
 }
 
 /**
- * Build sign-in parameters with a fresh nonce and bounded expiry.
+ * Build login parameters with a fresh nonce and bounded expiry.
  *
  * @param {string} appId
  * @param {{expiresInMs?: number, nonce?: string}} [opts]
  * @returns {import('./index.ts').SignInParams}
  */
-export function makeSignInParams(appId, opts = {}) {
+export function makeLoginParams(appId, opts = {}) {
     return {
         appId,
         nonce: opts.nonce ?? generateNonce(),
-        expiresInMs: opts.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS,
+        expiresInMs: opts.expiresInMs ?? LOGIN_DEFAULT_EXPIRY_MS,
     };
 }
+
+export const makeSignInParams = makeLoginParams;
 
 /**
  * Validate the signed challenge fields before a caller verifies its signature.

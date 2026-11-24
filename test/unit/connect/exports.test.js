@@ -25,6 +25,7 @@ const EXPECTED_EXPORTS = [
     'parseReturn',
     'PROTOCOL_VERSION',
     'ERROR_CODES',
+    'makeLoginParams',
     'formatLoginChallenge',
     'parseLoginChallenge',
     'validateLoginChallenge',
@@ -45,6 +46,7 @@ function assertPublicExports(api) {
     expect(api.LOGIN_DEFAULT_EXPIRY_MS).toBe(api.SIGN_IN_DEFAULT_EXPIRY_MS);
     expect(api.LOGIN_CHALLENGE_PREFIX).toBe(api.SIGN_IN_CHALLENGE_PREFIX);
     expect(api.LOGIN_CHALLENGE_SEPARATOR).toBe(api.SIGN_IN_CHALLENGE_SEPARATOR);
+    expect(api.makeSignInParams).toBe(api.makeLoginParams);
     expect(api.formatSignInChallenge).toBe(api.formatLoginChallenge);
     expect(api.parseSignInChallenge).toBe(api.parseLoginChallenge);
     expect(api.validateSignInChallenge).toBe(api.validateLoginChallenge);

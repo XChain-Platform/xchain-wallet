@@ -24,6 +24,8 @@ import {
     formatSignInChallenge,
     isBridgeErrorCode,
     isErrorCode,
+    makeLoginParams,
+    makeSignInParams,
     parseLoginChallenge,
     parseSignInChallenge,
     validateLoginChallenge,
@@ -75,6 +77,7 @@ describe('connect protocol 0.2.0', () => {
         expect(LOGIN_DEFAULT_EXPIRY_MS).toBe(SIGN_IN_DEFAULT_EXPIRY_MS);
         expect(LOGIN_CHALLENGE_PREFIX).toBe(SIGN_IN_CHALLENGE_PREFIX);
         expect(LOGIN_CHALLENGE_SEPARATOR).toBe(SIGN_IN_CHALLENGE_SEPARATOR);
+        expect(makeLoginParams).toBe(makeSignInParams);
         expect(formatLoginChallenge).toBe(formatSignInChallenge);
         expect(parseLoginChallenge).toBe(parseSignInChallenge);
         expect(validateLoginChallenge).toBe(validateSignInChallenge);
@@ -88,5 +91,14 @@ describe('connect protocol 0.2.0', () => {
             nonce: parts.nonce,
             now: parts.timestamp,
         })).toBeNull();
+
+        expect(makeLoginParams(parts.appId, {
+            nonce: parts.nonce,
+            expiresInMs: parts.expiresAt - parts.timestamp,
+        })).toEqual({
+            appId: parts.appId,
+            nonce: parts.nonce,
+            expiresInMs: 300_000,
+        });
     });
 });
