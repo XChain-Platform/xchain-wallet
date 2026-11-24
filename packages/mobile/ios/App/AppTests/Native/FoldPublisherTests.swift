@@ -165,6 +165,7 @@ final class FoldPublisherTests: XCTestCase {
         XCTAssertEqual(changes, 1)
     }
 
+    @available(iOS 17.0, *)
     func testLiveTraitObservationStartsAndStopsCallbacks() {
         let webView = WKWebView(frame: .zero)
         var changes = 0
