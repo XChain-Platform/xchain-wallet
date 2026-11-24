@@ -28,6 +28,9 @@
 		XC1000B00000000000000003 /* VaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000003 /* VaultStore.swift */; };
 		XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000004 /* VaultBiometricSidecar.swift */; };
 		XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000006 /* XChainLinksPlugin.swift */; };
+		XC1000B00000000000000007 /* CallbackAddressRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000007 /* CallbackAddressRule.swift */; };
+		XC1000B00000000000000008 /* CallbackPostRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000008 /* CallbackPostRule.swift */; };
+		XC1000B00000000000000009 /* CallbackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000009 /* CallbackSession.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
 		XC1037B00000000000000001 /* DisabledCapacitorPlugins.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */; };
 		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
@@ -136,6 +139,9 @@
 		XC1000A00000000000000004 /* VaultBiometricSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultBiometricSidecar.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000005 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Version.xcconfig; path = Version.xcconfig; sourceTree = SOURCE_ROOT; };
 		XC1000A00000000000000006 /* XChainLinksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/XChainLinksPlugin.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000007 /* CallbackAddressRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackAddressRule.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000008 /* CallbackPostRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostRule.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000009 /* CallbackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackSession.swift; sourceTree = "<group>"; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
 		XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledCapacitorPlugins.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000001 /* VaultArgon2id.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultArgon2id.swift; sourceTree = "<group>"; };
@@ -337,6 +343,9 @@
 				XC1050A00000000000000002 /* VaultQrScannerViewController.swift */,
 				XC1014A00000000000000001 /* XChainClipboardPlugin.swift */,
 				XC1000A00000000000000006 /* XChainLinksPlugin.swift */,
+				XC1000A00000000000000007 /* CallbackAddressRule.swift */,
+				XC1000A00000000000000008 /* CallbackPostRule.swift */,
+				XC1000A00000000000000009 /* CallbackSession.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -689,6 +698,9 @@
 				XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */,
 				XC1060B00000000000000001 /* XChainAppPlugin.swift in Sources */,
 				XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */,
+				XC1000B00000000000000007 /* CallbackAddressRule.swift in Sources */,
+				XC1000B00000000000000008 /* CallbackPostRule.swift in Sources */,
+				XC1000B00000000000000009 /* CallbackSession.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
