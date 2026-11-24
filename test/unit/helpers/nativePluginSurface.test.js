@@ -19,7 +19,7 @@ describe('native plugin surface readers', () => {
         ))).toEqual({
             identifier: 'XChainLinksPlugin',
             jsName: 'XChainLinks',
-            methods: ['takePendingLink'],
+            methods: ['takePendingLink', 'resolveHost'],
         });
         expect(swiftPluginSurface(read(
             'packages/mobile/ios/App/App/clipboard/XChainClipboardPlugin.swift',

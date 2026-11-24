@@ -176,8 +176,11 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "XChainLinksPlugin"
     public let jsName = "XChainLinks"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "takePendingLink", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "takePendingLink", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "resolveHost", returnType: CAPPluginReturnPromise)
     ]
+
+    var hostLookup: CallbackResolve.Lookup = CallbackResolve.systemLookup
 
     override public func load() {
         XChainLinkInbox.shared.attach(self)
@@ -193,6 +196,18 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["url": url])
         } else {
             call.resolve([:])
+        }
+    }
+
+    @objc func resolveHost(_ call: CAPPluginCall) {
+        let host = call.getString("host")
+        let lookup = hostLookup
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let list = CallbackHostAnswer.addresses(host: host, lookup: lookup) else {
+                call.reject("Callback host lookup failed")
+                return
+            }
+            call.resolve(["addresses": list])
         }
     }
 }
