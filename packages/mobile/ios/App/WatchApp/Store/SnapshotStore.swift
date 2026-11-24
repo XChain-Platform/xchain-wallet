@@ -50,11 +50,16 @@ final class SnapshotStore {
 
     @discardableResult
     func save(_ data: Data) -> Bool {
-        guard let snapshot = try? decoder.decode(Snapshot.self, from: data),
-              snapshot.session == "unlocked" || snapshot.session == "locked" else {
+        guard let snapshot = try? decoder.decode(Snapshot.self, from: data) else {
+            WatchEventLog.snapshotRejected(reason: "decode failed")
+            return false
+        }
+        guard snapshot.session == "unlocked" || snapshot.session == "locked" else {
+            WatchEventLog.snapshotRejected(reason: "session \(snapshot.session)")
             return false
         }
         guard snapshot.settings.enabled else {
+            WatchEventLog.snapshotRejected(reason: "disabled")
             latest = nil
             return file.wipe()
         }
@@ -73,6 +78,7 @@ final class SnapshotStore {
             )
             return true
         } catch {
+            WatchEventLog.snapshotRejected(reason: "write failed")
             return false
         }
     }
