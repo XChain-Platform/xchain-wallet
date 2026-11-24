@@ -42,15 +42,12 @@ final class NotifyActions: NSObject, UNUserNotificationCenterDelegate {
 
     @discardableResult
     func route(actionId: String, categoryId: String, notificationId: String) -> Bool {
-        guard !notificationId.isEmpty,
-              NotifyCategoryRules.isOpenOnPhone(
-                  actionId: actionId,
-                  categoryId: categoryId
-              ) else { return false }
-        onAction([
-            "action": "openOnPhone",
-            "id": notificationId,
-        ])
+        guard let payload = NotifyActionEvent.payload(
+            actionId: actionId,
+            categoryId: categoryId,
+            notificationId: notificationId
+        ) else { return false }
+        onAction(payload)
         return true
     }
 

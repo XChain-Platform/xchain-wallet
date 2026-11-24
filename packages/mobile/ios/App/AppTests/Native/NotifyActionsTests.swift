@@ -48,6 +48,7 @@ final class NotifyActionsTests: XCTestCase {
             notificationId: "request-1"
         ))
         XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(Set(events[0].keys), Set(["action", "id"]))
         XCTAssertEqual(events[0]["action"] as? String, "openOnPhone")
         XCTAssertEqual(events[0]["id"] as? String, "request-1")
 
