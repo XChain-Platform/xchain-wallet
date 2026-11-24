@@ -227,6 +227,7 @@ const CLIENT_MODULES = [
     { file: 'packages/extension/src/popup/messaging.js', preHost: true, floor: 250 },
     { file: 'packages/desktop/renderer/messaging.js', preHost: true, floor: 250 },
     { file: 'packages/web/src/messaging.js', preHost: false, floor: 250 },
+    { file: 'packages/web/src/hostBridge.js', preHost: false, floor: 0 },
     { file: 'packages/extension/src/approval/messaging.js', preHost: true, floor: 5 },
     { file: 'packages/desktop/renderer/fiatRateSource.js', preHost: true, floor: 0 },
     { file: 'packages/desktop/renderer/releaseFeedSource.js', preHost: true, floor: 0 },
@@ -254,11 +255,21 @@ function sourceFiles(dir) {
  * module binds its shell's transport at import. `computed` lists sends whose
  * type is not a string literal, which this check cannot follow.
  */
-function sentTypes(file) {
-    const src = readFileSync(join(REPO_ROOT, file), 'utf8');
+function parseSentTypes(src) {
     const literal = [...src.matchAll(/sendMessage\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
-    const computed = [...src.matchAll(/sendMessage\(\s*[^'"\s)]/g)].map((m) => m[0]);
+    const computed = [...src.matchAll(/sendMessage\(\s*[^'"\s)]/g)]
+        // Declarations and // examples name sendMessage without invoking the transport.
+        .filter((m) => {
+            const lineStart = src.lastIndexOf('\n', m.index) + 1;
+            const before = src.slice(lineStart, m.index);
+            return !/\bfunction\s*$/.test(before) && !/^\s*\/\//.test(before);
+        })
+        .map((m) => m[0]);
     return { literal, computed };
+}
+
+function sentTypes(file) {
+    return parseSentTypes(readFileSync(join(REPO_ROOT, file), 'utf8'));
 }
 
 /** A host as the extension builds it, approval window routes included. */
@@ -273,6 +284,16 @@ function makeFullHost() {
 }
 
 describe('client message types against the host route table', () => {
+    it('detects a real computed send while ignoring declarations and // comments', () => {
+        const { computed } = parseSentTypes([
+            'export async function sendMessage(type, request) {}',
+            '// `sendMessage(type, request)` documents the transport',
+            'sendMessage(type, req);',
+        ].join('\n'));
+
+        expect(computed).toEqual(['sendMessage(t']);
+    });
+
     it('claims no type on both the host and the pre-host lane', () => {
         // Both transports divert the pre-host set before the host sees it, so
         // a host handler for one of those types can never run. Give the host
