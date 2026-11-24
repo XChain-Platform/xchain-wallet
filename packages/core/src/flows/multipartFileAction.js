@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The wire string of a public multi-part FILE action: the manifest (format 1)
-// and a part (format 2). The wallet pins SDK 0.27.0, whose FILE action knows
-// only format 0 and refuses both ("FILE requires field: TYPE"), so these are
-// serialized here as the SDK's format selector serializes any action: the
-// action, its version, then every field of the format in order, with trailing
-// empty fields trimmed. A gated manifest rides a BATCH instead
-// (gatedMultipartBatch.js), which the pinned SDK composes itself.
+// and a part (format 2). SDK releases before 0.28 know only format 0 and refuse
+// both ("FILE requires field: TYPE"), so the wallet serializes these formats as
+// the SDK's format selector serializes any action: the action, its version, then
+// every field of the format in order, with trailing empty fields trimmed. A
+// gated manifest rides a BATCH instead (gatedMultipartBatch.js), which the SDK
+// composes itself.
 
 const FORMAT_FIELDS = Object.freeze({
     1: Object.freeze([
