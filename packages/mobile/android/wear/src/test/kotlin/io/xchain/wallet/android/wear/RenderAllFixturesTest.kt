@@ -133,11 +133,13 @@ class RenderAllFixturesTest {
     fun rendersAlertsAndEveryAlertDetailAtBothSizes() {
         val inbox = decode<List<SnapshotInboxItem>>("inbox-alerts.json")
         require(inbox.size == 20)
-        val alerts = AlertsPresenter.present(inbox, request = null, now = NOW)
-        val alertTexts = alerts.rows.flatMap { alert ->
-            listOfNotNull(alert.title, alert.body)
-        }.filter(String::isNotBlank)
-        renderCase("w3", "inbox-alerts.json", unclippedTexts = alertTexts) {
+        val amounts = inbox.indices.map { index -> "${index + 1}.00 XCP" }
+        val alerts = AlertsPresenter.present(
+            inbox.mapIndexed { index, item -> item.copy(body = amounts[index]) },
+            request = null,
+            now = NOW,
+        )
+        renderCase("w3", "inbox-alerts.json", unclippedTexts = amounts) {
             AlertsScreen(alerts, NOW, {}, {}, ::text)
         }
         renderCase("w3", "inbox-empty.json", unclippedTexts = emptyList()) {
@@ -146,11 +148,10 @@ class RenderAllFixturesTest {
 
         alerts.rows.forEachIndexed { index, alert ->
             val fixture = "inbox-alerts-${(index + 1).toString().padStart(2, '0')}.json"
-            val detailTexts = listOfNotNull(alert.title, alert.body).filter(String::isNotBlank)
             renderCase(
                 "w4",
                 fixture,
-                unclippedTexts = detailTexts,
+                unclippedTexts = listOf(amounts[index]),
             ) {
                 AlertDetailScreen(alert, null, {}, ::text) { "Nov 14, 2023" }
             }
