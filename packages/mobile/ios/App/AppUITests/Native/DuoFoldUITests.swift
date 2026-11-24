@@ -43,7 +43,7 @@ final class DuoFoldUITests: XCTestCase {
             password: password
         )
         guard network == .switched || network == .alreadyActive else {
-            XCTFail("The funded wallet could not select the Litecoin test network")
+            XCTFail("The funded wallet could not select the test network")
             return
         }
 
