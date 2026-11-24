@@ -11,11 +11,22 @@ import {
 const directory = new URL('../../../packages/mobile/store-assets/play/wear/', import.meta.url);
 const readmeUrl = new URL('README.md', directory);
 const readme = fs.existsSync(readmeUrl) ? fs.readFileSync(readmeUrl, 'utf8') : null;
+const requiredCopy = [
+    'Your balances and wallet alerts on your wrist. Your phone keeps your keys and signs everything.',
+    'Wear OS Tile',
+    'complication',
+    'receive QR',
+    'Hide amounts',
+    'XChain Wallet Android app is required',
+];
 const screenshots = fs.readdirSync(directory)
     .filter((name) => name.endsWith('.png'))
     .sort()
     .map((name) => ({ name, header: pngHeader(fs.readFileSync(new URL(name, directory))) }));
 const problems = wearListingProblems({ readme, screenshots });
+for (const phrase of requiredCopy) {
+    if (!readme?.includes(phrase)) problems.push(`README.md lacks listing copy: ${phrase}`);
+}
 
 if (problems.length) {
     console.error(problems.join('\n'));
