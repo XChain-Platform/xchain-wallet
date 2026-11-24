@@ -129,7 +129,10 @@ class RenderAllFixturesTest {
         val inbox = decode<List<SnapshotInboxItem>>("inbox-alerts.json")
         require(inbox.size == 20)
         val alerts = AlertsPresenter.present(inbox, request = null, now = NOW)
-        renderCase("w3", "inbox-alerts.json") {
+        val alertTexts = alerts.rows.flatMap { alert ->
+            listOfNotNull(alert.title, alert.body)
+        }
+        renderCase("w3", "inbox-alerts.json", expectedTexts = alertTexts) {
             AlertsScreen(alerts, NOW, {}, {}, ::text)
         }
         renderCase("w3", "inbox-empty.json") {
@@ -138,7 +141,13 @@ class RenderAllFixturesTest {
 
         alerts.rows.forEachIndexed { index, alert ->
             val fixture = "inbox-alerts-${(index + 1).toString().padStart(2, '0')}.json"
-            renderCase("w4", fixture) {
+            val detailTexts = listOfNotNull(alert.title, alert.body)
+            renderCase(
+                "w4",
+                fixture,
+                expectedTexts = detailTexts,
+                unclippedTexts = detailTexts,
+            ) {
                 AlertDetailScreen(alert, null, {}, ::text) { "Nov 14, 2023" }
             }
         }
@@ -192,6 +201,8 @@ class RenderAllFixturesTest {
         screen: String,
         fixture: String,
         amounts: List<String> = emptyList(),
+        expectedTexts: List<String> = amounts,
+        unclippedTexts: List<String> = amounts,
         content: @Composable () -> Unit,
     ) {
         WearRenderFrames.Size.entries.forEach { size ->
@@ -211,8 +222,8 @@ class RenderAllFixturesTest {
                 assertEquals("$frame height", size.pixelSide(), bitmap.height)
                 assertTrue("$frame captured fewer than two pixel colours", hasMultipleColors(bitmap))
                 writeFrame(bitmap, frame)
-                amounts.distinct().forEach { amount ->
-                    compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(amount))
+                expectedTexts.distinct().forEach { expectedText ->
+                    compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(expectedText))
                     compose.waitForIdle()
                     val renderedTexts = compose.onAllNodes(
                         SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
@@ -221,14 +232,16 @@ class RenderAllFixturesTest {
                         node.config[SemanticsProperties.Text].map { it.text }
                     }
                     assertTrue(
-                        "$frame did not render expected amount: $amount; rendered: $renderedTexts",
-                        renderedTexts.any { text -> text.contains(amount) },
+                        "$frame did not render expected text: $expectedText; rendered: $renderedTexts",
+                        renderedTexts.any { text -> text.contains(expectedText) },
                     )
-                    val clipped = clippedTexts(compose)
-                    assertFalse(
-                        "$frame clipped expected amount $amount: $clipped",
-                        clipped.any { text -> text.contains(amount) },
-                    )
+                    if (expectedText in unclippedTexts) {
+                        val clipped = clippedTexts(compose)
+                        assertFalse(
+                            "$frame clipped expected text $expectedText: $clipped",
+                            clipped.any { text -> text.contains(expectedText) },
+                        )
+                    }
                 }
             } catch (failure: Throwable) {
                 val framed = AssertionError(frame)
