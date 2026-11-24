@@ -27,6 +27,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CollapseHandle } from './CollapseHandle.jsx';
 import { PanelSplitDivider, usePanelSplit } from './PanelSplit.jsx';
+import { useFoldDivision } from '../hooks/useFoldDivision.js';
 import { useHomeTopCollapsed } from '../hooks/useHomeTopCollapsed.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/home.js';
@@ -59,11 +60,13 @@ export const HOME_LIST_WIDTH_KEY = 'home';
  *
  * @param {number} minWidth
  * @param {boolean} enabled
+ * @param {{fold?: boolean}} [options]
  * @returns {[import('react').MutableRefObject<HTMLDivElement | null>, boolean]}
  */
-export function useHomeWide(minWidth, enabled) {
+export function useHomeWide(minWidth, enabled, { fold = false } = {}) {
     const ref = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [wide, setWide] = useState(false);
+    const foldDivision = useFoldDivision();
     useLayoutEffect(() => {
         const el = ref.current;
         if (!enabled || !el) {
@@ -72,7 +75,10 @@ export function useHomeWide(minWidth, enabled) {
         }
         const measure = () => {
             const width = el.getBoundingClientRect?.().width || 0;
-            const next = width >= minWidth;
+            const divided = fold
+                && foldDivision.vertical
+                && Number.isFinite(foldDivision.dividerX);
+            const next = width >= minWidth || divided;
             setWide((prev) => (prev === next ? prev : next));
         };
         measure();
@@ -84,7 +90,7 @@ export function useHomeWide(minWidth, enabled) {
         if (typeof window === 'undefined') return undefined;
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, [minWidth, enabled]);
+    }, [minWidth, enabled, fold, foldDivision.vertical, foldDivision.dividerX]);
     return [ref, wide];
 }
 
