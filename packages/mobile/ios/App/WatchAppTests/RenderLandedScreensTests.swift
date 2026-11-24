@@ -155,7 +155,10 @@ final class RenderLandedScreensTests: XCTestCase {
         line: UInt = #line
     ) {
         let context = "\(screen) \(fixture) at \(sizeDescription(size))"
-        guard let image = WatchRender.image(view, size: size) else {
+        guard let image = WatchRender.image(
+            view.environment(\.colorScheme, .dark),
+            size: size
+        ) else {
             XCTFail("\(context) produced no image", file: file, line: line)
             return
         }
