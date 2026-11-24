@@ -80,6 +80,76 @@ final class WatchSessionHostTests: XCTestCase {
             WatchSessionState(paired: false, installed: false, reachable: false)
         )
     }
+
+    func testListedIntentMessageReachesHandler() {
+        let host = WatchSessionHost(session: SessionStub())
+        var received: [(kind: String, value: [String: Any])] = []
+        host.onIntent = { received.append((kind: $0, value: $1)) }
+
+        host.session(
+            .default,
+            didReceiveMessage: [
+                "kind": "detailRequest",
+                "value": ["tokenId": "bitcoin-mainnet:T01"],
+            ]
+        )
+
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(received.first?.kind, "detailRequest")
+        XCTAssertEqual(received.first?.value["tokenId"] as? String, "bitcoin-mainnet:T01")
+    }
+
+    func testRefreshIntentMessageWithEmptyValueReachesHandler() {
+        let host = WatchSessionHost(session: SessionStub())
+        var received: [(kind: String, value: [String: Any])] = []
+        host.onIntent = { received.append((kind: $0, value: $1)) }
+
+        host.session(
+            .default,
+            didReceiveMessage: ["kind": "refresh", "value": [String: Any]()]
+        )
+
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(received.first?.kind, "refresh")
+        XCTAssertTrue(received.first?.value.isEmpty == true)
+    }
+
+    func testIntentMessageWithThirdKeyDoesNotReachHandler() {
+        assertIntentMessageIsDropped(
+            ["kind": "refresh", "value": [String: Any](), "extra": true]
+        )
+    }
+
+    func testIntentMessageWithUnlistedKindDoesNotReachHandler() {
+        assertIntentMessageIsDropped(
+            ["kind": "unknown", "value": [String: Any]()]
+        )
+    }
+
+    func testIntentMessageWithStringValueDoesNotReachHandler() {
+        assertIntentMessageIsDropped(
+            ["kind": "refresh", "value": "invalid"]
+        )
+    }
+
+    func testListedIntentMessageWithoutHandlerReturns() {
+        let host = WatchSessionHost(session: SessionStub())
+
+        host.session(
+            .default,
+            didReceiveMessage: ["kind": "refresh", "value": [String: Any]()]
+        )
+    }
+
+    private func assertIntentMessageIsDropped(_ message: [String: Any]) {
+        let host = WatchSessionHost(session: SessionStub())
+        var receivedCount = 0
+        host.onIntent = { _, _ in receivedCount += 1 }
+
+        host.session(.default, didReceiveMessage: message)
+
+        XCTAssertEqual(receivedCount, 0)
+    }
 }
 
 private final class SessionStub: PhoneWatchSession {
