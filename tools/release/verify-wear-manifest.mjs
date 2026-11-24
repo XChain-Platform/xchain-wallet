@@ -12,10 +12,11 @@ import { readFileSync } from 'node:fs';
 
 import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
-const USAGE = `Usage: node tools/release/verify-wear-manifest.mjs <merged-manifest.xml>
+const USAGE = `Usage: node tools/release/verify-wear-manifest.mjs <merged-manifest.xml> [--version-code N]
 
 Reads merged Wear Android manifest XML and verifies its watch feature, standalone
 metadata, exact component exports and exact permission set without changing it.
+With --version-code, also verifies the code derived from the release tag.
 `;
 
 export const EXPECTED_COMPONENTS = [
@@ -79,7 +80,7 @@ export function metaData(xml) {
     ]));
 }
 
-export function checkWearManifest(xml, { components, permissions }) {
+export function checkWearManifest(xml, { components, permissions, versionCode }) {
     const failures = [];
     const passes = [];
     const actualComponents = listComponents(xml);
@@ -88,6 +89,18 @@ export function checkWearManifest(xml, { components, permissions }) {
     const watchFeature = usesFeatures(xml)
         .find(({ name }) => name === 'android.hardware.type.watch');
     const standalone = metaData(xml)['com.google.android.wearable.standalone'];
+
+    if (versionCode !== undefined) {
+        const manifestTag = tags(xml, ['manifest'])[0]?.[0];
+        const actualVersionCode = manifestTag && attribute(manifestTag, 'android:versionCode');
+        if (actualVersionCode !== versionCode) {
+            failures.push(
+                `the Wear bundle's versionCode is ${actualVersionCode}, not the ${versionCode} the tag derives`,
+            );
+        } else {
+            passes.push(`versionCode is ${versionCode}, which is what the tag derives`);
+        }
+    }
 
     if (!watchFeature) {
         failures.push('feature android.hardware.type.watch is missing');
@@ -158,7 +171,9 @@ export function main(args, stdout = process.stdout, stderr = process.stderr) {
         stdout.write(USAGE);
         return 0;
     }
-    if (args.length !== 1) {
+    const hasManifestOnly = args.length === 1;
+    const hasVersionCode = args.length === 3 && args[1] === '--version-code';
+    if (!hasManifestOnly && !hasVersionCode) {
         stderr.write(USAGE);
         return 2;
     }
@@ -166,6 +181,7 @@ export function main(args, stdout = process.stdout, stderr = process.stderr) {
     const result = checkWearManifest(readFileSync(args[0], 'utf8'), {
         components: EXPECTED_COMPONENTS,
         permissions: EXPECTED_PERMISSIONS,
+        versionCode: hasVersionCode ? args[2] : undefined,
     });
     for (const pass of result.passes) stdout.write(`PASS ${pass}\n`);
     for (const failure of result.failures) stderr.write(`FAIL ${failure}\n`);
