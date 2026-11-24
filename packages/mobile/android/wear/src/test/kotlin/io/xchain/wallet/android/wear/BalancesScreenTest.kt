@@ -16,7 +16,9 @@ import io.xchain.wallet.android.wear.ui.BalanceLine
 import io.xchain.wallet.android.wear.ui.BalanceText
 import io.xchain.wallet.android.wear.ui.BalancesDisplay
 import io.xchain.wallet.android.wear.ui.BalancesScreen
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +80,22 @@ class BalancesScreenTest {
         compose.runOnIdle { assertEquals(listOf(UnitsMode.UNITS, UnitsMode.FIAT), modes) }
     }
 
+    @Test
+    fun usesTransformingListWithRotaryScrolling() {
+        val source = repoFile(
+            "packages/mobile/android/wear/src/main/kotlin/" +
+                "io/xchain/wallet/android/wear/ui/BalancesScreen.kt",
+        ).readText()
+
+        assertTrue(Regex("""\bTransformingLazyColumn\s*\(""").containsMatchIn(source))
+        assertTrue(
+            Regex(
+                """rotaryScrollableBehavior\s*=\s*""" +
+                    """RotaryScrollableDefaults\.behavior\(state\)""",
+            ).containsMatchIn(source),
+        )
+    }
+
     @Composable
     private fun screen(
         unread: Int = 0,
@@ -122,4 +140,13 @@ class BalancesScreenTest {
         "w1.requestWaiting" to "1 request waiting",
         "w3.title" to "Alerts",
     ).getValue(key)
+
+    private fun repoFile(path: String): File {
+        var directory = File(requireNotNull(System.getProperty("user.dir"))).canonicalFile
+        repeat(8) {
+            File(directory, path).takeIf(File::isFile)?.let { return it }
+            directory = directory.parentFile ?: return@repeat
+        }
+        throw AssertionError("Missing repository file: $path")
+    }
 }
