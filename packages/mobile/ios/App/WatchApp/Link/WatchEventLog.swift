@@ -38,6 +38,10 @@ enum WatchEventLog {
         logger.notice("\(snapshotLine(v: v), privacy: .public)")
     }
 
+    static func snapshotRejected(reason: String) {
+        logger.notice("snapshot rejected: \(reason, privacy: .public)")
+    }
+
     static func screenShown(_ screen: WatchScreen) {
         logger.notice("\(screenLine(screen), privacy: .public)")
     }
