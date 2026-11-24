@@ -40,6 +40,16 @@ import styles from './HomeWideLayout.module.css';
  * the menu), stay one column.
  */
 export const HOME_WIDE_MIN_PX = 1060;
+export const HOME_DUO_BOOK_FALLBACK_PX = 951;
+// The Book measurement is unavailable because simctl io screenConfig crashes
+// SpringBoard on this simulator runtime.
+export const HOME_DUO_BOOK_WIDTH_PX = HOME_DUO_BOOK_FALLBACK_PX;
+
+export function isHomeDuoBookSplit(viewportWidth, foldDivision) {
+    return viewportWidth === HOME_DUO_BOOK_WIDTH_PX
+        && foldDivision.vertical
+        && Number.isFinite(foldDivision.dividerX);
+}
 
 /**
  * The balances list's width range beside the detail (operator 2026-11-14).
@@ -60,10 +70,9 @@ export const HOME_LIST_WIDTH_KEY = 'home';
  *
  * @param {number} minWidth
  * @param {boolean} enabled
- * @param {{fold?: boolean}} [options]
  * @returns {[import('react').MutableRefObject<HTMLDivElement | null>, boolean]}
  */
-export function useHomeWide(minWidth, enabled, { fold = false } = {}) {
+export function useHomeWide(minWidth, enabled) {
     const ref = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [wide, setWide] = useState(false);
     const foldDivision = useFoldDivision();
@@ -75,9 +84,7 @@ export function useHomeWide(minWidth, enabled, { fold = false } = {}) {
         }
         const measure = () => {
             const width = el.getBoundingClientRect?.().width || 0;
-            const divided = fold
-                && foldDivision.vertical
-                && Number.isFinite(foldDivision.dividerX);
+            const divided = isHomeDuoBookSplit(globalThis.innerWidth, foldDivision);
             const next = width >= minWidth || divided;
             setWide((prev) => (prev === next ? prev : next));
         };
@@ -90,7 +97,7 @@ export function useHomeWide(minWidth, enabled, { fold = false } = {}) {
         if (typeof window === 'undefined') return undefined;
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, [minWidth, enabled, fold, foldDivision.vertical, foldDivision.dividerX]);
+    }, [minWidth, enabled, foldDivision.vertical, foldDivision.dividerX]);
     return [ref, wide];
 }
 
