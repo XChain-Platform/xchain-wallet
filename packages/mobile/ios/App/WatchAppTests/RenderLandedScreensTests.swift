@@ -19,9 +19,12 @@ final class RenderLandedScreensTests: XCTestCase {
         for name in ["detail-cached", "detail-native", "detail-noart", "detail-loaderror"] {
             let detail = try decode(Detail.self, named: name, in: directory)
             let display = TokenDetailPresenter.present(row: row, detail: detail, phoneReachable: true)
+            assertNotEmpty(display.displayName, screen: "W2 name", fixture: name, size: size)
+            assertNotEmpty(display.amountText, screen: "W2 amount", fixture: name, size: size)
+            assertNotEmpty(display.valueText, screen: "W2 value", fixture: name, size: size)
             assertRendered(
                 TokenDetailScreen(display: display, onOpenOnPhone: {}),
-                screen: "W2", fixture: name, size: size
+                screen: "W2", fixture: name, size: size, checkBlank: false
             )
             assertFits(
                 display.amountText, font: .title3,
@@ -34,9 +37,21 @@ final class RenderLandedScreensTests: XCTestCase {
         }
 
         let awayDisplay = TokenDetailPresenter.present(row: row, detail: nil, phoneReachable: false)
+        assertNotEmpty(
+            awayDisplay.displayName,
+            screen: "W2 name", fixture: "nil-detail-phone-away", size: size
+        )
+        assertNotEmpty(
+            awayDisplay.amountText,
+            screen: "W2 amount", fixture: "nil-detail-phone-away", size: size
+        )
+        assertNotEmpty(
+            awayDisplay.valueText,
+            screen: "W2 value", fixture: "nil-detail-phone-away", size: size
+        )
         assertRendered(
             TokenDetailScreen(display: awayDisplay, onOpenOnPhone: {}),
-            screen: "W2", fixture: "nil-detail-phone-away", size: size
+            screen: "W2", fixture: "nil-detail-phone-away", size: size, checkBlank: false
         )
         assertFits(
             awayDisplay.amountText, font: .title3,
@@ -59,9 +74,19 @@ final class RenderLandedScreensTests: XCTestCase {
         )
 
         for item in inbox {
+            let detailScreen = AlertDetailScreen(item: item, now: now, onOpenOnPhone: {})
+            assertNotEmpty(
+                item.title, screen: "W4 alert title", fixture: "inbox-alerts:\(item.id)", size: size
+            )
+            if let detailBody = detailScreen.detailBody {
+                assertNotEmpty(
+                    detailBody,
+                    screen: "W4 alert body", fixture: "inbox-alerts:\(item.id)", size: size
+                )
+            }
             assertRendered(
-                AlertDetailScreen(item: item, now: now, onOpenOnPhone: {}),
-                screen: "W4", fixture: "inbox-alerts:\(item.id)", size: size
+                detailScreen,
+                screen: "W4", fixture: "inbox-alerts:\(item.id)", size: size, checkBlank: false
             )
         }
 
@@ -69,24 +94,40 @@ final class RenderLandedScreensTests: XCTestCase {
         XCTAssertFalse(requestNames.isEmpty, "W4/N2 request fixtures at \(sizeDescription(size))")
         for name in requestNames {
             let request = try decode(Request.self, named: name, in: directory)
+            assertNotEmpty(request.sentence, screen: "W4 sentence", fixture: name, size: size)
+            assertNotEmpty(request.amountText, screen: "W4 amount", fixture: name, size: size)
             assertRendered(
                 AlertDetailScreen(request: request, now: now, onOpenOnPhone: {}),
-                screen: "W4", fixture: name, size: size
+                screen: "W4", fixture: name, size: size, checkBlank: false
             )
 
             let longLook = RequestLongLook(request: request, openOnPhone: {})
-            let renderNow = min(now, (request.expiresAt ?? now + 1) - 1)
-            assertRendered(
-                longLook.longLookContent(
-                    at: Date(timeIntervalSince1970: Double(renderNow) / 1_000)
-                ),
-                screen: "N2", fixture: name, size: size
-            )
-            assertFits(
-                request.amountText,
-                font: .title3.weight(.semibold),
-                screen: "N2 amount", fixture: name, size: size
-            )
+            let date = Date(timeIntervalSince1970: Double(now) / 1_000)
+            let content = longLook.presentation(at: date)
+            if name == "request-expired" {
+                assertImageExists(
+                    longLook.longLookContent(at: date),
+                    failure: "N2 request-expired expected no content at fixed now but produced no "
+                        + "image at \(sizeDescription(size))",
+                    size: size
+                )
+            } else {
+                let content = try XCTUnwrap(
+                    content,
+                    "N2 \(name) has no presentation at \(sizeDescription(size))"
+                )
+                assertNotEmpty(content.sentence, screen: "N2 sentence", fixture: name, size: size)
+                assertNotEmpty(content.amountText, screen: "N2 amount", fixture: name, size: size)
+                assertRendered(
+                    longLook.longLookContent(at: date),
+                    screen: "N2", fixture: name, size: size, checkBlank: false
+                )
+                assertFits(
+                    content.amountText,
+                    font: .title3.weight(.semibold),
+                    screen: "N2 amount", fixture: name, size: size
+                )
+            }
         }
 
         let receive = try decode([SnapshotReceive].self, named: "receive-chains", in: directory)
@@ -151,6 +192,7 @@ final class RenderLandedScreensTests: XCTestCase {
         screen: String,
         fixture: String,
         size: CGSize,
+        checkBlank: Bool = true,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -162,9 +204,55 @@ final class RenderLandedScreensTests: XCTestCase {
             XCTFail("\(context) produced no image", file: file, line: line)
             return
         }
+        XCTAssertEqual(
+            image.width,
+            Int(size.width * 2),
+            "\(context) rendered at the wrong width",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            image.height,
+            Int(size.height * 2),
+            "\(context) rendered at the wrong height",
+            file: file,
+            line: line
+        )
+        guard checkBlank else { return }
         XCTAssertFalse(
             WatchRender.isBlank(image),
             "\(context) rendered blank",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertImageExists<ViewType: View>(
+        _ view: ViewType,
+        failure: String,
+        size: CGSize,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertNotNil(
+            WatchRender.image(view.environment(\.colorScheme, .dark), size: size),
+            failure,
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertNotEmpty(
+        _ text: String,
+        screen: String,
+        fixture: String,
+        size: CGSize,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertFalse(
+            text.isEmpty,
+            "\(screen) \(fixture) has empty text at \(sizeDescription(size))",
             file: file,
             line: line
         )
