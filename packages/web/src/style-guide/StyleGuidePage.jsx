@@ -164,9 +164,9 @@ export const SECTIONS = [
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection, primitives: ['Tabs'] },
-    { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
+    { id: 'quick-action',          label: 'Quick-action tile',      Component: QuickActionSection },
     { id: 'gray-card',             label: 'Card',                   Component: GrayCardSection },
-    { id: 'solid-accent-card',     label: 'Solid accent card',      Component: AccentBorderedCardSection },
+    { id: 'solid-accent-card',     label: 'Hero card (Total Balance)',      Component: AccentBorderedCardSection },
     { id: 'stacked-asset-icon',    label: 'Stacked asset icon',     Component: StackedAssetIconSection, components: ['TickerIcon'] },
     { id: 'asset-mark',            label: 'Asset mark',             Component: AssetMarkSection },
     { id: 'asset-hero',            label: 'Asset hero (Send)',      Component: AssetHeroSection },
@@ -178,8 +178,8 @@ export const SECTIONS = [
     // retires it from every screen and the section shows the dropdown instead.
     { id: 'single-choice',         label: 'Single choice',          Component: SingleChoiceSection, primitives: ['RadioGroup'] },
     { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
-    { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
-    { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
+    { id: 'pill-segmented',        label: 'Segmented control: inline filter',  Component: PillSegmentedSection },
+    { id: 'toggle-bar',            label: 'Segmented control: full-width filter',  Component: ToggleBarSection },
     { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection, primitives: ['Input', 'FieldIconButton', 'OptionalPill', 'Select', 'Textarea'] },
     { id: 'icon-select',           label: 'Icon select',            Component: IconSelectSection, primitives: ['IconSelect'] },
     { id: 'address-combobox',      label: 'Address combobox',       Component: AddressComboboxSection, primitives: ['AddressCombobox'] },
@@ -210,9 +210,9 @@ export const SECTIONS = [
     { id: 'fees-card',             label: 'Fees card',              Component: FeesCardSection, components: ['FeesCard'] },
     { id: 'picker-screens',        label: 'Picker screens',         Component: PickerScreensSection, components: ['OwnAddressPickerScreen', 'ListPickerScreen'] },
     { id: 'list-toolbar',          label: 'List toolbar',           Component: ListToolbarSection, components: ['ListToolbar'] },
-    { id: 'unavailable-states',    label: 'Offline, unchecked states', Component: UnavailableStatesSection, components: ['OfflineEmptyState', 'BalancesUncheckedState'] },
+    { id: 'unavailable-states',    label: 'Offline and unchecked states', Component: UnavailableStatesSection, components: ['OfflineEmptyState', 'BalancesUncheckedState'] },
     { id: 'activity-rows',         label: 'Activity rows',          Component: ActivityRowsSection, components: ['ActivityRow', 'HistoryEntryRow', 'RelativeTime'] },
-    { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar'] },
+    { id: 'shell-navigation',      label: 'Navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar'] },
     { id: 'home-tabs',             label: 'Home tabs',              Component: HomeTabsSection, components: ['HomeTabs'] },
     { id: 'multipart-upload-section', label: 'Multi-part upload section', Component: MultipartUploadSectionSection, components: ['MultipartUploadSection'] },
 ];
@@ -393,9 +393,9 @@ const PAGE_TEMPLATE_USAGE = Object.freeze({
 });
 
 export const TEMPLATE_VIEWS = Object.freeze([
-    { id: 'compact', label: 'Compact', width: 360, note: '12px gutter' },
-    { id: 'rail', label: 'Rail', width: 768, note: '16px gutter' },
-    { id: 'full', label: 'Full', width: 1024, note: '24px gutter' },
+    { id: 'compact', label: 'Compact', width: 360, note: '8px gutter' },
+    { id: 'rail', label: 'Rail', width: 768, note: '8px gutter' },
+    { id: 'full', label: 'Full', width: 1024, note: '8px gutter' },
 ]);
 
 export function Guidance({
