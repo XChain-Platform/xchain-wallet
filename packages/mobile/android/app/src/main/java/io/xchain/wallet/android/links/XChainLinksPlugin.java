@@ -21,6 +21,11 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
+import javax.net.ssl.HttpsURLConnection;
+
 /**
  * Delivers App Links, {@code xchain:} links and payment links to the SPA (§1, S3).
  *
@@ -70,6 +75,13 @@ public class XChainLinksPlugin extends Plugin {
 
     /** The link that launched the app, until the SPA asks for it. */
     private String pending;
+
+    CallbackPinnedOpen.Opener callbackOpener = CallbackPinnedOpen.SYSTEM;
+    Executor callbackExecutor = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "xchain-callback-post");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Override
     public void load() {
@@ -122,6 +134,34 @@ public class XChainLinksPlugin extends Plugin {
         // has already been shown, re-prefilling a send form they dismissed.
         pending = null;
         call.resolve(reply);
+    }
+
+    @PluginMethod
+    public void post(PluginCall call) {
+        String href = call.getString("href");
+        String address = call.getString("address");
+        String body = call.getString("body");
+        String redirect = call.getString("redirect");
+        String credentials = call.getString("credentials");
+        double timeoutMs = call.getDouble("timeoutMs", Double.NaN);
+        callbackExecutor.execute(() -> {
+            try {
+                int status = CallbackPostSend.send(
+                        href, address, body, timeoutMs, redirect, credentials, false,
+                        callbackOpener,
+                        HttpsURLConnection.getDefaultSSLSocketFactory(),
+                        HttpsURLConnection.getDefaultHostnameVerifier());
+                JSObject reply = new JSObject();
+                reply.put("status", status);
+                call.resolve(reply);
+            } catch (IllegalArgumentException exception) {
+                call.reject("Callback request refused");
+            } catch (java.io.IOException exception) {
+                call.reject("Callback POST failed");
+            } catch (Exception exception) {
+                call.reject("Callback POST failed");
+            }
+        });
     }
 
     /**
