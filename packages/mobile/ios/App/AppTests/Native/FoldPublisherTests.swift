@@ -148,20 +148,21 @@ final class FoldPublisherTests: XCTestCase {
         window.rootViewController = viewController
         window.makeKeyAndVisible()
         window.layoutIfNeeded()
-        var changes = 0
+        var observedChange = expectation(description: "trait change is observed")
         let cancellation = FoldPublisher.Environment.live.observeTraits(webView) {
-            changes += 1
+            observedChange.fulfill()
         }
 
         let changedSizeClass: UIUserInterfaceSizeClass =
             webView.traitCollection.horizontalSizeClass == .compact ? .regular : .compact
         webView.traitOverrides.horizontalSizeClass = changedSizeClass
-        XCTAssertGreaterThan(changes, 0)
-        let changesBeforeCancellation = changes
+        wait(for: [observedChange], timeout: 1)
 
         cancellation.cancel()
+        observedChange = expectation(description: "trait change is not observed after cancellation")
+        observedChange.isInverted = true
         webView.traitOverrides.horizontalSizeClass = changedSizeClass == .compact ? .regular : .compact
-        XCTAssertEqual(changes, changesBeforeCancellation)
+        wait(for: [observedChange], timeout: 0.1)
     }
 
     func testLiveHingeObservationAddsAndRemovesInteraction() {
