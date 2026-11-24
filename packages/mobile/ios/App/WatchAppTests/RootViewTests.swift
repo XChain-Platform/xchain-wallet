@@ -101,15 +101,23 @@ final class RootViewTests: XCTestCase {
         }
     }
 
-    func testRootViewSourceWiresNavigationStackToRootContent() throws {
+    func testRootViewSourceWiresRootContentSelectionsToNavigationPath() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("WatchApp/Screens/RootView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
         let wiringPattern = #"NavigationStack\(path:\s*\$path\)\s*\{\s*RootContent\(model:\s*model,\s*redaction:\s*redaction\)\s*\{\s*path\.append\(\$0\)\s*\}"#
+        let selectionPattern = #"private var balances:\s*some View\s*\{\s*BalancesScreen\([\s\S]*?open:\s*open\s*\)"#
 
-        XCTAssertNotNil(source.range(of: wiringPattern, options: .regularExpression))
+        XCTAssertNotNil(
+            source.range(of: wiringPattern, options: .regularExpression),
+            "RootView must append RootContent selections to the navigation path"
+        )
+        XCTAssertNotNil(
+            source.range(of: selectionPattern, options: .regularExpression),
+            "RootContent must forward BalancesScreen selections to RootView"
+        )
     }
 
     @MainActor
