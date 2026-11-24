@@ -4,10 +4,43 @@
 import UIKit
 import WebKit
 import XCTest
+import ObjectiveC.runtime
 @testable import App
 
 @MainActor
 final class FoldPublisherTests: XCTestCase {
+    @available(iOS 27.1, *)
+    private final class ReservedRegionSpyWebView: WKWebView {
+        var requestedKinds: [AnyObject] = []
+
+        static func installOverrides() {
+            let oneArgument = NSSelectorFromString("reservedRegionsOfKind:")
+            let twoArguments = NSSelectorFromString("reservedRegionsOfKind:options:")
+            if let method = class_getInstanceMethod(UIView.self, oneArgument) {
+                let block: @convention(block) (AnyObject, AnyObject) -> NSArray = { receiver, kind in
+                    MainActor.assumeIsolated {
+                        (receiver as? ReservedRegionSpyWebView)?.requestedKinds.append(kind)
+                    }
+                    return []
+                }
+                class_addMethod(
+                    self, oneArgument, imp_implementationWithBlock(block), method_getTypeEncoding(method)
+                )
+            }
+            if let method = class_getInstanceMethod(UIView.self, twoArguments) {
+                let block: @convention(block) (AnyObject, AnyObject, UInt) -> NSArray = { receiver, kind, _ in
+                    MainActor.assumeIsolated {
+                        (receiver as? ReservedRegionSpyWebView)?.requestedKinds.append(kind)
+                    }
+                    return []
+                }
+                class_addMethod(
+                    self, twoArguments, imp_implementationWithBlock(block), method_getTypeEncoding(method)
+                )
+            }
+        }
+    }
+
     private final class Harness {
         var sizeRegistrations = 0
         var traitRegistrations = 0
@@ -103,20 +136,64 @@ final class FoldPublisherTests: XCTestCase {
         XCTAssertNil(harness.hingeChanged)
     }
 
-    func testDivisionLookupRequestsDivisionRegionKind() {
+    func testLiveDivisionLookupRequestsDivisionRegionKind() {
         guard #available(iOS 27.1, *) else {
             return XCTFail("iOS 27.1 is required")
         }
-        var requestedKind: UIView.ReservedRegion.Kind?
-        let expected = CGRect(x: 410, y: 0, width: 20, height: 900)
+        ReservedRegionSpyWebView.installOverrides()
+        let webView = ReservedRegionSpyWebView(frame: .zero)
 
-        let frame = FoldPublisher.divisionFrame { kind in
-            requestedKind = kind
-            return [expected, CGRect(x: 1, y: 2, width: 3, height: 4)]
+        let frame = FoldPublisher.Environment.live.divisionFrame(webView)
+
+        XCTAssertNil(frame)
+        XCTAssertEqual(webView.requestedKinds.count, 1)
+        XCTAssertEqual(webView.requestedKinds[0] as? UIView.ReservedRegion.Kind, .division)
+    }
+
+    func testLiveSizeObservationStartsAndStopsCallbacks() {
+        let webView = WKWebView(frame: .zero)
+        var changes = 0
+        let cancellation = FoldPublisher.Environment.live.observeSize(webView) {
+            changes += 1
         }
 
-        XCTAssertEqual(requestedKind, .division)
-        XCTAssertEqual(frame, expected)
+        webView.bounds = CGRect(x: 0, y: 0, width: 840, height: 900)
+        XCTAssertEqual(changes, 1)
+
+        cancellation.cancel()
+        webView.bounds = CGRect(x: 0, y: 0, width: 900, height: 840)
+        XCTAssertEqual(changes, 1)
+    }
+
+    func testLiveTraitObservationStartsAndStopsCallbacks() {
+        let webView = WKWebView(frame: .zero)
+        var changes = 0
+        let cancellation = FoldPublisher.Environment.live.observeTraits(webView) {
+            changes += 1
+        }
+
+        let changedSizeClass: UIUserInterfaceSizeClass =
+            webView.traitCollection.horizontalSizeClass == .compact ? .regular : .compact
+        webView.traitOverrides.horizontalSizeClass = changedSizeClass
+        XCTAssertEqual(changes, 1)
+
+        cancellation.cancel()
+        webView.traitOverrides.horizontalSizeClass = changedSizeClass == .compact ? .regular : .compact
+        XCTAssertEqual(changes, 1)
+    }
+
+    func testLiveHingeObservationAddsAndRemovesInteraction() {
+        guard #available(iOS 27.1, *) else {
+            return XCTFail("iOS 27.1 is required")
+        }
+        let webView = WKWebView(frame: .zero)
+
+        let cancellation = FoldPublisher.Environment.live.observeHinge(webView) { _ in }
+
+        XCTAssertNotNil(cancellation)
+        XCTAssertEqual(webView.interactions.compactMap { $0 as? UIHingeInteraction }.count, 1)
+        cancellation?.cancel()
+        XCTAssertTrue(webView.interactions.compactMap { $0 as? UIHingeInteraction }.isEmpty)
     }
 
     func testPublishesEvaluatesLogsAndAppliesInsets() {

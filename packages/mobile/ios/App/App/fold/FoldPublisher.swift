@@ -46,6 +46,17 @@ final class FoldPublisher {
                     }
                 },
                 observeTraits: { webView, changed in
+                    if #available(iOS 17.0, *) {
+                        let registration = webView.registerForTraitChanges([
+                            UITraitHorizontalSizeClass.self,
+                            UITraitVerticalSizeClass.self,
+                        ]) { (_: WKWebView, _: UITraitCollection) in
+                            changed()
+                        }
+                        return Cancellation { [weak webView] in
+                            webView?.unregisterForTraitChanges(registration)
+                        }
+                    }
                     let traits = webView.observe(\.traitCollection, options: [.new]) { _, _ in
                         MainActor.assumeIsolated { changed() }
                     }
@@ -64,9 +75,7 @@ final class FoldPublisher {
                 },
                 divisionFrame: { webView in
                     guard #available(iOS 27.1, *) else { return nil }
-                    return FoldPublisher.divisionFrame { kind in
-                        webView.reservedRegions(kind: kind).map(\.frame)
-                    }
+                    return webView.reservedRegions(kind: .division).first?.frame
                 },
                 bounds: { $0.bounds },
                 safeAreaInsets: { $0.safeAreaInsets },
@@ -127,11 +136,6 @@ final class FoldPublisher {
         case .fullyOpen: return .open
         @unknown default: return .unknown
         }
-    }
-
-    @available(iOS 27.1, *)
-    nonisolated static func divisionFrame(query: (UIView.ReservedRegion.Kind) -> [CGRect]) -> CGRect? {
-        query(.division).first
     }
 
     nonisolated static func state(status: HingeState, division: CGRect?) -> State {
