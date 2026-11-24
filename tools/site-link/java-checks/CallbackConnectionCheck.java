@@ -24,6 +24,7 @@ public final class CallbackConnectionCheck {
     public static void main(String[] args) {
         try {
             configureCase();
+            configureFixedLengthCase();
             postCase(200, "SENT");
             postCase(302, "HTTP_STATUS");
             rejectedBodyCase(null, "null body");
@@ -53,6 +54,14 @@ public final class CallbackConnectionCheck {
         require(connection.getRequestProperty("Authorization") == null, "configure authorization");
     }
 
+    private static void configureFixedLengthCase() throws Exception {
+        RecordingConnection connection = new RecordingConnection(200);
+
+        CallbackConnection.configure(connection, 17);
+
+        require(connection.fixedLength == 17, "configure fixed length");
+    }
+
     private static void postCase(int status, String expectedOutcome) throws Exception {
         RecordingConnection connection = new RecordingConnection(status);
         String body = "{\"message\":\"café\"}";
@@ -71,6 +80,9 @@ public final class CallbackConnectionCheck {
                 connection.getRequestProperty("Authorization") == null,
                 "post authorization " + status);
         require(connection.outputCalls == 1, "post output count " + status);
+        require(
+                connection.fixedLength == body.getBytes(StandardCharsets.UTF_8).length,
+                "post fixed length " + status);
         require(connection.inputCalls == 1, "post input count " + status);
         require(connection.response.closed, "post response close " + status);
         require(connection.disconnectCalls == 1, "post disconnect count " + status);
@@ -107,6 +119,7 @@ public final class CallbackConnectionCheck {
         private int outputCalls;
         private int inputCalls;
         private int disconnectCalls;
+        private int fixedLength = -1;
 
         private RecordingConnection(int status) throws Exception {
             super(new URL("https://example.com/cb"));
@@ -136,6 +149,11 @@ public final class CallbackConnectionCheck {
         @Override
         public int getResponseCode() {
             return status;
+        }
+
+        @Override
+        public void setFixedLengthStreamingMode(int contentLength) {
+            fixedLength = contentLength;
         }
 
         @Override
