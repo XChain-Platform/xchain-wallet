@@ -7,8 +7,6 @@ import android.webkit.WebView;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.splashscreen.SplashScreen;
-import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.WorkManager;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -56,10 +54,7 @@ public class MainActivity extends BridgeActivity {
         // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
         // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-                "xc_activity_check",
-                ExistingPeriodicWorkPolicy.KEEP,
-                BackgroundActivityWorker.periodicRequest());
+        BackgroundActivityWorker.enqueue(this);
         configureWebViewLayout();
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();

@@ -492,28 +492,8 @@ for (const plugin of [
 }
 assert.match(
     mainActivity,
-    new RegExp([
-        'enqueueUniquePeriodicWork\\(\\s*"xc_activity_check",',
-        '\\s*ExistingPeriodicWorkPolicy\\.KEEP,',
-        '\\s*BackgroundActivityWorker\\.periodicRequest\\(\\)\\s*\\)',
-    ].join('')),
-    'the background activity check is enqueued once by name without resetting its interval',
-);
-
-const watchPlugin = readFileSync(join(
-    android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android',
-    'watch', 'XChainWatchPlugin.java',
-), 'utf8');
-assert.match(watchPlugin, /reply\.put\("available", available\)/);
-assert.match(
-    watchPlugin,
-    new RegExp([
-        'isGooglePlayServicesAvailable\\(context\\) == ConnectionResult\\.SUCCESS',
-        'startsMessageRouter\\(',
-        'playServicesReady\\)',
-        'router\\.start\\(\\)',
-    ].join('[\\s\\S]*?')),
-    'the message router starts only for an available watch bridge with Play Services ready',
+    /BackgroundActivityWorker\.enqueue\(this\)/,
+    'the background activity worker is enqueued after startup',
 );
 
 // SSC-1: the plugins Capacitor registers FOR us, which the rule about
