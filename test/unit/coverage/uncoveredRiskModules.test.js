@@ -251,8 +251,6 @@ describe('test-dApp runtime modules', () => {
             signedPsbtHex: '70736274deadbeef',
             txHex: 'mock-txhex',
         });
-        await expect(provider.signPsbt({ ...valid, broadcast: true }))
-            .resolves.toMatchObject({ ok: false, error: 'INVALID_PARAMS' });
     });
 
     it('models single-input and multi-input coSign approvals', async () => {

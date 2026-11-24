@@ -277,8 +277,6 @@ export function makeLoginParams(appId, opts = {}) {
     };
 }
 
-export const makeSignInParams = makeLoginParams;
-
 /**
  * Validate the signed challenge fields before a caller verifies its signature.
  * expected.origin is mandatory because the wallet stamps the requesting page's
