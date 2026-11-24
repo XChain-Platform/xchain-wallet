@@ -1252,6 +1252,36 @@ assert.equal(
     'the app must keep one WebView and one vault session',
 );
 
+// --- 20. The activity-check setting reaches its native store -----------
+
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainActivityPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainActivityPlugin or the activity-check setting is silently never stored',
+);
+const activityPluginSrc = readFileSync(
+    join(ios, 'App', 'App', 'activity', 'XChainActivityPlugin.swift'),
+    'utf8',
+);
+assert.match(
+    activityPluginSrc,
+    /public let jsName = "XChainActivity"/,
+    'XChainActivityPlugin must answer to the name requested by the shared activity-check configuration',
+);
+
+// --- 21. Fold updates reach the WebView -------------------------------
+
+assert.match(
+    didLoadBody[1],
+    /FoldPublisher\(webView: webView\)/,
+    'capacitorDidLoad must construct FoldPublisher on the bridge WebView',
+);
+assert.match(
+    didLoadBody[1],
+    /let publisher = FoldPublisher\(webView: webView\)[\s\S]*?publisher\.start\(\)/,
+    'capacitorDidLoad must start FoldPublisher so the WebView receives fold updates',
+);
+
 console.log(
     'OK: iOS shell smoke (S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -1272,5 +1302,7 @@ console.log(
     + ' switches the network before it claims a test-network balance, so the airplane-mode signing demo has'
     + ' something to spend. §18: while composing routes through the remote encoder, that same demo reaches the'
     + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction.'
-    + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled)',
+    + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled.'
+    + ' §20: capacitorDidLoad registers XChainActivityPlugin, which answers to XChainActivity.'
+    + ' §21: capacitorDidLoad constructs and starts FoldPublisher on the bridge WebView)',
 );
