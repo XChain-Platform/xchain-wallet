@@ -1,6 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import SwiftUI
 import XCTest
 @testable import WatchApp
 
@@ -9,7 +10,7 @@ final class NotificationScenesTests: XCTestCase {
     private let decoder = JSONDecoder()
 
     func testRegistersEveryNotificationSceneWithTheExpectedLongLook() {
-        let registrations = notificationRegistrations(in: XChainWatchApp.notificationScenes)
+        let registrations = notificationRegistrations(in: XChainWatchApp().body)
 
         XCTAssertEqual(registrations, [
             "AlertNotificationController": ["alert"],
@@ -33,14 +34,15 @@ final class NotificationScenesTests: XCTestCase {
                     notifications: delegate,
                     pendingRequest: { request }
                 )
-                let navigation = root.navigation
+                let paths = reflectedValues(of: Binding<[WatchScreen]>.self, in: root.body)
 
+                XCTAssertEqual(paths.count, 1)
                 XCTAssertTrue(delegate.route(
                     notificationId: request.id,
                     category: category,
                     actionId: actionId
                 ))
-                XCTAssertEqual(navigation.path, [.alertDetail], "\(fixture) \(actionId)")
+                XCTAssertEqual(paths.first?.wrappedValue, [.alertDetail], "\(fixture) \(actionId)")
             }
         }
     }
@@ -115,5 +117,13 @@ final class NotificationScenesTests: XCTestCase {
     private func strings(in root: Any) -> [String] {
         if let value = root as? String { return [value] }
         return Mirror(reflecting: root).children.flatMap { strings(in: $0.value) }
+    }
+
+    private func reflectedValues<T>(of type: T.Type, in root: Any, depth: Int = 0) -> [T] {
+        if let value = root as? T { return [value] }
+        guard depth < 20 else { return [] }
+        return Mirror(reflecting: root).children.flatMap {
+            reflectedValues(of: type, in: $0.value, depth: depth + 1)
+        }
     }
 }
