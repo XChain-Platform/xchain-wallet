@@ -31,6 +31,17 @@ assert.match(
     ceremony,
     /mv "\$WORK_DIR\/\$WEAR_AAB_NAME" "\$OUTPUT_DIR\/\$WEAR_AAB_NAME"/,
 );
+const stagedList = ceremony.slice(
+    ceremony.indexOf('==> staged in'),
+    ceremony.indexOf('==> K10 certificate fingerprint'),
+);
+assert.match(
+    stagedList,
+    /\$AAB_NAME   \(Play upload; NEVER hosted publicly\)"\necho "    \$WEAR_AAB_NAME   \(Play upload, Wear OS; NEVER hosted publicly\)/,
+);
+assert.match(ceremony, /sign all three artifacts/);
+assert.match(ceremony, /sign all four artifacts/);
+assert.doesNotMatch(ceremony, /both artifacts/);
 
 const directApkLeg = ceremony.slice(
     ceremony.indexOf('# 3. Derive the universal APK'),
@@ -51,4 +62,4 @@ assert.match(
     /^android-full\s+SHIPPED\s+store-only\s+xchain-wallet-v\*-full\.apk$/m,
 );
 
-console.log(`android-ceremony-wear: 12 checks passed (${root})`);
+console.log(`android-ceremony-wear: 16 checks passed (${root})`);
