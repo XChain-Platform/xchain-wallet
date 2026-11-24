@@ -43,18 +43,17 @@ struct AlertDetailScreen: View {
     var requestModel: AlertsPresenter.RequestModel? {
         request.map { AlertsPresenter.request($0, now: now) }
     }
-    var requestAccessibilityLines: [String] {
-        requestModel.map {
-            AccessibilityLabels.requestLines($0, text: localized, time: formattedExpiry)
-        } ?? []
-    }
-
     func alertLabel(_ item: SnapshotInboxItem) -> String {
         AccessibilityLabels.alertDetail(item, time: formattedAlertTime)
     }
 
     func requestLabel(_ index: Int) -> String {
-        requestAccessibilityLines[index]
+        guard let requestModel else { return "" }
+        return AccessibilityLabels.requestLines(
+            requestModel,
+            text: localized,
+            time: formattedExpiry
+        )[index]
     }
 
     func controlLabel(_ key: String) -> String {
