@@ -84,12 +84,35 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Still validated in the SPA, on exactly the same footing.
         SceneDelegateProxy.shared.scene(scene, continue: userActivity)
 
+        if deliverWatchHandoff(
+            userActivity,
+            to: { XChainLinkInbox.shared.deliver($0) }
+        ) {
+            return
+        }
+
         // The proxy's own delivery target is `@capacitor/app`'s `appUrlOpen`,
         // which is not a dependency here (see XChainLinksPlugin.swift), so
         // forwarding to it alone reached nothing. This is the line that makes
         // the tap arrive somewhere.
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb else { return }
         XChainLinkInbox.shared.deliver(userActivity.webpageURL?.absoluteString)
+    }
+
+    @discardableResult
+    func deliverWatchHandoff(
+        _ userActivity: NSUserActivity,
+        to deliver: (String?) -> Void
+    ) -> Bool {
+        guard let route = WatchViewActivity.route(
+            activityType: userActivity.activityType,
+            userInfo: userActivity.userInfo
+        ) else {
+            return false
+        }
+
+        deliver("xchain:\(route)")
+        return true
     }
 
     // MARK: - Snapshot cover
