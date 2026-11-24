@@ -29,6 +29,7 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
 
     let session: PhoneWatchSession?
     private(set) var state: WatchSessionState
+    var onIntent: ((String, [String: Any]) -> Void)?
 
     var supported: Bool { session != nil }
     var activationState: WCSessionActivationState { session?.activationState ?? .notActivated }
@@ -66,6 +67,11 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
 
     func sessionReachabilityDidChange(_ session: WCSession) {
         refreshState()
+    }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let intent = WatchIntentMessage.read(message) else { return }
+        onIntent?(intent.kind, intent.value)
     }
 
     private func refreshState() {
