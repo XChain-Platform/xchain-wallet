@@ -45,6 +45,7 @@ import { dirname, resolve } from 'node:path';
 
 import { IPC_CHANNEL } from '../../../packages/desktop/main/messageHost.js';
 import { SIGNER_BRIDGE_CHANNEL } from '../../../packages/desktop/main/signerBridgeListener.js';
+import { SITE_REQUEST_CHANNEL } from '../../../packages/desktop/main/siteRequest.js';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { sendMessage as rendererSendMessage } from '../../../packages/desktop/renderer/bridgeMessaging.js';
 import { createDeepLinkSlot, pickDeepLinkTarget } from '../../../packages/desktop/main/protocol.js';
@@ -142,7 +143,7 @@ function runPreload() {
 }
 
 /** Channel constants main may register on by name, resolved to their values. */
-const KNOWN_CHANNEL_CONSTANTS = { IPC_CHANNEL };
+const KNOWN_CHANNEL_CONSTANTS = { IPC_CHANNEL, SITE_REQUEST_CHANNEL };
 
 /** Resolve one registration's channel argument, refusing any expression it cannot name. */
 function resolveChannelExpression(expr) {
@@ -257,6 +258,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         const updater = pre.worlds.get('xchainWalletUpdater');
 
         await bridge.sendMessage({ type: 'session.status' });
+        await bridge.sendMessage({ type: 'siteRequest.return', request: { url: 'https://example.test/return' } });
         await bridge.wipeStorage();
         await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         // The picked-file registration is walked so main must answer on it.
@@ -290,7 +292,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(14);
+        expect(used.size).toBe(15);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {
