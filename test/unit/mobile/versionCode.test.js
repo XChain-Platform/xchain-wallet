@@ -301,5 +301,9 @@ describe('generated build files', () => {
         it('--artifact still prints ONE field, since a bare read would glue a third on', () => {
             expect(run(script, 'v0.333.1', '--artifact').split(/\s+/)).toHaveLength(1);
         });
+
+        it('--wear prints exactly the Wear versionCode as one field', () => {
+            expect(run(script, 'v0.333.1', '--wear')).toBe('1003330150');
+        });
     });
 });
