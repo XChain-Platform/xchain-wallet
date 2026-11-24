@@ -31,6 +31,50 @@ async function soundDigests(temporaryRoot) {
         }))));
 }
 
+for (const directory of soundDirectories) {
+    const directoryUrl = new URL(directory, root);
+    assert.deepEqual(
+        (await readdir(directoryUrl)).sort(),
+        expectedFiles,
+        `${directory} must exactly match SOUND_PALETTE`,
+    );
+
+    for (const fileName of expectedFiles) {
+        const contents = await readFile(new URL(fileName, directoryUrl));
+        assert.equal(
+            contents.subarray(0, 4).toString('ascii'),
+            'caff',
+            `${directory}${fileName} must be a CAF file`,
+        );
+    }
+}
+
+const committedDigests = await soundDigests(rootPath);
+for (const fileName of expectedFiles) {
+    assert.equal(
+        committedDigests[`${soundDirectories[0]}${fileName}`],
+        committedDigests[`${soundDirectories[1]}${fileName}`],
+        `${fileName} must match in both committed bundles`,
+    );
+}
+
+if (!process.env.XCHAIN_NATIVE_SMOKES) {
+    console.log('watch sounds: conversion skipped (set XCHAIN_NATIVE_SMOKES=1)');
+    process.exit(0);
+}
+
+async function requireNativeTool(tool) {
+    try {
+        const result = await execFileAsync('/usr/bin/which', [tool]);
+        return (typeof result === 'string' ? result : result.stdout).trim();
+    } catch {
+        throw new Error(`watch sounds: XCHAIN_NATIVE_SMOKES requires ${tool}`);
+    }
+}
+
+const realMpg123 = await requireNativeTool('mpg123');
+await requireNativeTool('afconvert');
+
 const temporaryRoot = await mkdtemp(join(rootPath, 'tmp/watch-sounds-smoke-'));
 try {
     const converterDirectory = join(temporaryRoot, 'tools/watch');
@@ -48,8 +92,6 @@ try {
     await Promise.all(SOUND_PALETTE.map(({ file }) =>
         cp(join(rootPath, 'packages/web/public/sounds', file), join(sourceDirectory, file))));
 
-    const whichResult = await execFileAsync('/usr/bin/which', ['mpg123']);
-    const realMpg123 = (typeof whichResult === 'string' ? whichResult : whichResult.stdout).trim();
     const mpg123Wrapper = join(mockBin, 'mpg123');
     await writeFile(mpg123Wrapper, `#!/bin/bash
 set -euo pipefail
@@ -66,6 +108,7 @@ exec "$REAL_MPG123" "$@"
     };
     await execFileAsync('/bin/bash', [converter], { env: environment });
     const firstDigests = await soundDigests(temporaryRoot);
+    assert.deepEqual(firstDigests, committedDigests);
     await execFileAsync('/bin/bash', [converter], { env: environment });
     assert.deepEqual(await soundDigests(temporaryRoot), firstDigests);
 
@@ -84,24 +127,6 @@ exec "$REAL_MPG123" "$@"
     }
 } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
-}
-
-for (const directory of soundDirectories) {
-    const directoryUrl = new URL(directory, root);
-    assert.deepEqual(
-        (await readdir(directoryUrl)).sort(),
-        expectedFiles,
-        `${directory} must exactly match SOUND_PALETTE`,
-    );
-
-    for (const fileName of expectedFiles) {
-        const contents = await readFile(new URL(fileName, directoryUrl));
-        assert.equal(
-            contents.subarray(0, 4).toString('ascii'),
-            'caff',
-            `${directory}${fileName} must be a CAF file`,
-        );
-    }
 }
 
 console.log(`watch sounds smoke OK (${expectedFiles.length} sounds in both bundles)`);
