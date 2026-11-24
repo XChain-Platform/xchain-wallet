@@ -28,14 +28,9 @@
 //   canSignMessage === false          → prompt via approvals
 // No grant skips the password: every signature is unlocked by it.
 //
-// Unknown-origin / first-time requests must go through `bridge.connect`
-// which creates the ConnectedSite record; other handlers reject with
-// `NOT_CONNECTED` if no record exists.
-//
-// One exception, deliberate: `bridge.getSupportedChains` is the catalogue a
-// dApp reads BEFORE it can connect, so it takes assertOrigin +
-// assertNotBlocked and no site record. It is the only route that carries its
-// own blocklist check for that reason.
+// `bridge.getSupportedChains` is the catalogue a dApp reads before connect,
+// so it takes assertOrigin + assertNotBlocked and no site record. Login can
+// also begin without a site record, then stores its approved address grant.
 
 import { flows, registry, schemas } from '@xchain-wallet/core';
 import {
@@ -50,6 +45,8 @@ import {
     assertActionAllowedOnChain,
 } from '../../../core/src/registry/actions.js';
 import { createSignPasswordCache } from './signPasswordCache.js';
+import { LOGIN_PROOF_LIMIT, selectLoginAddresses } from './loginAddressSet.js';
+import { buildLoginResult } from './loginResult.js';
 import {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
@@ -140,6 +137,7 @@ function resolveChainIconUrl(getAssetUrl, icon) {
  *   events?: typeof noopBridgeEvents,
  *   signPasswordCache?: import('./signPasswordCache.js').SignPasswordCache,
  *   getAssetUrl?: (path: string) => string,
+ *   grantFreeSiteContext?: boolean,
  * }} [opts]
  */
 export function registerBridgeHandlers(host, opts = {}) {
@@ -148,6 +146,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     const signThrottleReady = opts.signThrottleReady ?? (async () => {});
     const events = opts.events ?? noopBridgeEvents;
     const getAssetUrl = opts.getAssetUrl ?? defaultAssetUrl;
+    const grantFreeSiteContext = opts.grantFreeSiteContext === true;
     // The host's queue-on-failure hook factory. A host without a queue passes
     // none, and a failed broadcast then stays a failure.
     const enqueueOnBroadcastFailure = opts.enqueueOnBroadcastFailure ?? (() => undefined);
@@ -892,9 +891,13 @@ export function registerBridgeHandlers(host, opts = {}) {
         return results;
     });
 
-    register('bridge.signIn', async (req, deps) => {
+    const loginHandler = async (req, deps) => {
         await assertNotBlocked(req, deps);
-        const site = await requireSite(deps.vault, req);
+        assertOrigin(req);
+        const site = grantFreeSiteContext
+            ? null
+            : await findConnectedSite(deps.vault, req.origin);
+        const hadAddressGrant = Array.isArray(site?.permissions?.addresses);
         await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
         if (typeof req.appId !== 'string' || req.appId.length === 0) {
@@ -915,12 +918,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         // window would be signed as an already-expired (or unparseable)
         // challenge after the user typed a password, so refuse it up front.
         const expiresInMs = signInExpiryMs(req.expiresInMs);
-        // Offer only addresses this site's grant covers; with none, refuse before prompting.
+        const maxAddresses = loginMaxAddresses(req.maxAddresses);
         const candidates = await signInCandidates(deps, site, req);
         if (candidates.length === 0) {
             throw bridgeError('ADDRESS_NOT_PERMITTED', 'no address this site may sign in with');
         }
-        const decision = await approvals.signIn({
+        const approvalDecision = await approvals.signIn({
             origin: req.origin,
             kind: 'signIn',
             ...approvalRequester(req),
@@ -929,22 +932,54 @@ export function registerBridgeHandlers(host, opts = {}) {
                 appId: req.appId,
                 nonce: req.nonce,
                 expiresInMs: req.expiresInMs,
+                maxAddresses,
                 addresses: candidates,
             },
         });
-        if (!decision?.approved) throw new UserRejectedError('signIn');
-        if (!decision.password || !decision.address) {
+        if (!approvalDecision?.approved) throw new UserRejectedError('signIn');
+        const requestedAddresses = loginDecisionAddresses(approvalDecision);
+        const { password } = approvalDecision;
+        if (!password || requestedAddresses.length === 0) {
             throw bridgeError('NO_CREDENTIALS', 'approvals must return { password, address }');
         }
-        await assertGrantStillHeld(req, deps, site);
-        // The window's answer is untrusted: it must name one of the offered
-        // addresses, and that address must still pass the per-site grant.
-        const chosen = candidates.find((c) => c.address === decision.address
-            && (!decision.chainId || c.chainId === decision.chainId));
-        if (!chosen) throw bridgeError('ADDRESS_NOT_PERMITTED', decision.address);
-        assertChainPermitted(site, chosen.chainId);
-        await assertAddressPermitted(deps, site, chosen.chainId, decision.address);
-        // Compose challenge per §43.6 format.
+        const currentSite = site
+            ? await assertGrantStillHeld(req, deps, site)
+            : null;
+        if (!site) await assertNotBlocked(req, deps);
+
+        const currentCandidates = await signInCandidates(deps, currentSite, req);
+        const requested = requestedAddresses.slice(0, maxAddresses);
+        const currentAddressGrant = currentSite
+            && (hadAddressGrant || Array.isArray(currentSite.permissions?.addresses))
+            ? currentSite
+            : null;
+        const selected = selectLoginAddresses(requested, currentAddressGrant).addresses;
+        const offered = selected.map((selectedAddress) => candidates.find(
+            (candidate) => candidate.address === selectedAddress,
+        ));
+        if (offered.length === 0 || offered.some((candidate) => !candidate)) {
+            const refused = selected.find((selectedAddress, index) => !offered[index]) ?? '';
+            throw bridgeError('ADDRESS_NOT_PERMITTED', refused);
+        }
+        if (currentSite) {
+            for (const candidate of offered) {
+                assertChainPermitted(currentSite, candidate.chainId);
+                await assertAddressPermitted(
+                    deps,
+                    currentSite,
+                    candidate.chainId,
+                    candidate.address,
+                );
+            }
+        }
+        const chosen = selected.map((selectedAddress) => currentCandidates.find(
+            (candidate) => candidate.address === selectedAddress,
+        ));
+        if (chosen.some((candidate) => !candidate)) {
+            const refused = selected.find((selectedAddress, index) => !chosen[index]) ?? '';
+            throw bridgeError('ADDRESS_NOT_PERMITTED', refused);
+        }
+
         const now = Date.now();
         if (now + expiresInMs <= now) {
             throw bridgeError('CHALLENGE_EXPIRED', 'sign-in window is too short to be valid');
@@ -966,45 +1001,66 @@ export function registerBridgeHandlers(host, opts = {}) {
         // so parseSignInChallenge returned null for every challenge this wallet
         // has ever emitted while the mock provider's formatted output parsed
         // fine.
-        const challengeParts = {
-            version: SIGN_IN_CHALLENGE_VERSION,
-            appId: req.appId,
-            origin: req.origin,
-            address: decision.address,
-            nonce,
-            timestamp: now,
-            expiresAt: now + expiresInMs,
-        };
-        let challenge;
-        try {
-            challenge = formatSignInChallenge(challengeParts);
-        } catch (err) {
-            throw bridgeError('INVALID_PARAMS', err?.message ?? 'malformed sign-in challenge');
+        const proofs = [];
+        for (const decision of chosen) {
+            const { address: selectedAddress, chainId } = decision;
+            const challengeParts = {
+                version: SIGN_IN_CHALLENGE_VERSION,
+                appId: req.appId,
+                origin: req.origin,
+                address: decision.address,
+                nonce,
+                timestamp: now,
+                expiresAt: now + expiresInMs,
+            };
+            let challenge;
+            try {
+                challenge = formatSignInChallenge(challengeParts);
+            } catch (err) {
+                throw bridgeError('INVALID_PARAMS', err?.message ?? 'malformed sign-in challenge');
+            }
+
+            const addr = await findAddressByString(
+                deps.vault,
+                selectedAddress,
+                chainId,
+                deps.chainRegistry,
+            );
+            if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', selectedAddress);
+            assertSoftwareSignable(addr);
+            const addressType = addr.addressType ?? 'p2wpkh';
+            const walletId = await walletIdForAddress(deps.vault, selectedAddress);
+            const { signature } = await signSignInChallengeFlow({
+                vault: deps.vault,
+                walletId,
+                password,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                chainId,
+                path: addr.derivationPath ?? undefined,
+                addressId: addr.derivationPath ? undefined : addr.id,
+                addressType,
+                message: challenge,
+            });
+            proofs.push({
+                address: selectedAddress,
+                chainId,
+                addressType,
+                challenge,
+                challengeParts,
+                signature,
+            });
         }
 
-        const chainId = chosen.chainId;
-        const addr = await findAddressByString(deps.vault, decision.address, chainId, deps.chainRegistry);
-        if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
-        assertSoftwareSignable(addr);
-        // Sign with the chosen address's own wallet; the window defaults walletId to the first one.
-        const walletId = await walletIdForAddress(deps.vault, decision.address);
-        const { signature } = await signSignInChallengeFlow({
-            vault: deps.vault,
-            walletId,
-            password: decision.password,
-            chainRegistry: deps.chainRegistry,
-            sdkRegistry: deps.sdkRegistry,
-            chainId,
-            path: addr.derivationPath ?? undefined,
-            addressId: addr.derivationPath ? undefined : addr.id,
-            addressType: addr.addressType,
-            message: challenge,
-        });
-        // chainId and challengeParts are declared on SignInSuccess and were
-        // being dropped, so a dApp had to re-parse the string to recover fields
-        // the wallet already held.
-        return { ok: true, address: decision.address, chainId, signature, challenge, challengeParts };
-    });
+        if (!grantFreeSiteContext) {
+            await storeLoginGrant(req, deps, currentSite, proofs, events);
+        }
+
+        return buildLoginResult(proofs);
+    };
+
+    register('bridge.login', loginHandler);
+    register('bridge.signIn', loginHandler);
 }
 
 
@@ -1942,6 +1998,7 @@ async function assertGrantStillHeld(req, deps, site) {
     await assertNotBlocked(req, deps);
     const current = await findConnectedSite(deps.vault, req.origin);
     if (!current || current.id !== site.id) throw bridgeError('NOT_CONNECTED', req.origin);
+    return current;
 }
 
 function assertNotThrottled(throttle, req) {
@@ -2125,8 +2182,11 @@ async function findAddressByString(vault, address, chainId, chainRegistry) {
 // to: inside the site's account and chain grants (an empty list is "all", per
 // §43.3), narrowed by the request's optional `chains` coin list and `chainId`.
 async function signInCandidates(deps, site, req) {
-    const accountIds = new Set(site.permissions?.accounts ?? []);
-    const grantedChains = site.permissions?.chains ?? [];
+    const accountIds = new Set(site?.permissions?.accounts ?? []);
+    const grantedChains = site?.permissions?.chains ?? [];
+    const grantedAddresses = Array.isArray(site?.permissions?.addresses)
+        ? new Set(site.permissions.addresses)
+        : null;
     const coins = Array.isArray(req.chains) && req.chains.length > 0 ? new Set(req.chains) : null;
     /** @type {{ address: string, chainId: string }[]} */
     const out = [];
@@ -2138,6 +2198,7 @@ async function signInCandidates(deps, site, req) {
         if (accountIds.size > 0 && !(a.accountId && accountIds.has(a.accountId))) continue;
         // Skip a chain the site was not granted
         if (grantedChains.length > 0 && !grantedChains.includes(chainId)) continue;
+        if (grantedAddresses && !grantedAddresses.has(a.address)) continue;
         // Skip a coin the site did not ask for, and any chain but the one it named
         if (coins && !coins.has(a.chain)) continue;
         if (req.chainId && chainId !== req.chainId) continue;
@@ -2145,6 +2206,83 @@ async function signInCandidates(deps, site, req) {
         out.push({ address: a.address, chainId });
     }
     return out;
+}
+
+function loginMaxAddresses(raw) {
+    if (raw === undefined || raw === null) return 1;
+    if (!Number.isInteger(raw) || raw < 1 || raw > LOGIN_PROOF_LIMIT) {
+        throw bridgeError(
+            'INVALID_PARAMS',
+            `maxAddresses must be an integer from 1 to ${LOGIN_PROOF_LIMIT}`,
+        );
+    }
+    return raw;
+}
+
+function loginDecisionAddresses(decision) {
+    const out = [];
+    const add = (value) => {
+        const address = typeof value === 'string' ? value : value?.address;
+        if (typeof address === 'string' && address && !out.includes(address)) out.push(address);
+    };
+    add(decision?.address);
+    if (Array.isArray(decision?.addresses)) decision.addresses.forEach(add);
+    return out;
+}
+
+async function storeLoginGrant(req, deps, site, proofs, events) {
+    const addresses = proofs.map((proof) => proof.address);
+    const chains = [...new Set(proofs.map((proof) => proof.chainId))];
+    if (site) {
+        const written = await updateSitePermissions(
+            deps.vault,
+            site,
+            (permissions) => ({
+                addresses: [...new Set([...(permissions.addresses ?? []), ...addresses])],
+            }),
+            { events },
+        );
+        if (!written) throw bridgeError('NOT_CONNECTED', req.origin);
+        return;
+    }
+
+    const current = await findConnectedSite(deps.vault, req.origin);
+    if (current) {
+        const allowed = selectLoginAddresses(addresses, current).addresses;
+        if (allowed.length !== addresses.length) {
+            throw bridgeError('ADDRESS_NOT_PERMITTED', req.origin);
+        }
+        const written = await updateSitePermissions(
+            deps.vault,
+            current,
+            (permissions) => ({
+                addresses: [...new Set([...(permissions.addresses ?? []), ...addresses])],
+            }),
+            { events },
+        );
+        if (!written) throw bridgeError('NOT_CONNECTED', req.origin);
+        return;
+    }
+
+    const records = await deps.vault.addresses.list();
+    const selected = new Set(addresses);
+    const accounts = [...new Set(records
+        .filter((record) => selected.has(record.address) && record.accountId)
+        .map((record) => record.accountId))];
+    const grant = schemas.createConnectedSite({
+        origin: req.origin,
+        appName: typeof req.appName === 'string' && req.appName ? req.appName : req.origin,
+        appIcon: typeof req.appIcon === 'string' ? req.appIcon : '',
+        icon: schemas.sanitizeSiteIcon(req.siteIcon),
+        permissions: {
+            chains,
+            accounts,
+            addresses,
+            canSignMessage: false,
+            canSignAction: {},
+        },
+    });
+    await deps.vault.connectedSites.put(grant);
 }
 
 // The published bridge-spec `PsbtSigningPath` is `{ inputIndex, address? |
