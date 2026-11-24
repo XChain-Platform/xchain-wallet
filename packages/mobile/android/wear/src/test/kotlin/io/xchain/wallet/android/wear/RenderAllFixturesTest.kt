@@ -7,8 +7,12 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.performScrollToNode
 import io.xchain.wallet.android.wear.data.Detail
 import io.xchain.wallet.android.wear.data.Request
 import io.xchain.wallet.android.wear.data.Snapshot
@@ -63,7 +67,7 @@ class RenderAllFixturesTest {
             val snapshot = json.decodeFromString<Snapshot>(fixture.readText())
             UnitsMode.entries.forEach { mode ->
                 val display = BalancesPresenter.present(snapshot, mode, now = snapshot.builtAt)
-                val amounts = display.lines.flatMap { line ->
+                val amounts = listOfNotNull(display.header?.text) + display.lines.flatMap { line ->
                     listOfNotNull(line.primary?.text, line.secondary?.text)
                 }
                 renderCase(
@@ -109,13 +113,13 @@ class RenderAllFixturesTest {
         fixtures("detail-").forEach { fixture ->
             val detail = json.decodeFromString<Detail>(fixture.readText())
             val display = TokenDetailPresenter.present(row, detail, phoneReachable = true)
-            renderCase("w2", fixture.name, listOf(row.amountText, row.fiatText)) {
+            renderCase("w2", fixture.name, listOf(display.amountText)) {
                 TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {}
             }
         }
 
         val display = TokenDetailPresenter.present(row, detail = null, phoneReachable = false)
-        renderCase("w2", "detail-phone-away.json", listOf(row.amountText, row.fiatText)) {
+        renderCase("w2", "detail-phone-away.json", listOf(display.amountText)) {
             TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {}
         }
     }
@@ -202,16 +206,30 @@ class RenderAllFixturesTest {
                     useUnmergedTree = true,
                 ).fetchSemanticsNodes()
                 assertTrue("$frame rendered no semantics nodes", nodes.isNotEmpty())
-                val clipped = clippedTexts(compose)
-                assertFalse(
-                    "$frame clipped an amount: $clipped",
-                    clipped.any { text -> amounts.any(text::contains) },
-                )
                 val bitmap = captureFrame(controller.get())
                 assertEquals("$frame width", size.pixelSide(), bitmap.width)
                 assertEquals("$frame height", size.pixelSide(), bitmap.height)
                 assertTrue("$frame captured fewer than two pixel colours", hasMultipleColors(bitmap))
                 writeFrame(bitmap, frame)
+                amounts.distinct().forEach { amount ->
+                    compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(amount))
+                    compose.waitForIdle()
+                    val renderedTexts = compose.onAllNodes(
+                        SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+                        useUnmergedTree = true,
+                    ).fetchSemanticsNodes().flatMap { node ->
+                        node.config[SemanticsProperties.Text].map { it.text }
+                    }
+                    assertTrue(
+                        "$frame did not render expected amount: $amount; rendered: $renderedTexts",
+                        renderedTexts.any { text -> text.contains(amount) },
+                    )
+                    val clipped = clippedTexts(compose)
+                    assertFalse(
+                        "$frame clipped expected amount $amount: $clipped",
+                        clipped.any { text -> text.contains(amount) },
+                    )
+                }
             } catch (failure: Throwable) {
                 val framed = AssertionError(frame)
                 framed.initCause(failure)
