@@ -36,7 +36,7 @@ final class TokenDetailArtworkViewTests: XCTestCase {
         )
 
         XCTAssertFalse(view.showsImage)
-        XCTAssertEqual(view.glyphText, TokenGlyph.letter(tick: "XC"))
+        XCTAssertEqual(view.glyphText, TokenGlyph.letter(tick: display.tick))
     }
 
     func testRendersAtBothSidesForGlyphAndImage() throws {
