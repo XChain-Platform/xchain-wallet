@@ -108,6 +108,88 @@ if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
     die "refusing to run in CI. Release artifacts are signed in the maintainer ceremony (§7)."
 fi
 
+if [ "$REHEARSAL" -eq 1 ]; then
+    rehearsal_default() {
+        printf -v "$1" '%s' "$2"
+        echo "==> rehearsal default: $1=$2"
+    }
+
+    if [ -z "$TAG" ]; then
+        PACKAGE_VERSION="$(node -e '
+const fs = require("fs");
+const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+process.stdout.write(pkg.version || "");
+' "$MOBILE_DIR/package.json")"
+        [ -n "$PACKAGE_VERSION" ] && rehearsal_default TAG "v$PACKAGE_VERSION"
+    fi
+    if [ -z "$OUTPUT_DIR" ]; then
+        rehearsal_default OUTPUT_DIR \
+            "$REPO_ROOT/tmp/ceremony-rehearsal-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    fi
+
+    XCHAIN_KEY_DIR="${XCHAIN_KEY_DIR:-$HOME/.xchain-release}"
+    if [ -z "${XCHAIN_K9_KEYSTORE:-}" ] && [ -f "$XCHAIN_KEY_DIR/xchain-play-upload.p12" ]; then
+        rehearsal_default XCHAIN_K9_KEYSTORE "$XCHAIN_KEY_DIR/xchain-play-upload.p12"
+    fi
+    [ -n "${XCHAIN_K9_ALIAS:-}" ] \
+        || rehearsal_default XCHAIN_K9_ALIAS "xchain-upload"
+    if [ -z "${XCHAIN_K9_PASSFILE:-}" ] && [ -f "$XCHAIN_KEY_DIR/k9-upload.pass" ]; then
+        rehearsal_default XCHAIN_K9_PASSFILE "$XCHAIN_KEY_DIR/k9-upload.pass"
+    fi
+    if [ -z "${XCHAIN_K10_KEYSTORE:-}" ] && [ -f "$XCHAIN_KEY_DIR/xchain-direct-apk.p12" ]; then
+        rehearsal_default XCHAIN_K10_KEYSTORE "$XCHAIN_KEY_DIR/xchain-direct-apk.p12"
+    fi
+    [ -n "${XCHAIN_K10_ALIAS:-}" ] \
+        || rehearsal_default XCHAIN_K10_ALIAS "xchain-direct"
+    if [ -z "${XCHAIN_K10_PASSFILE:-}" ] && [ -f "$XCHAIN_KEY_DIR/k10-direct.pass" ]; then
+        rehearsal_default XCHAIN_K10_PASSFILE "$XCHAIN_KEY_DIR/k10-direct.pass"
+    fi
+
+    if [ -z "${BUNDLETOOL:-}" ]; then
+        BUNDLETOOL_JARS=()
+        for candidate in "$XCHAIN_KEY_DIR"/bundletool-*.jar; do
+            [ -f "$candidate" ] && BUNDLETOOL_JARS+=("$candidate")
+        done
+        if [ "${#BUNDLETOOL_JARS[@]}" -gt 1 ]; then
+            die "found ${#BUNDLETOOL_JARS[@]} bundletool-*.jar files in $XCHAIN_KEY_DIR; expected one"
+        elif [ "${#BUNDLETOOL_JARS[@]}" -eq 1 ]; then
+            rehearsal_default BUNDLETOOL "${BUNDLETOOL_JARS[0]}"
+        fi
+    fi
+
+    if [ -n "${JAVA_HOME:-}" ]; then
+        if [ -d "$JAVA_HOME/bin" ] \
+            && [ -x "$JAVA_HOME/bin/java" ] \
+            && [ -x "$JAVA_HOME/bin/jarsigner" ]; then
+            PATH="$JAVA_HOME/bin:$PATH"
+            echo "==> rehearsal default: PATH=$JAVA_HOME/bin"
+        fi
+    elif [ -d /opt/homebrew/opt/openjdk@21/bin ] \
+        && [ -x /opt/homebrew/opt/openjdk@21/bin/java ] \
+        && [ -x /opt/homebrew/opt/openjdk@21/bin/jarsigner ]; then
+        PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
+        echo "==> rehearsal default: PATH=/opt/homebrew/opt/openjdk@21/bin"
+    fi
+
+    ANDROID_BUILD_TOOLS_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}}/build-tools"
+    if [ -d "$ANDROID_BUILD_TOOLS_ROOT" ]; then
+        ANDROID_BUILD_TOOLS_VERSION="$(node -e '
+const fs = require("fs");
+const root = process.argv[1];
+const versions = fs.readdirSync(root).filter((name) => fs.statSync(`${root}/${name}`).isDirectory());
+versions.sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+process.stdout.write(versions.at(-1) || "");
+' "$ANDROID_BUILD_TOOLS_ROOT")"
+        ANDROID_BUILD_TOOLS="$ANDROID_BUILD_TOOLS_ROOT/$ANDROID_BUILD_TOOLS_VERSION"
+        if [ -n "$ANDROID_BUILD_TOOLS_VERSION" ] \
+            && [ -d "$ANDROID_BUILD_TOOLS" ] \
+            && [ -x "$ANDROID_BUILD_TOOLS/apksigner" ]; then
+            PATH="$ANDROID_BUILD_TOOLS:$PATH"
+            echo "==> rehearsal default: PATH=$ANDROID_BUILD_TOOLS"
+        fi
+    fi
+fi
+
 [ -n "$TAG" ] || die "--tag vX.Y.Z is required"
 [ -n "$OUTPUT_DIR" ] || die "--output <dir> is required"
 
