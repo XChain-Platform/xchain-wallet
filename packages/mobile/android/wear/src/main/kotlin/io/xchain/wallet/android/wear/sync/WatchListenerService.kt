@@ -32,6 +32,14 @@ class WatchListenerService : WearableListenerService() {
         Unit
     }
 
+    internal var stateItems: (DataEventBuffer) -> Iterable<StateItem> = { events ->
+        events.filter { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path == WatchPaths.STATE }
+            .map {
+                val map = DataMapItem.fromDataItem(it.dataItem).dataMap
+                StateItem(map.getBoolean("enabled"), map.getLong("builtAt"))
+            }
+    }
+
     override fun onMessageReceived(event: MessageEvent) = receive(event.path, event.data)
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
@@ -41,13 +49,7 @@ class WatchListenerService : WearableListenerService() {
     }
 
     override fun onDataChanged(events: DataEventBuffer) {
-        onStateItems(
-            events.filter { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path == WatchPaths.STATE }
-                .map {
-                    val map = DataMapItem.fromDataItem(it.dataItem).dataMap
-                    StateItem(map.getBoolean("enabled"), map.getLong("builtAt"))
-                },
-        )
+        onStateItems(stateItems(events))
     }
 
     internal fun onStateItems(items: Iterable<StateItem>) =

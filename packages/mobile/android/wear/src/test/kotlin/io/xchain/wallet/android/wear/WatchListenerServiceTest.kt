@@ -5,6 +5,7 @@ package io.xchain.wallet.android.wear
 
 import android.os.Parcel
 import com.google.android.gms.wearable.ChannelClient
+import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.MessageEvent
 import io.xchain.wallet.android.wear.data.SnapshotStore
 import io.xchain.wallet.android.wear.sync.WatchListenerService
@@ -54,11 +55,11 @@ class WatchListenerServiceTest {
         service.onMessageReceived(message("/xc/snapshot", fixture("snapshot-empty.json")))
         val builtAt = checkNotNull(SnapshotStore(service).latest)["builtAt"]!!.toString().toLong()
 
-        service.onStateItems(listOf(WatchListenerService.StateItem(false, builtAt - 1)))
+        stateChanged(WatchListenerService.StateItem(false, builtAt - 1))
         assertNotNull(SnapshotStore(service).latest)
         assertEquals(1, refreshes)
 
-        service.onStateItems(listOf(WatchListenerService.StateItem(false, builtAt)))
+        stateChanged(WatchListenerService.StateItem(false, builtAt))
         assertNull(SnapshotStore(service).latest)
         assertEquals(2, refreshes)
     }
@@ -108,11 +109,23 @@ class WatchListenerServiceTest {
         service.onMessageReceived(message("/ignored", byteArrayOf(1)))
         service.onMessageReceived(message("/xc/state", byteArrayOf(2)))
         service.onChannelOpened(channel("/xc/image/not-a-hash"))
-        service.onStateItems(listOf(WatchListenerService.StateItem(true, Long.MAX_VALUE)))
+        stateChanged()
 
         assertEquals(0, refreshes)
         assertNull(SnapshotStore(service).latest)
         assertFalse(service.filesDir.resolve("watch/images/not-a-hash").exists())
+    }
+
+    private fun stateChanged(vararg items: WatchListenerService.StateItem) {
+        service.stateItems = { items.asIterable() }
+        service.onDataChanged(emptyEvents())
+    }
+
+    private fun emptyEvents(): DataEventBuffer {
+        val unsafeClass = Class.forName("sun.misc.Unsafe")
+        val field = unsafeClass.getDeclaredField("theUnsafe").also { it.isAccessible = true }
+        return unsafeClass.getMethod("allocateInstance", Class::class.java)
+            .invoke(field.get(null), DataEventBuffer::class.java) as DataEventBuffer
     }
 
     private fun message(eventPath: String, payload: ByteArray): MessageEvent = object : MessageEvent {
