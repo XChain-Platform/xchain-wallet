@@ -44,7 +44,13 @@ final class ActivityCheckBudgetTests: XCTestCase {
         })
         let probe = ActivityCheckProbe()
 
-        let reads = await ActivityCheckBudget.run(Array(addresses), lastCheckedAt: timestamps) { address in
+        let reads = await ActivityCheckBudget.run(
+            Array(addresses),
+            lastCheckedAt: timestamps,
+            parallel: 1,
+            requestTimeoutNanoseconds: 1_000_000_000,
+            runBudgetNanoseconds: 2_000_000_000
+        ) { address in
             await probe.started(address)
             await probe.finished()
             return [address, "pending"]
@@ -52,7 +58,7 @@ final class ActivityCheckBudgetTests: XCTestCase {
         let (_, called) = await probe.snapshot()
 
         XCTAssertEqual(reads.count, 20)
-        XCTAssertEqual(Set(called), Set((0..<20).map { "address-\($0)" }))
+        XCTAssertEqual(called, (0..<20).map { "address-\($0)" })
     }
 
     func testRunsFourReadsAtOnce() async {
