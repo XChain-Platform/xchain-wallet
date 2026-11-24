@@ -9,7 +9,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
 import io.xchain.wallet.android.wear.data.Detail
 import io.xchain.wallet.android.wear.data.Snapshot
@@ -94,9 +98,19 @@ class FontScaleRenderTest {
                     phoneReachable = true,
                 )
                 val fixture = "${snapshotFixture.removeSuffix(".json")}-${detailFixture}"
-                renderCase("w2", fixture, listOf(row.amountText, row.fiatText)) {
-                    TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {}
-                }
+                renderCase(
+                    "w2",
+                    fixture,
+                    listOf(row.amountText, row.fiatText),
+                    prepareAmount = { amount ->
+                        if (amount == row.fiatText) {
+                            scrollToAmount(row.amountText)
+                            val node = compose.onNodeWithText(row.amountText).fetchSemanticsNode()
+                            checkNotNull(node.config[SemanticsActions.OnClick].action).invoke()
+                        }
+                        scrollToAmount(amount)
+                    },
+                ) { TokenDetailScreen(display, null, "Open on phone", noticeText(display.notice)) {} }
             }
         }
     }
@@ -105,6 +119,7 @@ class FontScaleRenderTest {
         screen: String,
         fixture: String,
         amounts: List<String>,
+        prepareAmount: (String) -> Unit = ::scrollToAmount,
         content: @Composable () -> Unit,
     ) {
         WearRenderFrames.Size.entries.forEach { size ->
@@ -123,12 +138,7 @@ class FontScaleRenderTest {
                     useUnmergedTree = true,
                 ).fetchSemanticsNodes()
                 assertTrue("$frame at fontScale $FONT_SCALE rendered no semantics nodes", nodes.isNotEmpty())
-                val clipped = clippedTexts(compose)
-                assertFalse(
-                    "$frame at fontScale $FONT_SCALE clipped an amount: $clipped",
-                    clipped.any { text -> amounts.any(text::contains) },
-                )
-                assertAmountFontScale(frame, amounts)
+                assertAmountFontScale(frame, amounts, prepareAmount)
             } catch (failure: Throwable) {
                 val framed = AssertionError("$frame at fontScale $FONT_SCALE")
                 framed.initCause(failure)
@@ -139,28 +149,52 @@ class FontScaleRenderTest {
         }
     }
 
-    private fun assertAmountFontScale(frame: String, amounts: List<String>) {
-        compose.onAllNodes(
-            SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult),
-            useUnmergedTree = true,
-        ).fetchSemanticsNodes().forEach { node ->
-            val text = node.config[SemanticsProperties.Text].joinToString("") { it.text }
-            if (amounts.none(text::contains)) return@forEach
-            val results = mutableListOf<TextLayoutResult>()
-            node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-            assertTrue(
-                "$frame at fontScale $FONT_SCALE had no layout result for amount $text",
-                results.isNotEmpty(),
+    private fun assertAmountFontScale(
+        frame: String,
+        amounts: List<String>,
+        prepareAmount: (String) -> Unit,
+    ) {
+        amounts.forEach { amount ->
+            prepareAmount(amount)
+            compose.waitForIdle()
+            val clipped = clippedTexts(compose)
+            assertFalse(
+                "$frame at fontScale $FONT_SCALE clipped an amount while showing $amount: $clipped",
+                clipped.any { text -> amounts.any(text::contains) },
             )
-            results.forEach { result ->
-                assertEquals(
-                    "$frame amount $text did not use fontScale $FONT_SCALE",
-                    FONT_SCALE,
-                    result.layoutInput.density.fontScale,
-                    0f,
+            val nodes = compose.onAllNodes(
+                SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes()
+            val matches = nodes.mapNotNull { node ->
+                val text = node.config[SemanticsProperties.Text].joinToString("") { it.text }
+                node.takeIf { text.contains(amount) }?.let { it to text }
+            }
+            assertTrue(
+                "$frame at fontScale $FONT_SCALE had no text-layout node for amount $amount",
+                matches.isNotEmpty(),
+            )
+            matches.forEach { (node, text) ->
+                val results = mutableListOf<TextLayoutResult>()
+                node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+                assertTrue(
+                    "$frame at fontScale $FONT_SCALE had no layout result for amount $amount in $text",
+                    results.isNotEmpty(),
                 )
+                results.forEach { result ->
+                    assertEquals(
+                        "$frame amount $amount in $text did not use fontScale $FONT_SCALE",
+                        FONT_SCALE,
+                        result.layoutInput.density.fontScale,
+                        0f,
+                    )
+                }
             }
         }
+    }
+
+    private fun scrollToAmount(amount: String) {
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(amount))
     }
 
     private inline fun <reified T> decode(name: String): T =
