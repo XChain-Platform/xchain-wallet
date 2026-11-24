@@ -34,12 +34,15 @@ done
 [ -n "$udid" ] && [ -n "$since" ] || usage
 
 mkdir -p "$logs"
-log_file="$(mktemp "$logs/log.XXXXXX.ndjson")"
+log_file="$(mktemp "$logs/log.XXXXXX")"
+mv "$log_file" "$log_file.ndjson"
+log_file="$log_file.ndjson"
 if ! xcrun simctl spawn "$udid" log show --style ndjson --start "$since" \
     --predicate 'subsystem == "io.xchain.wallet.ios.watch"' > "$log_file"; then
     echo "watch-log-check: log show failed" >&2
     exit 1
 fi
+echo "watch-log-check: captured $(awk 'END { print NR }' "$log_file") entries" >&2
 
 status=0
 node packages/mobile/scripts/sim-log.js find \
