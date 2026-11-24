@@ -41,6 +41,7 @@
 		XC1000B00000000000000010 /* CallbackHostAnswer.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000010 /* CallbackHostAnswer.swift */; };
 		XC1000B00000000000000011 /* CallbackPostPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000011 /* CallbackPostPlan.swift */; };
 		XC1000B00000000000000013 /* CallbackPostExchange.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000013 /* CallbackPostExchange.swift */; };
+		XC1000B00000000000000014 /* CallbackPostCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000014 /* CallbackPostCall.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
 		XC1037B00000000000000001 /* DisabledCapacitorPlugins.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */; };
 		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
@@ -162,6 +163,7 @@
 		XC1000A00000000000000010 /* CallbackHostAnswer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackHostAnswer.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000011 /* CallbackPostPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostPlan.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000013 /* CallbackPostExchange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostExchange.swift; sourceTree = "<group>"; };
+		XC1000A00000000000000014 /* CallbackPostCall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/CallbackPostCall.swift; sourceTree = "<group>"; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
 		XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisabledCapacitorPlugins.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000001 /* VaultArgon2id.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultArgon2id.swift; sourceTree = "<group>"; };
@@ -376,6 +378,7 @@
 				XC1000A00000000000000010 /* CallbackHostAnswer.swift */,
 				XC1000A00000000000000011 /* CallbackPostPlan.swift */,
 				XC1000A00000000000000013 /* CallbackPostExchange.swift */,
+				XC1000A00000000000000014 /* CallbackPostCall.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -741,6 +744,7 @@
 				XC1000B00000000000000010 /* CallbackHostAnswer.swift in Sources */,
 				XC1000B00000000000000011 /* CallbackPostPlan.swift in Sources */,
 				XC1000B00000000000000013 /* CallbackPostExchange.swift in Sources */,
+				XC1000B00000000000000014 /* CallbackPostCall.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
