@@ -835,6 +835,7 @@
     "fiat": {
       "header": null,
       "lines": [],
+      "a11y": [],
       "banners": [
         "state.watchDisabled"
       ],
@@ -843,6 +844,7 @@
     "units": {
       "header": null,
       "lines": [],
+      "a11y": [],
       "banners": [
         "state.watchDisabled"
       ],

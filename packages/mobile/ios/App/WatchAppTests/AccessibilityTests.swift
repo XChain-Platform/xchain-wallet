@@ -14,7 +14,7 @@ final class AccessibilityTests: XCTestCase {
     }
 
     private struct ExpectedMode: Decodable {
-        let a11y: [String]?
+        let a11y: [String]
     }
 
     private struct ExpectedFixture: Decodable {
@@ -51,7 +51,7 @@ final class AccessibilityTests: XCTestCase {
                 )
                 XCTAssertEqual(
                     display.lines.indices.map(screen.rowLabel),
-                    expectedMode.a11y ?? [],
+                    expectedMode.a11y,
                     "\(fixture) \(modeName)"
                 )
             }
