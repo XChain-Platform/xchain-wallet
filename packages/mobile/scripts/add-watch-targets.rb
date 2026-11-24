@@ -104,6 +104,7 @@ apply_settings(watch_app, {
   'INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp' => 'NO',
   'INFOPLIST_KEY_WKWatchOnly' => 'NO',
   'CODE_SIGN_ENTITLEMENTS' => 'WatchApp/WatchApp.entitlements',
+  'CODE_SIGN_STYLE' => 'Automatic',
   'PRODUCT_BUNDLE_IDENTIFIER' => 'io.xchain.wallet.ios.watch',
   'PRODUCT_NAME' => '$(TARGET_NAME)',
   'SDKROOT' => 'watchos',
@@ -118,6 +119,7 @@ watch_widgets = target_named(project, 'WatchWidgets', :app_extension)
 apply_settings(watch_widgets, {
   'APPLICATION_EXTENSION_API_ONLY' => 'YES',
   'CODE_SIGN_ENTITLEMENTS' => 'WatchWidgets/WatchWidgets.entitlements',
+  'CODE_SIGN_STYLE' => 'Automatic',
   'GENERATE_INFOPLIST_FILE' => 'NO',
   'INFOPLIST_FILE' => '$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist',
   'PRODUCT_BUNDLE_IDENTIFIER' => 'io.xchain.wallet.ios.watch.widgets',

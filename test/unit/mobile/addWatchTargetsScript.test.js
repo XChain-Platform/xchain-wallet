@@ -42,6 +42,7 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb', () => {
         expect(app.productType).toBe('com.apple.product-type.application');
         expectSettings(app, {
             CODE_SIGN_ENTITLEMENTS: 'WatchApp/WatchApp.entitlements',
+            CODE_SIGN_STYLE: 'Automatic',
             GENERATE_INFOPLIST_FILE: 'YES',
             INFOPLIST_KEY_CFBundleDisplayName: 'XChain',
             INFOPLIST_KEY_WKApplication: 'YES',
@@ -65,6 +66,7 @@ describe.skipIf(process.platform !== 'darwin')('add-watch-targets.rb', () => {
         expectSettings(widgets, {
             APPLICATION_EXTENSION_API_ONLY: 'YES',
             CODE_SIGN_ENTITLEMENTS: 'WatchWidgets/WatchWidgets.entitlements',
+            CODE_SIGN_STYLE: 'Automatic',
             GENERATE_INFOPLIST_FILE: 'NO',
             INFOPLIST_FILE: '$(DERIVED_FILE_DIR)/WatchWidgets-Info.plist',
             PRODUCT_BUNDLE_IDENTIFIER: 'io.xchain.wallet.ios.watch.widgets',
