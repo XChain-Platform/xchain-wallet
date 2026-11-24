@@ -75,6 +75,7 @@ internal fun BalancesScreen(
         val secondaryKey = line.secondary?.key
         if (secondaryKey != null) resolvedLabelText[secondaryKey] = text(secondaryKey)
     }
+    display.requestKey?.let { resolvedLabelText[it] = text(it) }
     val labels = AccessibilityLabels.balanceLines(display, resolvedLabelText::getValue)
     ScreenScaffold(scrollState = state) { padding ->
         TransformingLazyColumn(
@@ -98,7 +99,17 @@ internal fun BalancesScreen(
             }
             onRequest?.let { open ->
                 display.requestKey?.let { key ->
-                    item { Text(text(key), Modifier.clickable(onClick = open)) }
+                    val label = AccessibilityLabels.requestPinned(key) {
+                        resolvedLabelText.getValue(it)
+                    }
+                    item {
+                        Text(
+                            text(key),
+                            Modifier.clickable(onClick = open).semantics {
+                                contentDescription = label
+                            },
+                        )
+                    }
                 }
             }
             items(display.banners) { Text(text(it)) }
