@@ -23,9 +23,16 @@ final class RealOnboardingUITests: XCTestCase {
             )
         }
 
-        XCTAssertFalse(app.buttons["Create new wallet"].exists)
+        XCTAssertFalse(button(app, named: "Create new wallet").exists)
         XCTAssertTrue(
-            app.buttons["Home"].isHittable || app.buttons["Balances"].isHittable
+            button(app, named: "Home").isHittable
+                || button(app, named: "Balances").isHittable
         )
+    }
+
+    private func button(_ app: XCUIApplication, named label: String) -> XCUIElement {
+        app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", label)
+        ).firstMatch
     }
 }
