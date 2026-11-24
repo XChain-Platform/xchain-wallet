@@ -91,6 +91,8 @@ class MainViewController: CAPBridgeViewController {
         // defence demos as broken.
         bridge?.registerPluginInstance(XChainLinksPlugin())
         bridge?.registerPluginInstance(XChainSplashPlugin())
+        bridge?.registerPluginInstance(XChainWatchPlugin())
+        bridge?.registerPluginInstance(XChainNotifyPlugin())
         // Without this, getPlugin('XChainActivity') in packages/core/src/notifications/activityCheckConfig.js finds nothing and the setting is silently never stored.
         bridge?.registerPluginInstance(XChainActivityPlugin())
 
