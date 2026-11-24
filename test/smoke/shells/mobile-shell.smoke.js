@@ -470,13 +470,50 @@ function assertRelativeOrder(source, first, second, firstShouldPrecede, message)
         : firstPosition > secondPosition, message);
 }
 
-assert.match(mainActivity, /registerPlugin\(XChainVaultPlugin\.class\)/);
-assertRelativeOrder(
+for (const plugin of [
+    'XChainVaultPlugin',
+    'XChainLinksPlugin',
+    'XChainSplashPlugin',
+    'XChainAppPlugin',
+    'XChainClipboardPlugin',
+    'XChainWatchPlugin',
+    'XChainNotifyPlugin',
+    'XChainActivityPlugin',
+]) {
+    const registration = `registerPlugin(${plugin}.class)`;
+    assert.ok(mainActivity.includes(registration), `${plugin} is registered`);
+    assertRelativeOrder(
+        mainActivity,
+        registration,
+        'super.onCreate(',
+        true,
+        `${plugin} is registered before super.onCreate builds the bridge`,
+    );
+}
+assert.match(
     mainActivity,
-    'registerPlugin(XChainVaultPlugin.class)',
-    'super.onCreate(',
-    true,
-    'the plugin is registered BEFORE super.onCreate builds the bridge',
+    new RegExp([
+        'enqueueUniquePeriodicWork\\(\\s*"xc_activity_check",',
+        '\\s*ExistingPeriodicWorkPolicy\\.KEEP,',
+        '\\s*BackgroundActivityWorker\\.periodicRequest\\(\\)\\s*\\)',
+    ].join('')),
+    'the background activity check is enqueued once by name without resetting its interval',
+);
+
+const watchPlugin = readFileSync(join(
+    android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android',
+    'watch', 'XChainWatchPlugin.java',
+), 'utf8');
+assert.match(watchPlugin, /reply\.put\("available", available\)/);
+assert.match(
+    watchPlugin,
+    new RegExp([
+        'isGooglePlayServicesAvailable\\(context\\) == ConnectionResult\\.SUCCESS',
+        'startsMessageRouter\\(',
+        'playServicesReady\\)',
+        'router\\.start\\(\\)',
+    ].join('[\\s\\S]*?')),
+    'the message router starts only for an available watch bridge with Play Services ready',
 );
 
 // SSC-1: the plugins Capacitor registers FOR us, which the rule about
@@ -816,15 +853,6 @@ assert.match(
     'an Intent is extracted once: Capacitor hands the launch intent to both load()'
     + ' and handleOnNewIntent, and getIntent() keeps returning it afterwards',
 );
-assert.match(mainActivity, /registerPlugin\(XChainLinksPlugin\.class\)/);
-assertRelativeOrder(
-    mainActivity,
-    'registerPlugin(XChainLinksPlugin.class)',
-    'super.onCreate(',
-    true,
-    'the links plugin is registered before the bridge is built, like the vault',
-);
-
 // The web half must agree with the native half on the plugin name and must
 // still refuse the lookalike hosts.
 const deepLinkJs = readFileSync(

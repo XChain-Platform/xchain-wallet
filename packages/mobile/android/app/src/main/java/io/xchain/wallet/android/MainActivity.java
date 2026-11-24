@@ -7,16 +7,22 @@ import android.webkit.WebView;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.splashscreen.SplashScreen;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.WorkManager;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
+import io.xchain.wallet.android.activity.BackgroundActivityWorker;
+import io.xchain.wallet.android.activity.XChainActivityPlugin;
 import io.xchain.wallet.android.app.XChainAppPlugin;
 import io.xchain.wallet.android.clipboard.XChainClipboardPlugin;
 import io.xchain.wallet.android.links.XChainLinksPlugin;
+import io.xchain.wallet.android.notify.XChainNotifyPlugin;
 import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
 import io.xchain.wallet.android.splash.XChainSplashPlugin;
 import io.xchain.wallet.android.vault.XChainVaultPlugin;
+import io.xchain.wallet.android.watch.XChainWatchPlugin;
 
 /**
  * The app's single exported component: launcher now, deep-link target from
@@ -40,6 +46,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(XChainLinksPlugin.class);
         registerPlugin(XChainSplashPlugin.class);
         registerPlugin(XChainAppPlugin.class);
+        registerPlugin(XChainWatchPlugin.class);
+        registerPlugin(XChainNotifyPlugin.class);
+        registerPlugin(XChainActivityPlugin.class);
         // SSC-4: without this the SPA finds no clipboard plugin and
         // refuses sensitive copies, rather than writing a seed phrase to an
         // unmarked clip any foreground app can read.
@@ -47,6 +56,10 @@ public class MainActivity extends BridgeActivity {
         // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
         // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "xc_activity_check",
+                ExistingPeriodicWorkPolicy.KEEP,
+                BackgroundActivityWorker.periodicRequest());
         configureWebViewLayout();
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
