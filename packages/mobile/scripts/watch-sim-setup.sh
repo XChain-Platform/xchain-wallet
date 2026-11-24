@@ -221,7 +221,8 @@ check_duo() {
 }
 
 boot_wear() {
-    local size="$1" avd port serial pid_file deadline state boot adb="$sdk/platform-tools/adb"
+    local size="$1" avd port serial pid_file deadline state boot
+    local adb="$sdk/platform-tools/adb" timeout="${WATCH_SIM_BOOT_TIMEOUT_SECONDS:-180}"
     case "$size" in
         small) avd=xc-wear-small-round; port=5572 ;;
         large) avd=xc-wear-large-round; port=5570 ;;
@@ -234,7 +235,7 @@ boot_wear() {
     "$emulator" -avd "$avd" -no-window -no-audio -no-snapshot -port "$port" >"$pid_dir/$size.log" 2>&1 &
     printf '%s\n' "$!" > "$pid_file"
     serial="emulator-$port"
-    deadline=$((SECONDS + 180))
+    deadline=$((SECONDS + timeout))
     while (( SECONDS < deadline )); do
         state="$("$adb" -s "$serial" get-state 2>/dev/null || true)"
         boot=
@@ -244,7 +245,7 @@ boot_wear() {
         [ "$boot" = 1 ] && { printf '%s\n' "$serial"; return; }
         sleep 1
     done
-    echo "android: $serial did not reach device and complete boot within 180 seconds" >&2
+    echo "android: $serial did not reach device and complete boot within $timeout seconds" >&2
     return 1
 }
 
