@@ -23,6 +23,7 @@
 // offending node instead of just its screen.
 
 import { kdfStepTimeout } from '../timeout-budget.js';
+import { loadDuoViewports } from './duoMeasured.js';
 
 /**
  * Representative widths the wallet must render at, narrowest first.
@@ -66,6 +67,15 @@ export const LG_K51 = {
     userAgent: 'Mozilla/5.0 (Linux; Android 10; LM-K500) AppleWebKit/537.36 '
         + '(KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36',
 };
+
+/**
+ * Viewports for every Duo state the measurement reached (outer portrait and
+ * landscape, Book, rotated), read from measured-widths.json. States the
+ * simulator could not reach are absent rather than guessed.
+ */
+export function duoWidths() {
+    return loadDuoViewports().map(({ name, state, width, height }) => ({ name, state, width, height }));
+}
 
 export const WALK_VIEWPORTS = VIEWPORTS.filter(
     (vp) => vp.name === 'popup 360' || vp.name === 'tablet 768' || vp.name === 'desktop 1280',

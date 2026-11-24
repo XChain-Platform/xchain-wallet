@@ -27,9 +27,9 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet, overflowingElements } from '../../fixtures/responsive.js';
+import { duoWidths, enterDemoWallet, overflowingElements } from '../../fixtures/responsive.js';
 
-const VIEWPORTS = [
+const BASE_VIEWPORTS = [
     { width: 320, height: 640 },
     { width: 375, height: 667 },
     { width: 600, height: 900 },
@@ -42,6 +42,12 @@ const VIEWPORTS = [
     { width: 1280, height: 720 },
     { width: 1920, height: 1080 },
 ];
+
+// Duo widths join the sweep unless a base width already covers the size.
+const DUO = duoWidths().filter(
+    (d) => !BASE_VIEWPORTS.some((b) => b.width === d.width && b.height === d.height),
+);
+const VIEWPORTS = [...BASE_VIEWPORTS, ...DUO.map(({ width, height }) => ({ width, height }))];
 
 // Navigation labels as the sidebar and wallet menu show them, with the route id
 // the registry lists them under. gotoSection opens each one as a history root.
@@ -338,5 +344,13 @@ test('the app header keeps only its logo and controls in one row at every width'
         expect.soft(result.controlsWithin, at('buttons stay inside the header')).toBe(true);
         expect.soft(new Set(result.controlTops).size, at('buttons share a row')).toBe(1);
         expect.soft(result.docOverflow, at('page does not scroll sideways')).toBeLessThanOrEqual(0);
+    }
+});
+
+test("the measured Duo widths are part of the sweep", () => {
+    const all = duoWidths();
+    expect(all.length, "at least one reachable Duo state").toBeGreaterThan(0);
+    for (const d of all) {
+        expect(VIEWPORTS.some((v) => v.width === d.width && v.height === d.height), d.name).toBe(true);
     }
 });
