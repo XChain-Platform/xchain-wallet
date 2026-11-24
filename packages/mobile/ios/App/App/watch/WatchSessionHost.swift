@@ -33,6 +33,15 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
     var supported: Bool { session != nil }
     var activationState: WCSessionActivationState { session?.activationState ?? .notActivated }
 
+    static func activateAtLaunch() {
+        _ = shared
+    }
+
+    @discardableResult
+    static func activateAtLaunch(session: PhoneWatchSession) -> WatchSessionHost {
+        WatchSessionHost(session: session)
+    }
+
     init(session: PhoneWatchSession?) {
         self.session = session
         self.state = Self.readState(from: session)
@@ -73,19 +82,5 @@ final class WatchSessionHost: NSObject, WCSessionDelegate {
             installed: session?.isWatchAppInstalled == true,
             reachable: session?.isReachable == true
         )
-    }
-}
-
-extension AppDelegate {
-    func application(
-        _ application: UIApplication,
-        willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        activateWatchSessionAtLaunch()
-        return true
-    }
-
-    @objc func activateWatchSessionAtLaunch() {
-        _ = WatchSessionHost.shared
     }
 }
