@@ -7,7 +7,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { contractParityFailures } from '../../../tools/watch/contract-fields.mjs';
+import {
+    contractParityFailures,
+    kotlinSerialFields,
+    swiftCodableFields,
+} from '../../../tools/watch/contract-fields.mjs';
 import {
     CONTRACT_MODEL_FILES,
     contractPairs,
@@ -20,18 +24,31 @@ const readRepoFile = (path) => readFileSync(join(root, path), 'utf8');
 const readSchema = (name) => JSON.parse(readRepoFile(
     join('packages/core/src/watch/contract', name),
 ));
-const modelSource = (platform) => CONTRACT_MODEL_FILES[platform]
-    .map(readRepoFile)
-    .join('\n');
+const modelSources = Object.fromEntries(Object.entries(CONTRACT_MODEL_FILES).map(
+    ([platform, files]) => [platform, files.map(readRepoFile).join('\n')],
+));
 
 const pairs = contractPairs(readSchema);
 const failures = contractParityFailures({
     pairs,
-    swiftSource: modelSource('swift'),
-    kotlinSource: modelSource('kotlin'),
+    swiftSource: modelSources.swift,
+    kotlinSource: modelSources.kotlin,
 });
 
 assert.deepEqual(failures, [], `watch contract parity failures:\n${failures.join('\n')}`);
+
+const contractTypes = pairs.map(({ type }) => type).sort();
+const nativeTypes = {
+    swift: Object.keys(swiftCodableFields(modelSources.swift)).sort(),
+    kotlin: Object.keys(kotlinSerialFields(modelSources.kotlin)).sort(),
+};
+for (const [platform, types] of Object.entries(nativeTypes)) {
+    assert.deepEqual(
+        types,
+        contractTypes,
+        `${platform} watch models must contain exactly the schema model types`,
+    );
+}
 
 const strings = spawnSync(
     process.execPath,
@@ -74,14 +91,24 @@ assert.deepEqual(
     `watch fixture reach failures:\n${fixtureFailures.join('\n')}`,
 );
 
-const expected = {
-    balances: JSON.parse(readRepoFile('test/fixtures/watch/expected/balances.json')),
-    request: JSON.parse(readRepoFile('test/fixtures/watch/expected/request.json')),
-};
+const expectedPrefixes = { balances: 'snapshot-', request: 'request-' };
+const expectedDirectory = join(fixtureDirectory, 'expected');
+const expectedFiles = readdirSync(expectedDirectory, { recursive: true })
+    .filter((path) => extname(path) === '.json')
+    .sort();
+assert.deepEqual(
+    expectedFiles,
+    Object.keys(expectedPrefixes).map((name) => `${name}.json`).sort(),
+    'every expected fixture file must have an audited fixture prefix',
+);
+const expected = Object.fromEntries(expectedFiles.map((path) => [
+    path.slice(0, -extname(path).length),
+    JSON.parse(readFileSync(join(expectedDirectory, path), 'utf8')),
+]));
 const expectedFailures = expectedEntryFailures({
     fixtures,
     expected,
-    prefixes: { balances: 'snapshot-', request: 'request-' },
+    prefixes: expectedPrefixes,
 });
 
 assert.deepEqual(
