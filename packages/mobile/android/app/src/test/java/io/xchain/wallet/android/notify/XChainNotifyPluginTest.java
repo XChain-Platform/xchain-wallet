@@ -153,7 +153,7 @@ public class XChainNotifyPluginTest {
     }
 
     @Test
-    public void schedulesThroughScheduledNotify() throws Exception {
+    public void productionScheduleRunsScheduledNotifyWorker() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         WorkManager workManager = initializeWorkManager(context);
         XChainNotifyPlugin.createChannels(context);
@@ -185,7 +185,7 @@ public class XChainNotifyPluginTest {
     }
 
     @Test
-    public void cancelRemovesPostedNotificationAndScheduledWork() throws Exception {
+    public void productionCancelRemovesPostedNotificationAndScheduledWork() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         WorkManager workManager = initializeWorkManager(context);
         TestPlugin plugin = new TestPlugin(context);
@@ -193,8 +193,11 @@ public class XChainNotifyPluginTest {
                 "deadline-5", "Payment due", null, "deadlines",
                 "alert", null, false, 0L);
         XChainNotifyPlugin.post(context, spec);
-        plugin.schedule(new TestCall("schedule", notificationData("deadline-5")
-                .put("at", System.currentTimeMillis() + 60_000L)));
+        TestCall schedule = new TestCall("schedule", notificationData("deadline-5")
+                .put("at", System.currentTimeMillis() + 60_000L));
+        plugin.schedule(schedule);
+        assertNull(schedule.rejection);
+        assertTrue(schedule.result.optBoolean("scheduled"));
         WorkInfo scheduled = onlyWork(workManager, "deadline-5");
         ShadowNotificationManager manager = shadowOf(
                 context.getSystemService(NotificationManager.class));
@@ -203,6 +206,7 @@ public class XChainNotifyPluginTest {
 
         plugin.cancel(call);
 
+        assertNull(call.rejection);
         assertNull(manager.getNotification("deadline-5".hashCode()));
         assertEquals(WorkInfo.State.CANCELLED,
                 workManager.getWorkInfoById(scheduled.getId()).get().getState());
@@ -210,7 +214,7 @@ public class XChainNotifyPluginTest {
     }
 
     @Test
-    public void cancelAllRemovesEveryNotificationAndScheduledWork() throws Exception {
+    public void productionCancelAllRemovesEveryNotificationAndScheduledWork() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         WorkManager workManager = initializeWorkManager(context);
         TestPlugin plugin = new TestPlugin(context);
@@ -219,8 +223,16 @@ public class XChainNotifyPluginTest {
         XChainNotifyPlugin.post(context, new XChainNotifyPlugin.NotificationSpec(
                 "alert-7", "Second", null, "priceAlerts", "alert", null, false, 0L));
         long later = System.currentTimeMillis() + 60_000L;
-        plugin.schedule(new TestCall("schedule", notificationData("alert-6").put("at", later)));
-        plugin.schedule(new TestCall("schedule", notificationData("alert-7").put("at", later)));
+        TestCall firstSchedule = new TestCall(
+                "schedule", notificationData("alert-6").put("at", later));
+        TestCall secondSchedule = new TestCall(
+                "schedule", notificationData("alert-7").put("at", later));
+        plugin.schedule(firstSchedule);
+        plugin.schedule(secondSchedule);
+        assertNull(firstSchedule.rejection);
+        assertNull(secondSchedule.rejection);
+        assertTrue(firstSchedule.result.optBoolean("scheduled"));
+        assertTrue(secondSchedule.result.optBoolean("scheduled"));
         WorkInfo first = onlyWork(workManager, "alert-6");
         WorkInfo second = onlyWork(workManager, "alert-7");
         ShadowNotificationManager manager = shadowOf(
@@ -238,7 +250,7 @@ public class XChainNotifyPluginTest {
     }
 
     @Test
-    public void buildsRealNotifyActionsPendingIntent() throws Exception {
+    public void productionPostBuildsRealNotifyActionsPendingIntent() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         File config = new File(context.getFilesDir(), "activity-check.json");
         Files.write(config.toPath(),
@@ -261,6 +273,7 @@ public class XChainNotifyPluginTest {
             assertNotNull(notification);
             assertEquals(1, notification.actions.length);
             assertEquals("Open on phone", notification.actions[0].title);
+            assertEquals(notification.actions[0].actionIntent, notification.contentIntent);
             ShadowPendingIntent pending = shadowOf(notification.actions[0].actionIntent);
             assertTrue(pending.isActivity());
             assertTrue(pending.isImmutable());
