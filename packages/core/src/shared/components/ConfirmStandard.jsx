@@ -270,9 +270,12 @@ export function ConfirmWarningSlot({ warning }) {
  *   rejectDisabled?: boolean,     both exits lock while a signature is in flight
  *   approveLoading?: boolean,
  *   approveLabel?: string,
+ *   approveSettled?: boolean,
  * }} props
  */
-export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel }) {
+export function ConfirmButtons({
+    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel, approveSettled,
+}) {
     const approve = approveLabel || t('extension.connect.approve');
     return (
         <div className={styles.buttons} data-testid="confirm-buttons">
@@ -293,6 +296,7 @@ export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, ap
                 onClick={onApprove}
                 loading={approveLoading}
                 data-testid="confirm-approve"
+                data-settled={approveSettled}
                 aria-label={approve}
             >
                 {approve}
@@ -309,7 +313,7 @@ export function ConfirmButtons({ onReject, onApprove, rejectDisabled = false, ap
  * window's footer included, since that one holds ConfirmButtons too.
  */
 export function ConfirmDecisionFooter({
-    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel,
+    onReject, onApprove, rejectDisabled = false, approveLoading = false, approveLabel, approveSettled,
 }) {
     return (
         <div className={styles.decision} data-testid="confirm-decision">
@@ -319,6 +323,7 @@ export function ConfirmDecisionFooter({
                 rejectDisabled={rejectDisabled}
                 approveLoading={approveLoading}
                 approveLabel={approveLabel}
+                approveSettled={approveSettled}
             />
         </div>
     );
