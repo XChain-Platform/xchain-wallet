@@ -213,26 +213,32 @@ describe('watch-sim-setup.sh', () => {
         expect(result.stderr).toContain(`android: AVD ${name} logical size expected ${dp}`);
     });
 
-    it('boots named headless AVDs and stops only their recorded pids', async () => {
+    it('boots named headless AVDs on fixed ports, waits for them, and stops recorded pids', async () => {
         const fixture = makeFixture();
         const small = run(fixture, ['--boot-wear', 'small']);
         const large = run(fixture, ['--boot-wear', 'large']);
 
         expect(small.status).toBe(0);
+        expect(small.stdout).toBe('emulator-5572\n');
         expect(large.status).toBe(0);
+        expect(large.stdout).toBe('emulator-5570\n');
         const smallPid = join(fixture.root, 'tmp/watch-sim/small.pid');
         const largePid = join(fixture.root, 'tmp/watch-sim/large.pid');
         expect(readFileSync(smallPid, 'utf8')).toMatch(/^\d+\n$/);
         expect(readFileSync(largePid, 'utf8')).toMatch(/^\d+\n$/);
         await expect.poll(() => readFileSync(fixture.log, 'utf8')).toContain(
-            'emulator -avd xc-wear-large-round -no-window -no-audio',
+            'emulator -avd xc-wear-large-round -no-window -no-audio -no-snapshot -port 5570',
         );
         const stopped = run(fixture, ['--stop-wear']);
         expect(stopped.status).toBe(0);
         expect(() => readFileSync(smallPid)).toThrow();
         expect(() => readFileSync(largePid)).toThrow();
         const commands = readFileSync(fixture.log, 'utf8');
-        expect(commands).toContain('emulator -avd xc-wear-small-round -no-window -no-audio');
+        expect(commands).toContain('emulator -avd xc-wear-small-round -no-window -no-audio -no-snapshot -port 5572');
+        expect(commands).toContain('adb -s emulator-5572 get-state');
+        expect(commands).toContain('adb -s emulator-5572 shell getprop sys.boot_completed');
+        expect(commands).toContain('adb -s emulator-5570 get-state');
+        expect(commands).toContain('adb -s emulator-5570 shell getprop sys.boot_completed');
     });
 });
 
@@ -279,6 +285,7 @@ function makeFixture(options = {}) {
     put(join(bin, 'xcodebuild'), commandStub('xcodebuild'), 0o755);
     put(join(sdk, 'cmdline-tools/latest/bin/sdkmanager'), sdkmanagerStub(), 0o755);
     put(join(sdk, 'cmdline-tools/latest/bin/avdmanager'), avdmanagerStub(), 0o755);
+    put(join(sdk, 'platform-tools/adb'), adbStub(), 0o755);
     put(emulatorTemplate, emulatorStub(), 0o755);
     if (settings.emulator) put(emulator, emulatorStub(), 0o755);
     if (settings.avds) {
@@ -456,6 +463,16 @@ function emulatorStub() {
     return `#!/usr/bin/env bash
 printf 'emulator %s\n' "$*" >> "$FAKE_COMMAND_LOG"
 exec sleep 30
+`;
+}
+
+function adbStub() {
+    return `#!/usr/bin/env bash
+printf 'adb %s\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$*" in
+  *' get-state') printf 'device\n' ;;
+  *' shell getprop sys.boot_completed') printf '1\n' ;;
+esac
 `;
 }
 
