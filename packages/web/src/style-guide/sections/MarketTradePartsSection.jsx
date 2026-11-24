@@ -22,9 +22,9 @@ export function MarketTradePartsSection() {
             kicker="The pieces of the market trading panels: the swap ticket with its flip button, and the Buy and Sell glyphs."
         >
             <Guidance
-                what={<><code>SwapTicket</code> shows a Pay field and a Get field for one pair with a flip between them; typing in one side fills the other, and leaving a field settles the typed side to its exact value. <code>BuyGlyph</code> and <code>SellGlyph</code> mark the two sides; <code>tidyQuotePrice</code> trims a quote to a readable price.</>}
+                what={<><code>SwapTicket</code> is the Trade page's Swap ticket, drawn with the shared Give/Get Quick cards: You pay over You get, a round flip between them and a Buying or Selling tag. Typing in one side fills the other, and leaving a field settles the typed side to its exact value. <code>BuyGlyph</code> and <code>SellGlyph</code> mark the two sides; <code>tidyQuotePrice</code> trims a quote to a readable price.</>}
                 when={<>Market buy and sell panels, and any trade ticket that pays one asset to get another.</>}
-                whenNot={<>Forms in the Give / Get standard, which have their own cards.</>}
+                whenNot={<>Any form that is not a two-asset trade (Give / Get forms use the cards directly).</>}
                 doRule={<>✓ Pass a balance line and a per-unit note under the Get field</>}
                 dontRule={<>✗ Compute the other side with a rounded price: settle to the exact value on blur</>}
                 supersedes={<>Source: <code>marketTradeParts.jsx</code> in <code>shared/components</code>.</>}

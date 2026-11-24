@@ -142,6 +142,7 @@ const stageAndroid = (dir, version = '0.336.0') => {
     };
     pack(`xchain-wallet-v${version}.apk`, join('assets', 'public'));
     pack(`xchain-wallet-android-v${version}.aab`, join('base', 'assets', 'public'));
+    pack(`xchain-wallet-wear-v${version}.aab`, join('base', 'assets', 'public'));
     return dir;
 };
 
@@ -232,7 +233,7 @@ const execFileSyncPair = (script, args) => {
 
     const r = prepare(repo, ['--tag', TAG, '--work-dir', workDir, '--input', staged]);
     assert.equal(r.status, 0, `preparing the re-sign tag: ${r.out}`);
-    assert.match(r.out, /OK - 2 bundle\(s\) scanned/,
+    assert.match(r.out, /OK - 3 bundle\(s\) scanned/,
         'the new tag is PROVED by running its own gate against the staged artifacts, '
         + `not by asserting that it would work:\n${r.out}`);
     assert.match(r.out, /gate proved: yes/, 'and the summary says which it was');

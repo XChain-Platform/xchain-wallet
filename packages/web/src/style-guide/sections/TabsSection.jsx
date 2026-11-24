@@ -14,22 +14,24 @@ import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function TabsSection() {
     const [homeTab, setHomeTab] = useState('balances');
-    const [tokenTab, setTokenTab] = useState('info');
+    const [tokenTab, setTokenTab] = useState('actions');
+    const [optionalTab, setOptionalTab] = useState('all');
     return (
         <Section
             id="tabs"
             title="Tabs (page-level)"
-            tag="CANONICAL underline tab strip"
-            kicker="Larger, bolder tabs with an accent-colored active state, used as the primary navigation inside a routed panel (Home's Balances / Activity / DeFi, TokenDetail's Info / Market / Holders). Distinct from the pill-segmented selector, which is for inline filters."
+            tag="CANONICAL view-toggle tab strip"
+            kicker="A full-width segmented tab strip with a filled active segment, used as the primary navigation inside a routed panel (Home's Balances / NFTs / DeFi, TokenDetail's Actions / Details / History). Same look as the Segmented control; it differs in role=&quot;tablist&quot;, panel wiring and optional icons and counts."
         >
             <Guidance
-                what={<>A horizontal row of transparent buttons; the active tab gets <code>color: var(--xc-accent-text)</code> and a 2px accent underline. Optional count badge on the right of each label: accent-tinted gray by default, inverted to accent-primary background with white text when the tab is active.</>}
+                what={<>A segmented row that spans its container (44px high, <code>--xc-border-strong</code> outline, <code>--xc-card-radius</code>). The active tab fills its segment with <code>--xc-control-selected</code>. An optional count pill sits on the right (muted fill, inverted on the active fill). An optional icon draws before the label.</>}
                 when={<>Inside a routed panel where the user is switching VIEWS of the same record (Token detail's tabs over one token) or VIEWS of a related collection (Home tabs over the wallet). Tabs live at the top of the panel content, NOT in the PageHeader.</>}
                 whenNot={<>For mutually-exclusive inline filters (All / Coins / Tokens) → use the <a href="#pill-segmented">pill segmented selector</a> instead. For deep navigation (different sections of the app) → use the left-nav / pancake-menu, not tabs.</>}
-                sizing={<>The row uses <code>var(--xc-control-h-md)</code>. Each tab has <code>var(--xc-space-3)</code> inline padding, a 2px accent underline when selected, and an optional 11px count badge. The row scrolls horizontally without showing a scrollbar when labels exceed the available width.</>}
+                sizing={<>The row is 44px high in every shell. Each tab has <code>var(--xc-space-3)</code> inline padding and an optional 11px count pill. The row scrolls horizontally without a scrollbar when labels exceed the width.</>}
+                variants={<>Each item may carry <code>icon</code> (16px, before the label), <code>count</code>, and <code>controls</code> (its own panel id); <code>panelId</code> may be a function of the item.</>}
                 doRule={<>✓ Use this for primary panel-internal navigation · keep labels short (one or two words) · connect each tab to its panel with <code>panelId</code> · include counts when useful · preserve the built-in arrow, Home, and End keyboard behavior</>}
-                dontRule={<>✗ Use tabs as filters that exclude data (filters belong in the pill-segmented or the chip-filter row) · nest tabs inside tabs (use sub-tabs sparingly via the pill-segmented in a tab panel) · drop the underline in favor of a background fill (the underline is the visual signature)</>}
-                supersedes={<>Route-local tab button markup and underline styles. Use the shared <code>&lt;Tabs&gt;</code> component for new page-level tab bars.</>}
+                dontRule={<>✗ Use tabs as filters that exclude data (filters belong in the pill-segmented or the chip-filter row) · nest tabs inside tabs (use sub-tabs sparingly via the pill-segmented in a tab panel) · restyle the active tab per route (the filled segment is the shared look)</>}
+                supersedes={<>Route-local tab button markup and tab styles. Use the shared <code>&lt;Tabs&gt;</code> component for new page-level tab bars.</>}
             />
 
             <Markup>
@@ -50,7 +52,7 @@ export function TabsSection() {
 </div>`}
             </Markup>
 
-            <LiveExample label="Home tabs (with count badges)">
+            <LiveExample label="Home tabs">
                 <Tabs
                     id="style-guide-home-tabs"
                     value={homeTab}
@@ -58,9 +60,9 @@ export function TabsSection() {
                     panelId="style-guide-home-panel"
                     aria-label="Home views"
                     items={[
-                        { id: 'balances', label: 'Balances', count: 12 },
-                        { id: 'activity', label: 'Activity', count: 3 },
-                        { id: 'defi', label: 'DeFi', count: 0 },
+                        { id: 'balances', label: 'Balances' },
+                        { id: 'nfts', label: 'NFTs' },
+                        { id: 'defi', label: 'DeFi' },
                     ]}
                 />
                 <div
@@ -70,11 +72,11 @@ export function TabsSection() {
                 >
                     {homeTab === 'balances'
                         ? 'Wallet balances'
-                        : homeTab === 'activity' ? 'Wallet activity' : 'DeFi positions'}
+                        : homeTab === 'nfts' ? 'Wallet NFTs' : 'DeFi positions'}
                 </div>
             </LiveExample>
 
-            <LiveExample label="Token detail (no counts)">
+            <LiveExample label="Token detail">
                 <Tabs
                     id="style-guide-token-tabs"
                     value={tokenTab}
@@ -82,9 +84,9 @@ export function TabsSection() {
                     panelId="style-guide-token-panel"
                     aria-label="Token detail views"
                     items={[
-                        { id: 'info', label: 'Info' },
-                        { id: 'market', label: 'Market' },
-                        { id: 'holders', label: 'Holders' },
+                        { id: 'actions', label: 'Actions' },
+                        { id: 'details', label: 'Details' },
+                        { id: 'history', label: 'History' },
                     ]}
                 />
                 <div
@@ -92,9 +94,31 @@ export function TabsSection() {
                     role="tabpanel"
                     aria-labelledby={`style-guide-token-tabs-tab-${tokenTab}`}
                 >
-                    {tokenTab === 'info'
-                        ? 'Token information'
-                        : tokenTab === 'market' ? 'Market data' : 'Token holders'}
+                    {tokenTab === 'actions'
+                        ? 'Token actions'
+                        : tokenTab === 'details' ? 'Token details' : 'Token history'}
+                </div>
+            </LiveExample>
+
+            <LiveExample label="Counts and icons are optional">
+                <Tabs
+                    id="style-guide-optional-tabs"
+                    value={optionalTab}
+                    onChange={setOptionalTab}
+                    panelId="style-guide-optional-panel"
+                    aria-label="Counts and icons"
+                    items={[
+                        { id: 'all', label: 'All', count: 12, icon: <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 4h10M3 8h10M3 12h10" /></svg> },
+                        { id: 'open', label: 'Open', count: 3 },
+                        { id: 'done', label: 'Done' },
+                    ]}
+                />
+                <div
+                    id="style-guide-optional-panel"
+                    role="tabpanel"
+                    aria-labelledby={`style-guide-optional-tabs-tab-${optionalTab}`}
+                >
+                    {optionalTab === 'all' ? 'Every item' : optionalTab === 'open' ? 'Open items' : 'Finished items'}
                 </div>
             </LiveExample>
         </Section>
