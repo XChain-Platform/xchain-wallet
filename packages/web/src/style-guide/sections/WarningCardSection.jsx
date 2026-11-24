@@ -16,7 +16,7 @@ export function WarningCardSection() {
         >
             <Guidance
                 what={<><code>WarningCard</code> holds <code>WarningLine</code> rows; <code>critical</code> draws a line as a danger <code>Notice</code> (a thin wrapper); on a screen of its own, render <code>{'<Notice tone="danger" role="note">'}</code> outside the card instead, never a notice inside a card. <code>BodyParagraph</code> is the same start-aligned line at body size for an explanation page outside a card.</>}
-                when={<>Recovery phrase, private key and license screens, and any page whose text protects the user's money.</>}
+                when={<>Explanatory pages of plain lines: license text, settings notes, the shortcut help footer. A money-protecting caution goes in a standalone danger Notice instead.</>}
                 whenNot={<>A status after an action (Notice) or a field error (the form's error map).</>}
                 doRule={<>✓ Keep each line one idea · mark only the money-protecting lines critical</>}
                 dontRule={<>✗ Centre the text · colour a whole card red</>}

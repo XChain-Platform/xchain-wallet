@@ -283,11 +283,8 @@ describe('page templates', () => {
         // the list picker), so no shell mounts SharedListDirectory; the module stays only until its
         // own tests are retired with it.
         const RETIRED_ROUTES = new Set(['PollStatusPill.jsx', 'SharedListDirectory.jsx']);
-        // SI-16 mounts this route and removes this entry.
-        const UNMOUNTED_UNTIL_SI16 = new Set(['NewerWalletNeeded.jsx']);
         const leftovers = check.unaccounted(files, routeModules())
             .filter((file) => !RETIRED_ROUTES.has(basename(file)))
-            .filter((file) => !UNMOUNTED_UNTIL_SI16.has(basename(file)))
             .map((file) => relative(ROOT, file));
         expect(leftovers, `${leftovers.join('\n')}\nis neither mounted by a shell nor loaded by a route`).toEqual([]);
     });

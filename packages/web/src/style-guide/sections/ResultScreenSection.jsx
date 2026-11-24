@@ -21,7 +21,7 @@ export function ResultScreenSection() {
                 when={<>A form finished submitting: it went through, failed, is still under way, was signed but queued, or produced an unsigned transaction for another device.</>}
                 whenNot={<>A problem the user can fix before submitting (FormErrorSummary or a field note) · a toast for something the user has already left behind.</>}
                 sizing={<>The notice takes the full content width of the page template. The action row sits at the end of the line, wraps under it, and stacks full width at 360px.</>}
-                variants={<>success is green, failure is red, pending and unsigned are blue, signed-not-broadcast is amber. The tone and the live-region role come from StatusMessage.</>}
+                variants={<>success is green, failure and signed-not-broadcast are red (the danger tone; signed-not-broadcast keeps a polite status role), pending and unsigned are blue. The tone and the live-region role come from StatusMessage.</>}
                 doRule={<>✓ Notice first, details second, actions last · one primary button, Done, at the end · say what happened in the notice, not in a heading of the screen</>}
                 dontRule={<>✗ A bordered card of the screen's own · an emoji in place of the notice icon · a "do it again" button on signed-not-broadcast (re-signing while a signed copy is queued double-broadcasts)</>}
                 supersedes={<><code>QueuedResultPanel</code> and <code>WatcherResultPanel</code> (two unrelated looks for the same moment).</>}

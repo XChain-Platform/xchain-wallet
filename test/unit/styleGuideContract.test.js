@@ -41,7 +41,7 @@ describe('STYLE_GUIDE component contracts', () => {
             }
             expect(guide).toContain(`\`--xc-control-h-${size}\``);
         }
-        expect(guide).toContain('`sm` | 28px painted, with a 44px hit area on touch');
+        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 28px (a `Button` stays 28px painted on touch; a field is 36px painted on touch)');
         expect(guide).toContain('`md` | `--xc-control-h-md`, 36px (44px on touch)');
         expect(guide).toContain('`lg` | `--xc-control-h-lg`, 44px (48px on touch)');
         // Every badge geometry token in tokens.css has a row in the guide.
@@ -111,8 +111,8 @@ describe('STYLE_GUIDE component contracts', () => {
             ));
             expect(tokens).toContain(`--xc-control-h-${size}: ${height};`);
         }
-        expect(guide).toContain('Its `size` prop is `sm` (28px painted with a 44px hit area on touch)');
-        expect(guide).toContain('<Input label="Amount" size="lg" />');
+        expect(guide).toContain('Its `size` prop is `sm` (28px, 36px painted on touch with a 44px target)');
+        expect(guide).toContain('<Input label="Amount" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
     });
 
@@ -134,10 +134,10 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(guide.match(/\| control \| use it when \| do \| do not \|/g)).toHaveLength(2);
         for (const example of [
             '`Grouped / Flat` for history grouping',
-            '`Balances / Activity / DeFi` above one connected tab panel',
-            '`Include spam` and `Include testnet`',
-            '`Hide balances` and save the change on toggle',
-            '`Low / Normal / Fast` default fee priority',
+            '`Balances / NFTs / DeFi` above one connected tab panel',
+            'use a checkbox for an acknowledgement submitted with the form',
+            '`Hide small balances` and save the change on toggle',
+            '`Slow / Normal / Fast` default fee priority',
         ]) {
             expect(guide).toContain(example);
         }

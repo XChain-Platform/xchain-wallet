@@ -33,12 +33,12 @@ vi.mock('../../../packages/web/src/style-guide/StyleGuidePage.jsx', () => ({
 describe('TabsSection', () => {
     it('switches every home and token-detail panel branch independently', () => {
         render(<TabsSection />);
-        const home = screen.getByRole('region', { name: 'Home tabs (with count badges)' });
-        const token = screen.getByRole('region', { name: 'Token detail (no counts)' });
+        const home = screen.getByRole('region', { name: 'Home tabs' });
+        const token = screen.getByRole('region', { name: 'Token detail' });
 
         expect(within(home).getByRole('tabpanel')).toHaveTextContent('Wallet balances');
-        fireEvent.click(within(home).getByRole('button', { name: 'Activity' }));
-        expect(within(home).getByRole('tabpanel')).toHaveTextContent('Wallet activity');
+        fireEvent.click(within(home).getByRole('button', { name: 'NFTs' }));
+        expect(within(home).getByRole('tabpanel')).toHaveTextContent('Wallet NFTs');
         fireEvent.click(within(home).getByRole('button', { name: 'DeFi' }));
         expect(within(home).getByRole('tabpanel')).toHaveTextContent('DeFi positions');
         expect(within(home).getByRole('tabpanel')).toHaveAttribute(
@@ -46,11 +46,11 @@ describe('TabsSection', () => {
             'style-guide-home-tabs-tab-defi',
         );
 
-        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Token information');
-        fireEvent.click(within(token).getByRole('button', { name: 'Market' }));
-        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Market data');
-        fireEvent.click(within(token).getByRole('button', { name: 'Holders' }));
-        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Token holders');
+        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Token actions');
+        fireEvent.click(within(token).getByRole('button', { name: 'Details' }));
+        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Token details');
+        fireEvent.click(within(token).getByRole('button', { name: 'History' }));
+        expect(within(token).getByRole('tabpanel')).toHaveTextContent('Token history');
         expect(within(home).getByRole('tabpanel')).toHaveTextContent('DeFi positions');
     });
 });

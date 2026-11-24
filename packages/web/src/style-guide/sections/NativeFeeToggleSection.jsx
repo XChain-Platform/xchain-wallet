@@ -20,7 +20,7 @@ export function NativeFeeToggleSection() {
         >
             <Guidance
                 what={<><code>&lt;NativeFeeToggle checked onChange coinTicker mandatory unverified fee /&gt;</code>. A choice renders a switch row; a chain with no choice, or an action whose fee is zero, renders a plain statement row on the same card.</>}
-                when={<>Forms for actions that carry a protocol fee, below the amount fields.</>}
+                when={<>Inside the Fees section of the Form Standard, for actions that carry a protocol fee.</>}
                 whenNot={<>Plain coin sends: they have no protocol fee.</>}
                 doRule={<>✓ Pass <code>mandatory</code> when the chain gives no choice</>}
                 dontRule={<>✗ Hide the row when the fee is zero (the statement row says so)</>}

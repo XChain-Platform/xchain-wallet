@@ -42,10 +42,10 @@ export function ActionConfirmSection() {
             id="action-confirm"
             title="Action confirm"
             tag="CANONICAL · ActionConfirmScreen"
-            kicker="The review step every signed action ends on: what will happen, who signs, the network fee, and the credentials gate, in one screen. Fifty-six screens reach it through the same component."
+            kicker="The review step every signed action ends on: what will happen, who signs, the network fee, and the credentials gate, in one screen. Every signed action reaches it through the same component."
         >
             <Guidance
-                what={<><code>&lt;ActionConfirmScreen confirmAction chainLabel password onPasswordChange signerReady /&gt;</code> from <code>@xchain-wallet/core/shared/components/</code>. It reads the decoded action from <code>confirmAction</code>, shows the exact network fee when the composed transaction knows it, and swaps the password field for the hardware-signer block when the source is a Trezor or Ledger.</>}
+                what={<><code>&lt;ActionConfirmScreen confirmAction chainLabel password onPasswordChange signerReady /&gt;</code> from <code>@xchain-wallet/core/shared/components/</code>. It reads the decoded action from <code>confirmAction</code>, shows the exact network fee when the composed transaction knows it, and swaps the password field for the hardware-signer block (<code>HwSignBlock</code>) when the source is a Trezor or Ledger. The review anatomy (summary, rows and learn note) is the shared <code>ConfirmStandard</code> (<code>shared/components/ConfirmStandard.jsx</code>).</>}
                 when={<>The review stage of every form that signs and broadcasts an action: send, token actions, market orders, contract calls.</>}
                 whenNot={<>Result screens (use the result panels) · a yes / no question that signs nothing (ConfirmModal).</>}
                 doRule={<>✓ Pass the form's own extra gates through <code>extraCredentials</code> · keep Approve disabled until the credentials gate is complete</>}

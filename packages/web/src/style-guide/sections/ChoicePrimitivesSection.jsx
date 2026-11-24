@@ -96,7 +96,7 @@ export function AddressComboboxSection() {
             id="address-combobox"
             title="Address combobox"
             tag="PRIMITIVE · compatibility"
-            kicker="An editable address field with contact and recent-destination suggestions. New transaction forms use AddressField plus the full-screen picker, while existing autocomplete flows keep this primitive."
+            kicker="An editable address field with contact and recent-destination suggestions. New transaction forms use AddressField plus the full-screen picker, while existing autocomplete flows keep this primitive. Send's To field keeps it for contact and recent-destination suggestions."
         >
             <Guidance
                 what={<>An <code>Input</code>-compatible combobox that filters suggestions as the user types and supports arrow-key selection.</>}

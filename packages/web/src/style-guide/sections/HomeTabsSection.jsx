@@ -28,20 +28,20 @@ export function HomeTabsSection() {
             id="home-tabs"
             title="Home tabs"
             tag="CANONICAL · HomeTabs"
-            kicker="The Home body below the balance hero: the Coins, Tokens, NFTs, DeFi and Activity tabs over one filter row."
+            kicker="The Balances, NFTs and DeFi tabs over one filter row. Balances is narrowed by Type (All, Coins, Tokens)."
         >
             <Guidance
-                what={<><code>HomeTabs</code> builds the balance rows from the raw balances, sorts them, and renders the tab strip, the optional search and network filter, the lists and their empty states. Quick actions go in the <code>actions</code> slot.</>}
+                what={<><code>HomeTabs</code> builds the balance rows from the raw balances, sorts them, and renders the tab strip, the optional search and network filter, the lists and their empty states.</>}
                 when={<>Home only.</>}
                 whenNot={<>Other balance lists: use BalanceList directly.</>}
-                doRule={<>✓ Pass <code>balancesUnchecked</code> so an unreachable network does not read as an empty wallet</>}
-                dontRule={<>✗ Add a fourth tab without a plan for its empty state</>}
+                doRule={<>✓ Pass <code>balanceNoticeShown</code> and <code>recentActivityFailed</code> / <code>defiPositionsFailed</code> so an unreachable network does not read as an empty wallet</>}
+                dontRule={<>✗ Add a tab without a plan for its empty state</>}
                 supersedes={<>Source: <code>HomeTabs.jsx</code> in <code>shared/components</code>.</>}
             />
             <Markup>
 {`<HomeTabs chainRegistry={registry} balances={balances} walletId={walletId} networkFilter="all" coinFamilies={families} />`}
             </Markup>
-            <LiveExample label="Coins tab with example balances">
+            <LiveExample label="Balances tab with example balances">
                 <PartsExampleProvider>
                     <HomeTabs
                         chainRegistry={chainRegistry}
