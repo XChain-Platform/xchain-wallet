@@ -32,18 +32,26 @@ final class RootViewTests: XCTestCase {
         let root = RootView(model: model)
 
         XCTAssertEqual(root.rootScreen, .notSetUp)
+        let beforeSnapshotKey = try XCTUnwrap(
+            WatchScreenGraph.notSetUpTextKey(hasSnapshot: model.hasSnapshot, enabled: model.enabled)
+        )
+        XCTAssertEqual(beforeSnapshotKey, "state.openWalletOnPhone")
         XCTAssertEqual(
-            WatchScreenGraph.notSetUpTextKey(hasSnapshot: model.hasSnapshot, enabled: model.enabled),
-            "state.openWalletOnPhone"
+            NotSetUpScreen(textKey: beforeSnapshotKey).message,
+            "Open XChain Wallet on your phone"
         )
 
         session.receive(snapshot(enabled: false))
         await waitForMainQueue()
 
         XCTAssertEqual(root.rootScreen, .notSetUp)
+        let disabledKey = try XCTUnwrap(
+            WatchScreenGraph.notSetUpTextKey(hasSnapshot: model.hasSnapshot, enabled: model.enabled)
+        )
+        XCTAssertEqual(disabledKey, "state.watchDisabled")
         XCTAssertEqual(
-            WatchScreenGraph.notSetUpTextKey(hasSnapshot: model.hasSnapshot, enabled: model.enabled),
-            "state.watchDisabled"
+            NotSetUpScreen(textKey: disabledKey).message,
+            "Show wallet on watch is off on your phone"
         )
     }
 
