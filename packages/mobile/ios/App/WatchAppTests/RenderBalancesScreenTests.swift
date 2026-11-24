@@ -135,7 +135,7 @@ final class RenderBalancesScreenTests: XCTestCase {
                     width: size.width
                 ),
                 "W1 \(fixture) \(mode) text does not fit "
-                    + "at \(sizeDescription(size)): \(text)",
+                    + "at \(self.sizeDescription(size)): \(text)",
                 file: file,
                 line: line
             )
