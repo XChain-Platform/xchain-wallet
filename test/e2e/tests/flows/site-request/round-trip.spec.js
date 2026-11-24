@@ -404,9 +404,28 @@ test.describe('extension on the test-dapp', () => {
 
             await page.evaluate(() => {
                 window.__opened = [];
+                window.__providerTraffic = [];
                 window.open = (url) => { window.__opened.push(String(url)); return {}; };
+                window.addEventListener('message', (event) => {
+                    const data = event.data;
+                    if (event.source !== window || !data) return;
+                    if (data.source === 'xchain-inject' || data.source === 'xchain-inject-response') {
+                        window.__providerTraffic.push({ source: data.source, id: data.id, type: data.type, ok: data.ok });
+                    }
+                });
             });
             await page.getByRole('button', { name: 'Login with XChain' }).click();
+            await expect.poll(
+                () => page.evaluate(() => window.__providerTraffic.map((entry) => entry.source)),
+                { timeout: 30_000 },
+            ).toEqual(['xchain-inject', 'xchain-inject-response']);
+            const traffic = await page.evaluate(() => window.__providerTraffic);
+            expect(traffic[0].type, 'the page asked the provider to sign in').toMatch(/sign.?in|login/i);
+            expect(traffic[1].id, 'the provider answered the same request').toBe(traffic[0].id);
+            await expect.poll(
+                () => page.locator('#response').textContent(),
+                { timeout: 30_000 },
+            ).toMatch(/"error": "WALLET_LOCKED"/);
             await expect(page.locator('[data-pick]')).toHaveCount(0);
             expect(await page.evaluate(() => window.__opened)).toEqual([]);
             testInfo.annotations.push({ type: 'extension', description: EXTENSION_DIST });
