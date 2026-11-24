@@ -360,6 +360,8 @@ EOF
 # filename as the release they re-upload (rails §2/§3).
 ARTIFACT_VERSION="$(node "$MOBILE_DIR/scripts/version.js" "$TAG" --artifact)"
 [ -n "$ARTIFACT_VERSION" ] || die "could not derive an artifact version from $TAG"
+WEAR_VERSION_CODE="$(node "$MOBILE_DIR/scripts/version.js" "$TAG" --wear)"
+[ -n "$WEAR_VERSION_CODE" ] || die "could not derive a Wear versionCode from $TAG"
 echo "==> $TAG -> versionCode $VERSION_CODE, versionName $VERSION_NAME, artifacts v$ARTIFACT_VERSION"
 
 AAB_NAME="xchain-wallet-android-v${ARTIFACT_VERSION}.aab"
@@ -452,6 +454,7 @@ java -jar "$BUNDLETOOL" dump manifest --bundle="$WORK_DIR/$WEAR_AAB_NAME" \
     || die "bundletool could not dump the Wear manifest; nothing was signed"
 node "$REPO_ROOT/tools/release/verify-wear-manifest.mjs" \
     "$WORK_DIR/wear-merged-manifest.xml" \
+    --version-code "$WEAR_VERSION_CODE" \
     || die "the built Wear bundle does not match the pinned manifest; nothing was signed"
 
 # ---------------------------------------------------------------------
