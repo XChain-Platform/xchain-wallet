@@ -8,21 +8,13 @@ import XCTest
 final class NotificationScenesTests: XCTestCase {
     private let decoder = JSONDecoder()
 
-    func testRegistersEveryNotificationSceneWithTheExpectedLongLook() throws {
-        let sourceURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("WatchApp/XChainWatchApp.swift")
-        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    func testRegistersEveryNotificationSceneWithTheExpectedLongLook() {
+        let registrations = notificationRegistrations(in: XChainWatchApp.notificationScenes)
 
-        XCTAssertTrue(source.contains(
-            "WKNotificationScene(controller: AlertNotificationController.self, category: \"alert\")"
-        ))
-        for category in ["request", "paydue"] {
-            XCTAssertTrue(source.contains(
-                "WKNotificationScene(controller: RequestNotificationController.self, category: \"\(category)\")"
-            ))
-        }
+        XCTAssertEqual(registrations, [
+            "AlertNotificationController": ["alert"],
+            "RequestNotificationController": ["paydue", "request"],
+        ])
     }
 
     func testTapAndOpenOnPhoneRouteMatchingRequestsToAlertDetail() throws {
@@ -36,17 +28,19 @@ final class NotificationScenesTests: XCTestCase {
                 NotificationSceneRules.defaultActionId,
                 NotificationSceneRules.openOnPhoneActionId,
             ] {
-                let response = WatchNotificationResponse(
+                let delegate = WatchApplicationDelegate()
+                let root = NotificationRoutingRootView(
+                    notifications: delegate,
+                    pendingRequest: { request }
+                )
+                let navigation = root.navigation
+
+                XCTAssertTrue(delegate.route(
                     notificationId: request.id,
                     category: category,
                     actionId: actionId
-                )
-
-                XCTAssertEqual(
-                    NotificationRoutingRootView.path(for: response, pendingRequest: request),
-                    [.balances, .alertDetail],
-                    "\(fixture) \(actionId)"
-                )
+                ))
+                XCTAssertEqual(navigation.path, [.alertDetail], "\(fixture) \(actionId)")
             }
         }
     }
@@ -68,9 +62,9 @@ final class NotificationScenesTests: XCTestCase {
             actionId: NotificationSceneRules.defaultActionId
         )
 
-        XCTAssertNil(NotificationRoutingRootView.path(for: dismissed, pendingRequest: request))
+        XCTAssertNil(NotificationNavigation.path(for: dismissed, pendingRequest: request))
         XCTAssertEqual(
-            NotificationRoutingRootView.path(for: stale, pendingRequest: request),
+            NotificationNavigation.path(for: stale, pendingRequest: request),
             [.balances]
         )
     }
@@ -94,5 +88,32 @@ final class NotificationScenesTests: XCTestCase {
             category: "request",
             actionId: NotificationSceneRules.defaultActionId
         ))
+    }
+
+    private func notificationRegistrations(in root: Any) -> [String: [String]] {
+        var registrations: [String: [String]] = [:]
+
+        func visit(_ value: Any) {
+            let type = String(describing: Swift.type(of: value))
+            if type.hasPrefix("WKNotificationScene<") {
+                let controller = ["AlertNotificationController", "RequestNotificationController"]
+                    .first(where: type.contains)
+                if let controller {
+                    registrations[controller, default: []].append(contentsOf: strings(in: value))
+                }
+                return
+            }
+            for child in Mirror(reflecting: value).children {
+                visit(child.value)
+            }
+        }
+
+        visit(root)
+        return registrations.mapValues { $0.sorted() }
+    }
+
+    private func strings(in root: Any) -> [String] {
+        if let value = root as? String { return [value] }
+        return Mirror(reflecting: root).children.flatMap { strings(in: $0.value) }
     }
 }

@@ -1,6 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import Combine
 import SwiftUI
 import UserNotifications
 import WatchKit
@@ -49,14 +50,31 @@ final class WatchApplicationDelegate: NSObject, ObservableObject,
 }
 
 @MainActor
-struct NotificationRoutingRootView: View {
-    @ObservedObject var notifications: WatchApplicationDelegate
-    @StateObject private var model: RootViewModel
-    @State private var path = NavigationPath()
+final class NotificationNavigation: ObservableObject {
+    @Published var path: [WatchScreen] = []
+    private let pendingRequest: () -> Request?
+    private var responseSubscription: AnyCancellable?
 
-    init(notifications: WatchApplicationDelegate) {
-        self.notifications = notifications
-        _model = StateObject(wrappedValue: RootViewModel.live())
+    init(
+        notifications: WatchApplicationDelegate,
+        pendingRequest: @escaping () -> Request?
+    ) {
+        self.pendingRequest = pendingRequest
+        responseSubscription = notifications.$response
+            .compactMap { $0 }
+            .sink { [weak self] in self?.route($0) }
+    }
+
+    private func route(_ response: WatchNotificationResponse) {
+        guard let route = Self.path(
+            for: response,
+            pendingRequest: pendingRequest()
+        ) else { return }
+        path = Array(route.dropFirst())
+    }
+
+    func open(_ screen: WatchScreen) {
+        path.append(screen)
     }
 
     static func path(
@@ -74,28 +92,37 @@ struct NotificationRoutingRootView: View {
             request: pendingRequest
         ) == nil ? [.balances] : path
     }
+}
+
+@MainActor
+struct NotificationRoutingRootView: View {
+    @StateObject private var model: RootViewModel
+    @StateObject var navigation: NotificationNavigation
+
+    init(
+        notifications: WatchApplicationDelegate,
+        pendingRequest: (() -> Request?)? = nil
+    ) {
+        let model = RootViewModel.live()
+        _model = StateObject(wrappedValue: model)
+        _navigation = StateObject(wrappedValue: NotificationNavigation(
+            notifications: notifications,
+            pendingRequest: pendingRequest ?? { [weak model] in model?.snapshot?.request }
+        ))
+    }
 
     var body: some View {
         AmbientRedaction(
             phoneHidden: model.snapshot?.hidden ?? false,
             hideAmounts: model.hideAmounts
         ) { redaction in
-            NavigationStack(path: $path) {
+            NavigationStack(path: $navigation.path) {
                 RootContent(model: model, redaction: redaction) {
-                    path.append($0)
+                    navigation.open($0)
                 }
             }
         }
         .task { model.activate() }
-        .onReceive(notifications.$response) { response in
-            guard let response,
-                  let route = Self.path(for: response, pendingRequest: model.snapshot?.request)
-            else { return }
-            path = NavigationPath()
-            for screen in route.dropFirst() {
-                path.append(screen)
-            }
-        }
     }
 }
 
@@ -151,12 +178,17 @@ final class RequestNotificationController: WKUserNotificationHostingController<A
 struct XChainWatchApp: App {
     @WKApplicationDelegateAdaptor(WatchApplicationDelegate.self) private var appDelegate
 
+    @SceneBuilder
+    static var notificationScenes: some Scene {
+        WKNotificationScene(controller: AlertNotificationController.self, category: "alert")
+        WKNotificationScene(controller: RequestNotificationController.self, category: "request")
+        WKNotificationScene(controller: RequestNotificationController.self, category: "paydue")
+    }
+
     var body: some Scene {
         WindowGroup {
             NotificationRoutingRootView(notifications: appDelegate)
         }
-        WKNotificationScene(controller: AlertNotificationController.self, category: "alert")
-        WKNotificationScene(controller: RequestNotificationController.self, category: "request")
-        WKNotificationScene(controller: RequestNotificationController.self, category: "paydue")
+        Self.notificationScenes
     }
 }
