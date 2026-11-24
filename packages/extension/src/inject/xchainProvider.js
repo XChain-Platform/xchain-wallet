@@ -72,6 +72,7 @@
     if (window.xchain && window.xchain.isXChainWallet) return;
 
     const VERSION = '0.1.0';
+    const PROVIDER_VERSION = '0.2.0';
     const SOURCE = 'xchain-inject';
     const RESPONSE_SOURCE = 'xchain-inject-response';
     const READY_EVENT = 'xchain#initialized';
@@ -222,7 +223,7 @@
     });
 
     const provider = {
-        version: VERSION,
+        version: PROVIDER_VERSION,
         isXChainWallet: true,
 
         // Result-union methods (sendResult): a refusal resolves as

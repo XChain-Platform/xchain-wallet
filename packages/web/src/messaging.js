@@ -15,6 +15,7 @@
 
 import { getRecentShellErrors } from './errorCapture.js';
 import { memoizeRetryablePromise } from './retryablePromise.js';
+import { installWebApprovalAdapter } from './approvalAdapter.js';
 
 // The web host installs createWebNotifyAdapter for delivered sounds and sound
 // previews. This capability follows the platform, not the viewport layout.
@@ -30,6 +31,8 @@ const sendMessage = async (type, request) => {
     return sendToHost(type, request);
 };
 export { sendMessage };
+
+installWebApprovalAdapter(sendMessage);
 
 export async function getSessionStatus() {
     const { getSessionStatus: getStatus } = await loadHostBridge();
