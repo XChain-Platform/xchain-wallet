@@ -141,7 +141,7 @@ assert.match(
 );
 assert.match(watchScheme, /BlueprintName = "WatchApp"/);
 assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
-assert.match(watchAppSource, /@main[\s\S]*RootView\(\)/);
+assert.match(watchAppSource, /WindowGroup\s*\{\s*RootView\(\)/);
 assert.match(watchRootSource, /NotSetUpScreen\([\s\S]*state\.openWalletOnPhone/);
 assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
 assert.match(nativeTestsSource, /final class NativeSmokeTests: XCTestCase/);
