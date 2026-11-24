@@ -37,6 +37,16 @@ export function nativeSiteHooks(plugin, request) {
     if (typeof plugin.post === 'function') {
         hooks.deliver = (req, outcome, options = {}) => deliverResult(req, outcome, {
             ...options,
+            ...(typeof plugin.resolveHost === 'function' ? {
+                resolve: async (host) => {
+                    const answer = await plugin.resolveHost({ host });
+                    if (!Array.isArray(answer?.addresses)
+                        || answer.addresses.some((value) => typeof value !== 'string')) {
+                        throw new Error('Invalid response');
+                    }
+                    return answer.addresses;
+                },
+            } : {}),
             post: async ({ href, address, body, timeoutMs, redirect, credentials }) => {
                 const answer = await plugin.post({
                     href,

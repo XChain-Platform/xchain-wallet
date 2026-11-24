@@ -128,6 +128,73 @@ describe('nativeSiteHooks', () => {
         expect(post).toHaveBeenCalledWith(expect.objectContaining({ address: '1.1.1.1' }));
     });
 
+    it('uses native hostname resolution in place of the runner resolver', async () => {
+        const post = vi.fn().mockResolvedValue({ status: 204 });
+        const resolveHost = vi.fn().mockResolvedValue({ addresses: ['8.8.8.8'] });
+        const runnerResolve = vi.fn();
+        const { deliver } = nativeSiteHooks({ post, resolveHost }, request());
+        const delivered = await deliver(
+            request({ callback: 'https://callback.example/cb' }),
+            { ok: true, result: {} },
+            { resolve: runnerResolve },
+        );
+
+        expect(resolveHost).toHaveBeenCalledOnce();
+        expect(resolveHost).toHaveBeenCalledWith({ host: 'callback.example' });
+        expect(Object.keys(resolveHost.mock.calls[0][0])).toEqual(['host']);
+        expect(runnerResolve).not.toHaveBeenCalled();
+        expect(post).toHaveBeenCalledWith(expect.objectContaining({ address: '8.8.8.8' }));
+        expect(delivered.callbackResult).toEqual({ sent: true, status: 204 });
+    });
+
+    it('leaves resolved address refusal to the callback sender', async () => {
+        const post = vi.fn();
+        const resolveHost = vi.fn().mockResolvedValue({
+            addresses: ['8.8.8.8', '10.0.0.1'],
+        });
+        const { deliver } = nativeSiteHooks({ post, resolveHost }, request());
+        const delivered = await deliver(
+            request({ callback: 'https://callback.example/cb' }),
+            { ok: true, result: {} },
+        );
+
+        expect(delivered.callbackResult).toEqual({ sent: false, reason: 'REFUSED_ADDRESS' });
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a rejection', vi.fn().mockRejectedValue(new Error('callback.example failed'))],
+        ['a missing addresses value', vi.fn().mockResolvedValue({})],
+        ['a non-array addresses value', vi.fn().mockResolvedValue({ addresses: '8.8.8.8' })],
+        ['a non-string address', vi.fn().mockResolvedValue({ addresses: [8] })],
+    ])('reports RESOLVE_FAILED for %s', async (_label, resolveHost) => {
+        const post = vi.fn();
+        const { deliver } = nativeSiteHooks({ post, resolveHost }, request());
+        const delivered = await deliver(
+            request({ callback: 'https://callback.example/cb' }),
+            { ok: true, result: {} },
+        );
+
+        expect(delivered.callbackResult).toEqual({ sent: false, reason: 'RESOLVE_FAILED' });
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it('does not resolve an IP-literal callback', async () => {
+        const post = vi.fn().mockResolvedValue({ status: 204 });
+        const resolveHost = vi.fn();
+        const { deliver } = nativeSiteHooks({ post, resolveHost }, request());
+        const delivered = await deliver(request(), { ok: true, result: {} });
+
+        expect(resolveHost).not.toHaveBeenCalled();
+        expect(delivered.callbackResult).toEqual({ sent: true, status: 204 });
+    });
+
+    it('does not add hooks for a resolver without native post', () => {
+        const resolveHost = vi.fn();
+
+        expect(nativeSiteHooks({ resolveHost }, request())).toEqual({});
+    });
+
     it.each([
         ['returns a non-integer status', vi.fn().mockResolvedValue({ status: '200' })],
         ['rejects with callback details', vi.fn().mockRejectedValue(new Error('https://8.8.8.8/cb failed'))],
