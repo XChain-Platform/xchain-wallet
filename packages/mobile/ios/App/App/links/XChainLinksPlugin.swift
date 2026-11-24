@@ -43,6 +43,7 @@
 
 import Capacitor
 import Foundation
+import UIKit
 
 /// Carries a link from `SceneDelegate` to the plugin.
 ///
@@ -177,10 +178,16 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "XChainLinks"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "takePendingLink", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "resolveHost", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "resolveHost", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "returnToBrowser", returnType: CAPPluginReturnPromise)
     ]
 
     var hostLookup: CallbackResolve.Lookup = CallbackResolve.systemLookup
+    var returnOpener: BrowserReturnOpen.Opener = { url, done in
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url, options: [:], completionHandler: done)
+        }
+    }
 
     override public func load() {
         XChainLinkInbox.shared.attach(self)
@@ -208,6 +215,25 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
             call.resolve(["addresses": list])
+        }
+    }
+
+    @objc func returnToBrowser(_ call: CAPPluginCall) {
+        let url = call.getString("url")
+        let browser = call.getString("browser")
+        guard let url = url,
+              !BrowserReturnHint.candidates(url: url, browser: browser).isEmpty
+        else {
+            call.reject("Return URL refused")
+            return
+        }
+
+        BrowserReturnOpen.open(url: url, browser: browser, opener: returnOpener) { opened in
+            if opened {
+                call.resolve([:])
+            } else {
+                call.reject("No browser opened the return URL")
+            }
         }
     }
 }
