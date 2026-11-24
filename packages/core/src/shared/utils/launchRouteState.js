@@ -14,7 +14,7 @@ export function createLaunchRouteState() {
 
     return {
         /**
-         * @param {'send' | 'receive' | 'contract-execute'} view
+         * @param {'send' | 'receive' | 'contract-execute' | 'site-request-approval' | 'newer-wallet-needed'} view
          * @param {{ state?: string } | string | null | undefined} [session]
          */
         remember(view, session) {

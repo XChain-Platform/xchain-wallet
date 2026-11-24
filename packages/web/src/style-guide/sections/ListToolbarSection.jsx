@@ -16,11 +16,11 @@ export function ListToolbarSection() {
             id="list-toolbar"
             title="List toolbar"
             tag="CANONICAL · ListToolbar"
-            kicker="The row above a list: one search field, then any filters, all the same height and spaced by the same gap."
+            kicker="Legacy: no screen uses it. List pages put search and filters in ListFilterMenu in the title bar."
         >
             <Guidance
                 what={<><code>&lt;ListToolbar query onQueryChange searchLabel&gt;</code> renders a search <code>Input</code> and wraps each child (a Select, a SegmentedControl) in an equal field cell.</>}
-                when={<>Above a list that can be searched or filtered: contacts, dispensers, lists, messages.</>}
+                when={<>Do not use for new pages.</>}
                 whenNot={<>Forms: they take FormSection fields, not a toolbar.</>}
                 doRule={<>✓ Pass filters as children so they share the row</>}
                 dontRule={<>✗ Draw a second search input beside the toolbar</>}

@@ -13,13 +13,13 @@ export function PortfolioChartSection() {
             id="portfolio-chart"
             title="Portfolio chart"
             tag="CANONICAL · PortfolioChart"
-            kicker="Home's performance chart: the wallet's total fiat value over a chosen range, drawn on the brand card."
+            kicker="Home's performance chart: the wallet's total fiat value over a chosen range, drawn behind the total-balance hero."
         >
             <Guidance
                 what={<><code>PortfolioChart</code> sums each balance row's fiat value into one series for the selected range, with range tabs and a change readout. Its series always ends at the portfolio total, so it agrees with the balance hero.</>}
-                when={<>Home, under the total balance.</>}
+                when={<>Home, drawn behind the total-balance hero (<code>behind</code>).</>}
                 whenNot={<>One token's price history (Sparkline).</>}
-                doRule={<>✓ Pass rows already filtered by network · let the user hide it from settings</>}
+                doRule={<>✓ Pass rows already filtered by network · let the hero's chart toggle hide it · use <code>behind</code> when it sits behind the hero and <code>unit</code> to show the total in a coin</>}
                 dontRule={<>✗ Fetch prices inside the chart's parent on every render</>}
                 supersedes={<>Source: <code>PortfolioChart.jsx</code> in <code>shared/components</code>.</>}
             />
