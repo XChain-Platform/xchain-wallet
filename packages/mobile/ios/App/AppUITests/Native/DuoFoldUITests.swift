@@ -2,7 +2,7 @@ import XCTest
 
 final class DuoFoldUITests: XCTestCase {
     private let password = "WalletPass1!"
-    private let recipient = "tltc1qw508d6qejxtdg4y5r3zarvary0c5xw7klfsuq0"
+    private let recipient = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
     private let amount = "0.0001"
 
     func testAmountComparisonIgnoresGroupingAndUnitSuffix() {
@@ -409,25 +409,7 @@ final class DuoFoldUITests: XCTestCase {
                 return values
             }
 
-            let payment = app.buttons.matching(
-                NSPredicate(format: "label BEGINSWITH[c] %@", "Payment")
-            ).firstMatch
-            if payment.exists {
-                if payment.isHittable && payment.isEnabled {
-                    let expanded = (payment.value as? String)?.lowercased() == "true"
-                    if !expanded {
-                        payment.tap()
-                        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
-                    }
-                    if page.exists {
-                        page.swipeUp(velocity: .slow)
-                    } else {
-                        app.swipeUp(velocity: .slow)
-                    }
-                } else {
-                    scrollToward(payment, app: app)
-                }
-            } else if page.exists {
+            if page.exists {
                 dragPageDown(page)
             } else {
                 app.swipeDown(velocity: .slow)
