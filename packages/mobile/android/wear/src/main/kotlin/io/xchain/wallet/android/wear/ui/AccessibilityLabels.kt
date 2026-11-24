@@ -18,6 +18,8 @@ object AccessibilityLabels {
     fun requestPinned(display: RequestDisplay, text: (String) -> String): String =
         display.pinned.spoken(text)
 
+    fun requestPinned(key: String, text: (String) -> String): String = text(key)
+
     fun alertRow(alert: AlertDisplay, time: String): String =
         SpokenLabels.lines(alert.title, alert.body, time)
 
