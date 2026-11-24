@@ -193,6 +193,7 @@ import { resolveSdkFactory } from './sdkFactory.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import { createInAppApprovals } from '../../core/src/site_request/inAppApprovals.js';
 import { createSiteRequestRunner } from './approvalAdapter.js';
+import { nativeLinksPlugin, nativeSiteHooks } from './deeplinks/nativeSiteDelivery.js';
 
 const chainRegistry = defaultRegistry();
 const inAppApprovals = createInAppApprovals();
@@ -2618,7 +2619,12 @@ export async function sendMessage(type, request) {
  * @param {object} [hooks]
  */
 export function runSiteRequest(request, hooks) {
-    return createSiteRequestRunner({ send: sendMessage, approvals: inAppApprovals, chainRegistry }).run(request, hooks);
+    return createSiteRequestRunner({
+        send: sendMessage,
+        approvals: inAppApprovals,
+        chainRegistry,
+        ...nativeSiteHooks(nativeLinksPlugin(), request),
+    }).run(request, hooks);
 }
 
 // Settings preview for event sounds (§6 M4.1): the shared section dispatches
