@@ -41,8 +41,11 @@ internal fun AlertRow(
 ) {
     val age = WatchAge.of(alert.at, now)
     val key = RelativeTimeKeys.alertKey(age.bucket.id(), age.n.toInt())
+    val time = RelativeTimeKeys.fill(text(key.key), key.n)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).semantics(mergeDescendants = true) {
+            contentDescription = AccessibilityLabels.alertRow(alert, time)
+        },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -53,7 +56,7 @@ internal fun AlertRow(
         Column(Modifier.weight(1f)) {
             Text(alert.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             alert.body?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            Text(RelativeTimeKeys.fill(text(key.key), key.n), style = MaterialTheme.typography.labelSmall)
+            Text(time, style = MaterialTheme.typography.labelSmall)
         }
         if (alert.unread) {
             Box(
