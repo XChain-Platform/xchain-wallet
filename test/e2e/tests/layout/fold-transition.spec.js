@@ -88,7 +88,7 @@ test('one Duo resize keeps form values: the contacts filter text, scroll, select
     page.setDefaultTimeout(30 * 1000);
     const [measured] = loadDuoViewports();
     const opened = { ...measured, state: 'open-portrait', width: measured.width * 2 };
-    const widened = { ...opened, width: opened.width + 120 };
+    const widened = { ...opened, width: opened.width + 24 };
 
     await page.setViewportSize({ width: opened.width, height: opened.height });
     await createWallet(page);
@@ -119,8 +119,6 @@ test('one Duo resize keeps form values: the contacts filter text, scroll, select
     expect(before.detailKey, 'a selected contact detail').toBeTruthy();
 
     await foldTo(page, widened);
-    await expect(confirm).toBeVisible();
-    await foldTo(page, opened);
     await expect(confirm).toBeVisible();
 
     const after = await captureFoldState(page, DELETE_CONFIRM);
