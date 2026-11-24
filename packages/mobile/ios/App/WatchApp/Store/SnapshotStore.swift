@@ -3,36 +3,6 @@
 
 import Foundation
 
-struct Snapshot: Codable {
-    let v: Int
-    let builtAt: Int64
-    let balancesAt: Int64
-    let pricesAt: Int64
-    let session: String
-    let network: SnapshotNetwork
-    let fiatCode: String
-    let hidden: Bool
-    let unitDefault: String
-    let walletName: String
-    let totals: SnapshotTotals
-    let rows: [SnapshotRow]
-    let capped: Bool
-    let receive: [SnapshotReceive]
-    let inbox: [SnapshotInboxItem]
-    let request: Request
-    let settings: SnapshotSettings
-}
-
-struct SnapshotNetwork: Codable {
-    let kind: String
-    let isTest: Bool
-}
-
-struct SnapshotTotals: Codable {
-    let fiatText: String
-    let unitsText: String
-}
-
 final class SnapshotStore {
     typealias DirectoryCreator = (URL, Bool, [FileAttributeKey: Any]?) throws -> Void
     typealias Writer = (Data, Data.WritingOptions) throws -> Void
