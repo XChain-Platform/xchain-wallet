@@ -27,6 +27,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CollapseHandle } from './CollapseHandle.jsx';
 import { PanelSplitDivider, usePanelSplit } from './PanelSplit.jsx';
+import { useFoldDivision } from '../hooks/useFoldDivision.js';
 import { useHomeTopCollapsed } from '../hooks/useHomeTopCollapsed.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/home.js';
@@ -39,6 +40,16 @@ import styles from './HomeWideLayout.module.css';
  * the menu), stay one column.
  */
 export const HOME_WIDE_MIN_PX = 1060;
+export const HOME_DUO_BOOK_FALLBACK_PX = 951;
+// The Book measurement is unavailable because simctl io screenConfig crashes
+// SpringBoard on this simulator runtime.
+export const HOME_DUO_BOOK_WIDTH_PX = HOME_DUO_BOOK_FALLBACK_PX;
+
+export function isHomeDuoBookSplit(viewportWidth, foldDivision) {
+    return viewportWidth === HOME_DUO_BOOK_WIDTH_PX
+        && foldDivision.vertical
+        && Number.isFinite(foldDivision.dividerX);
+}
 
 /**
  * The balances list's width range beside the detail (operator 2026-11-14).
@@ -64,6 +75,7 @@ export const HOME_LIST_WIDTH_KEY = 'home';
 export function useHomeWide(minWidth, enabled) {
     const ref = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [wide, setWide] = useState(false);
+    const foldDivision = useFoldDivision();
     useLayoutEffect(() => {
         const el = ref.current;
         if (!enabled || !el) {
@@ -72,7 +84,8 @@ export function useHomeWide(minWidth, enabled) {
         }
         const measure = () => {
             const width = el.getBoundingClientRect?.().width || 0;
-            const next = width >= minWidth;
+            const divided = isHomeDuoBookSplit(globalThis.innerWidth, foldDivision);
+            const next = width >= minWidth || divided;
             setWide((prev) => (prev === next ? prev : next));
         };
         measure();
@@ -84,7 +97,7 @@ export function useHomeWide(minWidth, enabled) {
         if (typeof window === 'undefined') return undefined;
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
-    }, [minWidth, enabled]);
+    }, [minWidth, enabled, foldDivision.vertical, foldDivision.dividerX]);
     return [ref, wide];
 }
 

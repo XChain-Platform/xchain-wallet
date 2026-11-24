@@ -69,6 +69,10 @@ if (manifestTask != null) {
     }
 }
 
+tasks.withType(Test).configureEach {
+    inputs.property('wearRenderOut', System.getenv('WEAR_RENDER_OUT') ?: '')
+}
+
 dependencies {
     implementation "com.google.android.gms:play-services-wearable:$wearPlayServicesVersion"
     implementation "androidx.wear.compose:compose-material3:$wearComposeVersion"
@@ -90,4 +94,5 @@ dependencies {
     testImplementation "junit:junit:$wearJunitVersion"
     androidTestImplementation "androidx.test:runner:$wearTestRunnerVersion"
     androidTestImplementation "androidx.test.ext:junit:$wearAndroidxJunitVersion"
+    androidTestImplementation "androidx.compose.ui:ui-test-junit4:$wearComposeUiVersion"
 }

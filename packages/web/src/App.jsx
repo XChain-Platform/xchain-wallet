@@ -149,6 +149,11 @@ const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVar
 // An unknown view renders inside the route outlet's Suspense like every other
 // route, so its EmptyState and ListPage styles stay out of the startup CSS.
 const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
+const NewerWalletNeeded = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'NewerWalletNeeded');
+const SiteRequestApproval = lazyRoute(() => import('@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx'), 'SiteRequestApproval');
+const SignApproval = lazyRoute(() => import('@xchain-wallet/core/shared/approval/SignApproval.jsx'), 'SignApproval');
+const loadLinkHandoff = import.meta.glob('./routes/LinkHandoff.jsx')['./routes/LinkHandoff.jsx'];
+const LinkHandoff = loadLinkHandoff ? lazyRoute(loadLinkHandoff, 'LinkHandoff') : null;
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
 const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AccountPicker.jsx'), 'AccountPicker');
@@ -309,6 +314,13 @@ const loadPaletteBalanceRows = async (messagingClient, walletId, accountId) => {
 
 export function App() {
     const variantState = useActiveVariant();
+    if (LinkHandoff && typeof window !== 'undefined' && /^\/link(?:\/|$)/.test(window.location.pathname)) {
+        return (
+            <Suspense fallback={<Loading />}>
+                <LinkHandoff />
+            </Suspense>
+        );
+    }
     const { variant, source } = variantState;
     const shell = shellForVariant(variant);
     const pwaInstall = usePwaInstall();
@@ -352,6 +364,43 @@ function GatedDevVariantBadge({ state }) {
         <Suspense fallback={null}>
             <DevVariantBadge state={state} />
         </Suspense>
+    );
+}
+
+// Runs a site request link: the runner parks the approval, the shared sign
+// screen answers it, and the runner delivers the result and follows return.
+function SiteRequestRun({ request, onDone }) {
+    const [entry, setEntry] = useState(null);
+    const [finished, setFinished] = useState(false);
+    const handle = useRef(null);
+    const doneRef = useRef(onDone);
+    doneRef.current = onDone;
+
+    useEffect(() => {
+        let alive = true;
+        import('./hostBridge.js').then(({ runSiteRequest }) => runSiteRequest(request, {
+            onApproval: (parked) => { if (alive) setEntry(parked); },
+            onDone: () => { if (alive) { setFinished(true); doneRef.current(); } },
+        })).then((started) => {
+            if (alive) handle.current = started;
+            else started.cancel();
+        });
+        return () => {
+            alive = false;
+            handle.current?.cancel();
+        };
+    }, [request]);
+
+    if (finished) return null;
+    if (!entry) return <SiteRequestApproval request={request} onReject={() => handle.current?.cancel()} />;
+    return (
+        <SignApproval
+            key={entry.id}
+            id={entry.id}
+            kind={entry.kind}
+            payload={entry.payload}
+            onReject={() => handle.current?.cancel()}
+        />
     );
 }
 
@@ -808,6 +857,9 @@ function AppInner({ pwaInstall }) {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
+    const [siteRequestRoute, setSiteRequestRoute] = useState(
+        /** @type {{ view?: string, request?: Record<string, unknown> } | null} */ (null),
+    );
     // The launch guard keeps a URI authoritative through both unlock and the
     // later per-wallet last-view restore.
     const launchRouteState = useRef(createLaunchRouteState());
@@ -896,6 +948,7 @@ function AppInner({ pwaInstall }) {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setSiteRequestRoute(null);
         setMultisigInitialLink(null);
         setGlobalScannerOpen(false);
         launchRouteState.current.clear();
@@ -954,6 +1007,9 @@ function AppInner({ pwaInstall }) {
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
+            }
+            if (route.view === 'site-request-approval' || route.view === 'newer-wallet-needed') {
+                setSiteRequestRoute(route);
             }
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             // The launch guard holds a locked-session link through unlock and the
@@ -1447,6 +1503,21 @@ function AppInner({ pwaInstall }) {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
+            if (siteRequestRoute?.view === 'site-request-approval' && siteRequestRoute.request) {
+                return (
+                    <SiteRequestRun
+                        request={siteRequestRoute.request}
+                        onDone={() => { launchRouteState.current.clear(); setSiteRequestRoute(null); resetNav('home'); }}
+                    />
+                );
+            }
+            if (siteRequestRoute?.view === 'newer-wallet-needed') {
+                return (
+                    <NewerWalletNeeded
+                        onBack={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
+            }
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
                     <AlertsRoute

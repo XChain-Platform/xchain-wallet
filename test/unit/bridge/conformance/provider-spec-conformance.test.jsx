@@ -123,6 +123,8 @@ describe('provider interface conformance', () => {
             .filter((method) => method !== 'on' && method !== 'off')
             .sort();
         expect(expected.length).toBeGreaterThanOrEqual(13);
+        // `login` is the named request-path alias of `signIn`.
+        const expectedRequestPaths = [...expected, 'login'].sort();
         const inject = [...injectSource.matchAll(/\b(?:send|sendResult)\(\s*'bridge\.(\w+)'/g)]
             .map((match) => match[1]).sort();
         const publicBody = contentSource.match(/const PUBLIC_TYPES = new Set\(\[([\s\S]*?)\]\);/);
@@ -133,9 +135,9 @@ describe('provider interface conformance', () => {
         const publicTypes = publicEntries.map((entry) => entry.slice('bridge.'.length)).sort();
         const registered = [...handlersSource.matchAll(/\bregister\(\s*'bridge\.(\w+)'/g)]
             .map((match) => match[1]).sort();
-        expect([...new Set(inject)]).toEqual(expected);
-        expect([...new Set(publicTypes)]).toEqual(expected);
-        expect([...new Set(registered)]).toEqual(expected);
+        expect([...new Set(inject)]).toEqual(expectedRequestPaths);
+        expect([...new Set(publicTypes)]).toEqual(expectedRequestPaths);
+        expect([...new Set(registered)]).toEqual(expectedRequestPaths);
     });
 
     it('serves approved and rejected coSign results from the mock', async () => {
@@ -361,7 +363,6 @@ describe('single-source bridge runtime', () => {
             'isXChainAvailable',
             'getProvider',
             'generateNonce',
-            'makeSignInParams',
             'validateSignInChallenge',
         ];
         for (const name of names) expect(spec[name], name).toBe(runtime[name]);

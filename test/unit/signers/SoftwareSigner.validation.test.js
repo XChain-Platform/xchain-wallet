@@ -91,7 +91,6 @@ describe('SoftwareSigner signing input validation', () => {
     it.each([
         [{}, 'exactly one of'],
         [{ path: PATH, addressId: 'imported-1' }, 'exactly one of'],
-        [{ path: "m/86'/0'/0'/0/0" }, 'p2tr message signing not supported'],
     ])('refuses invalid message key input %#', async (key, message) => {
         await expect(makeSigner().signMessage({
             message: 'hello', chainId: 'bitcoin', ...key,

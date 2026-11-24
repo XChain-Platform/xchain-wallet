@@ -35,6 +35,10 @@ import {
 } from './Signer.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 import { defaultAddressTypeForFormat } from '../flows/_defaultAddressType.js';
+import {
+    signMessageOptsFromAddressType,
+    signMessageOptsFromPath,
+} from './messageSignOptions.js';
 
 /**
  * @typedef {Object} WalletEncryptionInputs
@@ -984,28 +988,4 @@ function assertEntryShape(entry, method) {
             `SoftwareSigner.${method}: signing entry must supply exactly one of \`path\` or \`addressId\``,
         );
     }
-}
-
-function signMessageOptsFromAddressType(addressType) {
-    if (addressType === 'p2pkh') return {};
-    if (addressType === 'p2sh-p2wpkh') return { segwitRedeemScript: true };
-    if (addressType === 'p2wpkh') return { segwitNative: true };
-    if (addressType === 'p2tr') {
-        throw new Error('SoftwareSigner.signMessage: p2tr message signing not supported');
-    }
-    throw new Error(`SoftwareSigner.signMessage: unsupported address type "${addressType}"`);
-}
-
-// Compatibility fallback: map BIP44 purpose number to SDK signMessage opts.
-// Paths outside the standard purposes (44/49/84) default to plain p2pkh
-// signing, the SDK's behavior when no opts are supplied.
-function signMessageOptsFromPath(path) {
-    const m = /^m\/(\d+)'/.exec(path);
-    const purpose = m?.[1];
-    if (purpose === '84') return { segwitNative: true };
-    if (purpose === '49') return { segwitRedeemScript: true };
-    if (purpose === '86') {
-        throw new Error('SoftwareSigner.signMessage: p2tr message signing not supported');
-    }
-    return {};
 }

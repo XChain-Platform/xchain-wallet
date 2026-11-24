@@ -217,7 +217,7 @@ describe('style guide primitive coverage', () => {
         expect(states).toContain('<Skeleton.Row />');
         expect(states).toContain('<Skeleton.List');
         expect(states).toContain('details="available=');
-        expect(states).toContain("recovery={{ label: 'Use Max'");
+        expect(states).toContain("action={{ label: 'Use Max'");
     });
 
     it('uses shipped composed components instead of local visual replicas', () => {

@@ -32,7 +32,7 @@
 // FAILURE SHAPE. bridge-spec splits the surface in two and this
 // shim must respect the split, because a blanket wrap would break half of it:
 //
-//   - connect / signMessage / signAction / signPsbt / coSign / signIn declare
+//   - connect / signMessage / signAction / signPsbt / coSign / login / signIn declare
 //     a RESULT UNION (`ConnectResult = ConnectSuccess | BridgeErrorResult`),
 //     so a refusal RESOLVES with `{ ok: false, error: <BridgeErrorCode> }`.
 //     These went out as rejected promises, so `if (!conn.ok)` - the first line
@@ -72,6 +72,7 @@
     if (window.xchain && window.xchain.isXChainWallet) return;
 
     const VERSION = '0.1.0';
+    const PROVIDER_VERSION = '0.2.0';
     const SOURCE = 'xchain-inject';
     const RESPONSE_SOURCE = 'xchain-inject-response';
     const READY_EVENT = 'xchain#initialized';
@@ -222,7 +223,7 @@
     });
 
     const provider = {
-        version: VERSION,
+        version: PROVIDER_VERSION,
         isXChainWallet: true,
 
         // Result-union methods (sendResult): a refusal resolves as
@@ -240,6 +241,7 @@
         signAction(params) { return sendResult('bridge.signAction', params); },
         signPsbt(params) { return sendResult('bridge.signPsbt', params); },
         coSign(params) { return sendResult('bridge.coSign', params); },
+        login(params) { return sendResult('bridge.login', params); },
         signIn(params) { return sendResult('bridge.signIn', params); },
 
         parallel(actions) {

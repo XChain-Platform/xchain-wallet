@@ -22,7 +22,7 @@ export function MnemonicGridSection() {
                 what={<><code>MnemonicGrid</code> shows the words in a 2-column (<code>small</code>) or responsive 2/4-column (<code>full</code>) grid. It holds the screen guard while mounted and offers no copy button, because clipboard history can keep a phrase.</>}
                 when={<>Showing or confirming a recovery phrase.</>}
                 whenNot={<>Entering a phrase (the import form's inputs).</>}
-                doRule={<>✓ Pair it with a WarningCard</>}
+                doRule={<>✓ Pair it with a danger Notice (<code>role="note"</code>) outside any card</>}
                 dontRule={<>✗ Add a copy button · log or store the phrase</>}
                 supersedes={<>Source: <code>MnemonicGrid.jsx</code> in <code>shared/components</code>. The example uses the public all-zero test phrase.</>}
             />

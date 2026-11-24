@@ -470,13 +470,30 @@ function assertRelativeOrder(source, first, second, firstShouldPrecede, message)
         : firstPosition > secondPosition, message);
 }
 
-assert.match(mainActivity, /registerPlugin\(XChainVaultPlugin\.class\)/);
-assertRelativeOrder(
+for (const plugin of [
+    'XChainVaultPlugin',
+    'XChainLinksPlugin',
+    'XChainSplashPlugin',
+    'XChainAppPlugin',
+    'XChainClipboardPlugin',
+    'XChainWatchPlugin',
+    'XChainNotifyPlugin',
+    'XChainActivityPlugin',
+]) {
+    const registration = `registerPlugin(${plugin}.class)`;
+    assert.ok(mainActivity.includes(registration), `${plugin} is registered`);
+    assertRelativeOrder(
+        mainActivity,
+        registration,
+        'super.onCreate(',
+        true,
+        `${plugin} is registered before super.onCreate builds the bridge`,
+    );
+}
+assert.match(
     mainActivity,
-    'registerPlugin(XChainVaultPlugin.class)',
-    'super.onCreate(',
-    true,
-    'the plugin is registered BEFORE super.onCreate builds the bridge',
+    /BackgroundActivityWorker\.enqueue\(this\)/,
+    'the background activity worker is enqueued after startup',
 );
 
 // SSC-1: the plugins Capacitor registers FOR us, which the rule about
@@ -816,15 +833,6 @@ assert.match(
     'an Intent is extracted once: Capacitor hands the launch intent to both load()'
     + ' and handleOnNewIntent, and getIntent() keeps returning it afterwards',
 );
-assert.match(mainActivity, /registerPlugin\(XChainLinksPlugin\.class\)/);
-assertRelativeOrder(
-    mainActivity,
-    'registerPlugin(XChainLinksPlugin.class)',
-    'super.onCreate(',
-    true,
-    'the links plugin is registered before the bridge is built, like the vault',
-);
-
 // The web half must agree with the native half on the plugin name and must
 // still refuse the lookalike hosts.
 const deepLinkJs = readFileSync(
@@ -1426,8 +1434,8 @@ const shippedLanes = readFileSync(
 );
 assert.match(
     shippedLanes,
-    /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
-    'shipped-lanes.txt declares the android lane with BOTH artifacts (one build, two signatures)',
+    /^android\s+(SHIPPED|NOT-SHIPPED)\s+store-only\s+xchain-wallet-android-v\*\.aab\s+xchain-wallet-wear-v\*\.aab\s+xchain-wallet-v\*\[0-9\]\.apk\s*$/m,
+    'shipped-lanes.txt declares the android lane with the phone AAB, Wear AAB, and direct APK',
 );
 // The feed column is asserted, not merely tolerated. Play is its
 // own update channel, so this lane carries no electron-updater pointer and

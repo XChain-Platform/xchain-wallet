@@ -803,6 +803,7 @@ export function ConfirmActionModal({
             rejectDisabled={exitsLocked}
             approveDisabled={variant === 'action' && status?.state === 'fail' && !canApprove}
             approveLoading={approveInFlight || signaturePhase}
+            approveSettled={approveSettled}
         />
     );
 

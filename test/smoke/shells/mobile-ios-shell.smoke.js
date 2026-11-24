@@ -54,6 +54,12 @@ for (const rel of [
     'App/App.xcodeproj/project.pbxproj',
     'App/App/Info.plist',
     'App/App/App.entitlements',
+    'App/App/watch/WatchSessionHost.swift',
+    'App/App/notify/XChainNotifyPlugin.swift',
+    'App/App/activity/ActivityCheckStore.swift',
+    'App/App/fold/FoldPublisher.swift',
+    'App/AppTests/Native/NativeSmokeTests.swift',
+    'App/AppUITests/Native/NativeUISmokeTests.swift',
     'App/CapApp-SPM/Package.swift',
     '.gitignore',
 ]) {
@@ -70,7 +76,12 @@ const watchScheme = readFileSync(
     'utf8',
 );
 const watchAppSource = readFileSync(join(ios, 'App', 'WatchApp', 'XChainWatchApp.swift'), 'utf8');
+const watchRootSource = readFileSync(
+    join(ios, 'App', 'WatchApp', 'Screens', 'RootView.swift'),
+    'utf8',
+);
 const watchTestsSource = readFileSync(join(ios, 'App', 'WatchAppTests', 'SmokeTests.swift'), 'utf8');
+const nativeTestsSource = readFileSync(join(ios, 'App', 'AppTests', 'Native', 'NativeSmokeTests.swift'), 'utf8');
 const watchSharedSource = readFileSync(join(ios, 'App', 'WatchShared', 'WatchShared.swift'), 'utf8');
 const watchWidgetsSource = readFileSync(join(ios, 'App', 'WatchWidgets', 'WatchWidgetsBundle.swift'), 'utf8');
 const watchAppEntitlements = readFileSync(join(ios, 'App', 'WatchApp', 'WatchApp.entitlements'), 'utf8');
@@ -107,6 +118,12 @@ assert.match(pbxproj, /path = WatchApp;/, 'missing synchronized WatchApp source 
 assert.match(pbxproj, /path = WatchAppTests;/, 'missing synchronized WatchAppTests source group');
 assert.match(pbxproj, /path = WatchShared;/, 'missing synchronized shared watch source group');
 assert.match(pbxproj, /path = WatchWidgets;/, 'missing synchronized widget source group');
+assert.match(pbxproj, /path = App\/watch;/, 'missing synchronized phone watch source group');
+assert.match(pbxproj, /path = App\/notify;/, 'missing synchronized phone notify source group');
+assert.match(pbxproj, /path = App\/activity;/, 'missing synchronized phone activity source group');
+assert.match(pbxproj, /path = App\/fold;/, 'missing synchronized phone fold source group');
+assert.match(pbxproj, /path = AppTests\/Native;/, 'missing synchronized native unit-test source group');
+assert.match(pbxproj, /path = AppUITests\/Native;/, 'missing synchronized native UI-test source group');
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch;/);
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.tests;/);
 assert.match(pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = io\.xchain\.wallet\.ios\.watch\.widgets;/);
@@ -124,8 +141,10 @@ assert.match(
 );
 assert.match(watchScheme, /BlueprintName = "WatchApp"/);
 assert.match(watchScheme, /BlueprintName = "WatchAppTests"/);
-assert.match(watchAppSource, /@main[\s\S]*Open XChain Wallet on your phone/);
+assert.match(watchAppSource, /WindowGroup\s*\{\s*RootView\(\)/);
+assert.match(watchRootSource, /NotSetUpScreen\([\s\S]*state\.openWalletOnPhone/);
 assert.match(watchTestsSource, /final class SmokeTests: XCTestCase/);
+assert.match(nativeTestsSource, /final class NativeSmokeTests: XCTestCase/);
 assert.match(watchSharedSource, /enum WatchShared/);
 assert.match(watchWidgetsSource, /@main[\s\S]*struct WatchWidgetsBundle: WidgetBundle/);
 for (const watchEntitlements of [watchAppEntitlements, watchWidgetsEntitlements]) {
@@ -1238,6 +1257,49 @@ assert.equal(
     'the app must keep one WebView and one vault session',
 );
 
+// --- 20. App-local watch and notification plugins reach the bridge -----
+
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainWatchPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainWatchPlugin',
+);
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainNotifyPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainNotifyPlugin',
+);
+
+// --- 21. The activity-check setting reaches its native store -----------
+
+assert.match(
+    didLoadBody[1],
+    /bridge\?\.registerPluginInstance\(XChainActivityPlugin\(\)\)/,
+    'capacitorDidLoad must register XChainActivityPlugin or the activity-check setting is silently never stored',
+);
+const activityPluginSrc = readFileSync(
+    join(ios, 'App', 'App', 'activity', 'XChainActivityPlugin.swift'),
+    'utf8',
+);
+assert.match(
+    activityPluginSrc,
+    /public let jsName = "XChainActivity"/,
+    'XChainActivityPlugin must answer to the name requested by the shared activity-check configuration',
+);
+
+// --- 22. Fold updates reach the WebView -------------------------------
+
+assert.match(
+    didLoadBody[1],
+    /FoldPublisher\(webView: webView\)/,
+    'capacitorDidLoad must construct FoldPublisher on the bridge WebView',
+);
+assert.match(
+    didLoadBody[1],
+    /let publisher = FoldPublisher\(webView: webView\)[\s\S]*?publisher\.start\(\)/,
+    'capacitorDidLoad must start FoldPublisher so the WebView receives fold updates',
+);
+
 console.log(
     'OK: iOS shell smoke (S1: bundle id io.xchain.wallet.ios in both configs and NOT the Android id'
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
@@ -1258,5 +1320,8 @@ console.log(
     + ' switches the network before it claims a test-network balance, so the airplane-mode signing demo has'
     + ' something to spend. §18: while composing routes through the remote encoder, that same demo reaches the'
     + ' confirmation screen before it cuts the network, and never claims the device BUILDS the transaction.'
-    + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled)',
+    + ' §19: NSUserActivityTypes contains only io.xchain.wallet.view and multiple scenes remain disabled.'
+    + ' §20: capacitorDidLoad registers XChainWatchPlugin and XChainNotifyPlugin.'
+    + ' §21: capacitorDidLoad registers XChainActivityPlugin, which answers to XChainActivity.'
+    + ' §22: capacitorDidLoad constructs and starts FoldPublisher on the bridge WebView)',
 );

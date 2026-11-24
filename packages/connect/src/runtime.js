@@ -7,7 +7,12 @@
 // loads this package unbundled from node_modules, where Node does not strip
 // TypeScript. index.ts re-exports them for the typed public entry point.
 
-// Semver for the bridge protocol itself, independent of wallet version.
+// Semver for the request protocol, independent of wallet version.
+export const PROTOCOL_VERSION = '0.2.0';
+/** @type {readonly string[]} */
+export const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze(['0.1.0', '0.2.0']);
+
+// Semver for the injected bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
 // Maintained by hand. It deliberately does not track the package release
 // version. Update the supported list with protocol changes.
@@ -141,12 +146,24 @@ export const BRIDGE_ERROR_CODES = Object.freeze([
     'INTERNAL_ERROR',
 ]);
 
+export const ERROR_CODES = Object.freeze([
+    ...BRIDGE_ERROR_CODES,
+    'REQUEST_EXPIRED',
+    'REQUEST_TOO_LARGE',
+    'RESULT_TOO_LARGE',
+    'NO_PENDING_REQUEST',
+]);
+
 /**
  * @param {unknown} value
  * @returns {boolean} true when `value` is one of the published codes.
  */
 export function isBridgeErrorCode(value) {
     return typeof value === 'string' && BRIDGE_ERROR_CODES.includes(value);
+}
+
+export function isErrorCode(value) {
+    return typeof value === 'string' && ERROR_CODES.includes(value);
 }
 
 // Version of the Sign-in with XChain challenge format (§43.6).
@@ -160,11 +177,13 @@ export function isBridgeErrorCode(value) {
 // a challenge signed on a look-alike site that passed a legitimate
 // app's appId. v1 challenges (no origin field) fail to parse and
 // should be rejected.
-export const SIGN_IN_CHALLENGE_VERSION = 2;
+export const LOGIN_CHALLENGE_VERSION = 2;
+export const SIGN_IN_CHALLENGE_VERSION = LOGIN_CHALLENGE_VERSION;
 
 // Default expiry window for a Sign-in challenge. Wallets refuse to sign a
 // challenge whose expiresAt is in the past.
-export const SIGN_IN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
+export const LOGIN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
+export const SIGN_IN_DEFAULT_EXPIRY_MS = LOGIN_DEFAULT_EXPIRY_MS;
 
 // The wire format is:
 //
@@ -175,8 +194,10 @@ export const SIGN_IN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
 // that do not contain the separator. The versioned prefix lets validators
 // detect the format on the wire; v1 challenges ("XChain Sign-In", no
 // origin field) fail parseSignInChallenge and must be rejected.
-export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
-export const SIGN_IN_CHALLENGE_SEPARATOR = ' | ';
+export const LOGIN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
+export const LOGIN_CHALLENGE_SEPARATOR = ' | ';
+export const SIGN_IN_CHALLENGE_PREFIX = LOGIN_CHALLENGE_PREFIX;
+export const SIGN_IN_CHALLENGE_SEPARATOR = LOGIN_CHALLENGE_SEPARATOR;
 
 // Expose the injection event from the plain-JS entry point so packed and
 // unbundled consumers receive the TypeScript declaration barrel's runtime surface.
@@ -242,17 +263,17 @@ export function generateNonce(byteLength = 16) {
 }
 
 /**
- * Build sign-in parameters with a fresh nonce and bounded expiry.
+ * Build login parameters with a fresh nonce and bounded expiry.
  *
  * @param {string} appId
  * @param {{expiresInMs?: number, nonce?: string}} [opts]
  * @returns {import('./index.ts').SignInParams}
  */
-export function makeSignInParams(appId, opts = {}) {
+export function makeLoginParams(appId, opts = {}) {
     return {
         appId,
         nonce: opts.nonce ?? generateNonce(),
-        expiresInMs: opts.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS,
+        expiresInMs: opts.expiresInMs ?? LOGIN_DEFAULT_EXPIRY_MS,
     };
 }
 
@@ -265,8 +286,8 @@ export function makeSignInParams(appId, opts = {}) {
  * @param {{appId: string, origin: string, nonce?: string, now?: number}} expected
  * @returns {string | null}
  */
-export function validateSignInChallenge(parts, expected) {
-    if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
+export function validateLoginChallenge(parts, expected) {
+    if (parts.version !== LOGIN_CHALLENGE_VERSION) {
         return `Unsupported challenge version: ${parts.version}`;
     }
     if (parts.appId !== expected.appId) {
@@ -288,12 +309,14 @@ export function validateSignInChallenge(parts, expected) {
     return null;
 }
 
+export const validateSignInChallenge = validateLoginChallenge;
+
 /**
  * @param {import('./index.ts').SignInChallengeV2} parts
  * @returns {string}
  */
-export function formatSignInChallenge(parts) {
-    if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
+export function formatLoginChallenge(parts) {
+    if (parts.version !== LOGIN_CHALLENGE_VERSION) {
         throw new Error(
             `Unsupported sign-in challenge version: ${parts.version}`,
         );
@@ -310,27 +333,29 @@ export function formatSignInChallenge(parts) {
         if (typeof f !== 'string' && typeof f !== 'number') {
             throw new Error('Sign-in challenge field has invalid type');
         }
-        if (String(f).includes(SIGN_IN_CHALLENGE_SEPARATOR)) {
+        if (String(f).includes(LOGIN_CHALLENGE_SEPARATOR)) {
             throw new Error(
                 `Sign-in challenge field contains reserved separator: ${String(f)}`,
             );
         }
     }
-    return [SIGN_IN_CHALLENGE_PREFIX, ...fields].join(
-        SIGN_IN_CHALLENGE_SEPARATOR,
+    return [LOGIN_CHALLENGE_PREFIX, ...fields].join(
+        LOGIN_CHALLENGE_SEPARATOR,
     );
 }
+
+export const formatSignInChallenge = formatLoginChallenge;
 
 /**
  * @param {string} challenge
  * @returns {import('./index.ts').SignInChallengeV2 | null}
  */
-export function parseSignInChallenge(challenge) {
-    const segments = challenge.split(SIGN_IN_CHALLENGE_SEPARATOR);
+export function parseLoginChallenge(challenge) {
+    const segments = challenge.split(LOGIN_CHALLENGE_SEPARATOR);
     if (segments.length !== 7) return null;
     const [prefix, appId, origin, address, nonce, timestampStr, expiresAtStr] =
         segments;
-    if (prefix !== SIGN_IN_CHALLENGE_PREFIX) return null;
+    if (prefix !== LOGIN_CHALLENGE_PREFIX) return null;
     const timestamp = Number(timestampStr);
     const expiresAt = Number(expiresAtStr);
     if (!Number.isFinite(timestamp) || !Number.isFinite(expiresAt))
@@ -345,3 +370,5 @@ export function parseSignInChallenge(challenge) {
         expiresAt,
     };
 }
+
+export const parseSignInChallenge = parseLoginChallenge;
