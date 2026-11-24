@@ -33,6 +33,10 @@ import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupporte
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { SiteIcon } from '@xchain-wallet/core/shared/components/SiteIcon.jsx';
 import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
+import {
+    linkAnswerOrigin,
+    linkAppName,
+} from '../../site_request/linkIdentity.js';
 import { getSettings, resolveApproval } from './index.js';
 import { ApprovalHeader } from './ApprovalHeader.jsx';
 import shared from './approval.module.css';
@@ -61,11 +65,11 @@ const PICKER_NAMES_BUDGET = 32;
 const CANONICAL_COIN_ORDER = ['bitcoin', 'litecoin', 'dogecoin'];
 export const CONNECT_PICKER_MAX_ICONS = 5;
 
-function isValidConnectPayload(payload) {
+function isValidConnectPayload(payload, origin = payload?.origin) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-    if (typeof payload.origin !== 'string' || !payload.origin) return false;
+    if (typeof origin !== 'string' || !origin) return false;
     try {
-        if (new URL(payload.origin).origin === 'null') return false;
+        if (new URL(origin).origin === 'null') return false;
     } catch {
         return false;
     }
@@ -204,8 +208,16 @@ function PickerHeader({ title, onBack }) {
  * @param {() => void} props.onReject
  */
 export function ConnectApproval({ id, payload, onReject }) {
-    const payloadValid = isValidConnectPayload(payload);
-    const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
+    const linkRequest = payload?.linkRequest;
+    const linkMode = linkRequest !== null
+        && typeof linkRequest === 'object'
+        && !Array.isArray(linkRequest);
+    const answerOrigin = linkMode ? linkAnswerOrigin(linkRequest) : null;
+    const origin = linkMode ? answerOrigin || '' : payload?.origin || '';
+    const payloadValid = isValidConnectPayload(payload, origin);
+    const appName = linkMode
+        ? linkAppName(linkRequest) || ''
+        : neutralizeControlText(payload?.appName || '', { maxLength: 80 });
     const requestedChains = useMemo(
         () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
         [payload],
@@ -421,8 +433,11 @@ export function ConnectApproval({ id, payload, onReject }) {
     const summaryTitle = `Fix ${problems.length} thing${problems.length === 1 ? '' : 's'} to continue`;
     let siteName = appName;
     if (!siteName && payloadValid) {
-        try { siteName = new URL(payload.origin).hostname; } catch { siteName = ''; }
+        try { siteName = new URL(origin).hostname; } catch { siteName = ''; }
     }
+    const linkLabel = linkMode && origin
+        ? t('extension.approval.linkAnswer', { origin })
+        : REQUESTING_SITE_LABEL;
 
     return (
         <Screen
@@ -466,22 +481,28 @@ export function ConnectApproval({ id, payload, onReject }) {
                 ) : null}
                 {requestError ? <Notice tone="danger">{requestError}</Notice> : null}
                 {payloadValid ? (
-                    <section className={styles.siteIdentity} aria-label={REQUESTING_SITE_LABEL}>
+                    <section className={styles.siteIdentity} aria-label={linkLabel}>
                         <SiteIcon
-                            origin={payload.origin}
-                            name={siteName}
-                            icon={payload.icon}
+                            origin={origin}
+                            name={linkMode ? new URL(origin).hostname : siteName}
+                            icon={linkMode ? null : payload.icon}
                             context="hero"
                         />
-                        <strong className={styles.siteName}>{siteName}</strong>
+                        <strong className={styles.siteName}>
+                            {linkMode ? new URL(origin).hostname : siteName}
+                        </strong>
                         <div className={styles.originDetails}>
                             <OriginIdentity
-                                origin={payload.origin}
-                                label={REQUESTING_SITE_LABEL}
+                                origin={origin}
+                                label={linkLabel}
                                 originClassName={styles.siteOrigin}
                                 embedded
                                 as="div"
-                            />
+                            >
+                                {linkMode && appName ? (
+                                    <p>{t('extension.sign.declaredName', { name: appName })}</p>
+                                ) : null}
+                            </OriginIdentity>
                         </div>
                     </section>
                 ) : null}
