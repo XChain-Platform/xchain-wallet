@@ -155,6 +155,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		18AADDAE06848AFF9E5CE19D /* AppTests/Native */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = AppTests/Native;
+			sourceTree = "<group>";
+		};
+		3978BEA267B10830B5F9B28A /* App/activity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = App/activity;
+			sourceTree = "<group>";
+		};
 		43C3F21DEDAB6D86C2F17715 /* WatchApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -169,6 +183,20 @@
 			path = WatchAppTests;
 			sourceTree = "<group>";
 		};
+		6DBEE63DD4096E2DBFCB11EA /* App/watch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = App/watch;
+			sourceTree = "<group>";
+		};
+		7C332104CD3A9B4609096C33 /* AppUITests/Native */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = AppUITests/Native;
+			sourceTree = "<group>";
+		};
 		A900500EC4A558ADCBF5461C /* WatchWidgets */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -176,11 +204,25 @@
 			path = WatchWidgets;
 			sourceTree = "<group>";
 		};
+		AC394D0E4E19843C922657A8 /* App/fold */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = App/fold;
+			sourceTree = "<group>";
+		};
 		B2E244DCD20E116541724B9B /* WatchShared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 			);
 			path = WatchShared;
+			sourceTree = "<group>";
+		};
+		EFBE8F0AC56248CAA030CCA1 /* App/notify */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = App/notify;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -366,6 +408,9 @@
 			dependencies = (
 				8AE79BDA91370CD667A0AEF7 /* PBXTargetDependency */,
 			);
+			fileSystemSynchronizedGroups = (
+				7C332104CD3A9B4609096C33 /* AppUITests/Native */,
+			);
 			name = AppUITests;
 			productName = AppUITests;
 			productReference = 2F6FCB9B35B7BBDD900034D5 /* AppUITests.xctest */;
@@ -384,6 +429,12 @@
 			);
 			dependencies = (
 				5D276D3DAD5B2FB39D0DAEDF /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				6DBEE63DD4096E2DBFCB11EA /* App/watch */,
+				EFBE8F0AC56248CAA030CCA1 /* App/notify */,
+				3978BEA267B10830B5F9B28A /* App/activity */,
+				AC394D0E4E19843C922657A8 /* App/fold */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -471,6 +522,9 @@
 			);
 			dependencies = (
 				XC1040C00000000000000007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				18AADDAE06848AFF9E5CE19D /* AppTests/Native */,
 			);
 			name = AppTests;
 			productName = AppTests;

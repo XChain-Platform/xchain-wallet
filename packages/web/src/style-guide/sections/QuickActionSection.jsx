@@ -12,16 +12,16 @@ export function QuickActionSection() {
         <Section
             id="quick-action"
             title="Quick-action tile"
-            tag="CANONICAL primary-CTA tile"
-            kicker="The shared quick-action tile: a square with rounded corners, the icon centred and the label on its own line under it. Token detail draws its quick actions with this one component, so the example changes when it changes."
+            tag="PRIMITIVE, no screen uses it yet"
+            kicker="The square quick-action tile (icon over label). No routed screen renders it at present; token detail lists actions in its Actions tab."
         >
             <Guidance
                 what={<>A <code>QuickActionTile</code>: a secondary <code>Button</code> with the shared tile class and icon slot. The screen's row (token detail) is a grid that gives every tile the same width and height.</>}
-                when={<>A short row of primary actions at the top of a screen (Home and token detail: Send, Receive, Exchange, More).</>}
+                when={<>Reserved for a short grid of primary actions.</>}
                 whenNot={<>One action: a plain Button. Toolbar actions: the PageHeader trailing slot.</>}
                 doRule={<>✓ Pair every icon with a label · keep the tiles the same height</>}
                 dontRule={<>✗ Mix icon styles in one row · draw a tile from a bare <code>button</code> or a screen's own class</>}
-                supersedes={<>The per-screen tile rules in <code>Home.module.css</code> and <code>TokenDetail.module.css</code>. Source: <code>ui/QuickActionTile.jsx</code> and <code>ui/QuickActionTile.module.css</code>.</>}
+                supersedes={<>The <code>square</code> prop draws the outlined square for action grids. Source: <code>ui/QuickActionTile.jsx</code> and <code>ui/QuickActionTile.module.css</code>.</>}
             />
             <Markup>
 {`<div className={styles.quickActions}>

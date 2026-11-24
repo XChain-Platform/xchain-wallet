@@ -49,6 +49,7 @@ import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
+import { NewerWalletNeeded, SiteRequestApproval } from '@xchain-wallet/core/shared/routes/NewerWalletNeeded.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { t } from '../../core/src/i18n/index.js';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
@@ -406,6 +407,9 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
+    const [siteRequestRoute, setSiteRequestRoute] = useState(
+        /** @type {{ view?: string, request?: Record<string, unknown> } | null} */ (null),
+    );
     // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
@@ -728,6 +732,7 @@ function AppInner() {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setSiteRequestRoute(null);
         setMultisigInitialLink(null);
     }
 
@@ -1230,6 +1235,9 @@ function AppInner() {
             }
             if (route.contractRef) setContractRef(route.contractRef);
             if (route.executePrefill) setExecutePrefill(route.executePrefill);
+            if (route.view === 'site-request-approval' || route.view === 'newer-wallet-needed') {
+                setSiteRequestRoute(route);
+            }
             if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             setUnlockedView(route.view);
         },
@@ -1328,6 +1336,21 @@ function AppInner() {
                 onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
             });
             const routeNode = (() => {
+            if (siteRequestRoute?.view === 'site-request-approval' && siteRequestRoute.request) {
+                return (
+                    <SiteRequestApproval
+                        request={siteRequestRoute.request}
+                        onReject={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
+            }
+            if (siteRequestRoute?.view === 'newer-wallet-needed') {
+                return (
+                    <NewerWalletNeeded
+                        onBack={() => { setSiteRequestRoute(null); goBack(); }}
+                    />
+                );
+            }
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
