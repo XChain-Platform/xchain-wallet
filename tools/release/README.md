@@ -152,6 +152,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `verify-android-manifest.mjs` | §5/§7: asserts the manifest facts of a BUILT Android bundle rather than of the source that was meant to produce it. | Live |
 | `gradle-pins.mjs` | Reads Gradle `ext` assignments and identifies dependency version pins that are not exact numeric releases. | Live; shared release-check library |
 | `verify-wear-manifest.mjs` | Checks a Wear OS manifest against its required watch feature, standalone metadata, components, exports and permissions. | Live; shared release-check library |
+| `play-upload-check.mjs` | Checks the staged Android ceremony record and bundle set before Play upload, refuses rehearsals or mismatched bundles, and identifies bundles above the Chrome tool's upload cap for operator drag-and-drop. | Live |
 | `watch-embed.mjs` | Checks an `.xcarchive` or `.ipa` for the embedded Apple Watch app and widget extension. | Live |
 | `xcode-pin.mjs` | Parses `xcodebuild -version` output and checks both the Xcode release and build against the toolchain pin. | Live; shared release-check library |
 | `verify-apk-signer.mjs` | Refuses a direct APK whose signer certificate is not the K10 fingerprint `SECURITY.md` pins. `apksigner verify` accepts any valid signer, so `android-ceremony.sh` runs this on both direct APKs before staging them. | Live |
