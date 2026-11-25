@@ -12,14 +12,23 @@
 
 package io.xchain.wallet.android.links;
 
+import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+
+import javax.net.ssl.HttpsURLConnection;
 
 /**
  * Delivers App Links, {@code xchain:} links and payment links to the SPA (§1, S3).
@@ -70,18 +79,35 @@ public class XChainLinksPlugin extends Plugin {
 
     /** The link that launched the app, until the SPA asks for it. */
     private String pending;
+    String linkReferrer;
+
+    CallbackPinnedOpen.Opener callbackOpener = CallbackPinnedOpen.SYSTEM;
+    CallbackResolve.Lookup callbackLookup = CallbackResolve.SYSTEM;
+    Consumer<Intent> returnOpener = intent -> returnContext().startActivity(intent);
+    Executor callbackExecutor = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "xchain-callback-post");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Override
     public void load() {
-        Intent intent = getActivity() == null ? null : getActivity().getIntent();
+        Activity activity = getActivity();
+        Intent intent = activity == null ? null : activity.getIntent();
         pending = extract(intent);
+        if (pending != null) {
+            linkReferrer = referrerOf(intent, activity == null ? null : activity.getReferrer());
+        }
     }
 
     @Override
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
+        Activity activity = getActivity();
+        Uri activityReferrer = activity == null ? null : activity.getReferrer();
         String url = extract(intent);
         if (url == null) return;
+        linkReferrer = referrerOf(intent, activityReferrer);
 
         // QUEUE **XOR** NOTIFY, which is the whole delivery contract: one
         // intent reaches the SPA exactly once.
@@ -122,6 +148,86 @@ public class XChainLinksPlugin extends Plugin {
         // has already been shown, re-prefilling a send form they dismissed.
         pending = null;
         call.resolve(reply);
+    }
+
+    @PluginMethod
+    public void post(PluginCall call) {
+        String href = call.getString("href");
+        String address = call.getString("address");
+        String body = call.getString("body");
+        String redirect = call.getString("redirect");
+        String credentials = call.getString("credentials");
+        double timeoutMs = call.getDouble("timeoutMs", Double.NaN);
+        callbackExecutor.execute(() -> {
+            try {
+                int status = CallbackPostSend.send(
+                        href, address, body, timeoutMs, redirect, credentials, false,
+                        callbackOpener,
+                        HttpsURLConnection.getDefaultSSLSocketFactory(),
+                        HttpsURLConnection.getDefaultHostnameVerifier());
+                JSObject reply = new JSObject();
+                reply.put("status", status);
+                call.resolve(reply);
+            } catch (IllegalArgumentException exception) {
+                call.reject("Callback request refused");
+            } catch (java.io.IOException exception) {
+                call.reject("Callback POST failed");
+            } catch (Exception exception) {
+                call.reject("Callback POST failed");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void resolveHost(PluginCall call) {
+        String host = call.getString("host");
+        callbackExecutor.execute(() -> {
+            try {
+                JSObject reply = new JSObject();
+                reply.put("addresses", new JSArray(
+                        CallbackHostAnswer.addresses(host, callbackLookup)));
+                call.resolve(reply);
+            } catch (java.io.IOException exception) {
+                call.reject("Callback host lookup failed");
+            } catch (Exception exception) {
+                call.reject("Callback host lookup failed");
+            }
+        });
+    }
+
+    Context returnContext() {
+        return getContext();
+    }
+
+    @PluginMethod
+    public void returnToBrowser(PluginCall call) {
+        String checked = BrowserReturnUrl.checked(call.getString("url"));
+        if (checked == null) {
+            call.reject("Return URL refused");
+            return;
+        }
+        try {
+            Context context = returnContext();
+            Intent intent = BrowserReturnIntent.forUrl(
+                    checked, linkReferrer, context.getPackageName(), context.getPackageManager());
+            returnOpener.accept(intent);
+            call.resolve(new JSObject());
+        } catch (Throwable throwable) {
+            call.reject("No browser opened the return URL");
+        }
+    }
+
+    static String referrerOf(Intent intent, Uri activityReferrer) {
+        Uri intentReferrer = intent == null
+                ? null
+                : intent.getParcelableExtra(Intent.EXTRA_REFERRER);
+        if (intentReferrer != null) return intentReferrer.toString();
+
+        String referrerName = intent == null
+                ? null
+                : intent.getStringExtra(Intent.EXTRA_REFERRER_NAME);
+        if (referrerName != null && !referrerName.isEmpty()) return referrerName;
+        return activityReferrer == null ? null : activityReferrer.toString();
     }
 
     /**

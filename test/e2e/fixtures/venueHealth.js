@@ -71,6 +71,58 @@ export function venueVerdict(status, coin) {
     return null;
 }
 
+export function venueStartDecision(status, coin, {
+    lastAdvanceAtMs = 0,
+    observedAtMs = lastAdvanceAtMs,
+    previousLastBlock,
+} = {}) {
+    const verdict = venueVerdict(status, coin);
+    const health = status?.decoder_health?.[coin];
+    const lag = status?.chain_lag_blocks?.[coin];
+    const tip = status?.chain_tip?.[coin];
+    const indexed = status?.last_block?.[coin];
+    const missingChain = typeof lag !== 'number'
+        || typeof tip !== 'number'
+        || typeof indexed !== 'number';
+    if (health !== null && health !== undefined && health !== 'healthy') {
+        return { action: 'fail', verdict };
+    }
+    if (missingChain) {
+        return { action: 'fail', verdict: `Explorer answered but reports no ${coin} chain.` };
+    }
+    if (health !== 'healthy') {
+        return {
+            action: 'fail',
+            verdict: `Explorer answered but reports no ${coin} decoder health.`,
+        };
+    }
+    if (!verdict) return { action: 'ready', verdict: null };
+
+    const gap = typeof tip === 'number' && typeof indexed === 'number'
+        ? tip - indexed
+        : null;
+    const advanced = typeof previousLastBlock === 'number'
+        && typeof indexed === 'number'
+        && indexed > previousLastBlock;
+    const behind = status?.indexer_state?.[coin] === 'behind';
+    const nextLastAdvanceAtMs = advanced ? observedAtMs : lastAdvanceAtMs;
+    const stalledForMs = observedAtMs - nextLastAdvanceAtMs;
+
+    if (gap > 2 && stalledForMs >= 30_000) {
+        return { action: 'fail', verdict };
+    }
+
+    const waitingVerdict = gap > 2
+        ? `Regtest ${coin} indexer is ${gap} blocks behind; wait for it to catch up.`
+        : verdict;
+    return {
+        action: 'wait',
+        verdict: waitingVerdict,
+        catchingUp: gap > 2 && (behind || advanced),
+        lastAdvanceAtMs: nextLastAdvanceAtMs,
+    };
+}
+
 /**
  * One probe of the venue, mid-run, classified. Returns null when the venue is
  * answering and fit, else the sentence.

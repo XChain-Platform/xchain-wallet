@@ -55,6 +55,7 @@ import {
 } from '../../../packages/core/src/index.js';
 import { ApprovalBroker } from '../../../packages/extension/src/background/approvalBroker.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { SIGN_ACTION_ENABLED } from '../../../packages/extension/src/bridge/signActionEnabled.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -298,14 +299,14 @@ async function autoApprove(host, fakeWindows, result) {
     const issueResp = await call(host, 'bridge.signAction', {
         origin: 'https://dapp.example',
         chainId: 'bitcoin-regtest',
-        action: 'ISSUE',
+        action: 'STAKE',
         params: { tick: 'NEWCOIN', quantity: '1000000' },
     });
     // bridge-spec's UnsupportedActionResult: an `ok: false` envelope carrying
     // the wallet's current action list.
     assert.equal(issueResp.ok, false);
     assert.equal(issueResp.error, 'UNSUPPORTED_ACTION');
-    assert.deepEqual(issueResp.supportedActions, ['SEND', 'SWEEP']);
+    assert.deepEqual(issueResp.supportedActions, SIGN_ACTION_ENABLED.slice());
     assert.equal(
         fakeWindows._opened().length,
         0,

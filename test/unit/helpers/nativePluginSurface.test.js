@@ -19,7 +19,7 @@ describe('native plugin surface readers', () => {
         ))).toEqual({
             identifier: 'XChainLinksPlugin',
             jsName: 'XChainLinks',
-            methods: ['takePendingLink'],
+            methods: ['takePendingLink', 'post', 'resolveHost', 'returnToBrowser'],
         });
         expect(swiftPluginSurface(read(
             'packages/mobile/ios/App/App/clipboard/XChainClipboardPlugin.swift',
@@ -36,7 +36,7 @@ describe('native plugin surface readers', () => {
             + 'XChainLinksPlugin.java',
         ))).toEqual({
             name: 'XChainLinks',
-            methods: ['takePendingLink'],
+            methods: ['takePendingLink', 'post', 'resolveHost', 'returnToBrowser'],
         });
         expect(javaPluginSurface(read(
             'packages/mobile/android/app/src/main/java/io/xchain/wallet/android/clipboard/'
