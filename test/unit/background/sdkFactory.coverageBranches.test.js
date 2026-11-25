@@ -8,11 +8,15 @@ import {
 } from '../../../packages/extension/src/background/sdkFactory.js';
 
 describe('extension SDK factory edge branches', () => {
-    it('contains a dynamic SDK load failure and warns only once', async () => {
+    it('loads the real SDK dynamically and warns only once for invalid injections', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const devMockFactory = vi.fn();
 
-        await expect(resolveSdkFactory({ devMockFactory }))
+        await expect(resolveSdkFactory({ devMockFactory })).resolves.toMatchObject({
+            factory: expect.any(Function),
+            source: 'real',
+        });
+        await expect(resolveSdkFactory({ devMockFactory, XChainSDK: null }))
             .resolves.toEqual({ factory: devMockFactory, source: 'dev-mock' });
         await expect(resolveSdkFactory({ devMockFactory, XChainSDK: null }))
             .resolves.toEqual({ factory: devMockFactory, source: 'dev-mock' });

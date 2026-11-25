@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import bitcoin from 'bitcoinjs-lib';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import wifCodec from 'wif';
+import { encode as encodeWif } from 'wif';
 import xchainSdk from 'xchain-sdk';
 import {
     DEFAULT_FEE_RATE,
@@ -45,7 +45,11 @@ function generatedKey(type = 'p2wpkh') {
     } while (!secp256k1.utils.isValidPrivateKey(privateKey));
     const publicKey = Buffer.from(secp256k1.getPublicKey(privateKey, true));
     const payment = bitcoin.payments[type]({ pubkey: publicKey, network: TESTNET_NETWORK });
-    const wif = wifCodec.encode(TESTNET_NETWORK.wif, privateKey, true);
+    const wif = encodeWif({
+        version: TESTNET_NETWORK.wif,
+        privateKey,
+        compressed: true,
+    });
     privateKey.fill(0);
     return { wif, address: payment.address };
 }

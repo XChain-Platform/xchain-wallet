@@ -46,7 +46,7 @@
 //       --config=playwright.regtest.config.js tests/addresses/secret-reveal.regtest.spec.js
 
 import bitcoin from 'bitcoinjs-lib';
-import wifCodec from 'wif';
+import { decode as decodeWif } from 'wif';
 import { secp256k1 } from '@noble/curves/secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
@@ -73,7 +73,7 @@ const PASSWORD = 'regtestpassword123';
 function wifControlsAddress(wif, address) {
     let decoded;
     try {
-        decoded = wifCodec.decode(wif);
+        decoded = decodeWif(wif);
     } catch {
         return false;
     }

@@ -254,8 +254,11 @@ describe.skipIf(!installed)('Confirm status on the real pre-flight path', () => 
     // activation read that missed beside the dry run must not hold it at warn.
     it.each(CHAINS)('a new-token ISSUE on %s whose dry run never answers is not checked, not a warning', async (chainId) => {
         const out = await confirmNotice(chainId, action('ISSUE|0|NEWTOK|1000||8||1000'), { dryRunDown: true });
-        // Mainnet's activation is fixed in the SDK, so only a venue that reads it misses it.
-        if (chainId !== 'bitcoin-mainnet') expect(out.unverified).toContain('ISSUE_TICK_COIN_PREFIX');
+        if (chainId === 'bitcoin-testnet') {
+            expect(out.unverified).toContain('ISSUE_TICK_COIN_PREFIX');
+        } else {
+            expect(out.unverified).not.toContain('ISSUE_TICK_COIN_PREFIX');
+        }
         expect(out.state).toBe('notChecked');
         expect(out.text).toContain('Not checked with the network');
         expect(out.text).not.toContain('Check this before you approve');

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import wifCodec from 'wif';
+import { encode as encodeWif } from 'wif';
 import xchainSdk from 'xchain-sdk';
 import { derive, hdKeyFromSeed } from '../../../packages/core/src/crypto/hd.js';
 import { bip39MnemonicToSeedSync } from '../../../packages/core/src/crypto/mnemonic.js';
@@ -78,7 +78,11 @@ export function recoverKey({ address, phrase } = {}) {
                         const privateKey = Buffer.from(key.privateKey);
                         try {
                             return {
-                                wif: wifCodec.encode(TESTNET_NETWORK.wif, privateKey, true),
+                                wif: encodeWif({
+                                    version: TESTNET_NETWORK.wif,
+                                    privateKey,
+                                    compressed: true,
+                                }),
                                 address: derivedAddress,
                             };
                         } finally {

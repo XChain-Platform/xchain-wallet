@@ -15,7 +15,7 @@
 // verifier is checked against the SDK's signer and not against itself.
 
 import { Psbt, Transaction, payments, networks, opcodes, crypto, script as bscript } from 'bitcoinjs-lib';
-import wifCodec from 'wif';
+import { encode as encodeWif } from 'wif';
 import { requireSdkDeep } from './sdkDeepPaths.js';
 import { TEST_KEYS, pubkeyOf } from './hwSignedReply.js';
 
@@ -66,7 +66,11 @@ export function signedReveal({ encoding, key = TEST_KEYS[0], script = null, chun
     }
 
     const Wallet = requireSdkDeep('wallet');
-    const signed = new Wallet('bitcoin-regtest').signRevealPsbt(psbt.toHex(), wifCodec.encode(NETWORK.wif, Buffer.from(key, 'hex'), true));
+    const signed = new Wallet('bitcoin-regtest').signRevealPsbt(psbt.toHex(), encodeWif({
+        version: NETWORK.wif,
+        privateKey: Buffer.from(key, 'hex'),
+        compressed: true,
+    }));
     return {
         txHex: signed.txHex,
         txid: signed.txid,

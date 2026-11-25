@@ -75,6 +75,8 @@ describe('BROADCAST v2/v3 real SDK encoding through the wallet registry', () => 
             pubkey: PUBKEY,
             utxos: [],
             encoding: 'OP_RETURN',
+        }, {
+            retryOn: expect.any(Function),
         });
         expect(encoded).toEqual({ psbt: '70736274ff', encoding: 'OP_RETURN' });
     });
@@ -102,8 +104,12 @@ describe('BROADCAST v2/v3 real SDK encoding through the wallet registry', () => 
         });
         expect(action.fields).not.toHaveProperty('MESSAGE');
         expect(action.fields).not.toHaveProperty('FEE');
-        expect(rpc).toHaveBeenCalledWith('create_tx', expect.objectContaining({
-            data: 'BROADCAST|3|42|123.5|feed result',
-        }));
+        expect(rpc).toHaveBeenCalledWith(
+            'create_tx',
+            expect.objectContaining({
+                data: 'BROADCAST|3|42|123.5|feed result',
+            }),
+            { retryOn: expect.any(Function) },
+        );
     });
 });

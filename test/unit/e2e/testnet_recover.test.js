@@ -14,7 +14,7 @@ import { HDKey } from '@scure/bip32';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import bitcoin from 'bitcoinjs-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import wifCodec from 'wif';
+import { encode as encodeWif } from 'wif';
 import xchainSdk from 'xchain-sdk';
 import {
     TESTNET_NETWORK,
@@ -46,7 +46,11 @@ function independentKey(chain, index, phrase = PHRASE) {
     const privateKey = Buffer.from(child.privateKey);
     const publicKey = Buffer.from(child.publicKey);
     const address = bitcoin.payments.p2wpkh({ pubkey: publicKey, network: TESTNET_NETWORK }).address;
-    const wif = wifCodec.encode(TESTNET_NETWORK.wif, privateKey, true);
+    const wif = encodeWif({
+        version: TESTNET_NETWORK.wif,
+        privateKey,
+        compressed: true,
+    });
     seed.fill(0);
     privateKey.fill(0);
     return { address, wif };

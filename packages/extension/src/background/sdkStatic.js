@@ -33,7 +33,7 @@
 // desktop-keychain.smoke.js and test/smoke/onboarding/
 // extension-onboarding.smoke.js both import sdkFactory.js directly.
 
-import * as sdkModule from 'xchain-sdk';
+import * as sdkModule from 'xchain-sdk/index.js';
 // The pre-flight amount validators sit on no SDK index export, so they are read by path.
 import * as preflightNumeric from 'xchain-sdk/src/preflight/numeric.js';
 import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_format.js';
@@ -43,9 +43,13 @@ import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_f
  * which `resolveSdkFactory` reports as a hard failure rather than papering
  * over with the dev mock.
  */
-export const XChainSDK = sdkModule?.XChainSDK
-    ?? sdkModule?.default?.XChainSDK
-    ?? sdkModule?.default;
+export function sdkClassFromModule(module) {
+    return module?.XChainSDK
+        ?? module?.default?.XChainSDK
+        ?? module?.default;
+}
+
+export const XChainSDK = sdkClassFromModule(sdkModule);
 
 /** The SDK modules flows.amountRulesFromSdk reads the amount validators from. */
 export const preflightAmountModules = Object.freeze({

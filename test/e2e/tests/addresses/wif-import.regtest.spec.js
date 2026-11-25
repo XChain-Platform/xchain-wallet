@@ -74,7 +74,7 @@
 //       --config=playwright.regtest.config.js tests/addresses/wif-import.regtest.spec.js
 
 import bitcoin from 'bitcoinjs-lib';
-import wifCodec from 'wif';
+import { decode as decodeWif } from 'wif';
 import { secp256k1 } from '@noble/curves/secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
@@ -127,7 +127,7 @@ const VENUE_HRP = { RBTC: 'bcrt', RLTC: 'rltc' };
  * which is what lets one network object cover both chains; only the HRP moves.
  */
 function expectedP2wpkh(wif, hrp) {
-    const decoded = wifCodec.decode(wif);
+    const decoded = decodeWif(wif);
     const point = secp256k1.getPublicKey(decoded.privateKey, decoded.compressed);
     const pubkey = Buffer.from(point);
     return bitcoin.payments.p2wpkh({

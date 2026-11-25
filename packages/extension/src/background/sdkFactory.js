@@ -45,7 +45,7 @@ export async function resolveSdkFactory(opts) {
     try {
         let XChainSDK = opts?.XChainSDK;
         if (!injected) {
-            const module = await import('xchain-sdk');
+            const module = await import('xchain-sdk/index.js');
             XChainSDK = module?.XChainSDK ?? module?.default?.XChainSDK ?? module?.default;
         }
         if (typeof XChainSDK !== 'function') {
