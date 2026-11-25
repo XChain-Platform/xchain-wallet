@@ -27,7 +27,7 @@ describe('wear-acceptance.sh', () => {
         const commands = readFileSync(fixture.log, 'utf8');
 
         expect(result.status, result.stderr).toBe(0);
-        expect(commands).toContain('gradle -p packages/mobile/android :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug');
+        expect(commands).toContain('watch-test.sh gradle :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug');
         expect(commands).toContain('adb -s PHONE install -r packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk');
         expect(commands).toContain('adb -s WATCH install -r packages/mobile/android/wear/build/outputs/apk/debug/wear-debug.apk');
         expect(commands).toContain(`WatchAcceptanceDriverTest#${caseName}`);
@@ -100,7 +100,8 @@ function makeFixture() {
         },
     }));
     put(log, '');
-    put(join(bin, 'gradle'), '#!/usr/bin/env bash\nprintf "gradle %s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n', 0o755);
+    // The script builds through watch-test.sh, which stages web assets before Gradle; the stub only logs the call.
+    put(join(root, 'packages/mobile/scripts/watch-test.sh'), '#!/usr/bin/env bash\nprintf "watch-test.sh %s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n', 0o755);
     put(join(bin, 'adb'), fakeAdb, 0o755);
     return { root, bin, log };
 }
