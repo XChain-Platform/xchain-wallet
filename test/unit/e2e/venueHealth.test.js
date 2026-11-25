@@ -61,6 +61,16 @@ describe('venueStartDecision', () => {
             .toMatchObject({ action: 'fail', verdict: expect.stringMatching(/unreachable/) });
     });
 
+    it.each([undefined, null])('fails missing decoder health immediately when it is %s', (health) => {
+        const body = status();
+        if (health === undefined) delete body.decoder_health.RBTC;
+        else body.decoder_health.RBTC = health;
+        expect(venueStartDecision(body, 'RBTC')).toMatchObject({
+            action: 'fail',
+            verdict: expect.stringMatching(/reports no RBTC decoder health/),
+        });
+    });
+
     it('fails a wholly missing chain immediately', () => {
         expect(venueStartDecision({}, 'RBTC'))
             .toMatchObject({ action: 'fail', verdict: expect.stringMatching(/reports no RBTC chain/) });

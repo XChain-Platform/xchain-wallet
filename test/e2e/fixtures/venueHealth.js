@@ -84,11 +84,17 @@ export function venueStartDecision(status, coin, {
     const missingChain = typeof lag !== 'number'
         || typeof tip !== 'number'
         || typeof indexed !== 'number';
-    if (health && health !== 'healthy') {
+    if (health !== null && health !== undefined && health !== 'healthy') {
         return { action: 'fail', verdict };
     }
     if (missingChain) {
         return { action: 'fail', verdict: `Explorer answered but reports no ${coin} chain.` };
+    }
+    if (health !== 'healthy') {
+        return {
+            action: 'fail',
+            verdict: `Explorer answered but reports no ${coin} decoder health.`,
+        };
     }
     if (!verdict) return { action: 'ready', verdict: null };
 
