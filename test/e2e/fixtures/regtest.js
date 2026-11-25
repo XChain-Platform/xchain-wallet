@@ -65,7 +65,7 @@ import {
 
 export { openFromAddress, FROM_ADDRESS_LABEL };
 import { kdfStepTimeout } from '../timeout-budget.js';
-import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
+import { rateLimitDelayMs, venueStartDecision } from './venueHealth.js';
 import { pickOption } from './pickOption.js';
 import { fieldByLabel, searchTokenPicker } from './fields.js';
 import { selectNamedToken } from './crossChain.js';
@@ -284,21 +284,36 @@ export async function assertVenueReachable() {
         + bitcoinPorts
         + '"$XC_REGTEST_SSH_HOST"';
 
-    let status;
-    try {
-        const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
-            signal: AbortSignal.timeout(10_000),
-        });
-        status = await res.json();
-    } catch (err) {
-        throw new Error(`${hint}\n\nExplorer ${EXPLORER_URL} did not answer: ${err.message}`);
-    }
+    const startedAt = Date.now();
+    let lastAdvanceAt = startedAt;
+    let previousLastBlock;
+    while (true) {
+        let status;
+        try {
+            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
+                signal: AbortSignal.timeout(10_000),
+            });
+            status = await res.json();
+        } catch (err) {
+            throw new Error(`${hint}\n\nExplorer ${EXPLORER_URL} did not answer: ${err.message}`);
+        }
 
-    // A reachable-but-lagging chain produces confusing spec failures
-    // (funds that never arrive), so check liveness, not just liveness of
-    // the socket.
-    const unfit = venueVerdict(status, REGTEST_COIN);
-    if (unfit) throw new Error(`${hint}\n\n${unfit}`);
+        const now = Date.now();
+        const lastBlock = status?.last_block?.[REGTEST_COIN];
+        const decision = venueStartDecision(status, REGTEST_COIN, {
+            lastAdvanceAtMs: lastAdvanceAt,
+            observedAtMs: now,
+            previousLastBlock,
+        });
+        lastAdvanceAt = decision.lastAdvanceAtMs ?? lastAdvanceAt;
+        previousLastBlock = lastBlock;
+
+        if (decision.action === 'ready') break;
+        if (decision.action === 'fail' || now - startedAt >= 90_000) {
+            throw new Error(`${hint}\n\n${decision.verdict}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
 
     let miner;
     try {
