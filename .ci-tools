@@ -33,3 +33,9 @@ unzip
 # brings its own stand-in: when sips is missing the test puts a node
 # script named sips on PATH, so a Linux venue runs the test without it.
 -sips
+# adb and xcrun are FALSE POSITIVES from the scan: their only spawns are in
+# test/e2e/tests/flows/site-request/round-trip.device.spec.js, which
+# playwright.config.js ignores unless XCHAIN_DEVICE_E2E=1 is set on a Mac with
+# a booted simulator or attached device. No venue sets it.
+-adb
+-xcrun
