@@ -22,6 +22,7 @@ const PACKAGE_NAMES = ['web', 'extension', 'desktop'];
 const RELEASE_SDK_PINS = Object.freeze([
     'npm:@dankest-llc/xchain-sdk@0.27.0',
     'npm:@dankest-llc/xchain-sdk@0.28.1',
+    'npm:@dankest-llc/xchain-sdk@0.28.2',
 ]);
 const SDK_PIN_PATTERN = /^npm:@dankest-llc\/xchain-sdk@[0-9]+\.[0-9]+\.[0-9]+$/;
 const repoFile = (path) => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
