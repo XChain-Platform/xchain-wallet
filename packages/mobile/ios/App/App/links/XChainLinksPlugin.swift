@@ -178,10 +178,12 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "XChainLinks"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "takePendingLink", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "post", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resolveHost", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "returnToBrowser", returnType: CAPPluginReturnPromise)
     ]
 
+    var postChannel: CallbackPostCall.ChannelFactory = CallbackPostCall.systemChannel
     var hostLookup: CallbackResolve.Lookup = CallbackResolve.systemLookup
     var returnOpener: BrowserReturnOpen.Opener = { url, done in
         DispatchQueue.main.async {
@@ -204,6 +206,10 @@ public class XChainLinksPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             call.resolve([:])
         }
+    }
+
+    @objc func post(_ call: CAPPluginCall) {
+        CallbackPostBridge.handle(call, channel: postChannel)
     }
 
     @objc func resolveHost(_ call: CAPPluginCall) {

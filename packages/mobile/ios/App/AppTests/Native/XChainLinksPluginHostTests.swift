@@ -45,7 +45,7 @@ final class XChainLinksPluginHostTests: XCTestCase {
         XCTAssertEqual(plugin.jsName, "XChainLinks")
         XCTAssertEqual(
             plugin.pluginMethods.map(\.name),
-            ["takePendingLink", "resolveHost", "returnToBrowser"]
+            ["takePendingLink", "post", "resolveHost", "returnToBrowser"]
         )
         XCTAssertTrue(plugin.pluginMethods.allSatisfy { $0.returnType == CAPPluginReturnPromise })
         XCTAssertEqual(
