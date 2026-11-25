@@ -46,11 +46,15 @@ describe('bridge.signAction enabled action coverage', () => {
         }
     });
 
-    it('enables SEND and SWEEP only', () => {
-        expect(SIGN_ACTION_ENABLED).toEqual(['SEND', 'SWEEP']);
+    it('enables every matrix-proven action outside the chain-gated set', () => {
+        const expectedEnabled = AUTHORABLE_ACTIONS.filter(
+            (action) => !CHAIN_GATED_ACTIONS.includes(action),
+        );
+        expect(SIGN_ACTION_ENABLED).toHaveLength(27);
+        expect(SIGN_ACTION_ENABLED).toEqual(expectedEnabled);
 
         for (const action of AUTHORABLE_ACTIONS) {
-            expect(isSignActionEnabled(action), action).toBe(action === 'SEND' || action === 'SWEEP');
+            expect(isSignActionEnabled(action), action).toBe(expectedEnabled.includes(action));
         }
 
         expect(isSignActionEnabled('send')).toBe(false);

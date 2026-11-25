@@ -19,6 +19,7 @@
 // destination, amount or extra output went straight to the signer.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SIGN_ACTION_ENABLED } from '../../../packages/extension/src/bridge/signActionEnabled.js';
 
 const signer = {
     kind: 'software',
@@ -227,7 +228,7 @@ describe('bridge.signAction checks the built transaction before signing', () => 
         const approvals = { signAction: vi.fn() };
         const { sdkRegistry } = fakeSdkRegistry({ outputs: [OPRETURN, CHANGE] });
         const resp = await signAction({
-            action: 'ISSUE',
+            action: 'STAKE',
             params: { fromAddress: FROM },
             sdkRegistry,
             settings: { activeNetwork: 'mainnet', blockedOrigins: [] },
@@ -235,7 +236,7 @@ describe('bridge.signAction checks the built transaction before signing', () => 
         });
 
         expect(resultOf(resp)).toMatchObject({ ok: false, error: 'UNSUPPORTED_ACTION' });
-        expect(resultOf(resp).supportedActions).toEqual(['SEND', 'SWEEP']);
+        expect(resultOf(resp).supportedActions).toEqual(SIGN_ACTION_ENABLED.slice());
         expect(approvals.signAction).not.toHaveBeenCalled();
         expect(signer.signPsbt).not.toHaveBeenCalled();
     });
