@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import handlersSource from '../../../packages/extension/src/bridge/handlers.js?raw';
 import specSource from '../../../packages/connect/src/index.ts?raw';
 import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
+import { SIGN_ACTION_ENABLED } from '../../../packages/extension/src/bridge/signActionEnabled.js';
 
 const flowMocks = vi.hoisted(() => ({
     sendToken: vi.fn(),
@@ -478,11 +479,11 @@ describe('the signing methods answer their published success shapes', () => {
         const host = buildHost(makeVault({ site: connectedSite() }));
         const { result } = await host.handle({
             type: 'bridge.signAction',
-            request: { origin: ORIGIN, chainId: CHAIN, action: 'ISSUE', params: {} },
+            request: { origin: ORIGIN, chainId: CHAIN, action: 'STAKE', params: {} },
         });
         expect(result.ok).toBe(false);
         expect(result.error).toBe('UNSUPPORTED_ACTION');
-        expect(result.supportedActions).toEqual(['SEND', 'SWEEP']);
+        expect(result.supportedActions).toEqual(SIGN_ACTION_ENABLED.slice());
     });
 
     it('signPsbt returns SignPsbtSuccess', async () => {
@@ -810,7 +811,7 @@ describe('parallel entries are SignActionResults', () => {
                 origin: ORIGIN,
                 actions: [
                     { chainId: CHAIN, action: 'SEND', params: { fromAddress: FROM, toAddress: 'bcrt1qto', asset: 'BTC', amount: '1' } },
-                    { chainId: CHAIN, action: 'ISSUE', params: {} },
+                    { chainId: CHAIN, action: 'STAKE', params: {} },
                     { chainId: 'litecoin-regtest', action: 'SEND', params: { fromAddress: FROM } },
                 ],
             },

@@ -65,9 +65,9 @@ EXPLORER_MAX_TIME="$(ms_to_seconds "$EXPLORER_TIMEOUT_MS")"
 # additionally content-checked below.
 EXPLORER_STATUS_URL="${BASE}:18080/RBTC/api/status"
 SERVICES=(
-    "xchain-encoder-btc|${BASE}:3023/health"
-    "xchain-encoder-doge|${BASE}:3123/health"
-    "xchain-encoder-ltc|${BASE}:3223/health"
+    "xchain-encoder-btc|${BASE}:3023/status"
+    "xchain-encoder-doge|${BASE}:3123/status"
+    "xchain-encoder-ltc|${BASE}:3223/status"
     "xchain-hub|${BASE}:10000/health"
 )
 

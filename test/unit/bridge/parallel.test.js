@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageHost } from '../../../packages/extension/src/background/MessageHost.js';
 import { registerBridgeHandlers } from '../../../packages/extension/src/bridge/handlers.js';
 import handlersSource from '../../../packages/extension/src/bridge/handlers.js?raw';
+import { SIGN_ACTION_ENABLED } from '../../../packages/extension/src/bridge/signActionEnabled.js';
 
 const ORIGIN = 'https://composer.example';
 
@@ -108,7 +109,7 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
     it('folds unsupported / unpermitted / rejected actions into ordered ok:false entries', async () => {
         const { approvals, calls } = fakeApprovals({ signAction: { approved: false } });
         const resp = await runParallel(vault, approvals, [
-            { chainId: 'bitcoin-regtest', action: 'ISSUE', params: {} },          // unsupported kind
+            { chainId: 'bitcoin-regtest', action: 'STAKE', params: {} },          // unsupported kind
             { chainId: 'litecoin-regtest', action: 'SEND', params: { from: 'x' } }, // chain not permitted
             { chainId: 'bitcoin-regtest', action: 'SEND', params: { from: 'x' } },  // user rejects
         ]);
@@ -121,7 +122,7 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
         // Order preserved, each entry self-describes success/failure.
         expect(results[0].ok).toBe(false);
         expect(results[0].error).toBe('UNSUPPORTED_ACTION');
-        expect(results[0].supportedActions).toEqual(['SEND', 'SWEEP']);
+        expect(results[0].supportedActions).toEqual(SIGN_ACTION_ENABLED.slice());
 
         expect(results[1].ok).toBe(false);
         // The published code, not the wallet's internal CHAIN_NOT_PERMITTED: a
@@ -147,7 +148,7 @@ describe('bridge.parallel: per-action results carry their own ok flag', () => {
         };
         const { approvals, calls } = fakeApprovals({ signAction: { approved: true, password: 'pw' } });
         const resp = await runParallel(offNetwork, approvals, [
-            { chainId: 'bitcoin-regtest', action: 'ISSUE', params: {} },
+            { chainId: 'bitcoin-regtest', action: 'STAKE', params: {} },
             { chainId: 'bitcoin-regtest', action: 'SEND', params: { from: 'x' } },
         ]);
 
@@ -241,7 +242,7 @@ describe('bridge.parallel: grouped approval modal', () => {
             parallel: { approved: true, password: 'pw' },
         });
         const resp = await runParallel(vault, approvals, [
-            { chainId: 'bitcoin-regtest', action: 'ISSUE', params: {} },            // unsupported
+            { chainId: 'bitcoin-regtest', action: 'STAKE', params: {} },            // unsupported
             { chainId: 'litecoin-regtest', action: 'SEND', params: { from: 'x' } },  // chain not permitted
         ]);
         expect(resp.ok).toBe(true);

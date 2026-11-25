@@ -34,6 +34,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
+import { SIGN_ACTION_ENABLED } from '../../../packages/extension/src/bridge/signActionEnabled.js';
 
 const { sendToken } = vi.hoisted(() => ({ sendToken: vi.fn() }));
 
@@ -370,12 +371,12 @@ describe('what the reference dApp sees through the real provider', () => {
 
         const issueResult = await provider.signAction({
             chainId: CHAIN,
-            action: 'ISSUE',
+            action: 'STAKE',
             params: { asset: 'NEWCOIN', quantity: '1000000', divisibility: 0 },
         });
         expect(issueResult.ok).toBe(false);
         expect(issueResult.error).toBe('UNSUPPORTED_ACTION');
-        expect(issueResult.supportedActions).toEqual(['SEND', 'SWEEP']);
+        expect(issueResult.supportedActions).toEqual(SIGN_ACTION_ENABLED.slice());
     });
 
     it('a throttled signAction resolves THROTTLED with the retry window attached', async () => {

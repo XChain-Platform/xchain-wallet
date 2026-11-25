@@ -31,15 +31,19 @@ describe('sign action matrix', () => {
         expect(Object.isFrozen(MATRIX_STAGES)).toBe(true);
     });
 
-    it('reproduces the landed lists from passing SEND and SWEEP runs', () => {
-        const lists = cutSignActionLists([
-            { action: 'SEND', stages: passingStages() },
-            { action: 'SWEEP', stages: passingStages() },
-        ], {
+    it('reproduces the matrix-derived lists from all 32 passing runs', () => {
+        const results = AUTHORABLE_ACTIONS.map((action) => ({
+            action,
+            stages: passingStages(),
+        }));
+        const lists = cutSignActionLists(results, {
             authorable: AUTHORABLE_ACTIONS,
             gated: CHAIN_GATED_ACTIONS,
         });
 
+        expect(results).toHaveLength(32);
+        expect(lists.enabled).toHaveLength(27);
+        expect(Object.keys(lists.refused)).toHaveLength(5);
         expect(lists.enabled).toEqual(SIGN_ACTION_ENABLED);
         expect(lists.refused).toEqual(SIGN_ACTION_REFUSED);
     });
