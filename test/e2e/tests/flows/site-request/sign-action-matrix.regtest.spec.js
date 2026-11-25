@@ -276,9 +276,15 @@ async function fundSeparateCoins(address, count) {
 async function settleOnChain(venue, txid) {
     try {
         await waitForConfirmedUtxo(venue.source.address, txid, STEP_BUDGET_MS);
-    } catch {
+        return null;
+    } catch (firstError) {
         await minerRpc('generate_blocks', { count: 1 });
-        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        try {
+            await waitForConfirmedUtxo(venue.source.address, txid, STEP_BUDGET_MS);
+            return null;
+        } catch {
+            return firstError.message;
+        }
     }
 }
 
@@ -349,8 +355,12 @@ async function probeAction(venue, action, params) {
         && !paysDonation
         && !adsReservationOf(adsSettings)
     ) {
-        stages.submit = true;
-        await settleOnChain(venue, txid);
+        const unconfirmed = await settleOnChain(venue, txid);
+        if (unconfirmed === null) {
+            stages.submit = true;
+        } else {
+            notes.submit = `broadcast but never confirmed: ${unconfirmed}`;
+        }
     } else {
         notes.submit = tracked || honest.result?.ok !== true
             ? failureReason(honest)
