@@ -94,6 +94,12 @@ export default defineConfig({
         // small binary assets land as separate files with content-hash
         // names, which hash stably across builds.
         assetsInlineLimit: 0,
+        // SDK 0.28.2's bitcoinjs-lib 6 fallback names two bip174 v2 internals that
+        // bip174 3 does not export. The wallet loads bitcoinjs-lib 7, so that branch
+        // never runs; ignoring the ids keeps the resolver from failing the build.
+        commonjsOptions: {
+            ignore: ['bip174/src/lib/converter/tools', 'bip174/src/lib/converter/input/witnessUtxo'],
+        },
         rollupOptions: {
             output: {
                 // Deterministic chunk names. Vite's default includes
