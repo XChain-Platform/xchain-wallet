@@ -40,9 +40,12 @@ require_dump() {
     printf '%s' "$dump" | grep -Eiq "$pattern" || die "$label"
 }
 
+# wear-pair.sh boots this pair; a USB phone such as the LG test device must not be picked.
+: "${WEAR_PHONE_SERIAL:=emulator-5560}"
+: "${WEAR_WATCH_SERIAL:=emulator-5570}"
 phone="$(serial_for WEAR_PHONE_SERIAL)"
 watch="$(serial_for WEAR_WATCH_SERIAL)"
-gradle -p packages/mobile/android :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug
+bash packages/mobile/scripts/watch-test.sh gradle :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug
 adb_for "$phone" install -r packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 adb_for "$phone" install -r packages/mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb_for "$watch" install -r packages/mobile/android/wear/build/outputs/apk/debug/wear-debug.apk
