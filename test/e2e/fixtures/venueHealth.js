@@ -77,16 +77,21 @@ export function venueStartDecision(status, coin, {
     previousLastBlock,
 } = {}) {
     const verdict = venueVerdict(status, coin);
-    if (!verdict) return { action: 'ready', verdict: null };
-
     const health = status?.decoder_health?.[coin];
     const lag = status?.chain_lag_blocks?.[coin];
-    if ((health && health !== 'healthy') || typeof lag !== 'number') {
-        return { action: 'fail', verdict };
-    }
-
     const tip = status?.chain_tip?.[coin];
     const indexed = status?.last_block?.[coin];
+    const missingChain = typeof lag !== 'number'
+        || typeof tip !== 'number'
+        || typeof indexed !== 'number';
+    if (health && health !== 'healthy') {
+        return { action: 'fail', verdict };
+    }
+    if (missingChain) {
+        return { action: 'fail', verdict: `Explorer answered but reports no ${coin} chain.` };
+    }
+    if (!verdict) return { action: 'ready', verdict: null };
+
     const gap = typeof tip === 'number' && typeof indexed === 'number'
         ? tip - indexed
         : null;

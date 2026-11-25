@@ -61,8 +61,21 @@ describe('venueStartDecision', () => {
             .toMatchObject({ action: 'fail', verdict: expect.stringMatching(/unreachable/) });
     });
 
-    it('fails a missing chain immediately', () => {
+    it('fails a wholly missing chain immediately', () => {
         expect(venueStartDecision({}, 'RBTC'))
             .toMatchObject({ action: 'fail', verdict: expect.stringMatching(/reports no RBTC chain/) });
     });
+
+    it.each(['chain_tip', 'last_block'])(
+        'fails immediately when numeric lag is present but %s is missing',
+        (field) => {
+            const body = status();
+            body.chain_lag_blocks.RBTC = 9;
+            delete body[field].RBTC;
+            expect(venueStartDecision(body, 'RBTC')).toMatchObject({
+                action: 'fail',
+                verdict: expect.stringMatching(/reports no RBTC chain/),
+            });
+        },
+    );
 });
