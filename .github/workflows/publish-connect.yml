@@ -1,0 +1,60 @@
+name: Publish xchain-connect to npm
+
+# Publishes @dankest-llc/xchain-connect through npm Trusted Publishing (GitHub
+# OIDC), so a release needs no npm token, login or passkey. The npm package is
+# linked to this repository and this exact workflow file name; renaming the
+# file breaks the link until `npm trust github` is run again.
+on:
+  push:
+    tags:
+      - "connect-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must be on PATH before setup-node, or its pnpm cache step cannot
+      # find the store.
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - name: Install an OIDC-capable npm CLI
+        run: npm install --global "npm@^11.5.1"
+
+      - name: Check the tag matches the package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const pkg = require('./packages/connect/package.json');
+          const expected = process.env.RELEASE_TAG.replace(/^connect-v/, '');
+          if (pkg.version !== expected) {
+            throw new Error(`${pkg.name} is ${pkg.version}, but the tag asks for ${expected}`);
+          }
+          NODE
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # prepack rebuilds dist/ as well; building first fails the job before
+      # anything is sent to npm.
+      - name: Build the package
+        run: pnpm --dir packages/connect run build
+
+      - name: Publish
+        working-directory: packages/connect
+        run: npm publish --access public
