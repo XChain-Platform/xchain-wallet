@@ -7,6 +7,11 @@ import { expect, test } from '@playwright/test';
 
 const VIEWS = ['mobile', 'extension', 'desktop'];
 
+// Tracing injects Playwright's snapshot script into every frame, and Chrome
+// blocks it in the guide's script-free sandboxed previews and logs each block
+// as a console error, so a recorded run would fail on the harness, not the page.
+test.use({ trace: 'off' });
+
 for (const view of VIEWS) {
     test(`${view} style guide boots without errors or remote requests`, async ({ page }, testInfo) => {
         const errors = [];
