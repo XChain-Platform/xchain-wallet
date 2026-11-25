@@ -171,11 +171,23 @@ final class DuoFoldUITests: XCTestCase {
             return
         }
 
-        guard let restoredScroll = sendScrollSnapshot(app) else {
+        // The form restores its scroll a moment after the review closes, so
+        // the position is read once it stops moving, not on the first frame
+        // the Send action is hittable again.
+        var restoredScroll: CGRect?
+        _ = waitUntil(timeout: 5) {
+            restoredScroll = sendScrollSnapshot(app)
+            guard let restoredScroll else { return false }
+            return sameScrollPosition(beforeScroll, restoredScroll)
+        }
+        guard let restoredScroll else {
             XCTFail("The returned Send form lost its scroll position")
             return
         }
-        XCTAssertTrue(sameScrollPosition(beforeScroll, restoredScroll))
+        XCTAssertTrue(
+            sameScrollPosition(beforeScroll, restoredScroll),
+            "The returned Send form moved its Send action from \(beforeScroll) to \(restoredScroll)"
+        )
 
         let restored = visibleSendFormValues(app)
         XCTAssertEqual(restored["to"], initialValues["to"])
