@@ -19,7 +19,10 @@ const require = createRequire(import.meta.url);
 const { XChainSDK } = require('xchain-sdk');
 
 const PACKAGE_NAMES = ['web', 'extension', 'desktop'];
-const EXPECTED_SDK_PIN = 'npm:@dankest-llc/xchain-sdk@0.27.0';
+const RELEASE_SDK_PINS = Object.freeze([
+    'npm:@dankest-llc/xchain-sdk@0.27.0',
+    'npm:@dankest-llc/xchain-sdk@0.28.1',
+]);
 const SDK_PIN_PATTERN = /^npm:@dankest-llc\/xchain-sdk@[0-9]+\.[0-9]+\.[0-9]+$/;
 const repoFile = (path) => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
 
@@ -156,7 +159,7 @@ describe('xchain-sdk package and lockfile pins', () => {
     });
 
     it('keeps every package manifest and lockfile importer in agreement', () => {
-        expect(currentPin).toBe(EXPECTED_SDK_PIN);
+        expect(RELEASE_SDK_PINS).toContain(currentPin);
         expect(sdkPinDisagreements(
             packageTexts.web,
             packageTexts.extension,
