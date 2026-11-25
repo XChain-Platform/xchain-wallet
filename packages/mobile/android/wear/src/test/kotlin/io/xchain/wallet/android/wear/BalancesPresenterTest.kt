@@ -35,7 +35,9 @@ class BalancesPresenterTest {
                 "units" to WatchDisplayRules.UnitsMode.UNITS,
             ).forEach { (key, mode) ->
                 val display = BalancesPresenter.present(snapshot, mode, now = snapshot.builtAt)
-                assertEquals("$name $key", models.getValue(key), display.balanceJson())
+                // a11y labels are checked against the shared strings in AccessibilityLabelsTest.
+                val model = JsonObject((models.getValue(key) as JsonObject) - "a11y")
+                assertEquals("$name $key", model, display.balanceJson())
             }
         }
     }
