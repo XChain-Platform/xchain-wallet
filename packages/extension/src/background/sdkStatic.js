@@ -33,7 +33,7 @@
 // desktop-keychain.smoke.js and test/smoke/onboarding/
 // extension-onboarding.smoke.js both import sdkFactory.js directly.
 
-import * as sdkModule from 'xchain-sdk/index.js';
+import * as sdkModule from 'xchain-sdk';
 // The pre-flight amount validators sit on no SDK index export, so they are read by path.
 import * as preflightNumeric from 'xchain-sdk/src/preflight/numeric.js';
 import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_format.js';
