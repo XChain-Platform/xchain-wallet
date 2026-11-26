@@ -388,6 +388,15 @@ export default defineConfig({
             // Point the bare musig subpath at its real file (see note above).
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
             { find: /^uint8array-tools$/, replacement: uint8ArrayToolsCjs },
+            // SDK 0.28.2's browser branch in bitcoinjs_compat/internals.js asks for
+            // `bitcoinjs-lib/src/cjs/<name>.cjs`, which bitcoinjs-lib 7's `./src/*`
+            // export doubles into src/cjs/cjs/<name>.cjs.cjs, so the dev pre-bundle
+            // fails. The exported subpath names the same shipped CJS file.
+            { find: /^bitcoinjs-lib\/src\/cjs\/(bufferutils|types)\.cjs$/, replacement: 'bitcoinjs-lib/src/$1' },
+            // Its bitcoinjs-lib 6 fallback names two bip174 v2 internals that bip174 3
+            // does not export. That branch never runs on bitcoinjs-lib 7, so the ids
+            // point at the package root only to let the dev pre-bundle resolve them.
+            { find: /^bip174\/src\/lib\/converter\/(tools|input\/witnessUtxo)$/, replacement: 'bip174' },
         ],
     },
     // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
