@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Websites can ask the web, extension, desktop, Android and iOS wallets to sign in or sign, and the wallet returns the result to the site.
+- Site requests show the requesting site, requested accounts and addresses, and a dedicated approval screen before anything is signed.
+- The Apple Watch app shows balances, token details, receive codes, alerts and pending requests, with handoff to the phone when needed.
+- Apple Watch complications and widgets show wallet summaries and refresh from the paired phone.
+- The Wear OS app shows balances, token details, receive codes, alerts, pending requests and wallet status.
+- Wear OS tiles and complications show glanceable balances while notification actions open the matching wallet request.
+- Surface Duo and other foldable phones place Home, lists, details and forms around the hinge while preserving the current work across folds.
+- Settings has a Watch section for connection status, display preferences, alert choices and background activity.
+- Home and Settings offer Add to Home Screen on supported iPhone browsers.
+- Native deadline notifications and background activity checks keep payment and request alerts current when the wallet is not open.
+
+### Changed
+- Multi-part publish reviews show the full funded amount as the fee and preserve exact funding values across every wave.
+- Multi-part file and artwork publishing uses the current public file formats on Bitcoin and Litecoin, including gated uploads.
+- Website sign-in can use several approved addresses and supports Taproot accounts.
+- Website signing supports every enabled wallet action instead of a small fixed set.
+- Settings shows notification permission and explains when background explorer checks are enabled.
+- Connected Sites keeps failed undo actions at the top and states when a change was saved only on this device.
+- The 12-word recovery phrase is marked as the recommended default.
+- The extension opens immediately with a loading screen, and its full-screen view uses the web wallet's desktop layout.
+- Automatic balance and activity refreshes follow block-scale intervals to reduce unnecessary network traffic.
+- Notices use a standard corner close button and present several problems as short bullets.
+- The wallet moves to xchain-sdk 0.28.2.
+
+### Fixed
+- Send keeps its recipient, amount, open sections and accessible labels when a foldable phone opens or closes.
+- Contacts keep their filter, selected detail and open confirmation when a foldable phone changes posture.
+- Home uses a split layout only when a foldable screen has enough book-style width.
+- Controls and detail panels stay on the correct side of horizontal and vertical folds.
+- Multi-part Attach Artwork completes for standard, gated and Litecoin publishes.
+- Multi-part, multisig and recovered queued transactions are counted once for automatic donations.
+- Send refuses numeric amounts that cannot be represented exactly instead of rounding them.
+- Balance pages from another address are refused instead of being combined with the requested address.
+- Gated sends stop safely when the recipient's qualifying balance cannot be read.
+- Publish File, Attach Artwork and Official List refresh token ownership before submitting.
+- Attach Artwork cannot submit while its multi-part quote is still pending.
+- Oracle price publishes show their checked state after approval completes.
+- A wallet whose services answer is no longer shown as offline.
+- Opening Issue Token from the wallet menu clears a token selected on an earlier screen.
+- Token artwork falls back to an embedded or linked image and shows a short label instead of raw image data.
+- Hardware wallets show Connected only while the device session is actually open.
+- Unlock shows the vault-unavailable screen when the saved wallet data has disappeared.
+- Trezor signing supplies complete previous transactions when a transaction mixes legacy and SegWit inputs.
+- Linux desktop packages load the native signing component that matches the installed architecture.
+- Queued transaction actions stack cleanly on narrow screens, and Retry shows the correct refresh icon.
+
+### Security
+- Taproot envelope publishes verify both the approved action and the exact payload before any reveal is signed.
+- Website return callbacks pin checked network addresses and refuse private, loopback and changed destinations.
+- Website request links are bounded, throttled, single-use and expire before stale approvals can be replayed.
+- Website requests screen action parameters and avoid exposing rejection details to the requesting site.
+- Watch snapshots are protected on the phone, exclude private addresses and hide amounts in ambient mode.
+
 ## [0.343.1] - 2026-11-19
 
 ### Fixed
