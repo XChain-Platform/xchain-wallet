@@ -13,7 +13,9 @@ import { basename, join, relative, resolve } from 'node:path';
 
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { slowTimeout } from '../helpers/testEnvSpeed.js';
 
 const traverse = _traverse.default || _traverse;
 const UNIT_ROOT = resolve(process.cwd(), 'test/unit');
@@ -71,54 +73,68 @@ function enclosingSuiteTitles(path) {
     return titles;
 }
 
-describe('unit test source uniqueness', () => {
-    it('imports each module at most once per file', () => {
-        const duplicates = [];
+// One pass parses every unit test file once and collects both checks' findings.
+// Two scans, each parsing and traversing the whole tree, ran past the 20s test
+// timeout on CI runners at about 3,500 files. Imports can only sit at the top
+// level of a module, so they are read from the program body without a traverse.
+// The ASTs are not kept, because holding every one of them costs gigabytes.
+function scanUnitTests() {
+    const duplicateImports = [];
+    const duplicateNames = [];
 
-        for (const file of unitTestFiles()) {
-            const imports = new Map();
-            traverse(parseTestFile(file), {
-                ImportDeclaration(path) {
-                    const source = path.node.source.value;
-                    const lines = imports.get(source) || [];
-                    lines.push(path.node.loc.start.line);
-                    imports.set(source, lines);
-                },
-            });
-            for (const [source, lines] of imports) {
-                if (lines.length > 1) {
-                    duplicates.push(`${relative(UNIT_ROOT, file)} imports ${source} on lines ${lines.join(', ')}`);
-                }
+    for (const file of unitTestFiles()) {
+        const ast = parseTestFile(file);
+
+        const imports = new Map();
+        for (const node of ast.program.body) {
+            if (node.type !== 'ImportDeclaration') continue;
+            const lines = imports.get(node.source.value) || [];
+            lines.push(node.loc.start.line);
+            imports.set(node.source.value, lines);
+        }
+        for (const [source, lines] of imports) {
+            if (lines.length > 1) {
+                duplicateImports.push(`${relative(UNIT_ROOT, file)} imports ${source} on lines ${lines.join(', ')}`);
             }
         }
 
-        expect(duplicates).toEqual([]);
+        const declarations = new Map();
+        traverse(ast, {
+            CallExpression(path) {
+                const kind = declarationKind(path.node.callee);
+                const title = staticTitle(path.node);
+                if (!kind || title === null) return;
+                const qualifiedTitle = [...enclosingSuiteTitles(path), title].join(' > ');
+                const key = `${kind}:${qualifiedTitle}`;
+                const lines = declarations.get(key) || [];
+                lines.push(path.node.loc.start.line);
+                declarations.set(key, lines);
+            },
+        });
+        for (const [name, lines] of declarations) {
+            if (lines.length > 1) {
+                duplicateNames.push(`${basename(file)} has ${name} on lines ${lines.join(', ')}`);
+            }
+        }
+    }
+
+    return { duplicateImports, duplicateNames };
+}
+
+describe('unit test source uniqueness', () => {
+    let scan;
+
+    // The scan grows with the tree, so it carries its own budget instead of
+    // the default hook timeout; slowTimeout stretches it for an instrumented run.
+    beforeAll(() => {
+        scan = scanUnitTests();
+    }, slowTimeout(60_000));
+
+    it('imports each module at most once per file', () => {
+        expect(scan.duplicateImports).toEqual([]);
     });
 
     it('gives each suite and test a unique fully qualified name', () => {
-        const duplicates = [];
-
-        for (const file of unitTestFiles()) {
-            const declarations = new Map();
-            traverse(parseTestFile(file), {
-                CallExpression(path) {
-                    const kind = declarationKind(path.node.callee);
-                    const title = staticTitle(path.node);
-                    if (!kind || title === null) return;
-                    const qualifiedTitle = [...enclosingSuiteTitles(path), title].join(' > ');
-                    const key = `${kind}:${qualifiedTitle}`;
-                    const lines = declarations.get(key) || [];
-                    lines.push(path.node.loc.start.line);
-                    declarations.set(key, lines);
-                },
-            });
-            for (const [name, lines] of declarations) {
-                if (lines.length > 1) {
-                    duplicates.push(`${basename(file)} has ${name} on lines ${lines.join(', ')}`);
-                }
-            }
-        }
-
-        expect(duplicates).toEqual([]);
+        expect(scan.duplicateNames).toEqual([]);
     });
 });
