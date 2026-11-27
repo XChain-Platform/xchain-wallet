@@ -55,6 +55,46 @@ jobs:
       - name: Build the package
         run: pnpm --dir packages/connect run build
 
+      # npm publish applies only publishConfig's registry settings (access, tag),
+      # not its main, module, types or exports. connect 1.0.0 went out with the
+      # workspace entry ./src/runtime.js, which the tarball does not ship, so a
+      # plain import of the package failed. Lift those fields onto the manifest
+      # in this job's checkout only; the workspace keeps its source entry.
+      - name: Point the manifest at the built entry points
+        working-directory: packages/connect
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          for (const key of ['main', 'module', 'types', 'exports']) {
+            if (pkg.publishConfig?.[key] === undefined) throw new Error(`publishConfig.${key} is missing`);
+            pkg[key] = pkg.publishConfig[key];
+          }
+          fs.writeFileSync('package.json', `${JSON.stringify(pkg, null, 4)}\n`);
+          NODE
+
+      # Install the packed tarball into a scratch project and load it the way a
+      # site does, so an entry point the tarball lacks fails here and not for users.
+      - name: Import the packed tarball
+        working-directory: packages/connect
+        run: |
+          probe="$RUNNER_TEMP/connect-probe"
+          mkdir -p "$probe"
+          npm pack --pack-destination "$probe"
+          npm install --prefix "$probe" --no-audit --no-fund "$probe"/dankest-llc-xchain-connect-*.tgz
+          cat > "$probe/probe.mjs" <<'JS'
+          import { createClient, generateNonce, getProvider } from '@dankest-llc/xchain-connect';
+          for (const [name, value] of Object.entries({ createClient, generateNonce, getProvider })) {
+              if (typeof value !== 'function') throw new Error(`import of ${name} gave ${typeof value}`);
+          }
+          JS
+          cat > "$probe/probe.cjs" <<'JS'
+          const { createClient } = require('@dankest-llc/xchain-connect');
+          if (typeof createClient !== 'function') throw new Error(`require of createClient gave ${typeof createClient}`);
+          JS
+          node "$probe/probe.mjs"
+          node "$probe/probe.cjs"
+
       - name: Publish
         working-directory: packages/connect
         run: npm publish --access public
