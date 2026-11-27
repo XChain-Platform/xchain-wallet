@@ -91,6 +91,23 @@ for (const [label, files, named] of [
     });
 }
 
+test('--help and -h print usage to stdout, exit 0 and read nothing', async () => {
+    for (const flag of ['--help', '-h']) {
+        let reads = 0;
+        const result = { stdout: '', stderr: '' };
+        const code = await main([flag], {
+            readDir: async () => { reads += 1; return []; },
+            stdout: { write: (text) => { result.stdout += text; } },
+            stderr: { write: (text) => { result.stderr += text; } },
+        });
+        assert.equal(code, 0);
+        assert.equal(reads, 0);
+        assert.match(result.stdout, /^Usage: node tools\/release\/play-upload-check\.mjs <staged dir>\n\n/);
+        assert.match(result.stdout, /PROVENANCE\.txt/);
+        assert.equal(result.stderr, '');
+    }
+});
+
 test('invalid argument shapes print usage and read nothing', async () => {
     for (const argv of [[], ['one', 'two'], ['--lane']]) {
         let reads = 0;

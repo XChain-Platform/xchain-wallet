@@ -16,6 +16,14 @@ import { join, resolve } from 'node:path';
 import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 const USAGE = 'Usage: node tools/release/play-upload-check.mjs <staged dir>\n';
+const HELP = `${USAGE}
+Checks a staged Android release directory before the Play Console upload.
+It reads records/PROVENANCE.txt (a real tag, rehearsal: no) and expects exactly
+xchain-wallet-android-v<version>.aab and xchain-wallet-wear-v<version>.aab.
+Each bundle prints as "upload <name> <bytes> sha256:<hash>", or "drag ..." when
+it is above 10 MB and must be dragged into the console by hand.
+Exits 0 when the set is ready, 1 with one "problem:" line each, 2 on bad usage.
+`;
 const DRAG_LIMIT = 10_000_000;
 
 async function streamedSha256(path) {
@@ -63,6 +71,10 @@ export async function main(argv, {
     stdout = process.stdout,
     stderr = process.stderr,
 } = {}) {
+    if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {
+        stdout.write(HELP);
+        return 0;
+    }
     if (argv.length !== 1 || argv[0].startsWith('-')) {
         stderr.write(USAGE);
         return 2;
