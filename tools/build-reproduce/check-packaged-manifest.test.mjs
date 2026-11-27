@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { archOf, checkCoverage, parseManifest } from './check-packaged-manifest.mjs';
 
 const CHECKER = fileURLToPath(new URL('./check-packaged-manifest.mjs', import.meta.url));
 const HASH = 'a'.repeat(64);
@@ -65,4 +66,18 @@ test('rejects a short manifest even when every listed hash is valid', (t) => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /no AppImage artifact for x64/);
     assert.match(result.stderr, /verifies clean/i);
+});
+
+test('rejects an AppImage whose forced architecture token is missing', () => {
+    const entries = parseManifest(manifest([
+        'xchain-wallet-1.2.3.AppImage',
+        'xchain-wallet-1.2.3-arm64.AppImage',
+        'xchain-wallet_1.2.3_amd64.deb',
+        'xchain-wallet_1.2.3_arm64.deb',
+    ]));
+    const problems = checkCoverage(entries, ['x64', 'arm64']).join('\n');
+
+    assert.equal(archOf('xchain-wallet-1.2.3.AppImage'), null);
+    assert.match(problems, /carries no architecture token/);
+    assert.match(problems, /no AppImage artifact for x64/);
 });

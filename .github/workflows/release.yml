@@ -762,6 +762,7 @@ jobs:
           path: |
             packages/desktop/dist/*.dmg
             packages/desktop/dist/*mac*.zip
+            packages/desktop/dist/*-mas.pkg
             packages/desktop/dist/*.yml
           if-no-files-found: error
 
@@ -987,6 +988,7 @@ jobs:
           path: |
             packages/desktop/dist/*.exe
             packages/desktop/dist/*win*.zip
+            packages/desktop/dist/*-appx.appx
             packages/desktop/dist/*.yml
           if-no-files-found: error
 

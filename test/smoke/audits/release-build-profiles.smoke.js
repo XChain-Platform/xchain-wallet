@@ -45,12 +45,10 @@ const verify = join(repo, 'tools', 'release', 'verify.sh');
 // with a space, and the two mobile artifacts are the whole point.
 //
 // BOTH ARCHITECTURES OF EVERY DESKTOP LANE, and the names are
-// electron-builder's real ones rather than approximations. This list used
-// to be one arch (and had `-mac-arch` the wrong way round), which the gate
-// accepted happily until the arch column landed - the same blind spot that
-// let all six lanes ship one arch for real (§8). Note the x64
-// AppImage carries NO arch token: that is electron-builder's default-arch
-// rule, not an omission here, and lib.sh's classifier knows it.
+// electron-builder's real ones rather than approximations. A one-arch list
+// here would hide the blind spot that let all six lanes ship one arch for
+// real (§8), so both arches stay listed. The AppImage name is forced, so
+// the x64 artifact carries the `x86_64` token like this fixture.
 const ARTIFACTS = [
     ['xchain-wallet-web-v0.333.1.tar.gz', 'default'],
     ['xchain-wallet-extension-v0.333.1.zip', 'default'],

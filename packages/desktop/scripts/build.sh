@@ -273,14 +273,11 @@ done
 
 # And the packaged set: one AppImage and one deb per shipped arch.
 #
-# Delegated rather than grepped, and that is not fastidiousness. The x64
-# AppImage carries NO arch token (electron-builder omits it for the default
-# arch when artifactName is not user-forced), so any pattern loose enough
-# to match it also matches the arm64 file - a build that produced only
-# arm64 would satisfy a grep for "the x64 AppImage". The checker
-# attributes each artifact to exactly one arch instead, the same way
-# tools/release/lib.sh does on the release side, and a smoke drives it
-# without needing a container.
+# Delegated rather than grepped, and that is not fastidiousness. The
+# AppImage name is forced, so every shipped artifact carries an arch token.
+# The checker attributes each artifact to exactly one arch and refuses an
+# untokened AppImage, the same way tools/release/lib.sh does on the release
+# side. A smoke drives it without needing a container.
 node /workspace/tools/build-reproduce/check-packaged-manifest.mjs /out/RELEASE_HASHES.txt
 
 echo "[xchain-wallet] build.sh - done"

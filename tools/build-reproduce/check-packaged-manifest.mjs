@@ -18,15 +18,12 @@
 // three of four artifacts exits 0, and the verifier reads that as proof.
 //
 // The check itself is where the subtlety is, and a grep gets it wrong.
-// electron-builder omits the arch token from the DEFAULT arch when the
-// artifactName is not user-forced, which for the AppImage target it is
-// not - so the x64 build is `xchain-wallet-<v>.AppImage`, with nothing in
-// the name to match on. A pattern loose enough to match it also matches
-// `xchain-wallet-<v>-arm64.AppImage`, so a build that produced only the
-// arm64 artifact would satisfy an "is there an x64 AppImage?" grep. That
-// is the same defect class the release gate hit from the other side
-// (tools/release/lib.sh: xr_artifact_arch), so it is answered the same
-// way: attribute each artifact to exactly one arch, then check coverage.
+// electron-builder.config.cjs forces the AppImage artifactName, so every
+// shipped AppImage carries an architecture token. A bare AppImage means
+// that forced name was lost and must be refused rather than guessed as
+// the default arch. That is the same rule the release gate applies in
+// tools/release/lib.sh: attribute each artifact to exactly one arch, then
+// check coverage.
 //
 // Usage:  node check-packaged-manifest.mjs <manifest> [<arch>...]
 //         arches default to tools/release/toolchain.json linuxArches.
@@ -43,18 +40,17 @@ export const LINUX_FORMATS = ['AppImage', 'deb'];
 /**
  * Attribute one artifact basename to an architecture, or to null.
  *
- * Mirrors `xr_artifact_arch` in tools/release/lib.sh, including the one
- * inference: an AppImage with no arch token is the default arch. Tokens
- * are electron-builder's own (`builder-util getArtifactArchName`): x64
- * becomes `amd64` for deb and `x86_64` for AppImage, and the arches we do
- * not ship are recognised by name so they cannot pass as x64.
+ * Mirrors `xr_artifact_arch` in tools/release/lib.sh, with no default-arch
+ * exception. Tokens are electron-builder's own (`builder-util
+ * getArtifactArchName`): x64 becomes `amd64` for deb and `x86_64` for
+ * AppImage, and the arches we do not ship are recognised by name so they
+ * cannot pass as x64.
  */
 export function archOf(name) {
     if (/arm64|aarch64/.test(name)) return 'arm64';
     if (/armv7l|armhf/.test(name)) return 'armv7l';
     if (/i386|i686|ia32/.test(name)) return 'ia32';
     if (/x86_64|amd64|[-_]x64/.test(name)) return 'x64';
-    if (name.endsWith('.AppImage')) return 'x64';
     return null;
 }
 

@@ -70,6 +70,11 @@ function loadConfig(env = {}) {
 
 const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : t.target));
 
+function globPattern(pattern) {
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escaped.replaceAll('*', '[^/]*')}$`);
+}
+
 // --- 1. The lane is opt-in ---------------------------------------------
 //
 // Unconditional would break every macOS and Linux build: AppxTarget
@@ -246,6 +251,25 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
         'and it must be gated on the Partner Center identity being present: '
         + 'AppxTarget accepts a missing publisher and builds a package that is '
         + 'rejected at ingestion, which is worse than not building one');
+
+    const start = wf.indexOf('\n  desktop-windows:');
+    const end = wf.indexOf('\n  desktop-windows-rehearsal:', start);
+    const job = wf.slice(start, end);
+    const uploadStart = job.indexOf('name: desktop-windows');
+    const pathStart = job.indexOf('path: |', uploadStart);
+    const pathEnd = job.indexOf('if-no-files-found:', pathStart);
+    const globs = job.slice(pathStart, pathEnd).split('\n')
+        .map((line) => line.trim()).filter((line) => line.startsWith('packages/'));
+    assert.ok(globs.includes('packages/desktop/dist/*-appx.appx'),
+        'desktop-windows must upload the optional store packages it builds');
+
+    const pattern = loadConfig({ XCHAIN_BUILD_APPX: '1' }).appx.artifactName;
+    for (const arch of ['x64', 'arm64']) {
+        const name = pattern.replace('${version}', '9.9.9')
+            .replace('${arch}', arch).replace('${ext}', 'appx');
+        assert.ok(globs.some((glob) => globPattern(glob.split('/').at(-1)).test(name)),
+            `desktop-windows upload globs do not match ${name}`);
+    }
 }
 
 console.log(
@@ -258,5 +282,6 @@ console.log(
     + ' all four Store tiles exist at the right size with alpha, so'
     + " electron-builder's SampleAppx artwork can never be substituted; a build"
     + ' running from an MSIX package short-circuits attachUpdater before'
-    + ' electron-updater is loaded, while a direct-download build still updates)',
+    + ' electron-updater is loaded, while a direct-download build still updates;'
+    + ' the workflow uploads both per-arch store packages)',
 );

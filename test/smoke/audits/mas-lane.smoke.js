@@ -344,6 +344,12 @@ try {
     assert.ok(/CSC_LINK:\s*\$\{\{\s*secrets\.MAS_CSC_LINK\s*\}\}/.test(step),
         'the store step signs the app with the Apple Distribution certificate, '
         + 'not the Developer ID one');
+
+    const job = wf.slice(wf.indexOf('\n  desktop-macos:'),
+        wf.indexOf('\n  desktop-macos-rehearsal:'));
+    assert.match(job,
+        /uses:\s*actions\/upload-artifact@v4[\s\S]*?name:\s*desktop-macos[\s\S]*?packages\/desktop\/dist\/\*-mas\.pkg/,
+        'desktop-macos must upload the optional store package it builds');
 }
 
 // --- 8. The store package ends up where the release tooling looks -----
@@ -445,7 +451,8 @@ console.log(
         + 'App Store build must never ship its own updater; the release workflow scopes --mac to exactly mas, '
         + 'behind the MAS_CSC_LINK guard with the installer certificate and its password, and asks for --universal and no '
         + 'per-arch flag, because naming a target on the CLI discards the config arch and emits two packages for '
-        + 'a store slot that holds one; the config relocates the .pkg out of the pack directory into the '
+        + 'a store slot that holds one; the workflow uploads that package with the direct-download artifacts; '
+        + 'the config relocates the .pkg out of the pack directory into the '
         + 'output directory, driven on a temp tree, because every release tool reads a flat dist/; and the '
         + `listing carries ${masSet.assets.length} screenshot(s) of the desktop shell, each hashing to its `
         + 'capture pin at a canvas App Store Connect accepts)',

@@ -24,8 +24,21 @@ const walletRoot = resolve(here, '..', '..', '..');
 const guidePath = join(DOCS_BRANCH_ROOT, 'developer-guide', 'wallet-integration.md');
 const canonicalRequestsPath = join(walletRoot, 'packages', 'connect', 'wallet-requests.json');
 const copiedRequestsPath = join(DOCS_BRANCH_ROOT, 'protocol', 'json', 'wallet-requests.json');
-const sdkRoot = process.env.XCHAIN_SDK_ROOT || resolve(DOCS_ROOT, '..', 'xchain-sdk');
 const nodeRequire = createRequire(import.meta.url);
+const requireFromWeb = createRequire(join(walletRoot, 'packages', 'web', 'package.json'));
+
+function resolveSdkEntry() {
+    if (process.env.XCHAIN_SDK_ROOT) {
+        return join(process.env.XCHAIN_SDK_ROOT, 'index.js');
+    }
+    try {
+        return requireFromWeb.resolve('xchain-sdk');
+    } catch {
+        return join(resolve(DOCS_ROOT, '..', 'xchain-sdk'), 'index.js');
+    }
+}
+
+const sdkEntry = resolveSdkEntry();
 
 skipUnlessDocs('wallet integration snippets smoke');
 
@@ -208,7 +221,7 @@ test('the guide receiver example accepts a cross-device login through the SDK', 
         'the SDK import',
     );
 
-    const sdkModule = nodeRequire(join(sdkRoot, 'index.js'));
+    const sdkModule = nodeRequire(sdkEntry);
     const XChainSDK = sdkModule.XChainSDK || sdkModule.default || sdkModule;
     assert.equal(typeof XChainSDK, 'function', 'the SDK checkout must export XChainSDK');
 
