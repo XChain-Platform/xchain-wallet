@@ -98,6 +98,12 @@ export function resolveDocsRoot({
 // sibling lives somewhere other than beside this repo.
 export const DOCS_ROOT = resolveDocsRoot();
 
+export function resolveDocsBranchRoot({ env = process.env, docsRoot = DOCS_ROOT } = {}) {
+    return env.XCHAIN_DOCS_BRANCH_ROOT || docsRoot;
+}
+
+export const DOCS_BRANCH_ROOT = resolveDocsBranchRoot();
+
 export const WALLET_DOCS = join(DOCS_ROOT, 'components', 'wallet');
 
 const SIBLINGS_FILE = join(wsRoot, '.ci-siblings');

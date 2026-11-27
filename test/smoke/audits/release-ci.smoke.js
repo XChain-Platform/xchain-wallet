@@ -544,6 +544,8 @@ assert.match(manifestCheckout,
     'the canonical action manifest checkout must use the PR base, master on master, and develop otherwise');
 assert.match(manifestCheckout, /^\s{10}path:\s*\.docs-sibling\/action-manifest-ref\s*$/m,
     'the canonical action manifest checkout must stay under the ignored docs sibling');
+assert.ok(/^\s{6}XCHAIN_DOCS_BRANCH_ROOT:\s*\$\{\{\s*github\.workspace\s*\}\}\/\.docs-sibling\/action-manifest-ref/m.test(testJob),
+    'XCHAIN_DOCS_BRANCH_ROOT must point at the branch-matched documentation checkout');
 assert.ok(/^\s{6}XCHAIN_ACTION_MANIFEST_ROOT:\s*\$\{\{\s*github\.workspace\s*\}\}\/\.docs-sibling\/action-manifest-ref/m.test(testJob),
     'XCHAIN_ACTION_MANIFEST_ROOT must point at the branch-matched documentation checkout');
 assert.ok(!/^xchain-documentation=/m.test(read('.ci-siblings-pins')),

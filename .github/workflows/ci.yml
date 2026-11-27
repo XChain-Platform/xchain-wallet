@@ -84,6 +84,7 @@ jobs:
       # outside the workspace, so the sibling cannot sit beside the repo the way
       # a developer checkout puts it.
       XCHAIN_DOCS_ROOT: ${{ github.workspace }}/.docs-sibling
+      XCHAIN_DOCS_BRANCH_ROOT: ${{ github.workspace }}/.docs-sibling/action-manifest-ref
       XCHAIN_ACTION_MANIFEST_ROOT: ${{ github.workspace }}/.docs-sibling/action-manifest-ref
     steps:
       - uses: actions/checkout@v4

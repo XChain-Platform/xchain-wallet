@@ -17,13 +17,13 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 import { createClient as createConnectClient } from '../../../packages/connect/src/client.js';
-import { DOCS_ROOT, skipUnlessDocs } from '../_docs-repo.js';
+import { DOCS_BRANCH_ROOT, DOCS_ROOT, skipUnlessDocs } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const walletRoot = resolve(here, '..', '..', '..');
-const guidePath = join(DOCS_ROOT, 'developer-guide', 'wallet-integration.md');
+const guidePath = join(DOCS_BRANCH_ROOT, 'developer-guide', 'wallet-integration.md');
 const canonicalRequestsPath = join(walletRoot, 'packages', 'connect', 'wallet-requests.json');
-const copiedRequestsPath = join(DOCS_ROOT, 'protocol', 'json', 'wallet-requests.json');
+const copiedRequestsPath = join(DOCS_BRANCH_ROOT, 'protocol', 'json', 'wallet-requests.json');
 const sdkRoot = process.env.XCHAIN_SDK_ROOT || resolve(DOCS_ROOT, '..', 'xchain-sdk');
 const nodeRequire = createRequire(import.meta.url);
 
