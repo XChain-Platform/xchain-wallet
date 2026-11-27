@@ -70,8 +70,15 @@ fi
 boot_avd "$watch_avd" "$watch_serial" 5570 -no-snapshot
 
 adb_for "$phone_serial" forward tcp:5601 tcp:5601
-adb_for "$phone_serial" shell pm path com.google.android.wearable.app >/dev/null 2>&1 \
-    || die 'missing Wear OS companion app'
+companion_package=
+for package in com.google.android.apps.wear.companion com.google.android.wearable.app; do
+    if adb_for "$phone_serial" shell pm path "$package" >/dev/null 2>&1; then
+        companion_package="$package"
+        break
+    fi
+done
+[ -n "$companion_package" ] \
+    || die 'missing companion app: com.google.android.apps.wear.companion or com.google.android.wearable.app'
 adb_for "$phone_serial" shell dumpsys account 2>/dev/null | awk '
     /^[[:space:]]*Accounts: [0-9]+/ { accounts = 1; next }
     accounts && /^[[:space:]]+/ {
@@ -84,8 +91,7 @@ adb_for "$phone_serial" shell dumpsys account 2>/dev/null | awk '
     accounts { exit !found }
     END { exit !found }
 ' || die "missing Google sign-in on $phone_serial"
-adb_for "$phone_serial" shell monkey -p com.google.android.wearable.app -c android.intent.category.LAUNCHER 1 >/dev/null
-adb_for "$phone_serial" shell input keyevent KEYCODE_MENU
+adb_for "$phone_serial" shell monkey -p "$companion_package" -c android.intent.category.LAUNCHER 1 >/dev/null
 
 tap_text() {
     local point
@@ -95,6 +101,23 @@ tap_text() {
     read -r x y <<< "$point"
     adb_for "$phone_serial" shell input tap "$x" "$y"
 }
+
+tap_content_desc() {
+    local point xml
+    adb_for "$phone_serial" shell uiautomator dump /sdcard/xchain-wear-pair.xml >/dev/null \
+        || die 'failed to dump companion app UI'
+    xml="$(adb_for "$phone_serial" shell cat /sdcard/xchain-wear-pair.xml)" \
+        || die 'failed to read companion app UI dump'
+    point="$(printf '%s\n' "$xml" \
+        | sed -E 's/ text="[^"]*"/ text=""/g; s/ content-desc=/ text=/g' \
+        | node packages/mobile/scripts/ui-dump.js tap --text "$1")" || return 1
+    read -r x y <<< "$point"
+    adb_for "$phone_serial" shell input tap "$x" "$y"
+}
+
+if ! tap_content_desc 'More options'; then
+    adb_for "$phone_serial" shell input keyevent KEYCODE_MENU
+fi
 
 tap_text 'Pair with emulator'
 sleep 2
