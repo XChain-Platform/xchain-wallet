@@ -162,8 +162,12 @@ if (current === target) {
 // key order and indentation across every package.json and bury the one-line change
 // this commit is supposed to be.
 
+// packages/connect is the npm-published @dankest-llc/xchain-connect with its
+// own semver and connect-v tags, so the wallet version never rewrites it; the
+// lockstep smoke exempts it for the same reason.
 const packageFiles = ['package.json'];
 for (const name of readdirSync(join(ROOT, 'packages')).sort()) {
+    if (name === 'connect') continue;
     const rel = join('packages', name, 'package.json');
     if (statSync(join(ROOT, 'packages', name)).isDirectory() && existsSync(join(ROOT, rel))) {
         packageFiles.push(rel);

@@ -40,6 +40,10 @@ function fixture() {
             name: `@fixture/${name}`, version: CURRENT,
         }, null, 4)}\n`);
     }
+    mkdirSync(path.join(root, 'packages', 'connect'), { recursive: true });
+    writeFileSync(path.join(root, 'packages', 'connect', 'package.json'), `${JSON.stringify({
+        name: '@fixture/connect', version: '1.0.0',
+    }, null, 4)}\n`);
     mkdirSync(path.join(root, 'packages', 'core', 'src'), { recursive: true });
     writeFileSync(path.join(root, 'packages', 'core', 'src', 'buildInfo.js'),
         `export const WALLET_VERSION = '${CURRENT}';\n`);
@@ -102,6 +106,9 @@ test('updates every derived version declaration and promotes the changelog', (t)
     ]) {
         assert.equal(JSON.parse(readFileSync(path.join(root, rel), 'utf8')).version, '1.3.0');
     }
+    assert.equal(JSON.parse(readFileSync(
+        path.join(root, 'packages', 'connect', 'package.json'), 'utf8',
+    )).version, '1.0.0', 'the independently versioned connect package keeps its own version');
     const manifest = JSON.parse(readFileSync(
         path.join(root, 'packages', 'extension', 'manifest.json'), 'utf8',
     ));
