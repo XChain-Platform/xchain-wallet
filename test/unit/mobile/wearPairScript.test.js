@@ -43,6 +43,10 @@ afterEach(async () => {
     }
 });
 
+const javaHome = process.env.JAVA_HOME || '/opt/homebrew/opt/openjdk@21';
+const javac = join(javaHome, 'bin/javac');
+const java = join(javaHome, 'bin/java');
+
 describe('wear-pair.sh', () => {
     it('drives attached-device forwarding and companion UI pairing before instrumentation', () => {
         const fixture = makeFixture();
@@ -126,11 +130,9 @@ describe('wear-pair.sh', () => {
         expect(scriptSource).not.toMatch(/pkill|killall|adb kill-server/);
     });
 
-    it('executes the Android capability predicate against connected node states', () => {
+    // Skip only where no JDK is installed (the Linux gate venues); GitHub runners and the Mac run it.
+    it.skipIf(!existsSync(javac))('executes the Android capability predicate against connected node states', () => {
         const fixture = makeJavaFixture();
-        const javaHome = process.env.JAVA_HOME || '/opt/homebrew/opt/openjdk@21';
-        const javac = join(javaHome, 'bin/javac');
-        const java = join(javaHome, 'bin/java');
         const compile = spawnSync(javac, ['-d', fixture.classes, ...fixture.sources], {
             encoding: 'utf8',
             timeout: 10_000,
