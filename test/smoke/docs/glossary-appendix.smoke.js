@@ -24,14 +24,15 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { docsPath, skipUnlessDocs } from '../_docs-repo.js';
+import { DOCS_BRANCH_ROOT, skipUnlessDocs } from '../_docs-repo.js';
 
 skipUnlessDocs('glossary-appendix smoke');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const generatorPath = join(wsRoot, 'tools', 'glossary', 'generate-appendix.js');
-const glossaryPath = docsPath('glossary.md');
+// Check the branch-matched docs checkout (docs master trails until a release publishes).
+const glossaryPath = join(DOCS_BRANCH_ROOT, 'components', 'wallet', 'glossary.md');
 
 assert.ok(existsSync(generatorPath),
     'tools/glossary/generate-appendix.js exists');
@@ -43,6 +44,7 @@ assert.ok(existsSync(glossaryPath),
 const r = spawnSync(process.execPath, [generatorPath, '--check'], {
     cwd: wsRoot,
     encoding: 'utf8',
+    env: { ...process.env, GLOSSARY_PATH: glossaryPath },
 });
 if (r.status !== 0) {
     console.error('Generator stdout:', r.stdout);

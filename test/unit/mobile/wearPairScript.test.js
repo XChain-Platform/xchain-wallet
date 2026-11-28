@@ -54,8 +54,10 @@ describe('wear-pair.sh', () => {
         expect(commands).toContain('adb -d get-serialno');
         expect(commands).toContain('adb -s LGK500 shell getprop ro.product.model');
         expect(commands).toContain('adb -s LGK500 forward tcp:5601 tcp:5601');
-        expect(commands.filter((line) => line.includes('uiautomator dump'))).toHaveLength(2);
-        expect(commands.filter((line) => line.includes('xchain-wear-pair.xml'))).toHaveLength(4);
+        expect(commands.filter((line) => line.includes('uiautomator dump'))).toHaveLength(3);
+        expect(commands.filter((line) => line.includes('xchain-wear-pair.xml'))).toHaveLength(6);
+        expect(commands).toContain('adb -s LGK500 shell input tap 530 40');
+        expect(commands.some((line) => line.includes('KEYCODE_MENU'))).toBe(false);
         expect(commands).toContain('adb -s LGK500 shell input tap 60 70');
         expect(commands).toContain('adb -s LGK500 shell input tap 300 400');
         expect(commands).toContain('watch-test gradle :app:assembleDebug :app:assembleDebugAndroidTest :wear:assembleDebug');
@@ -102,7 +104,7 @@ describe('wear-pair.sh', () => {
     });
 
     it.each([
-        [{ companion: false }, 'missing Wear OS companion app'],
+        [{ companion: false }, 'missing companion app'],
         [{ model: 'Pixel 9' }, 'attached device is not the LG K500'],
     ])('names an unavailable device prerequisite', (options, message) => {
         const fixture = makeFixture(options);
@@ -302,7 +304,7 @@ case "$*" in
     ;;
   *' shell getprop sys.boot_completed') printf '1\\n' ;;
   *' shell getprop ro.product.model') printf '%s\\n' "$DEVICE_MODEL" ;;
-  *' shell pm path com.google.android.wearable.app')
+  *' shell pm path com.google.android.apps.wear.companion'|*' shell pm path com.google.android.wearable.app')
     [ "$HAS_COMPANION" = 1 ] || exit 1
     printf 'package:wear.apk\\n'
     ;;
@@ -314,7 +316,7 @@ case "$*" in
     fi
     ;;
   *' shell cat /sdcard/xchain-wear-pair.xml')
-    printf '%s\\n' '<hierarchy><node text="Pair with emulator" bounds="[10,20][110,120]"/><node text="Pair" bounds="[200,300][400,500]"/></hierarchy>'
+    printf '%s\\n' '<hierarchy><node text="" content-desc="More options" bounds="[500,10][560,70]"/><node text="Pair with emulator" bounds="[10,20][110,120]"/><node text="Pair" bounds="[200,300][400,500]"/></hierarchy>'
     ;;
   *' shell am instrument '*) printf 'OK (1 test)\\n' ;;
 esac

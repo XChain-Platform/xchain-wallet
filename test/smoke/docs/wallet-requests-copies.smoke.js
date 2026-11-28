@@ -12,12 +12,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DOCS_ROOT, skipUnlessDocs } from '../_docs-repo.js';
+import { DOCS_BRANCH_ROOT, skipUnlessDocs } from '../_docs-repo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const walletRoot = resolve(here, '..', '..', '..');
 const canonicalPath = join(walletRoot, 'packages', 'connect', 'wallet-requests.json');
-const copyPath = join(DOCS_ROOT, 'protocol', 'json', 'wallet-requests.json');
+// Compare against the branch-matched docs checkout (docs master trails until a release publishes).
+const copyPath = join(DOCS_BRANCH_ROOT, 'protocol', 'json', 'wallet-requests.json');
 
 skipUnlessDocs('wallet requests copies smoke');
 
