@@ -53,6 +53,7 @@ test('reads facts from the current App Xcode project', async () => {
             'App/activity',
             'App/fold',
             'App/notify',
+            'App/sounds',
             'App/watch',
             'AppTests/Native',
             'AppUITests/Native',

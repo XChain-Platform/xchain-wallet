@@ -25,6 +25,7 @@ test('WatchContract Codable blocks exactly match completed snapshot schemas', ()
     const receive = readJson('packages/core/src/watch/contract/receive.schema.json');
     const inbox = readJson('packages/core/src/watch/contract/inbox.schema.json');
     const settings = readJson('packages/core/src/watch/contract/settings.schema.json');
+    const snapshot = readJson('packages/core/src/watch/contract/snapshot.schema.json');
 
     assert.deepEqual(swiftCodableFields(source), {
         SnapshotRow: schemaFields(row),
@@ -32,5 +33,8 @@ test('WatchContract Codable blocks exactly match completed snapshot schemas', ()
         SnapshotQr: schemaFields(receive.items.properties.qr),
         SnapshotInboxItem: schemaFields(inbox.items),
         SnapshotSettings: schemaFields(settings),
+        Snapshot: schemaFields(snapshot),
+        SnapshotNetwork: schemaFields(snapshot.properties.network),
+        SnapshotTotals: schemaFields(snapshot.properties.totals),
     });
 });
